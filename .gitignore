@@ -1,0 +1,78 @@
+# ── Personal data ────────────────────────────────────────────────────────────
+# This repo holds code. Anything that *is* me (exports, notes, chat logs, the
+# compiled self-model, embeddings, research briefs) stays out of its history.
+# The vault is meant to be its own private git repo, nested here but ignored.
+# Un-ignore individual files deliberately (e.g. fixtures), never whole dirs.
+/data/
+/vault/
+/exports/
+*.mbox
+*.vcf
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+/secrets/
+*.pem
+*.key
+credentials*.json
+client_secret*.json
+token*.json
+
+# ── Local stores, indices, model weights ─────────────────────────────────────
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+/chroma_db/
+/.chroma/
+/.lancedb/
+/qdrant_storage/
+*.faiss
+/models/
+/checkpoints/
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+/logs/
+*.log
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ── Node (if a UI shows up later) ────────────────────────────────────────────
+node_modules/
+.next/
+*.tsbuildinfo
+
+# ── Claude Code ──────────────────────────────────────────────────────────────
+.claude/settings.local.json
+CLAUDE.local.md
+
+# ── OS / editors ─────────────────────────────────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/
+*.swp
