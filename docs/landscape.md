@@ -42,8 +42,8 @@ The most directly relevant idea is Letta's **sleep-time compute** ([coverage](ht
 ## Proposed v0
 
 **Two repos.**
-- `digital_twin/` (this one): code for ingesters, the nightly loop, and evals. Could be public someday.
-- `vault/`: the self-model and raw data, kept in its own private git repo and ignored by this one. Its `git log` becomes the record of how I changed.
+- `digital_twin/` (this one): code for ingesters, the nightly loop, and evals. Public on GitHub.
+- The vault: the self-model and raw data, kept in its own private git repo *outside* this one. Code finds it through `TWIN_VAULT` in `.env`. Its `git log` becomes the record of how I changed.
 
 ```
 vault/
@@ -81,7 +81,6 @@ vault/
 | How I spend time | `phronesis` (macOS activity) | later |
 | Taste, mood, routine | `spotifyExplorer` (streaming history) | later |
 | Physical routine | `strava_tracker` | later |
-| Finance | `plutus` | probably never |
 
 The v0 job is about intellectual taste, so reading, writing, and the interview come first.
 
@@ -95,7 +94,7 @@ The v0 job is about intellectual taste, so reading, writing, and the interview c
 ## Open decisions
 
 1. **What is v0's main job?** A research-overnight agent, a talk-to-me clone, or a decision predictor. I lean toward the research agent: it's the original motivation, and it comes with a daily feedback loop.
-2. **Which data is in bounds?** Messages involving other people, health, and finance are the obvious questions.
+2. ~~**Which data is in bounds?**~~ Decided 2026-10-27: everything. See [data_sources.md](data_sources.md).
 3. **Where does it run?** Local Mac or cloud.
 4. **Where is the privacy line?** What may be sent to an API model, and what stays local.
 5. **Stack.** Presumably Python 3.12 + conda, matching `plutus`.
