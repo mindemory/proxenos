@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  /* "High-Contrast Sunshine" palette, shared with alexandria */
+  --color-primary: #FFC629;
+  --color-background: #FFF9E5; /* Light Cream */
+  --color-surface: #FFFFFF;
+  --color-text-primary: #2E2E2E; /* Charcoal */
+  --color-text-secondary: #757575; /* Soft Gray */
+}
+
+@theme {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: var(--color-primary);
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+
+  /* Rounded corners */
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+
+  --shadow-soft: 0 4px 20px -4px rgb(46 46 46 / 0.08);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}

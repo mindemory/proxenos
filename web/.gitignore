@@ -1,0 +1,3 @@
+# next-env.d.ts is written by Next.js; node_modules, .next and .env* are ignored at the repo root.
+next-env.d.ts
+/out/
