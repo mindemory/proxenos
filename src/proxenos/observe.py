@@ -20,8 +20,9 @@ from proxenos.config import env
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 # Below this much rendered text a month says too little to be worth a model call.
 MIN_CHARS = 400
-# About 150k tokens. Longer months are cut, and the note says so.
-MAX_CHARS = 600_000
+# About 30k tokens: plenty to characterize a month. Longer months are sampled evenly across
+# the month, and the note says so.
+MAX_CHARS = 120_000
 
 
 def _local(ts: str) -> datetime:
@@ -139,6 +140,57 @@ def render_chrome(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def render_photos(records: list[dict]) -> str:
+    """Photos as who, which albums and what was written about them; never the images."""
+    photos = [r for r in records if r.get("title")]
+    if not photos:
+        return ""
+    people = Counter(p for r in photos for p in r.get("people") or [])
+    albums = Counter(r.get("album") or "?" for r in photos)
+    days = Counter(_local(r["ts"]).strftime("%a") for r in photos)
+    lines = [f"{len(photos)} photos and videos taken."]
+    lines.append("Albums: " + ", ".join(f"{a} ({n})" for a, n in albums.most_common(15)))
+    if people:
+        lines.append("People tagged: " + ", ".join(f"{p} ({n})" for p, n in people.most_common(20)))
+    lines.append("By weekday: " + ", ".join(f"{d} {n}" for d, n in days.most_common()))
+    lines += [f"  {r['description']}" for r in photos if r.get("description")][:30]
+    return "\n".join(lines)
+
+
+def render_youtube(records: list[dict]) -> str:
+    """What they searched for (their own words), and what they watched, by channel."""
+    searched = [r["text"] for r in records if r.get("_stream") == "searched" and r.get("text")]
+    watched = [r for r in records if r.get("_stream") == "watched"]
+    channels = Counter(r.get("channel") or "?" for r in watched)
+    lines = []
+    if searched:
+        lines.append(f"Searches ({len(searched)}): " + "; ".join(searched[:200]))
+    if watched:
+        lines.append(f"Watched {len(watched)} videos. Top channels:")
+        lines += [f"  {c}: {n}" for c, n in channels.most_common(30)]
+        step = max(1, len(watched) // 80)
+        lines.append("A sample of titles:")
+        lines += [f"  {r.get('title')}" for r in watched[::step][:80] if r.get("title")]
+    return "\n".join(lines)
+
+
+def render_drive(records: list[dict]) -> str:
+    """Their documents: title, type and how each opens."""
+    lines = []
+    for r in records:
+        opening = " ".join((r.get("text") or "").split())[:300]
+        lines.append(f"{_stamp(r['ts'])} [{r.get('ext')}] {r.get('title')}: {opening}")
+    return "\n".join(lines)
+
+
+def _sample(text: str, limit: int) -> str:
+    """Whole lines spread evenly over the month, up to limit characters."""
+    lines = text.splitlines()
+    keep = max(1, int(len(lines) * limit / len(text)))
+    step = len(lines) / keep
+    return "\n".join(lines[int(i * step)] for i in range(keep))[:limit]
+
+
 _SOURCES: dict[str, tuple[str, Callable[[list[dict]], str]]] = {
     "whatsapp": ("their own WhatsApp messages (personal chat)", render_whatsapp),
     "slack": ("their own Slack messages (work chat)", render_slack),
@@ -147,6 +199,9 @@ _SOURCES: dict[str, tuple[str, Callable[[list[dict]], str]]] = {
     "strava": ("their Strava activities", render_strava),
     "calendar": ("their calendar events", render_calendar),
     "chrome": ("a summary of the sites they browsed", render_chrome),
+    "photos": ("a summary of the photos they took", render_photos),
+    "youtube": ("their YouTube searches and a summary of what they watched", render_youtube),
+    "drive": ("their own documents in Google Drive", render_drive),
 }
 # Sources whose accounts each get their own notes (email/<account>, slack/<team>); every
 # other source's streams are read together, one note per source and month.
@@ -221,8 +276,8 @@ def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dic
             continue
         cut = ""
         if len(text) > MAX_CHARS:
-            text = text[:MAX_CHARS]
-            cut = "\n\n(This month was longer than one request allows; only its start is shown.)"
+            text = _sample(text, MAX_CHARS)
+            cut = "\n\n(A long month: these lines are an even sample across it.)"
         answer = llm.ask(
             f"Month: {month}. Source: {_describe(name)}.\n\n{text}{cut}",
             system=_OBSERVER_SYSTEM.format(person=person),
