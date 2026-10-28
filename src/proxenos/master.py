@@ -81,7 +81,7 @@ def sync(vault: Path) -> dict[str, int]:
             stats["sources_synced"] += 1
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one broken source must not stop the rest
             stats["sources_failed"] += 1
-            name = module.__name__.rsplit(".", 1)[-1]
+            name = getattr(module, "__name__", "source").rsplit(".", 1)[-1]
             reason = str(e) if isinstance(e, SystemExit) else f"{type(e).__name__}: {e}"
             print(f"sync: {name} failed ({' '.join(reason.split())[:200]})", file=sys.stderr)
     # What the sources just brought in becomes searchable, then today's recall is redone from it.
