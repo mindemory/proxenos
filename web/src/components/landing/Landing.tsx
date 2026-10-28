@@ -102,7 +102,7 @@ export function Landing() {
           Proxenos
         </h1>
         <p className="mt-6 max-w-[34rem] text-balance font-brand text-xl leading-snug text-muted sm:text-[1.4rem]">
-          In the Greek city-states, the citizen who formally acted on another&apos;s behalf.
+          An agent that holds your entire record and acts on your behalf.
         </p>
 
         <button
