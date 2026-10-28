@@ -27,11 +27,13 @@ cp .env.example .env    # then fill in keys
 
 | Command | What it does |
 |---|---|
-| `twin ingest <source>` | Pull whatsapp, spotify, strava, slack, or email (mbox) into the vault |
-| `twin auth strava` | One-time browser sign-in that writes a Strava token to `.env` |
+| `Twin.command` (double-click) or `twin web` | Open the local page at http://127.0.0.1:4747 |
+| `twin sync` | Import new downloads from `data/` and refresh every source that needs no model |
+| `twin import [PATH ...]` | Import downloaded exports (Takeout, X, LinkedIn, Instagram, Spotify, ...) |
+| `twin ingest <source>` | Pull one source into the vault (whatsapp, slack, slackdump, strava, gmail, ...) |
+| `twin auth strava` / `twin auth slack` | One-time sign-ins that write tokens to `.env` |
 | `twin observe [--dry-run]` | Write per-month notes on what each source says about me |
-| `twin master` | Sync, observe, and update the self-model (`twin master accept` applies proposals) |
-| `twin clone tracker` | Fetch new papers, news and posts, and rank them against the self-model |
-| `npm --prefix web run dev` | The local page at http://127.0.0.1:4747 |
+| `twin master` | Sync, observe and update the self-model (`twin master accept` applies proposals) |
+| `twin clone tracker\|tasks\|advisor` | Feed of new papers and news, tasks on my plate, and advice |
 
 Tests: `pytest`. Lint: `ruff check src tests`.

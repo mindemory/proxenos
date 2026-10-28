@@ -12,6 +12,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from twin import llm
 
@@ -100,56 +101,111 @@ def render_strava(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# Fields that hold someone's own words, in the order they're tried.
+_TEXT_FIELDS = ("text", "body_new", "caption", "summary", "title", "name", "subject")
+
+
+def render_generic(records: list[dict]) -> str:
+    """Any source: the dated text of every record that isn't someone else's."""
+    lines = []
+    for r in records:
+        if r.get("from_me") is False:
+            continue
+        words = next((str(r[f]).strip() for f in _TEXT_FIELDS if r.get(f)), "")
+        if words:
+            kind = r.get("kind") or r.get("_stream") or ""
+            lines.append(f"{_stamp(r['ts'])} [{kind}] {words[:1500]}")
+    return "\n".join(lines)
+
+
+def render_calendar(records: list[dict]) -> str:
+    lines = []
+    for r in records:
+        where = f" @ {r['location']}" if r.get("location") else ""
+        lines.append(f"{_stamp(r['ts'])} {r.get('summary') or r.get('title') or '?'}{where}")
+    return "\n".join(lines)
+
+
+def render_chrome(records: list[dict]) -> str:
+    """Browsing as site counts only: page titles can be far more private than they look."""
+    sites = Counter(urlparse(r.get("url") or "").netloc.removeprefix("www.") for r in records)
+    sites.pop("", None)
+    if not sites:
+        return ""
+    lines = [f"{sum(sites.values())} visits across {len(sites)} sites. Most visited:"]
+    lines += [f"  {site}: {n}" for site, n in sites.most_common(60)]
+    return "\n".join(lines)
+
+
 _SOURCES: dict[str, tuple[str, Callable[[list[dict]], str]]] = {
     "whatsapp": ("their own WhatsApp messages (personal chat)", render_whatsapp),
     "slack": ("their own Slack messages (work chat)", render_slack),
     "email": ("their own sent email", render_email),
     "spotify": ("a summary of their Spotify listening", render_spotify),
     "strava": ("their Strava activities", render_strava),
+    "calendar": ("their calendar events", render_calendar),
+    "chrome": ("a summary of the sites they browsed", render_chrome),
 }
-# Stream directories that hold one source's monthly files; the trailing name is dropped
-# from the observation path (raw/slack/<team>/messages → observations/slack/<team>).
-_STREAM_DIRS = {"messages", "plays", "activities"}
+# Sources whose accounts each get their own notes (email/<account>, slack/<team>); every
+# other source's streams are read together, one note per source and month.
+_PER_ACCOUNT = {"email", "slack"}
 
 
-def streams(vault: Path) -> list[tuple[str, Path]]:
-    """Every raw stream with monthly files, as (observation name, directory)."""
-    found = []
+def _describe(name: str) -> str:
+    source = name.split("/")[0]
+    if source in _SOURCES:
+        return _SOURCES[source][0]
+    return f"their own {source} records (what they wrote, posted, kept or chose)"
+
+
+def streams(vault: Path) -> list[tuple[str, list[Path]]]:
+    """Every observable unit as (observation name, the stream directories it reads)."""
+    units: dict[str, list[Path]] = {}
     for month_file in sorted((vault / "raw").glob("**/*.jsonl")):
-        directory = month_file.parent
-        parts = list(directory.relative_to(vault / "raw").parts)
-        if parts[-1] in _STREAM_DIRS:
-            parts.pop()
-        name = "/".join(parts)
-        if parts[0] in _SOURCES and (name, directory) not in found:
-            found.append((name, directory))
-    return found
+        parts = month_file.parent.relative_to(vault / "raw").parts
+        name = "/".join(parts[:2]) if parts[0] in _PER_ACCOUNT else parts[0]
+        directories = units.setdefault(name, [])
+        if month_file.parent not in directories:
+            directories.append(month_file.parent)
+    return sorted(units.items())
 
 
-def pending(vault: Path, since: str | None = None) -> list[tuple[str, Path, Path]]:
-    """Months whose raw file is newer than its note: (name, raw month file, note path)."""
+def pending(vault: Path, since: str | None = None) -> list[tuple[str, str, Path]]:
+    """(name, month, note path) for every month whose raw files are newer than its note."""
     todo = []
-    for name, directory in streams(vault):
-        for month_file in sorted(directory.glob("*.jsonl")):
-            if since and month_file.stem < since:
+    for name, directories in streams(vault):
+        newest: dict[str, float] = {}
+        for directory in directories:
+            for month_file in directory.glob("*.jsonl"):
+                mtime = month_file.stat().st_mtime
+                newest[month_file.stem] = max(newest.get(month_file.stem, 0.0), mtime)
+        for month, mtime in sorted(newest.items()):
+            if since and month < since:
                 continue
-            note = vault / "observations" / name / f"{month_file.stem}.md"
-            if not note.exists() or note.stat().st_mtime < month_file.stat().st_mtime:
-                todo.append((name, month_file, note))
+            note = vault / "observations" / name / f"{month}.md"
+            if not note.exists() or note.stat().st_mtime < mtime:
+                todo.append((name, month, note))
     return todo
 
 
-def render(name: str, month_file: Path) -> str:
-    with month_file.open(encoding="utf-8") as f:
-        records = [json.loads(line) for line in f]
-    return _SOURCES[name.split("/")[0]][1](records)
+def render(vault: Path, name: str, month: str) -> str:
+    records = []
+    for directory in dict(streams(vault))[name]:
+        month_file = directory / f"{month}.jsonl"
+        if month_file.exists():
+            with month_file.open(encoding="utf-8") as f:
+                stream = directory.name
+                records += [{**json.loads(line), "_stream": stream} for line in f]
+    records.sort(key=lambda r: r["ts"])
+    render_with = _SOURCES.get(name.split("/")[0], (None, render_generic))[1]
+    return render_with(records)
 
 
 def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dict[str, int]:
     stats = Counter()
     person = os.environ.get("TWIN_NAME", "the person")
-    for name, month_file, note in pending(vault, since):
-        text = render(name, month_file)
+    for name, month, note in pending(vault, since):
+        text = render(vault, name, month)
         if len(text) < MIN_CHARS:
             stats["too_little"] += 1
             continue
@@ -161,14 +217,13 @@ def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dic
         if len(text) > MAX_CHARS:
             text = text[:MAX_CHARS]
             cut = "\n\n(This month was longer than one request allows; only its start is shown.)"
-        source = _SOURCES[name.split("/")[0]][0]
         answer = llm.ask(
-            f"Month: {month_file.stem}. Source: {source}.\n\n{text}{cut}",
+            f"Month: {month}. Source: {_describe(name)}.\n\n{text}{cut}",
             system=_OBSERVER_SYSTEM.format(person=person),
             effort="medium",
         )
         note.parent.mkdir(parents=True, exist_ok=True)
-        note.write_text(f"# {name}, {month_file.stem}\n\n{answer.strip()}\n", encoding="utf-8")
+        note.write_text(f"# {name}, {month}\n\n{answer.strip()}\n", encoding="utf-8")
         stats["observed"] += 1
     # Roughly four characters per token: enough to see what a backfill will cost.
     stats["est_input_tokens"] = stats.pop("chars", 0) // 4

@@ -3,11 +3,12 @@
 import argparse
 import importlib
 import pkgutil
+from pathlib import Path
 from types import ModuleType
 
 import twin.clones
 import twin.ingest
-from twin import auth, master, observe
+from twin import auth, importer, master, observe, webapp
 from twin.config import REPO_ROOT, vault_path
 
 
@@ -41,18 +42,32 @@ def main(argv: list[str] | None = None) -> None:
     boss = commands.add_parser("master", help="sync, observe and update the self-model")
     boss.add_argument("action", nargs="?", default="run", choices=["run", "consolidate", "accept"])
     boss.add_argument("--since", metavar="YYYY-MM", help="observe only months from this one")
+    drop = commands.add_parser("import", help="import downloaded exports from the inboxes")
+    drop.add_argument("paths", nargs="*", type=Path, help="zips or folders (default: inboxes)")
+    commands.add_parser("sync", help="import downloads and refresh every source; no model")
+    commands.add_parser("web", help="start the local page and open it")
     sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
-    sign_in.add_argument("service", choices=["strava"])
+    sign_in.add_argument("service", choices=["strava", "slack"])
     args = parser.parse_args(argv)
 
+    if args.command == "web":
+        webapp.serve()
+        return
     if args.command == "auth":
-        vault_path()  # loads .env
-        print(auth.strava(REPO_ROOT / ".env"))
+        vault = vault_path()  # also loads .env
+        if args.service == "slack":
+            print(auth.slack(REPO_ROOT / ".env", vault / "state" / "slack_apps.json"))
+        else:
+            print(auth.strava(REPO_ROOT / ".env"))
         return
     vault = vault_path()
     vault.mkdir(mode=0o700, parents=True, exist_ok=True)
     if args.command == "observe":
         stats = observe.observe(vault, args.since, args.dry_run)
+    elif args.command == "import":
+        stats = importer.run(vault, args.paths or None)
+    elif args.command == "sync":
+        stats = master.sync(vault)
     elif args.command == "master":
         actions = {
             "run": lambda: master.run(vault, args.since),

@@ -1,5 +1,6 @@
 """Browser sign-in helper, with the browser and Strava faked out."""
 
+import json
 import socket
 import stat
 import threading
@@ -68,3 +69,60 @@ def test_strava_sign_in_without_activity_access_is_refused(tmp_path, monkeypatch
     monkeypatch.setenv("STRAVA_CLIENT_SECRET", "s")
     with pytest.raises(SystemExit, match="without activity access"):
         auth.strava(tmp_path / ".env", free_port(), browser_that_approves("read"), None)
+
+
+class FakeSlack:
+    """auth.test and apps.manifest.create, keyed by token."""
+
+    def __init__(self, scopes):
+        self.scopes = scopes  # token → granted scopes
+        self.created = []
+
+    def __call__(self, method, token, form):
+        if method == "apps.manifest.create":
+            self.created.append(json.loads(form["manifest"]))
+            return {"ok": True, "app_id": f"A{len(self.created)}"}, set()
+        if token not in self.scopes:
+            return {"ok": False, "error": "invalid_auth"}, set()
+        return {"ok": True, "team": "Acme Lab"}, self.scopes[token]
+
+
+CONFIG = {"identify", "app_configurations:read", "app_configurations:write"}
+
+
+def test_slack_config_tokens_become_reading_tokens(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLACK_USER_TOKEN_acme", "config-token")
+    monkeypatch.setenv("SLACK_USER_TOKEN_done", "reader-token")
+    env, state = tmp_path / ".env", tmp_path / "state" / "slack_apps.json"
+    env.write_text("SLACK_USER_TOKEN_acme=config-token\nSLACK_USER_TOKEN_done=reader-token\n")
+    fake = FakeSlack(
+        {
+            "config-token": CONFIG,
+            "reader-token": set(auth.SLACK_SCOPES),
+            "new-reader": set(auth.SLACK_SCOPES),
+        }
+    )
+    opened = []
+
+    result = auth.slack(env, state, opened.append, lambda prompt: "new-reader", fake)
+    assert result.startswith("slack: 1 reading token(s) saved")
+    assert len(fake.created) == 1
+    manifest = fake.created[0]
+    assert manifest["oauth_config"]["scopes"]["user"] == auth.SLACK_SCOPES
+    assert manifest["settings"]["token_rotation_enabled"] is False
+    assert opened == ["https://api.slack.com/apps/A1/oauth"]
+    assert (
+        env.read_text() == "SLACK_USER_TOKEN_acme=new-reader\nSLACK_USER_TOKEN_done=reader-token\n"
+    )
+
+
+def test_slack_reuses_the_app_and_refuses_tokens_that_cannot_read(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLACK_USER_TOKEN_acme", "config-token")
+    env, state = tmp_path / ".env", tmp_path / "state" / "slack_apps.json"
+    env.write_text("SLACK_USER_TOKEN_acme=config-token\n")
+    fake = FakeSlack({"config-token": CONFIG, "weak": {"identify"}})
+
+    auth.slack(env, state, lambda url: None, lambda prompt: "", fake)  # skipped at the prompt
+    auth.slack(env, state, lambda url: None, lambda prompt: "weak", fake)
+    assert len(fake.created) == 1
+    assert env.read_text() == "SLACK_USER_TOKEN_acme=config-token\n"

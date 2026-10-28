@@ -246,4 +246,4 @@ def test_the_http_transport_turns_rate_limits_into_retry_after(monkeypatch, how)
 def test_a_missing_token_fails_with_a_clear_message(monkeypatch, tmp_path):
     monkeypatch.delenv("SLACK_USER_TOKEN", raising=False)
     with pytest.raises(SystemExit, match="SLACK_USER_TOKEN is not set"):
-        slack.run(tmp_path, argparse.Namespace(full=False))
+        slack.run(tmp_path, argparse.Namespace(full=False, workspace=None))

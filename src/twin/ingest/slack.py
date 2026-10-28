@@ -2,8 +2,8 @@
 
 Reads every conversation the token's user is in: public channels they've joined, private
 channels, DMs and group DMs. A member who isn't an admin can only reach their DMs with a user
-token (xoxp-...), which comes from SLACK_USER_TOKEN. Each workspace gets its own stream under
-raw/slack/<team>/messages.
+token (xoxp-...). Tokens come from SLACK_USER_TOKEN and any SLACK_USER_TOKEN_<suffix>, one
+per workspace. Each workspace gets its own stream under raw/slack/<team>/messages.
 
 Runs are incremental per channel. State keeps the newest ts seen in each one, and the next run
 asks conversations.history for what came after it, starting a week early. Replies don't appear
@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -84,7 +85,11 @@ def ingest(
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     watermarks = state.setdefault("channels", {})
 
-    users = {u["id"]: _user_name(u) for u in slack.pages("users.list", "members")}
+    try:
+        users = {u["id"]: _user_name(u) for u in slack.pages("users.list", "members")}
+    except SlackError:
+        # Without users:read, names stay unresolved but every message still comes in.
+        users = {}
     listed = slack.pages("conversations.list", "channels", types=_TYPES, exclude_archived="false")
     channels = [_channel(c, users) for c in listed if _is_mine(c)]
 
@@ -105,13 +110,36 @@ def ingest(
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--full", action="store_true", help="ignore saved state, re-read all")
+    parser.add_argument("--workspace", help="only the token whose env name ends with this")
+
+
+def tokens() -> dict[str, str]:
+    """Env var name → token, for SLACK_USER_TOKEN and every SLACK_USER_TOKEN_<suffix>."""
+    return {
+        name: value.strip()
+        for name, value in sorted(os.environ.items())
+        if (name == TOKEN_ENV or name.startswith(TOKEN_ENV + "_")) and value.strip()
+    }
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
-    token = os.environ.get(TOKEN_ENV)
-    if not token:
+    found = tokens()
+    if args.workspace:
+        found = {k: v for k, v in found.items() if k.lower().endswith(args.workspace.lower())}
+    if not found:
         raise SystemExit(f"{TOKEN_ENV} is not set. Put a Slack user OAuth token (xoxp-...) in .env")
-    return ingest(vault, http_call(token), full=args.full)
+    totals: dict[str, int] = {"workspaces": 0, "workspaces_failed": 0}
+    for name, token in found.items():
+        try:
+            stats = ingest(vault, http_call(token), full=args.full)
+        except (SystemExit, SlackError, OSError) as e:  # one bad token must not stop the rest
+            print(f"slack: {name} failed: {e}", file=sys.stderr)
+            totals["workspaces_failed"] += 1
+            continue
+        totals["workspaces"] += 1
+        for key, value in stats.items():
+            totals[key] = totals.get(key, 0) + value
+    return totals
 
 
 class _Client:

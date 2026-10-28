@@ -150,7 +150,10 @@ def test_a_broken_source_does_not_stop_the_run(tmp_path, monkeypatch):
     monkeypatch.setattr(
         master,
         "_UNATTENDED",
-        [(SimpleNamespace(run=broken), None), (SimpleNamespace(run=lambda v, a: {}), None)],
+        [
+            (SimpleNamespace(run=broken), lambda: True),
+            (SimpleNamespace(run=lambda v, a: {}), lambda: True),
+        ],
     )
     fake_llm(
         monkeypatch,

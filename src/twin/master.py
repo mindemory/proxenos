@@ -15,8 +15,18 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from twin import llm, observe
-from twin.ingest import slack, spotify, strava, whatsapp
+from twin import importer, llm, observe
+from twin.ingest import (
+    bluesky,
+    gmail,
+    mentions,
+    slack,
+    slackdump,
+    spotify,
+    strava,
+    website,
+    whatsapp,
+)
 
 # name → what the file holds; consolidation writes exactly these.
 SELF_FILES = {
@@ -31,19 +41,34 @@ SELF_FILES = {
 }
 SLOW = {"identity", "voice"}
 
-# Sources that sync without me, and the env var each needs (None: always available).
+# Sources that sync without me, each with what tells us it's set up.
 _UNATTENDED = [
-    (whatsapp, None),
-    (spotify, None),
-    (strava, "STRAVA_CLIENT_ID"),
-    (slack, "SLACK_USER_TOKEN"),
+    (whatsapp, lambda: True),
+    (spotify, lambda: True),
+    (gmail, gmail.accounts),
+    (strava, lambda: os.environ.get("STRAVA_CLIENT_ID")),
+    (slack, slack.tokens),
+    (slackdump, slackdump.archives),
+    (website, lambda: True),
+    (mentions, lambda: os.environ.get("TWIN_FULL_NAME")),
+    (bluesky, lambda: os.environ.get("TWIN_BLUESKY_HANDLE")),
 ]
 
 
 def run(vault: Path, since: str | None = None) -> dict[str, int]:
+    stats = sync(vault)
+    stats.update(observe.observe(vault, since))
+    stats.update(consolidate(vault))
+    return stats
+
+
+def sync(vault: Path) -> dict[str, int]:
+    """Everything that needs no model: import new downloads, then refresh every set-up source."""
+    os.environ.setdefault("TWIN_FULL_NAME", os.environ.get("TWIN_NAME", ""))
     stats = {"sources_synced": 0, "sources_failed": 0}
-    for module, needs in _UNATTENDED:
-        if needs and not os.environ.get(needs):
+    stats.update(importer.run(vault))
+    for module, configured in _UNATTENDED:
+        if not configured():
             continue
         parser = argparse.ArgumentParser()
         if hasattr(module, "add_arguments"):
@@ -53,8 +78,6 @@ def run(vault: Path, since: str | None = None) -> dict[str, int]:
             stats["sources_synced"] += 1
         except (Exception, SystemExit):  # noqa: BLE001 - one broken source must not stop the rest
             stats["sources_failed"] += 1
-    stats.update(observe.observe(vault, since))
-    stats.update(consolidate(vault))
     return stats
 
 
