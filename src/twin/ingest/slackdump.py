@@ -21,7 +21,13 @@ DEFAULT_ROOT = Path("~/Documents/Personal").expanduser()
 
 
 def archives(root: Path = DEFAULT_ROOT) -> list[Path]:
-    return sorted(root.glob("slackdump_*/slackdump.sqlite"))
+    """Every slackdump run under root, plus any dropped into the repo's data/ folder."""
+    from twin.config import REPO_ROOT
+
+    found = set(root.glob("slackdump_*/slackdump.sqlite"))
+    if root == DEFAULT_ROOT:
+        found |= set((REPO_ROOT / "data").glob("slackdump_*/slackdump.sqlite"))
+    return sorted(found)
 
 
 def read_archive(db: Path) -> tuple[str | None, list[dict]]:

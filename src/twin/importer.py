@@ -108,6 +108,8 @@ def _waiting(path: Path) -> bool:
     """A finished download that hasn't been imported: a zip, a folder or a PDF; never a partial."""
     if path.name.startswith(".") or path.name == "imported":
         return False
+    if path.name.startswith("slackdump_"):
+        return False  # read in place by the slackdump ingester
     return path.is_dir() or path.suffix.lower() in {".zip", ".pdf"}
 
 
@@ -190,7 +192,7 @@ def _unpack(path: Path, dest: Path) -> None:
         # zipfile drops absolute paths and ".." parts, so nothing lands outside dest.
         with zipfile.ZipFile(path) as archive:
             for info in archive.infolist():
-                if not _wanted(info.filename):
+                if not _wanted(info.filename) or info.file_size > _MAX_FILE:
                     continue
                 try:
                     target = archive.extract(info, dest)
@@ -231,6 +233,10 @@ _MEDIA = (
     ".wmv",
     ".mpg",
 )
+
+
+# A single file this big is a video, a dataset or an archive, not something a reader uses.
+_MAX_FILE = 200 * 1024 * 1024
 
 
 def _wanted(name: str) -> bool:
