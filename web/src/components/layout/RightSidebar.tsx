@@ -1,11 +1,52 @@
-import { formatDateTime, timeAgo } from "@/lib/format";
-import type { ItemsResponse } from "@/lib/types";
+import { ChevronRight, Lightbulb, ListTodo, Rss, type LucideIcon } from "lucide-react";
+
+import { formatDateTime, localDay, plural, shortDate, timeAgo } from "@/lib/format";
+import { isUrgent } from "@/lib/tasks";
+import type { HomeResponse, ItemsResponse } from "@/lib/types";
+
+import type { View } from "./nav";
 
 interface RightSidebarProps {
   feed: ItemsResponse | null;
+  home: HomeResponse | null;
+  onNavigate: (view: View) => void;
 }
 
-export function RightSidebar({ feed }: RightSidebarProps) {
+function CloneRow({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  title,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  title?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="group w-[calc(100%+1rem)] flex items-center gap-3 rounded-xl px-2 py-2.5 -mx-2 text-left hover:bg-surface-2 transition-colors"
+    >
+      <Icon size={17} className="text-muted flex-shrink-0" />
+      <span className="flex-1 min-w-0">
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="text-sm">{label}</span>
+          <span className="num text-lg leading-none">{value}</span>
+        </span>
+        <span className="block text-xs text-muted leading-snug mt-0.5">{detail}</span>
+      </span>
+      <ChevronRight size={15} className="text-muted/60 group-hover:text-muted flex-shrink-0" />
+    </button>
+  );
+}
+
+export function RightSidebar({ feed, home, onNavigate }: RightSidebarProps) {
   const items = feed?.items ?? [];
   const latest = feed?.latest ?? null;
 
@@ -22,51 +63,79 @@ export function RightSidebar({ feed }: RightSidebarProps) {
     { label: "Opened", count: items.filter((i) => i.opened).length },
   ];
 
+  const open = home?.tasks.actionable.filter((t) => t.action === null) ?? [];
+  const urgent = home ? open.filter((t) => isUrgent(t, localDay(home.now))).length : 0;
+
   return (
-    <aside className="w-[350px] flex-shrink-0 sticky top-0 h-screen p-6 hidden xl:flex flex-col gap-6">
-      <div className="bg-surface rounded-2xl p-6 shadow-soft">
-        <h2 className="font-bold text-xl mb-4 text-text-primary">Latest batch</h2>
-        {latest && feed ? (
-          <div className="space-y-1">
-            <div className="text-3xl font-bold">{timeAgo(latest.ts, feed.now)}</div>
-            <div className="text-sm text-text-secondary">
-              {formatDateTime(latest.ts)} · {latest.count} items
-            </div>
-            <div className="text-sm text-text-secondary">Checks for new batches every 5 minutes.</div>
-          </div>
-        ) : (
-          <div className="text-sm text-text-secondary">{feed ? "No batches yet." : "Loading..."}</div>
-        )}
-      </div>
+    <aside className="w-[312px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto px-5 py-5 hidden xl:flex flex-col gap-4">
+      <section className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-display text-xl mb-2">Clones</h2>
+        <div className="divide-y divide-line">
+          <CloneRow
+            icon={ListTodo}
+            label="Open tasks"
+            value={home?.tasks.exists ? String(open.length) : "–"}
+            detail={
+              !home
+                ? "Loading"
+                : home.tasks.exists
+                  ? `${urgent} overdue or due soon · ${home.tasks.waiting} waiting`
+                  : "No list yet: twin clone tasks"
+            }
+            onClick={() => onNavigate("tasks")}
+          />
+          <CloneRow
+            icon={Lightbulb}
+            label="Advice"
+            value={home?.advice.exists ? String(home.advice.total) : "–"}
+            detail={
+              !home
+                ? "Loading"
+                : home.advice.exists
+                  ? `${home.advice.unanswered} unanswered · ${shortDate(home.advice.date, home.now)}`
+                  : "None yet: twin clone advisor"
+            }
+            onClick={() => onNavigate("advice")}
+          />
+          <CloneRow
+            icon={Rss}
+            label="Latest batch"
+            value={latest && feed ? timeAgo(latest.ts, feed.now) : "–"}
+            title={latest ? formatDateTime(latest.ts) : undefined}
+            detail={latest ? `${plural(latest.count, "item")} · rechecked every 5 min` : feed ? "No batches yet" : "Loading"}
+            onClick={() => onNavigate("feed")}
+          />
+        </div>
+      </section>
 
-      <div className="bg-surface rounded-2xl p-6 shadow-soft">
-        <h2 className="font-bold text-xl mb-4 text-text-primary">Interests in view</h2>
+      <section className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-display text-xl mb-3">Interests in view</h2>
         {topInterests.length > 0 ? (
-          <div className="space-y-3">
+          <ul className="space-y-2">
             {topInterests.map(([name, count]) => (
-              <div key={name} className="flex items-center justify-between gap-3">
-                <span className="font-bold truncate">{name}</span>
-                <span className="bg-primary/20 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full">{count}</span>
-              </div>
+              <li key={name} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate">{name}</span>
+                <span className="num text-xs text-muted">{count}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : (
-          <div className="text-sm text-text-secondary">Nothing ranked yet.</div>
+          <p className="text-sm text-muted">Nothing ranked yet.</p>
         )}
-      </div>
+      </section>
 
-      <div className="bg-surface rounded-2xl p-6 shadow-soft">
-        <h2 className="font-bold text-xl mb-4 text-text-primary">Your reactions</h2>
-        <div className="grid grid-cols-2 gap-3">
+      <section className="bg-surface border border-line rounded-2xl p-5">
+        <h2 className="font-display text-xl mb-3">Your reactions</h2>
+        <div className="grid grid-cols-2 gap-2">
           {reactions.map((r) => (
-            <div key={r.label} className="bg-background rounded-xl p-3">
-              <div className="text-2xl font-bold">{r.count}</div>
-              <div className="text-sm text-text-secondary">{r.label}</div>
+            <div key={r.label} className="bg-bg border border-line rounded-xl px-3 py-2.5">
+              <div className="num text-xl">{r.count}</div>
+              <div className="text-xs text-muted">{r.label}</div>
             </div>
           ))}
         </div>
-        <p className="text-xs text-text-secondary mt-3">On the batches shown in the feed.</p>
-      </div>
+        <p className="text-xs text-muted mt-3">On the batches shown in the feed.</p>
+      </section>
     </aside>
   );
 }

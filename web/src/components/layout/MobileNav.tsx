@@ -11,24 +11,30 @@ interface MobileNavProps {
 /** Bottom tab bar below the md breakpoint, where the left sidebar is hidden. */
 export function MobileNav({ onNavigate, currentView, hasNew = false }: MobileNavProps) {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-background/90 backdrop-blur-md border-t border-gray-200 flex justify-around px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {NAV_ITEMS.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => onNavigate(item.id)}
-          aria-current={currentView === item.id ? "page" : undefined}
-          className={cn(
-            "relative flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl text-xs font-medium transition-colors",
-            currentView === item.id ? "bg-primary text-text-primary" : "text-text-secondary",
-          )}
-        >
-          <item.icon size={22} strokeWidth={2.5} />
-          <span>{item.label}</span>
-          {item.id === "feed" && hasNew && (
-            <span className="absolute top-1 right-3 w-2 h-2 rounded-full bg-text-primary" aria-label="New items" />
-          )}
-        </button>
-      ))}
+    <nav
+      aria-label="Views"
+      className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg/90 backdrop-blur-md border-t border-line grid grid-cols-8 gap-0.5 px-1 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))]"
+    >
+      {NAV_ITEMS.map((item) => {
+        const active = currentView === item.id;
+        return (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] tracking-tight transition-colors",
+              active ? "bg-surface text-accent" : "text-muted",
+            )}
+          >
+            <item.icon size={20} strokeWidth={2} />
+            <span className="max-w-full truncate">{item.label}</span>
+            {item.id === "feed" && hasNew && (
+              <span className="absolute top-1 right-[22%] w-1.5 h-1.5 rounded-full bg-accent" aria-label="New items" />
+            )}
+          </button>
+        );
+      })}
     </nav>
   );
 }

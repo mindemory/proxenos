@@ -1,15 +1,6 @@
-import {
-  Bookmark,
-  Compass,
-  FileText,
-  Hash,
-  MessageSquare,
-  Newspaper,
-  ThumbsDown,
-  ThumbsUp,
-  type LucideIcon,
-} from "lucide-react";
+import { Bookmark, Compass, FileText, Hash, MessageSquare, Newspaper, ThumbsDown, ThumbsUp, type LucideIcon } from "lucide-react";
 
+import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { authorLine, formatDate, percent, sourceLabel } from "@/lib/format";
 import type { FeedItem, Kind, Reaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -20,43 +11,20 @@ const KIND_ICON: Record<Kind, LucideIcon> = {
   post: MessageSquare,
 };
 
-const ACTIONS: {
-  reaction: Reaction;
-  label: string;
-  icon: LucideIcon;
-  idle: [text: string, circle: string];
-  active: [text: string, circle: string];
-}[] = [
-  {
-    reaction: "useful",
-    label: "Useful",
-    icon: ThumbsUp,
-    idle: ["hover:text-green-600", "group-hover:bg-green-50"],
-    active: ["text-green-600", "bg-green-50"],
-  },
-  {
-    reaction: "not_me",
-    label: "Not me",
-    icon: ThumbsDown,
-    idle: ["hover:text-red-600", "group-hover:bg-red-50"],
-    active: ["text-red-600", "bg-red-50"],
-  },
-  {
-    reaction: "save",
-    label: "Save",
-    icon: Bookmark,
-    idle: ["hover:text-yellow-600", "group-hover:bg-yellow-50"],
-    active: ["text-yellow-600", "bg-yellow-50"],
-  },
+const ACTIONS: { reaction: Reaction; label: string; icon: LucideIcon; tone: ActionTone }[] = [
+  { reaction: "useful", label: "Useful", icon: ThumbsUp, tone: "ok" },
+  { reaction: "not_me", label: "Not me", icon: ThumbsDown, tone: "bad" },
+  { reaction: "save", label: "Save", icon: Bookmark, tone: "accent" },
 ];
 
 interface ItemCardProps {
   item: FeedItem;
+  flash?: boolean;
   onReact: (item: FeedItem, reaction: Reaction) => void;
   onOpen: (item: FeedItem) => void;
 }
 
-function TitleLink({ item, onOpen }: { item: FeedItem; onOpen: (item: FeedItem) => void }) {
+export function TitleLink({ item, onOpen }: { item: FeedItem; onOpen: (item: FeedItem) => void }) {
   if (!item.url) return <>{item.title}</>;
   return (
     <a
@@ -65,14 +33,14 @@ function TitleLink({ item, onOpen }: { item: FeedItem; onOpen: (item: FeedItem) 
       rel="noopener noreferrer"
       onClick={() => onOpen(item)}
       onAuxClick={(e) => e.button === 1 && onOpen(item)}
-      className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+      className="rounded hover:underline decoration-accent/60 underline-offset-4"
     >
       {item.title}
     </a>
   );
 }
 
-export function ItemCard({ item, onReact, onOpen }: ItemCardProps) {
+export function ItemCard({ item, flash = false, onReact, onOpen }: ItemCardProps) {
   const Icon = KIND_ICON[item.kind];
   const saved = item.reaction === "save";
   const authors = authorLine(item.authors);
@@ -82,44 +50,46 @@ export function ItemCard({ item, onReact, onOpen }: ItemCardProps) {
   return (
     <article
       className={cn(
-        "p-4 sm:p-6 hover:bg-gray-50/50 transition-all",
-        item.reaction === "not_me" && "opacity-50 hover:opacity-80",
+        "px-4 sm:px-6 py-5 transition-opacity",
+        flash && "row-flash",
+        item.reaction === "not_me" && "opacity-55 hover:opacity-85",
       )}
     >
       <div className="flex gap-3 sm:gap-4">
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex-shrink-0 bg-primary/20 text-yellow-700 flex items-center justify-center">
-          <Icon size={20} strokeWidth={2.5} />
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-surface-2 text-muted flex items-center justify-center">
+          <Icon size={17} strokeWidth={2} />
         </div>
 
         <div className="flex-1 min-w-0 space-y-3">
           {/* Source, kind, date, match */}
-          <div className="flex justify-between items-start gap-3">
-            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
-              <span className="font-bold text-text-primary truncate">{sourceLabel(item.source)}</span>
-              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary bg-gray-100 px-2 py-0.5 rounded-full">
-                {item.kind}
-              </span>
-              {published && <span className="text-text-secondary text-sm">· {published}</span>}
-              {item.opened && <span className="text-text-secondary text-sm">· opened</span>}
+          <div className="flex justify-between items-start gap-3 pt-1.5">
+            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0 text-sm">
+              <span className="font-medium text-ink truncate">{sourceLabel(item.source)}</span>
+              <span className="eyebrow">{item.kind}</span>
+              {published && <span className="num text-xs text-muted">{published}</span>}
+              {item.opened && <span className="text-xs text-muted">· opened</span>}
             </div>
-            <span className="bg-primary/20 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
-              Match: {percent(item.score)}%
+            <span
+              className="num text-xs text-accent bg-accent/10 border border-accent/25 px-2 py-0.5 rounded-full whitespace-nowrap"
+              title="Match with your profile"
+            >
+              {percent(item.score)}%
             </span>
           </div>
 
           {/* Why it matters to me */}
-          {item.why && <p className="text-lg text-text-primary leading-relaxed">{item.why}</p>}
+          {item.why && <p className="text-[15px] text-ink leading-relaxed">{item.why}</p>}
 
           {(item.interest || item.explore) && (
             <div className="flex flex-wrap gap-2">
               {item.interest && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 max-w-full">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-surface-2 text-muted max-w-full">
                   <Hash className="w-3 h-3 mr-1 flex-shrink-0" />
                   <span className="truncate">{item.interest}</span>
                 </span>
               )}
               {item.explore && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-800">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs border border-accent/25 text-accent">
                   <Compass className="w-3 h-3 mr-1" />
                   Explore
                 </span>
@@ -130,58 +100,42 @@ export function ItemCard({ item, onReact, onOpen }: ItemCardProps) {
           {/* Papers get the citation card; news and posts a plain card. */}
           <div
             className={cn(
-              "p-4 rounded-xl transition-colors group relative",
-              isPaper
-                ? "bg-primary/10 border-2 border-primary/20 hover:bg-primary/20"
-                : "bg-surface border border-gray-100 shadow-sm hover:bg-gray-50",
+              "p-4 rounded-xl border relative",
+              isPaper ? "bg-accent/[0.06] border-accent/25" : "bg-surface border-line",
             )}
           >
             {saved && (
-              <div className="absolute top-4 right-4 bg-primary text-text-primary text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                <Bookmark size={12} fill="currentColor" />
+              <div className="absolute top-3 right-3 bg-accent text-accent-ink text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Bookmark size={11} fill="currentColor" />
                 Saved
               </div>
             )}
-            <h3
-              className={cn(
-                "font-bold text-text-primary mb-1 group-hover:underline decoration-primary break-words",
-                isPaper ? "text-xl" : "text-lg",
-                saved && "pr-20",
-              )}
-            >
+            <h3 className={cn("font-display text-ink leading-snug break-words", isPaper ? "text-xl" : "text-lg", saved && "pr-20")}>
               <TitleLink item={item} onOpen={onOpen} />
             </h3>
             {authors && (
-              <div className="text-text-secondary truncate" title={item.authors?.join(", ")}>
+              <div className="text-sm text-muted truncate mt-1" title={item.authors?.join(", ")}>
                 {authors}
               </div>
             )}
             {item.summary && (
-              <p className="text-sm text-text-secondary/90 leading-relaxed line-clamp-3 mt-2 break-words">
-                {item.summary}
-              </p>
+              <p className="text-sm text-muted leading-relaxed line-clamp-3 mt-2 break-words">{item.summary}</p>
             )}
           </div>
 
           {/* Reactions */}
-          <div className="flex gap-2 sm:gap-6 pt-1 text-text-secondary">
-            {ACTIONS.map((a) => {
-              const active = item.reaction === a.reaction;
-              const [text, circle] = active ? a.active : a.idle;
-              return (
-                <button
-                  key={a.reaction}
-                  onClick={() => onReact(item, a.reaction)}
-                  aria-pressed={active}
-                  className={cn("flex items-center gap-1 group transition-colors whitespace-nowrap", text)}
-                >
-                  <div className={cn("p-2 rounded-full transition-colors", circle)}>
-                    <a.icon size={20} fill={active && a.reaction === "save" ? "currentColor" : "none"} />
-                  </div>
-                  <span className="text-sm font-medium">{a.label}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            {ACTIONS.map((a) => (
+              <ActionButton
+                key={a.reaction}
+                icon={a.icon}
+                label={a.label}
+                tone={a.tone}
+                active={item.reaction === a.reaction}
+                fillWhenActive={a.reaction === "save"}
+                onClick={() => onReact(item, a.reaction)}
+              />
+            ))}
           </div>
         </div>
       </div>

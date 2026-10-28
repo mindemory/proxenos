@@ -80,7 +80,7 @@ function inline(text: string): ReactNode[] {
       }
       if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
         return (
-          <code key={i} className="px-1 py-0.5 rounded bg-gray-100 text-[0.9em] font-mono">
+          <code key={i} className="px-1 py-0.5 rounded bg-surface-2 text-[0.88em] num">
             {part.slice(1, -1)}
           </code>
         );
@@ -88,7 +88,7 @@ function inline(text: string): ReactNode[] {
       const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
       if (link) {
         return /^https?:\/\//i.test(link[2]) ? (
-          <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" className="underline decoration-primary decoration-2 hover:text-yellow-700">
+          <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent">
             {link[1]}
           </a>
         ) : (
@@ -102,15 +102,16 @@ function inline(text: string): ReactNode[] {
     });
 }
 
-const HEADING = ["text-2xl font-bold", "text-xl font-bold", "text-lg font-bold", "text-base font-bold"];
+const HEADING = ["font-display text-2xl", "font-display text-xl", "font-display text-lg", "text-base font-semibold"];
 
-export function Markdown({ source }: { source: string }) {
+export function Markdown({ source, compact = false }: { source: string; compact?: boolean }) {
   return (
-    <div className="space-y-3 text-text-primary leading-relaxed break-words">
+    <div className={compact ? "space-y-2 text-sm text-ink/90 leading-relaxed break-words" : "space-y-3 text-ink leading-relaxed break-words"}>
       {parse(source).map((b, i) => {
         switch (b.type) {
           case "h": {
-            const cls = `${HEADING[Math.min(b.level, 4) - 1]} ${i > 0 ? "pt-2" : ""}`;
+            const size = compact ? "text-sm font-semibold" : HEADING[Math.min(b.level, 4) - 1];
+            const cls = `${size} ${i > 0 ? "pt-2" : ""}`;
             return b.level === 1 ? (
               <h3 key={i} className={cls}>{inline(b.text)}</h3>
             ) : (
@@ -119,30 +120,30 @@ export function Markdown({ source }: { source: string }) {
           }
           case "ul":
             return (
-              <ul key={i} className="list-disc pl-6 space-y-1 marker:text-primary">
+              <ul key={i} className="list-disc pl-6 space-y-1 marker:text-accent">
                 {b.items.map((it, j) => <li key={j}>{inline(it)}</li>)}
               </ul>
             );
           case "ol":
             return (
-              <ol key={i} className="list-decimal pl-6 space-y-1 marker:font-bold marker:text-yellow-700">
+              <ol key={i} className="list-decimal pl-6 space-y-1 marker:text-accent marker:num">
                 {b.items.map((it, j) => <li key={j}>{inline(it)}</li>)}
               </ol>
             );
           case "quote":
             return (
-              <blockquote key={i} className="border-l-4 border-primary/40 pl-4 text-text-secondary">
+              <blockquote key={i} className="border-l-2 border-accent/40 pl-4 text-muted">
                 {inline(b.text)}
               </blockquote>
             );
           case "code":
             return (
-              <pre key={i} className="bg-gray-100 rounded-xl p-4 text-sm font-mono overflow-x-auto">
+              <pre key={i} className="bg-surface-2 rounded-xl p-4 text-sm num overflow-x-auto">
                 {b.text}
               </pre>
             );
           case "hr":
-            return <hr key={i} className="border-gray-100" />;
+            return <hr key={i} className="border-line" />;
           default:
             return <p key={i}>{inline(b.text)}</p>;
         }

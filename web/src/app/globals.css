@@ -1,32 +1,155 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Twin is always dark: a quiet ground for reading late, with one cool accent.
+
+   The accent is periwinkle on purpose. Green, amber and red are reserved for
+   state (done, due soon, overdue; confident, unsure), so the colour that marks
+   "you are here" and "this is a link" stays out of that range and never reads
+   as a warning.
+
+   Semantic variables live on :root and are mapped into Tailwind with
+   `@theme inline`, so components say `bg-surface` or `text-bad-ink` and never
+   name a raw colour. The default Tailwind palette is switched off below, which
+   keeps it that way.
+--------------------------------------------------------------------------- */
+
 :root {
-  /* "High-Contrast Sunshine" palette, shared with alexandria */
-  --color-primary: #FFC629;
-  --color-background: #FFF9E5; /* Light Cream */
-  --color-surface: #FFFFFF;
-  --color-text-primary: #2E2E2E; /* Charcoal */
-  --color-text-secondary: #757575; /* Soft Gray */
+  color-scheme: dark;
+
+  --c-bg: #0f1114; /* page ground */
+  --c-surface: #171a1f; /* cards, sidebars */
+  --c-surface-2: #1f232a; /* chips, hover, raised controls */
+  --c-ink: #ebe8e2; /* body text, warm off-white: 15:1 on the ground */
+  --c-muted: #9ca2ad; /* secondary text: 7:1 on the ground, 6.8:1 on surface */
+  --c-line: #272b33; /* hairlines */
+  --c-line-strong: #363b46; /* control borders */
+  --c-accent: #a3b1ff; /* periwinkle: 9:1 on the ground */
+  --c-accent-ink: #0d1020; /* text on an accent fill */
+
+  --c-ok-bg: #13241a;
+  --c-ok-ink: #8fd9a8;
+  --c-ok-line: #2b5a3d;
+
+  --c-warn-bg: #2a2213;
+  --c-warn-ink: #eec97a;
+  --c-warn-line: #5f4b1f;
+
+  --c-bad-bg: #2f1618;
+  --c-bad-ink: #f5a5a0;
+  --c-bad-line: #6e2f31;
 }
 
 @theme {
-  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --color-*: initial;
+  --shadow-pop: 0 10px 30px -10px rgb(0 0 0 / 0.7);
+}
 
-  --color-primary: var(--color-primary);
-  --color-background: var(--color-background);
-  --color-surface: var(--color-surface);
-  --color-text-primary: var(--color-text-primary);
-  --color-text-secondary: var(--color-text-secondary);
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-accent: var(--c-accent);
+  --color-accent-ink: var(--c-accent-ink);
 
-  /* Rounded corners */
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 2rem;
+  --color-ok-bg: var(--c-ok-bg);
+  --color-ok-ink: var(--c-ok-ink);
+  --color-ok-line: var(--c-ok-line);
+  --color-warn-bg: var(--c-warn-bg);
+  --color-warn-ink: var(--c-warn-ink);
+  --color-warn-line: var(--c-warn-line);
+  --color-bad-bg: var(--c-bad-bg);
+  --color-bad-ink: var(--c-bad-ink);
+  --color-bad-line: var(--c-bad-line);
 
-  --shadow-soft: 0 4px 20px -4px rgb(46 46 46 / 0.08);
+  /* Body in Geist, headings in Newsreader, every number in Geist Mono. */
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-newsreader), ui-serif, "Iowan Old Style", Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Numbers, dates, scores and counts: mono with tabular figures so columns line up. */
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  /* A mono space is a full cell wide; pull "2h ago" back together. */
+  word-spacing: -0.3em;
+}
+
+/* Small uppercase label above a group. */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+html,
+body {
+  background: var(--c-bg);
+  color: var(--c-ink);
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--c-accent) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. All of it is opt-in to prefers-reduced-motion: no-preference; with
+   reduced motion every element simply appears in its final state.
+--------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .screen-in {
+    animation: screen-in 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .toast-in {
+    animation: toast-in 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  /* Marks the row an action just touched, so a change in a long list is findable. */
+  .row-flash {
+    animation: row-flash 1400ms ease-out both;
+  }
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+@keyframes row-flash {
+  0%,
+  35% {
+    background-color: color-mix(in oklab, var(--c-accent) 12%, transparent);
+    box-shadow: inset 2px 0 0 var(--c-accent);
+  }
 }
