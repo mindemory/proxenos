@@ -1,56 +1,120 @@
 # Proxenos
 
-*In the Greek city-states, the proxenos was the citizen who formally acted on someone else's behalf.*
+**An agent that holds your entire record and acts on your behalf.**
 
-Proxenos learns from my own data and works on my behalf. It is a digital twin of me in the plain sense. A master process keeps one shared model of who I am, and worker clones use it for one job each: a research and news feed, tasks, advice, my network, memories for the day, and drafts written as me. It drafts; it never sends anything by itself.
+Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
+- a feed of new papers and news, ranked for you;
+- your open tasks, pulled from your conversations;
+- advice grounded in your own patterns;
+- a map of the people you know and how they connect;
+- a searchable memory that brings the right past messages and notes to mind;
+- drafts of replies, emails and plans, written in your voice.
 
-Design notes: [architecture](docs/architecture.md), [data sources](docs/data_sources.md), [tracker and page](docs/tracker.md), [landscape](docs/landscape.md), [roadmap](docs/roadmap.md).
+It drafts; it never sends, posts or buys anything by itself. You approve what goes out. The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
+
+> **Status: early and personal-scale.** It's built and used by one person on macOS (Apple Silicon). Expect rough edges, and readers that assume a particular export format. Issues and ideas are very welcome, especially about making it useful for people navigating hard systems like healthcare. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+*The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
+
+## How it works
+
+```
+your sources ──ingest──▶ vault/raw ──observe──▶ notes ──consolidate──▶ self-model
+                              │                                             │
+                              └──index──▶ memory (full-text search)         ▼
+                                                        clones: feed, tasks, advice,
+                                                        network, recall, drafts
+                                                                │
+                                                        local page (127.0.0.1)
+```
+
+- **Ingesters** pull each source into the vault as monthly files. Re-running one is always safe.
+- **Observers** read one month of one source (only your own side of conversations) and write notes about you.
+- **The master** merges the notes into a single self-model: identity, interests, taste, voice, routines and open questions. Slow-changing parts change only through proposals you accept.
+- **Clones** read the self-model and each do one job. The page shows their output and records your reactions, which feed back into the next run.
+
+More detail: [architecture](docs/architecture.md), [data sources](docs/data_sources.md), [the feed and the page](docs/tracker.md), [related work](docs/landscape.md).
 
 ## Privacy
 
-This repository holds code only. Everything personal lives in a separate private vault (`PROXENOS_VAULT`, default `~/proxenos_vault`) that never enters this repo:
-- raw exports and messages;
-- observations and the self-model;
-- tracker items and feedback.
+- **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (`PROXENOS_VAULT`, default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news.
+- **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites.
+- **Credentials** stay in `.env`, which git ignores.
 
-The vault keeps its own local git history of how the self-model changes. Observers only send my own side of conversations to the model, never other people's messages.
+## Quick start
 
-## Setup
+Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and an Anthropic API key for the steps that use a model.
 
 ```bash
+git clone https://github.com/mindemory/proxenos && cd proxenos
 CONDA_SUBDIR=osx-arm64 conda env create -f environment.yml
 conda activate proxenos
-conda config --env --set subdir osx-arm64
 pip install -e ".[dev]"
-cp .env.example .env    # then fill in keys
+cp .env.example .env            # add your name, email addresses and ANTHROPIC_API_KEY
 ```
 
-Settings in `.env` are `PROXENOS_*`. The older `TWIN_*` names are still read when the new one isn't set.
+Add data in any order. Each source works on its own:
+
+```bash
+proxenos ingest whatsapp        # reads the WhatsApp Mac app's local store
+proxenos import ~/Downloads/takeout-*.zip   # Google Takeout: mail, calendar, Drive, YouTube, ...
+proxenos sync                   # imports anything dropped into data/, refreshes every source
+```
+
+Then build the model and the clones, and open the page:
+
+```bash
+proxenos master                 # notes per month, then the self-model
+proxenos clone tracker          # also: tasks, advisor, network, recall, work
+proxenos web                    # http://127.0.0.1:4747
+```
+
+`proxenos night` runs the whole loop. `scripts/install-night.sh` schedules it every night with launchd.
+
+`px` is a short alias for `proxenos`.
+
+## Sources
+
+| Source | How it gets in |
+|---|---|
+| WhatsApp | The Mac app's local database (`proxenos ingest whatsapp`) |
+| Slack | [slackdump](https://github.com/rusq/slackdump) archives, or a user token |
+| Gmail, Google Calendar, Drive, Photos metadata, Keep, Tasks, YouTube, Chrome | Google Takeout zips (`proxenos import`) |
+| Email (any) | mbox exports; Gmail over IMAP with an app password |
+| Strava | API (`proxenos auth strava`) |
+| Spotify | Extended Streaming History export |
+| LinkedIn, X, Instagram, Facebook, Threads | Each service's data export |
+| Bluesky | Public posts by handle |
+| Notion, Obsidian, PDFs | Exports or folders |
+| Letterboxd | Data export |
+| Personal website, papers and mentions | A local site repo; OpenAlex and news search |
+
+See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 
 ## Commands
 
-Every command is `proxenos ...`; `px` is the same command, shorter (`px sync`, `px clone recall`).
-
 | Command | What it does |
 |---|---|
-| `Proxenos.command` (double-click) or `proxenos web` | Open the local page at http://127.0.0.1:4747: the landing, then the app at `/app` |
-| `proxenos sync` | Import new downloads from `data/` and refresh every source that needs no model, then update the memory index and today's recall |
-| `proxenos index [--rebuild]` | Index every record in the raw layer for full-text search (`vault/memory/index.sqlite`, private, derived: safe to delete). Only changed month files are read again; no model |
-| `proxenos import [PATH ...]` | Import downloaded exports (Takeout, X, LinkedIn, Instagram, Spotify, ...) |
-| `proxenos ingest <source>` | Pull one source into the vault (whatsapp, slack, slackdump, strava, gmail, ...) |
-| `proxenos auth strava` / `proxenos auth slack` | One-time sign-ins that write tokens to `.env` |
-| `proxenos observe [--dry-run]` | Write per-month notes on what each source says about me |
-| `proxenos master` | Sync, observe and update the self-model (`proxenos master accept` applies proposals) |
-| `proxenos clone tracker\|tasks\|advisor` | Feed of new papers and news, tasks on my plate, and advice |
-| `proxenos clone network [--people-only]` | People I've met, know of or want to read, and who shares a chat, thread, paper or employer with whom (the page's graph); then project and outreach ideas. `--people-only` needs no model |
-| `proxenos clone recall [--people N]` | Memories for today, no model: for each calendar event in the next 48 hours, open task, top feed item and top person, the best past messages, mail and notes about it. Shown on the page's Home; the Memory view and ⌘K search the same index |
-| `proxenos clone work [--max N]` | Drafts written as me for open tasks, the top outreach and projects, and the top feed items, to approve, edit, copy or discard in the page's Drafts view. Never sends anything |
-| `proxenos night` | `proxenos master`, then the tracker, tasks, advisor, network, recall and work clones, one line each; a failed step doesn't stop the rest. `scripts/install-night.sh` schedules it daily at 01:30 |
+| `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Drafts, Advice, Network, Memory, Profile, Status) |
+| `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall |
+| `proxenos import [PATH ...]` | Recognize and import downloaded exports |
+| `proxenos ingest <source>` | Pull one source into the vault |
+| `proxenos auth strava` / `slack` | One-time sign-ins that write tokens to `.env` |
+| `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
+| `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
+| `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `advisor`, `network`, `recall` or `work` |
+| `proxenos night` | Everything above, in order, for a schedule |
 
-## The page
+## Development
 
-`proxenos web` serves it on http://127.0.0.1:4747, local only. It opens on a landing page: the name, a few live counts from the vault (memories indexed, people, drafts to review, sources, last sync) and the network's shape drawn as a slowly turning sky, with no names. Enter (or the Enter key) goes to the app at `/app`, and is remembered for the browser session; the wordmark in the sidebar goes back.
+```bash
+pytest                                   # tests use synthetic data only
+ruff check src tests
+npm --prefix web run lint && npm --prefix web run build
+```
 
-The app starts on Home, a briefing: today's agenda and tasks, drafts waiting for review with their approval record, memories the day brings to mind, activity per source over 30 days, how fresh each source is, then the feed, advice, network and profile. ⌘K (or `/`) opens the command palette: jump to a view, find someone in the network, or search memory.
+## License
 
-Tests: `pytest`. Lint: `ruff check src tests`; for the page, `npm --prefix web run lint` and `npm --prefix web run build`.
+[MIT](LICENSE)
