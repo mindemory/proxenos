@@ -138,7 +138,30 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
 
 
+def store_problem(db: Path = DEFAULT_DB) -> str | None:
+    """Why the store can't be read: "missing" (no WhatsApp for Mac signed in here) or "blocked"
+    (macOS wants Full Disk Access for whatever runs Proxenos). None when it can be read."""
+    try:
+        with db.open("rb") as f:
+            f.read(1)
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "blocked"
+    return None
+
+
+_PROBLEMS = {
+    "missing": "no store at {db}. Install WhatsApp for Mac and sign in, or pass --db.",
+    "blocked": "macOS won't let Proxenos read the store. Give the app that runs it Full Disk "
+    "Access (System Settings, Privacy & Security), then try again.",
+}
+
+
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
+    problem = store_problem(args.db)
+    if problem:
+        raise SystemExit("whatsapp: " + _PROBLEMS[problem].format(db=args.db))
     return ingest(vault, args.db)
 
 

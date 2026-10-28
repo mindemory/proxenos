@@ -28,6 +28,8 @@ packages = ["src/proxenos"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Test this checkout's code, even when the editable install points at another one.
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100

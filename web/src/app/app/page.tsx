@@ -41,6 +41,7 @@ const Memory = dynamic(() => import("@/components/views/Memory").then((m) => m.M
 const Profile = dynamic(() => import("@/components/views/Profile").then((m) => m.Profile), {
   loading: () => <ProseSkeleton label="Loading the profile" />,
 });
+const Connect = dynamic(() => import("@/components/views/Connect").then((m) => m.Connect), { loading: () => <StatusSkeleton /> });
 const Status = dynamic(() => import("@/components/views/Status").then((m) => m.Status), { loading: () => <StatusSkeleton /> });
 
 const TABS: { id: Tab; label: string }[] = [
@@ -49,7 +50,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /** Views that read as a single column of text, so they sit in a centred column, not across the canvas. */
-const COLUMN_VIEWS: readonly View[] = ["feed", "saved", "tasks", "care", "advice", "profile", "status"];
+const COLUMN_VIEWS: readonly View[] = ["feed", "saved", "tasks", "care", "advice", "profile", "connect", "status"];
 
 export default function AppPage() {
   const [view, setView] = useState<View>("home");
@@ -137,6 +138,8 @@ export default function AppPage() {
         return <Memory key={memoryKey} initial={memoryIntent} onConsumed={memoryConsumed} />;
       case "profile":
         return <Profile />;
+      case "connect":
+        return <Connect />;
       case "status":
         return <Status />;
       default:

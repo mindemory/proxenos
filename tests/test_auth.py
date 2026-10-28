@@ -208,3 +208,16 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
     calls.clear()
     assert "fetches its new messages" in auth.slackdump("acme", tmp_path / "data", run, now)
     assert len(calls) == 1  # signed in again; its archive is already there
+
+
+@pytest.mark.parametrize(
+    "address", ["me@example.com\nANTHROPIC_API_KEY=x", "me:oauth@example.com", "me", "a b@c.com"]
+)
+def test_gmail_sign_in_refuses_what_isnt_one_address(tmp_path, monkeypatch, address):
+    # The address goes into .env as GMAIL_<NAME>=address:oauth:<token>, one line.
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    opened = []
+    with pytest.raises(SystemExit, match="isn't an email address"):
+        auth.gmail("personal", address, tmp_path / ".env", free_port(), opened.append, None)
+    assert not opened and not (tmp_path / ".env").exists()

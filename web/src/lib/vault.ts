@@ -63,7 +63,7 @@ import { foldReviews, isAwaiting } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
 
-const REPO_ROOT = path.resolve(process.cwd(), "..");
+export const REPO_ROOT = path.resolve(process.cwd(), "..");
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
 const DAY_FILE = /^\d{4}-\d{2}-\d{2}\.json$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -1068,7 +1068,7 @@ const REBUILD_MS = 120_000;
 let rebuilding: Promise<unknown> = Promise.resolve();
 
 /** The `proxenos` command: PROXENOS_BIN (environment or .env), else the first `proxenos` on PATH. */
-async function proxenosBin(): Promise<string | null> {
+export async function proxenosBin(): Promise<string | null> {
   const set = setting("BIN");
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, "bin"));

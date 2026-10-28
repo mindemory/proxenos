@@ -8,6 +8,7 @@ import {
   ListTodo,
   Network,
   PenLine,
+  Plug,
   Rss,
   UserRound,
   type LucideIcon,
@@ -24,6 +25,7 @@ export type View =
   | "network"
   | "memory"
   | "profile"
+  | "connect"
   | "status";
 
 export interface NavItem {
@@ -45,6 +47,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Network, label: "Network", id: "network", group: "clones" },
   { icon: Brain, label: "Memory", id: "memory", group: "you" },
   { icon: UserRound, label: "Profile", id: "profile", group: "you" },
+  { icon: Plug, label: "Connect", id: "connect", group: "you" },
   { icon: Activity, label: "Status", id: "status", group: "you" },
 ];
 

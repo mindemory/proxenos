@@ -79,4 +79,4 @@ Today Proxenos is a tool for people who can code. This track makes it usable by 
    - the forms and faxes, drafted and ready.
 6. **A hosted option** for people without a Mac, with its privacy trade-offs stated plainly.
 
-Ideas and help on any of these are welcome. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+The plan for the first three is in [everyone.md](everyone.md). Ideas and help on any of these are welcome. See [CONTRIBUTING.md](../CONTRIBUTING.md).

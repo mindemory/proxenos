@@ -48,6 +48,8 @@ _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
 _GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GMAIL_SCOPE = "https://mail.google.com/"
+# One address on one line. No ":" either: .env keeps it as address:oauth:<token>.
+_ADDRESS = re.compile(r"[^\s@:]+@[^\s@:]+\.[^\s@:]+")
 _SLACK_API = "https://slack.com/api/"
 SLACK_SCOPES = [
     "channels:read",
@@ -140,6 +142,8 @@ def gmail(
     key = "".join(c for c in name.upper() if c.isalnum() or c == "_")
     if not key:
         raise SystemExit("Name the account with letters, digits or _, e.g. personal.")
+    if not _ADDRESS.fullmatch(address) or len(address) > 254:
+        raise SystemExit(f"{address!r} isn't an email address.")
 
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())

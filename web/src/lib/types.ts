@@ -615,3 +615,54 @@ export interface CareResponse {
   cited: Record<string, CareCited>;
   records: Record<string, number>; // what the last run read, by source
 }
+
+// ── Connect ─────────────────────────────────────────────────────────────────
+//
+// From `proxenos connect`: names, addresses, handles and dates, never a secret.
+
+/** How a source gets in: signed in or read directly, a download imported, or a folder named. */
+export type ConnectHow = "live" | "download" | "folder";
+
+export interface MailAccount {
+  name: string; // GMAIL_<NAME>, lower case
+  address: string;
+  signIn: "google" | "app_password";
+  lastRead: string | null;
+}
+
+export interface ConnectSource {
+  id: string;
+  how: ConnectHow;
+  connected: boolean;
+  lastRead: string | null; // newest change to its files under raw/
+  /** What stops its button from working: "no_google_client", or WhatsApp's "missing" or "blocked". */
+  problem: string | null;
+  detail: string | null; // a handle, where one helps
+  accounts: MailAccount[]; // Gmail only
+}
+
+/** What the page can start: a Gmail sign-in, or a read of WhatsApp. One of each at a time. */
+export type ConnectJobKind = "gmail" | "whatsapp";
+export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp"];
+
+export interface ConnectJob {
+  kind: ConnectJobKind;
+  state: "running" | "done" | "failed" | "stopped";
+  /** The command's last line, with anything that looks like a token blanked. */
+  message: string;
+  account: string | null; // the address a sign-in is for
+  started: string;
+  finished: string | null;
+}
+
+export interface ConnectJobsResponse {
+  now: string;
+  jobs: ConnectJob[];
+}
+
+export interface ConnectResponse extends ConnectJobsResponse {
+  vault: VaultInfo;
+  sources: ConnectSource[];
+  /** Why the sources couldn't be read, when they couldn't. */
+  error: string | null;
+}

@@ -1,6 +1,8 @@
 """WhatsApp ingester against a synthetic ChatStorage.sqlite. No real data lives in this repo."""
 
+import argparse
 import json
+import os
 import sqlite3
 from datetime import UTC, datetime
 
@@ -175,3 +177,19 @@ def test_vault_inside_the_public_repo_is_refused(monkeypatch):
     monkeypatch.setenv("PROXENOS_VAULT", str(config.REPO_ROOT / "vault"))
     with pytest.raises(ValueError, match="inside the public repo"):
         config.vault_path()
+
+
+def test_a_store_that_cant_be_read_says_what_to_do(tmp_path):
+    args = argparse.Namespace(db=tmp_path / "nowhere.sqlite")
+    with pytest.raises(SystemExit, match="Install WhatsApp for Mac"):
+        whatsapp.run(tmp_path / "vault", args)
+
+    args.db = make_db(tmp_path / "store.sqlite", BASE)
+    args.db.chmod(0)
+    try:
+        if os.geteuid() != 0:  # root reads any file
+            with pytest.raises(SystemExit, match="Full Disk Access"):
+                whatsapp.run(tmp_path / "vault", args)
+    finally:
+        args.db.chmod(0o600)
+    assert whatsapp.run(tmp_path / "vault", args)["added"] == 4

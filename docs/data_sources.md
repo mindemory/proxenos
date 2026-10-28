@@ -5,7 +5,7 @@ Every source is optional and works on its own. Start with one or two and add mor
 ## How data gets in
 
 - **Downloads.** Request an export from the service, put the zip (or the unzipped folder) in the repo's `data/` folder or in `<vault>/inbox/`, and run `proxenos import`. It recognizes each export, unpacks it, hands it to the right ingester and files the download away. Exports that arrive in several zips (Google Takeout, Meta) are imported together.
-- **Live sources.** WhatsApp (its local store), Gmail (IMAP), Slack, Strava, Bluesky and public mentions are read directly, and `proxenos sync` refreshes them. `sync` also imports anything waiting in the inboxes, so one command keeps everything current.
+- **Live sources.** WhatsApp (its local store), Gmail (IMAP), Slack, Strava, Bluesky and public mentions are read directly, and `proxenos sync` refreshes them. `sync` also imports anything waiting in the inboxes, so one command keeps everything current. The page's Connect view shows every source and whether it's connected, with buttons to sign in to Gmail and to read WhatsApp now.
 - **Folders you name.** A Spotify export, a website repo and slackdump runs live wherever you keep them. Point Proxenos at them in `.env` (see [the settings below](#folder-settings)).
 
 The `ingest` commands in the tables are for reading one source by hand. Anything that arrives as a download can go through `proxenos import` instead. Credentials and settings live in `.env`; [.env.example](../.env.example) lists them all.
