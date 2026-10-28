@@ -29,6 +29,9 @@ const Saved = dynamic(() => import("@/components/views/Saved").then((m) => m.Sav
   loading: () => <FeedSkeleton label="Loading saved items" />,
 });
 const Tasks = dynamic(() => import("@/components/views/Tasks").then((m) => m.Tasks), { loading: () => <TaskSkeleton /> });
+const Care = dynamic(() => import("@/components/views/Care").then((m) => m.Care), {
+  loading: () => <ProseSkeleton label="Loading care" />,
+});
 const Drafts = dynamic(() => import("@/components/views/Drafts").then((m) => m.Drafts), { loading: () => <DraftSkeleton /> });
 const Advice = dynamic(() => import("@/components/views/Advice").then((m) => m.Advice), {
   loading: () => <ProseSkeleton label="Loading advice" />,
@@ -46,7 +49,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /** Views that read as a single column of text, so they sit in a centred column, not across the canvas. */
-const COLUMN_VIEWS: readonly View[] = ["feed", "saved", "tasks", "advice", "profile", "status"];
+const COLUMN_VIEWS: readonly View[] = ["feed", "saved", "tasks", "care", "advice", "profile", "status"];
 
 export default function AppPage() {
   const [view, setView] = useState<View>("home");
@@ -122,6 +125,8 @@ export default function AppPage() {
         return <Saved />;
       case "tasks":
         return <Tasks onChange={home.reload} />;
+      case "care":
+        return <Care onChange={home.reload} onMemory={openMemory} />;
       case "drafts":
         return <Drafts onChange={home.reload} />;
       case "advice":

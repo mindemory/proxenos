@@ -1,21 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { PenLine, ShieldCheck } from "lucide-react";
+import { ChevronRight, PenLine, ShieldCheck } from "lucide-react";
 
 import { DraftCard } from "@/components/drafts/DraftCard";
+import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
 import { groupDrafts, isAwaiting } from "@/lib/drafts";
+import type { Draft } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Show = "awaiting" | "approved";
 
 /** Proxenos acting as you: replies, emails, plans and docs it wrote, waiting for you to approve. */
 export function Drafts({ onChange }: { onChange?: () => void }) {
-  const { data, error, flashId, approve, discard, edit, copy, clearError } = useDrafts(onChange);
+  const { data, error, flashId, approve, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
   const [show, setShow] = useState<Show>("awaiting");
+  const [showSent, setShowSent] = useState(false);
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load the drafts: ${error}`} /> : <DraftSkeleton />;
@@ -25,11 +28,29 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
   const kept = data.drafts.filter((d) => d.status !== "discarded");
   const awaiting = kept.filter((d) => isAwaiting(d.status));
   const approved = kept.filter((d) => d.status === "approved");
+  const sent = kept.filter((d) => d.status === "sent");
+
+  const card = (d: Draft) => (
+    <DraftCard
+      key={d.id}
+      draft={d}
+      now={data.now}
+      flash={flashId === d.id}
+      plan={data.actions[d.id] ?? null}
+      onCopy={copy}
+      onApprove={approve}
+      onDiscard={discard}
+      onOpen={open}
+      onSent={markSent}
+      onEdit={edit}
+    />
+  );
 
   if (kept.length === 0) {
     return (
       <div className="pb-24 md:pb-20">
         {error && <ErrorBanner message={error} onDismiss={clearError} />}
+        {data.record.reviewed > 0 && <TrackRecord record={data.record} />}
         <EmptyState icon={PenLine} title="No drafts yet" command="proxenos clone work">
           Drafts appear when Proxenos works through your tasks, outreach, projects and reading: replies, emails, plans
           and notes written as you, waiting here for your approval. Nothing is ever sent for you.
@@ -44,6 +65,8 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
   return (
     <div className="pb-24 md:pb-20">
       {error && <ErrorBanner message={error} onDismiss={clearError} />}
+
+      <TrackRecord record={data.record} />
 
       <div className="px-4 sm:px-6 py-3 border-b border-line flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex gap-2">
@@ -68,7 +91,7 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
         </div>
         <p className="flex items-center gap-1.5 text-sm text-muted sm:ml-auto">
           <ShieldCheck size={15} className="text-ok-ink flex-shrink-0" />
-          Nothing is sent from here. Copy a draft and send it yourself.
+          Approved drafts open in their app with the text filled in. You press send.
         </p>
       </div>
 
@@ -84,23 +107,31 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
                 {g.label}
                 <span className="num text-sm text-muted">{g.drafts.length}</span>
               </h2>
-              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">
-                {g.drafts.map((d) => (
-                  <DraftCard
-                    key={d.id}
-                    draft={d}
-                    now={data.now}
-                    flash={flashId === d.id}
-                    onCopy={copy}
-                    onApprove={approve}
-                    onDiscard={discard}
-                    onEdit={edit}
-                  />
-                ))}
-              </div>
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">{g.drafts.map(card)}</div>
             </section>
           ))}
         </div>
+      )}
+
+      {sent.length > 0 && (
+        <section aria-labelledby="drafts-sent" className="px-4 sm:px-6 pb-6">
+          <h2 id="drafts-sent" className="font-display text-2xl text-ink">
+            <button
+              onClick={() => setShowSent((v) => !v)}
+              aria-expanded={showSent}
+              className="flex items-baseline gap-2 text-left hover:text-accent transition-colors"
+            >
+              <ChevronRight size={18} className={cn("self-center transition-transform", showSent && "rotate-90")} />
+              Sent
+              <span className="num text-sm text-muted">{sent.length}</span>
+            </button>
+          </h2>
+          {showSent && (
+            <div className="mt-3 grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">
+              {[...sent].sort((a, b) => Date.parse(b.created ?? "") - Date.parse(a.created ?? "") || 0).map(card)}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

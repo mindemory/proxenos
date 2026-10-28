@@ -5,8 +5,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { memoryActivity } from "./memory";
-import type { AgendaEvent, BriefingResponse, DraftReviews } from "./types";
-import { nowIso, readJsonl, vaultPath } from "./vault";
+import type { AgendaEvent, BriefingResponse } from "./types";
+import { getDraftReviews, nowIso, vaultPath } from "./vault";
 
 const MAX_RECALL_BYTES = 8 * 1024 * 1024;
 const ACTIVITY_DAYS = 30;
@@ -49,46 +49,9 @@ async function agenda(vault: string): Promise<BriefingResponse["agenda"]> {
   return { exists: true, generated: text(data.generated) || null, events: events.slice(0, 50) };
 }
 
-const DECISIVE = new Set(["approve", "discard"]);
-
-/** clones/drafts/feedback.jsonl folded per draft: what became of each one reviewed. */
-async function reviews(vault: string): Promise<DraftReviews> {
-  const entries = await readJsonl(path.join(vault, "clones", "drafts", "feedback.jsonl"));
-  const byDraft = new Map<string, { edited: boolean; decision: string | null }>();
-  let copied = 0;
-  let last: string | null = null;
-  for (const e of entries) {
-    if (!e || typeof e !== "object") continue;
-    const r = e as Record<string, unknown>;
-    const id = text(r.draft_id);
-    const action = text(r.action);
-    const ts = text(r.ts);
-    if (!id || !action) continue;
-    if (action === "copy") {
-      copied++;
-      continue;
-    }
-    if (action !== "edit" && !DECISIVE.has(action)) continue;
-    const state = byDraft.get(id) ?? { edited: false, decision: null };
-    if (action === "edit") state.edited = true;
-    else state.decision = action;
-    byDraft.set(id, state);
-    if (ts && (!last || ts > last)) last = ts;
-  }
-  let approved = 0;
-  let edited = 0;
-  let discarded = 0;
-  for (const s of byDraft.values()) {
-    if (s.decision === "discard") discarded++;
-    else if (s.edited) edited++;
-    else if (s.decision === "approve") approved++;
-  }
-  return { reviewed: approved + edited + discarded, approved, edited, discarded, copied, last };
-}
-
 export async function getBriefing(): Promise<BriefingResponse> {
   const vault = vaultPath();
-  const [events, review] = await Promise.all([agenda(vault), reviews(vault)]);
+  const [events, review] = await Promise.all([agenda(vault), getDraftReviews(vault)]);
   let activity: BriefingResponse["activity"];
   try {
     activity = memoryActivity(ACTIVITY_DAYS);

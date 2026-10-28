@@ -28,6 +28,7 @@ There is exactly **one model of you**, and many clones that use it. Clones are r
 - **Worker clones** (`proxenos clone <name>`), one per job. They read `self/`, do one job, and write output for you to react to. They never change `self/` directly.
   - **tracker:** a research and news feed, ranked against your interests.
   - **tasks:** what's on your plate, from recent conversations.
+  - **care:** where your health care stands, from the health-care admin in your mail, calendar, chats and notes: a timeline, open items and who they wait on, scripts for calls and messages, and a printable brief for the next clinician. It restates your records and never diagnoses.
   - **advisor:** small, evidence-based changes to how you work and live.
   - **network:** the people you know, how they connect, and project and outreach ideas.
   - **recall:** memories relevant to today (below).

@@ -14,10 +14,10 @@ import proxenos.ingest
 from proxenos import auth, importer, master, memory, observe, webapp
 from proxenos.config import REPO_ROOT, vault_path
 
-# What `proxenos night` runs after the master, in this order: the feed, then the tasks and advice
-# that read the fresh self-model, the people index and ideas, then what each of those brings to
-# mind from memory, and last the drafts of them all.
-NIGHT_CLONES = ("tracker", "tasks", "advisor", "network", "recall", "work")
+# What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
+# their health care stands, and advice that read the fresh self-model, the people index and ideas,
+# then what each of those brings to mind from memory, and last the drafts of them all.
+NIGHT_CLONES = ("tracker", "tasks", "care", "advisor", "network", "recall", "work")
 
 
 def _modules(package: ModuleType) -> dict[str, ModuleType]:

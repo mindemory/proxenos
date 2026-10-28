@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useToast } from "@/components/Toasts";
 
+import { markdownFile, openText } from "./actions";
 import type {
   Action,
   AdviceAction,
   AdviceResponse,
   Draft,
   DraftAction,
-  DraftsResponse,
+  DraftReviews,
+  DraftsViewResponse,
   FeedItem,
   HomeResponse,
   ItemsResponse,
@@ -69,9 +71,13 @@ async function postForJson<T>(url: string, body: object): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Without keepalive: an edit can be longer than a keepalive request may carry. */
-export function sendDraftAction(draftId: string, action: DraftAction, body?: string): Promise<void> {
-  return postJson("/api/drafts/feedback", { draft_id: draftId, action, body }, false);
+/**
+ * Without keepalive: an edit can be longer than a keepalive request may carry. Resolves with
+ * the review record as it stands once the action is saved, or null if the server couldn't say.
+ */
+export async function sendDraftAction(draftId: string, action: DraftAction, body?: string): Promise<DraftReviews | null> {
+  const res = await postForJson<{ record?: DraftReviews | null }>("/api/drafts/feedback", { draft_id: draftId, action, body });
+  return res.record ?? null;
 }
 
 export function sendAdviceFeedback(suggestionId: string, action: AdviceAction): Promise<void> {
@@ -96,10 +102,12 @@ export const ADVICE_TOAST: Record<AdviceAction, string> = {
 };
 
 export const DRAFT_TOAST: Record<DraftAction, string> = {
-  approve: "Approved. Nothing was sent: copy it when you're ready",
+  approve: "Approved. Nothing was sent: open it when you're ready",
   discard: "Draft discarded",
   edit: "Draft saved",
   copy: "Copied to the clipboard",
+  opened: "Opened",
+  sent: "Marked sent",
 };
 
 export const NETWORK_TOAST: Record<NetworkAction, string> = {
@@ -426,13 +434,35 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** The status each action that changes a draft's file leaves it in. */
+const STATUS_AFTER = { approve: "approved", discard: "discarded", sent: "sent" } as const;
+
+/** Go to a link the way a person clicking it would: a web page in a new tab, an app's address in place. */
+function launch(url: string) {
+  if (/^https?:/i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+  else window.location.href = url;
+}
+
+/** Save text as a file through the browser's own download. */
+function download(filename: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /**
- * The drafts and the four things to do with one. Approve and discard change the
- * draft's status in its file, edit saves a new body, copy only logs. None of them
- * sends anything. `onChange` runs after a write lands, to refresh counts elsewhere.
+ * The drafts and what to do with one. Approve, discard and sent change the draft's status in
+ * its file, edit saves a new body, copy and open only log. Open puts the draft into the app it's
+ * for (Gmail, WhatsApp, Slack, LinkedIn, a download) and stops there: the reader presses send,
+ * then tells Proxenos with `sent`. `onChange` runs after a write lands, to refresh counts elsewhere.
  */
 export function useDrafts(onChange?: () => void) {
-  const { data, error, setData, setError } = useJson<DraftsResponse>("/api/drafts");
+  const { data, error, setData, setError } = useJson<DraftsViewResponse>("/api/drafts");
   const notify = useToast();
   const { flashId, flash } = useFlash();
 
@@ -442,9 +472,17 @@ export function useDrafts(onChange?: () => void) {
     [setData],
   );
 
+  /** The review record that came back with a saved action. */
+  const take = useCallback(
+    (record: DraftReviews | null) => {
+      if (record) setData((d) => (d ? { ...d, record } : d));
+    },
+    [setData],
+  );
+
   const resync = useCallback(
     () =>
-      getJson<DraftsResponse>("/api/drafts").then(
+      getJson<DraftsViewResponse>("/api/drafts").then(
         (d) => setData(d),
         () => {
           // The error banner already says the write failed.
@@ -454,14 +492,15 @@ export function useDrafts(onChange?: () => void) {
   );
 
   const setStatus = useCallback(
-    (draft: Draft, action: "approve" | "discard") => {
-      const status = action === "approve" ? "approved" : "discarded";
+    (draft: Draft, action: keyof typeof STATUS_AFTER) => {
+      const status = STATUS_AFTER[action];
       if (draft.status === status) return;
       flash(draft.id);
       patch(draft.id, { status });
       sendDraftAction(draft.id, action).then(
-        () => {
-          notify(DRAFT_TOAST[action], action === "approve" ? "ok" : "info");
+        (record) => {
+          take(record);
+          notify(DRAFT_TOAST[action], action === "discard" ? "info" : "ok");
           onChange?.();
         },
         () => {
@@ -471,14 +510,14 @@ export function useDrafts(onChange?: () => void) {
         },
       );
     },
-    [patch, flash, notify, onChange, setError, resync],
+    [patch, take, flash, notify, onChange, setError, resync],
   );
 
   /** Resolves true once the new body is saved in the file. */
   const edit = useCallback(
     async (draft: Draft, body: string): Promise<boolean> => {
       try {
-        await sendDraftAction(draft.id, "edit", body);
+        take(await sendDraftAction(draft.id, "edit", body));
       } catch {
         setError(SAVE_FAILED);
         return false;
@@ -488,7 +527,7 @@ export function useDrafts(onChange?: () => void) {
       notify(DRAFT_TOAST.edit, "ok");
       return true;
     },
-    [patch, flash, notify, setError],
+    [patch, take, flash, notify, setError],
   );
 
   const copy = useCallback(
@@ -505,14 +544,42 @@ export function useDrafts(onChange?: () => void) {
     [notify, setError],
   );
 
+  /**
+   * Open the draft in its app, or its second way in (the mail app) when `viaAlt`. The copy and
+   * the opening both start inside the click, so the browser still counts them as the reader's
+   * own. Resolves true once it has gone to the app, for the "Sent?" question that follows.
+   */
+  const open = useCallback(
+    async (draft: Draft, viaAlt = false): Promise<boolean> => {
+      const plan = data?.actions[draft.id];
+      const step = viaAlt ? plan?.alt : plan;
+      if (!plan || !step) return false;
+      const copied = step.copy ? copyText(openText(draft)) : null;
+      if (plan.target === "file") {
+        const file = markdownFile(draft);
+        download(file.filename, file.text);
+      } else if (step.url) launch(step.url);
+      sendDraftAction(draft.id, "opened").catch(() => {
+        // Only the log line is lost.
+      });
+      if (copied && !(await copied)) {
+        setError("Couldn't reach the clipboard. Select the text and copy it by hand.");
+      } else notify(step.note, "ok");
+      return true;
+    },
+    [data, notify, setError],
+  );
+
   return {
     data,
     error,
     flashId,
     approve: (d: Draft) => setStatus(d, "approve"),
     discard: (d: Draft) => setStatus(d, "discard"),
+    sent: (d: Draft) => setStatus(d, "sent"),
     edit,
     copy,
+    open,
     clearError: () => setError(null),
   };
 }

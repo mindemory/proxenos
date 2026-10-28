@@ -3,7 +3,7 @@
 import pytest
 
 from proxenos import cli, llm, master
-from proxenos.clones import advisor, network, recall, tasks, tracker, work
+from proxenos.clones import advisor, care, network, recall, tasks, tracker, work
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def steps(tmp_path, monkeypatch):
         return {"sources_synced": 2, "self_files_written": 1}
 
     monkeypatch.setattr(master, "run", fake_master)
-    for module in (tracker, tasks, advisor, network, recall, work):
+    for module in (tracker, tasks, care, advisor, network, recall, work):
         name = module.__name__.rsplit(".", 1)[1]
 
         def fake_run(vault, args, name=name):
@@ -38,6 +38,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
         "master: 2 sources synced, 1 self files written",
         "tracker: 1 done",
         "tasks: 1 done",
+        "care: 1 done",
         "advisor: 1 done",
         "network: 1 done",
         "recall: 1 done",
@@ -50,6 +51,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
     assert args["network"] == {"people_only": False}  # the full run, ideas too
     assert args["work"] == {"max": work.MAX_DRAFTS}
     assert args["tasks"] == {"days": tasks.DAYS}
+    assert args["care"] == {"days": care.DAYS, "dry_run": False}
     assert args["recall"] == {"people": recall.PEOPLE}
 
 
@@ -72,9 +74,10 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, ca
         "master: failed (ANTHROPIC_API_KEY is not set. Put a key in .env)",
         "tracker: 1 done",
         "tasks: 1 done",
+        "care: 1 done",
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
         "recall: 1 done",
         "work: 1 done",
     ]
-    assert [name for name, *_ in steps] == ["tracker", "tasks", "network", "recall", "work"]
+    assert [name for name, *_ in steps] == ["tracker", "tasks", "care", "network", "recall", "work"]

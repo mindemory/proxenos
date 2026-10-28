@@ -6,6 +6,7 @@ import {
   DraftFormatError,
   DraftNotFoundError,
   DraftTooLargeError,
+  getDraftReviews,
   MAX_DRAFT_BYTES,
   VaultMissingError,
 } from "@/lib/vault";
@@ -15,10 +16,12 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/drafts/feedback {"draft_id", "action", "body"?}
  *
- * approve and discard set the draft's status in its file, edit replaces its
- * body (and needs "body"), and copy only logs that the text was copied. Every
- * action appends {draft_id, action, ts} to clones/drafts/feedback.jsonl.
- * Nothing is ever sent anywhere.
+ * approve, discard and sent set the draft's status in its file, edit replaces
+ * its body (and needs "body"), and copy and opened only log that the text was
+ * copied or opened in its app. Every action appends {draft_id, action, ts} to
+ * clones/drafts/feedback.jsonl, and the answer carries the review record as it
+ * stands then. "sent" is the reader saying they sent it themselves: nothing is
+ * ever sent from here.
  */
 export async function POST(req: Request) {
   const parsed = await readLocalJson(req);
@@ -37,7 +40,9 @@ export async function POST(req: Request) {
 
   try {
     const entry = await applyDraftAction(draftId, action as DraftAction, typeof body === "string" ? body : undefined);
-    return Response.json({ ok: true, entry }, { headers: NO_STORE });
+    // The action is already saved; a record that can't be read only means the strip updates later.
+    const record = await getDraftReviews().catch(() => null);
+    return Response.json({ ok: true, entry, record }, { headers: NO_STORE });
   } catch (e) {
     if (e instanceof VaultMissingError) {
       return Response.json({ error: `vault not found at ${e.message}` }, { status: 503 });

@@ -23,6 +23,7 @@ import type {
   Confidence,
   Draft,
   DraftAction,
+  DraftReviews,
   DraftsResponse,
   Edge,
   FeedbackEntry,
@@ -58,7 +59,7 @@ import type {
   ToRead,
   VaultInfo,
 } from "./types";
-import { isAwaiting } from "./drafts";
+import { foldReviews, isAwaiting } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
 
@@ -185,7 +186,7 @@ function countLines(file: string): Promise<number> {
 }
 
 /** Parse a JSON file, or null when it is missing, too large or malformed. */
-async function readJsonFile(file: string, maxBytes = MAX_CLONE_BYTES): Promise<unknown> {
+export async function readJsonFile(file: string, maxBytes = MAX_CLONE_BYTES): Promise<unknown> {
   try {
     const st = await fs.stat(file);
     if (!st.isFile() || st.size > maxBytes) return null;
@@ -198,7 +199,7 @@ async function readJsonFile(file: string, maxBytes = MAX_CLONE_BYTES): Promise<u
 export class VaultMissingError extends Error {}
 
 /** Append one JSON line to a file in the vault, creating it (and its folders) private to the user. */
-async function appendJsonl(rel: string[], entry: object): Promise<void> {
+export async function appendJsonl(rel: string[], entry: object): Promise<void> {
   const vault = vaultPath();
   if (!(await isDir(vault))) throw new VaultMissingError(displayPath(vault));
   const file = path.join(vault, ...rel);
@@ -226,7 +227,7 @@ async function appendJsonl(rel: string[], entry: object): Promise<void> {
 }
 
 /** Latest action per id from an append-only log (file order wins). */
-async function foldLog<A extends string>(
+export async function foldLog<A extends string>(
   file: string,
   idKey: string,
   actions: readonly A[],
@@ -1281,9 +1282,17 @@ function withBody(file: DraftFile, body: string): string {
   return `---${eol}${lines}${eol}---${eol}${eol}${body.replace(/\r\n?/g, "\n").replace(/\s+$/, "").replace(/\n/g, eol)}${eol}`;
 }
 
+/** What each action that changes a draft's file sets its status to. The others only log. */
+const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", discard: "discarded", sent: "sent" };
+
+/** How the reader has reviewed drafts so far, from clones/drafts/feedback.jsonl. */
+export async function getDraftReviews(vault: string = vaultPath()): Promise<DraftReviews> {
+  return foldReviews(await readJsonl(path.join(draftsDir(vault), "feedback.jsonl")));
+}
+
 /**
- * Apply one action to a draft: approve and discard set its status, edit
- * replaces its body, copy only logs. Each is then appended to
+ * Apply one action to a draft: approve, discard and sent set its status, edit
+ * replaces its body, copy and opened only log. Each is then appended to
  * clones/drafts/feedback.jsonl as {draft_id, action, ts}. The draft is found by
  * matching the id against the files that exist, never by building a path from it.
  */
@@ -1293,12 +1302,10 @@ export async function applyDraftAction(draftId: string, action: DraftAction, bod
   const file = (await readDraftFiles(vault)).find((f) => toDraft(f).id === draftId);
   if (!file) throw new DraftNotFoundError(draftId);
 
-  if (action !== "copy") {
+  const status = STATUS_OF[action];
+  if (action === "edit" || status) {
     if (!file.head) throw new DraftFormatError(draftId);
-    const text =
-      action === "edit"
-        ? withBody(file, body ?? "")
-        : withField(file, "status", action === "approve" ? "approved" : "discarded");
+    const text = status ? withField(file, "status", status) : withBody(file, body ?? "");
     if (Buffer.byteLength(text, "utf8") > MAX_DRAFT_BYTES) throw new DraftTooLargeError(draftId);
     await replaceFile(path.join(draftsDir(vault), file.name), text);
   }

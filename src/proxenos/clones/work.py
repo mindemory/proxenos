@@ -7,6 +7,8 @@ one call apiece, in this order until `--max` drafts are written:
 - every open task in clones/tasks/tasks.json: the reply or email that answers it, or the doc,
   plan or checklist it asks for, or, when it needs something only the user has, a note saying what
   is missing ("blocked");
+- every email and patient portal message script in clones/care/care.json for an item still
+  open: the message itself, from the script, with nothing added;
 - the top three outreach ideas and the top three projects in clones/network/ideas.json: the
   message that makes the ask, and a plan to start the project;
 - the top six items of the newest batch in tracker/items: a reading note.
@@ -18,9 +20,9 @@ status) and a markdown body, which the page lists under Drafts. The id is the ta
 the idea's or item's with what it's for in front ("outreach-...", "project-...",
 "reading-..."), so each thing has one draft, which later runs write again as it changes;
 things with no draft yet come first when `--max` cuts a run short. A draft becomes the user's
-once they approve, discard or edit it on the page: its status says approved or discarded, or
-clones/drafts/feedback.jsonl has an edit for it, and no run touches it again. Nor does a run
-touch a file without front matter, since no run wrote it.
+once they approve, discard, send or edit it on the page: its status says approved, discarded or
+sent, or clones/drafts/feedback.jsonl has an edit for it, and no run touches it again. Nor does a
+run touch a file without front matter, since no run wrote it.
 
 The model gets the self-model's identity, voice and interests, so drafts sound like the user, and
 the task, idea or feed item as the other clones wrote it. No raw messages are sent. The
@@ -42,12 +44,13 @@ MAX_DRAFTS = 20
 OUTREACH = 3
 PROJECTS = 3
 READING = 6
+CARE_SCRIPTS = ("email", "portal_message")  # the care scripts drafted; calls and forms aren't
 TITLE_CHARS = 120
 SELF_FILES = ("identity", "voice", "interests")
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
 CHANNELS = ("email", "whatsapp", "slack", "linkedin", "instagram", "in_person", "other")
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
-_MINE = ("approved", "discarded")  # statuses the page sets; a draft with one is the user's
+_MINE = ("approved", "discarded", "sent")  # statuses the page sets; a draft with one is the user's
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the draft ids the page accepts
 _FRONT = re.compile(r"---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", re.DOTALL)
 _FIELD = re.compile(r"([A-Za-z_][\w-]*)\s*:\s*(.*)")
@@ -170,6 +173,24 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
         if isinstance(task, dict) and task.get("status") == "open" and task.get("id") not in closed:
             yield _job(task.get("id"), "task", task.get("title"), today, _task_text(task))
 
+    # Care scripts to write out: an email or portal message for an item still open, one draft
+    # per item and kind, so later runs write the same draft again as the item changes.
+    care = vault / "clones" / "care"
+    doc = _load_json(care / "care.json")
+    marked = _latest(care / "feedback.jsonl", "item_id", ("done", "waiting", "not_relevant"))
+    items = {
+        i["id"]: i
+        for i in doc.get("open_items") or []
+        if isinstance(i, dict) and isinstance(i.get("id"), str)
+        if i.get("status") == "open" and i["id"] not in marked
+    }
+    for script in doc.get("scripts") or []:
+        if not isinstance(script, dict) or script.get("kind") not in CARE_SCRIPTS:
+            continue
+        if item := items.get(script.get("item_id")):
+            key = f"care-{item['id']}-{script['kind']}"
+            yield _job(key, "care", script.get("title"), today, _care_text(script, item))
+
     network = vault / "clones" / "network"
     ideas = _load_json(network / "ideas.json")
     verdicts = _latest(network / "feedback.jsonl", "item_id", ("useful", "not_me", "done"))
@@ -252,6 +273,22 @@ def _task_text(task: dict) -> str:
         ],
         "Draft what gets it done: the reply or email to send, or the doc, plan or checklist it "
         "asks for. If it needs something only they have, make it blocked.",
+    )
+
+
+def _care_text(script: dict, item: dict) -> str:
+    portal = script.get("kind") == "portal_message"
+    return _brief(
+        "A message about their own health care, from the script their care notes suggest",
+        [
+            ("For", item.get("title")),
+            ("Next step", item.get("next_step")),
+            ("Due", item.get("due")),
+            ("Where it goes", "a patient portal message" if portal else "an email"),
+            ("Script", script.get("body")),
+        ],
+        "Draft the message, ready to send, from the script: the same facts and nothing added. "
+        "Keep its [placeholders], and never write a phone, account, member or claim number.",
     )
 
 

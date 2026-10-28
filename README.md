@@ -5,6 +5,7 @@
 Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
 - a feed of new papers and news, ranked for you;
 - your open tasks, pulled from your conversations;
+- where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
 - advice grounded in your own patterns;
 - a map of the people you know and how they connect;
 - a searchable memory that brings the right past messages and notes to mind;
@@ -38,7 +39,7 @@ More detail: [architecture](docs/architecture.md), [data sources](docs/data_sour
 ## Privacy
 
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (`PROXENOS_VAULT`, default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
-- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Two clones also send recent records they need, picked out in code: tasks sends conversations you're part of, and care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites.
 - **Credentials** stay in `.env`, which git ignores.
 
@@ -66,7 +67,7 @@ Then build the model and the clones, and open the page:
 
 ```bash
 proxenos master                 # notes per month, then the self-model
-proxenos clone tracker          # also: tasks, advisor, network, recall, work
+proxenos clone tracker          # also: tasks, care, advisor, network, recall, work
 proxenos web                    # http://127.0.0.1:4747
 ```
 
@@ -98,7 +99,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 
 | Command | What it does |
 |---|---|
-| `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Drafts, Advice, Network, Memory, Profile, Status) |
+| `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
@@ -106,7 +107,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `advisor`, `network`, `recall` or `work` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `recall` or `work` |
 | `proxenos night` | Everything above, in order, for a schedule |
 
 ## Development

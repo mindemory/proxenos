@@ -7,10 +7,11 @@ import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { isAwaiting } from "@/lib/drafts";
-import type { Draft } from "@/lib/types";
+import type { Draft, DraftOpen } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { ChannelBadge, KindBadge } from "./badges";
+import { ChannelBadge, KindBadge, SentBadge } from "./badges";
+import { AltOpenLink, OpenButton, SentPrompt } from "./OpenAction";
 
 // Long drafts are clipped until asked for, so a page of them stays scannable.
 const CLIP_CHARS = 700;
@@ -19,20 +20,28 @@ interface DraftCardProps {
   draft: Draft;
   now: string;
   flash: boolean;
+  /** Where the draft opens, or null for one that's already sent. */
+  plan: DraftOpen | null;
   onCopy: (d: Draft) => void;
   onApprove: (d: Draft) => void;
   onDiscard: (d: Draft) => void;
+  /** Opens the draft in its app (or its second way in, for `viaAlt`). Resolves true once it has. */
+  onOpen: (d: Draft, viaAlt: boolean) => Promise<boolean>;
+  /** The reader says they sent it. */
+  onSent: (d: Draft) => void;
   /** Resolves true when the new body is saved. */
   onEdit: (d: Draft, body: string) => Promise<boolean>;
 }
 
-export function DraftCard({ draft: d, now, flash, onCopy, onApprove, onDiscard, onEdit }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDiscard, onOpen, onSent, onEdit }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [asking, setAsking] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const approved = d.status === "approved";
+  const sent = d.status === "sent";
   const long = d.body.length > CLIP_CHARS;
 
   const start = () => {
@@ -40,6 +49,10 @@ export function DraftCard({ draft: d, now, flash, onCopy, onApprove, onDiscard, 
     setEditing(true);
     // After the textarea mounts.
     window.setTimeout(() => area.current?.focus(), 0);
+  };
+
+  const open = async (viaAlt: boolean) => {
+    if (await onOpen(d, viaAlt)) setAsking(true);
   };
 
   const save = async () => {
@@ -61,15 +74,21 @@ export function DraftCard({ draft: d, now, flash, onCopy, onApprove, onDiscard, 
       <div className="flex flex-wrap items-center gap-1.5">
         <KindBadge kind={d.kind} />
         <ChannelBadge channel={d.channel} />
-        <span
-          className={cn(
-            "ml-auto inline-flex items-center gap-1 text-xs",
-            approved ? "text-ok-ink" : isAwaiting(d.status) ? "text-muted" : "text-muted/70",
-          )}
-        >
-          {approved && <Check size={12} />}
-          {approved ? "Approved" : isAwaiting(d.status) ? "Awaiting you" : d.status}
-        </span>
+        {sent ? (
+          <span className="ml-auto">
+            <SentBadge />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "ml-auto inline-flex items-center gap-1 text-xs",
+              approved ? "text-ok-ink" : isAwaiting(d.status) ? "text-muted" : "text-muted/70",
+            )}
+          >
+            {approved && <Check size={12} />}
+            {approved ? "Approved" : isAwaiting(d.status) ? "Awaiting you" : d.status}
+          </span>
+        )}
       </div>
 
       <div className="min-w-0">
@@ -139,12 +158,36 @@ export function DraftCard({ draft: d, now, flash, onCopy, onApprove, onDiscard, 
       )}
 
       {!editing && (
-        <div className="flex flex-wrap gap-2 pt-1 mt-auto">
-          <ActionButton icon={Copy} label="Copy" tone="accent" onClick={() => onCopy(d)} />
-          <ActionButton icon={Check} label={approved ? "Approved" : "Approve"} tone="ok" active={approved} onClick={() => onApprove(d)} />
-          <ActionButton icon={Pencil} label="Edit" tone="neutral" onClick={start} />
-          <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
+        <div className="flex flex-wrap items-center gap-2 pt-1 mt-auto">
+          {sent ? (
+            <ActionButton icon={Copy} label="Copy" tone="neutral" onClick={() => onCopy(d)} />
+          ) : (
+            <>
+              {approved && plan && <OpenButton plan={plan} primary onOpen={() => void open(false)} />}
+              <ActionButton icon={Copy} label="Copy" tone={approved ? "neutral" : "accent"} onClick={() => onCopy(d)} />
+              <ActionButton icon={Check} label={approved ? "Approved" : "Approve"} tone="ok" active={approved} onClick={() => onApprove(d)} />
+              {!approved && plan && <OpenButton plan={plan} primary={false} onOpen={() => void open(false)} />}
+              <ActionButton icon={Pencil} label="Edit" tone="neutral" onClick={start} />
+              <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
+            </>
+          )}
         </div>
+      )}
+
+      {!editing && !sent && plan?.alt && !asking && (
+        <p className="-mt-1 text-xs text-muted">
+          Not using Gmail? <AltOpenLink plan={plan} onOpen={() => void open(true)} />
+        </p>
+      )}
+
+      {!editing && asking && plan && !sent && (
+        <SentPrompt
+          onSent={() => {
+            setAsking(false);
+            onSent(d);
+          }}
+          onNotYet={() => setAsking(false)}
+        />
       )}
     </article>
   );

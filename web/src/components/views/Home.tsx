@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Brain,
   CalendarDays,
+  HeartPulse,
   type LucideIcon,
   Lightbulb,
   ListTodo,
@@ -29,6 +30,7 @@ import { NetworkThumb } from "@/components/network/NetworkThumb";
 import { Bone, HomeSkeleton } from "@/components/Skeleton";
 import { SourceBadge, SourceChip, SourceIcon, sourceMeta } from "@/components/SourceBadge";
 import { TaskRow } from "@/components/tasks/TaskRow";
+import { careDue, careStatus, firstSentence, mostUrgent, yourMoves } from "@/lib/careClient";
 import { sendFeedback, useJson, type useHome } from "@/lib/client";
 import {
   formatDateTime,
@@ -48,6 +50,7 @@ import { byUrgency, daysLeft, isUrgent } from "@/lib/tasks";
 import type {
   AgendaEvent,
   BriefingResponse,
+  CareResponse,
   Draft,
   FeedItem,
   HomeResponse,
@@ -831,6 +834,69 @@ function ProfileCard({ data, onNavigate }: { data: HomeResponse; onNavigate: (v:
   );
 }
 
+// ── Care ────────────────────────────────────────────────────────────────────
+
+/** Where health care stands, in a sentence, and the one item that most needs doing. */
+function CareCard({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const { data, error } = useJson<CareResponse>("/api/care");
+  const urgent = data ? mostUrgent(data.items) : null;
+  const moves = data ? yourMoves(data.items) : 0;
+  const others = data ? data.items.filter((i) => careStatus(i) !== null && careStatus(i) !== "done").length - moves : 0;
+  const due = data && urgent ? careDue(urgent, data.now) : null;
+  const yours = urgent !== null && urgent.waiting_on === "me" && careStatus(urgent) === "open";
+  return (
+    <Card
+      icon={HeartPulse}
+      kicker="Health care"
+      title="Care"
+      link="Open care"
+      onLink={() => onNavigate("care")}
+      tier={moves > 0 ? "priority" : "default"}
+      className="md:col-span-2 lg:col-span-6 xl:col-span-12"
+    >
+      {error ? (
+        <Meta>Couldn&apos;t load care.</Meta>
+      ) : !data ? (
+        <Bone className="h-16 rounded-xl" />
+      ) : !data.exists ? (
+        <QuietLine command="proxenos clone care">Nothing on your care yet. This reads your health-care admin:</QuietLine>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-start">
+          <div className="min-w-0">
+            <p className="text-[1.0625rem] leading-relaxed text-ink">
+              {firstSentence(data.summary) || "Nothing about health care turned up in your recent records."}
+            </p>
+            {moves + others > 0 && (
+              <Meta className="mt-2">
+                <span className="num">{moves}</span> for you to do · <span className="num">{others}</span> waiting on
+                others
+              </Meta>
+            )}
+          </div>
+          {urgent ? (
+            <button onClick={() => onNavigate("care")} className="tile tile-hover block w-full px-3.5 py-3 text-left">
+              <span className={cn("smallcaps text-[0.75rem]", yours && "text-accent")}>
+                {yours ? "Your next step" : "Waiting on others"}
+              </span>
+              <span className="title-3 mt-1 block break-words">{urgent.title}</span>
+              {urgent.next_step && (
+                <span className="mt-1 line-clamp-2 block break-words text-sm leading-relaxed text-muted">{urgent.next_step}</span>
+              )}
+              {due && (
+                <span className={cn("num mt-1.5 block text-xs", due.tone === "bad" ? "text-bad-ink" : due.tone === "warn" ? "text-warn-ink" : "text-muted")}>
+                  {due.text}
+                </span>
+              )}
+            </button>
+          ) : (
+            <Meta>Nothing open.</Meta>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── The briefing ────────────────────────────────────────────────────────────
 
 export function Home({ home, onNavigate, onMemory }: HomeProps) {
@@ -851,6 +917,7 @@ export function Home({ home, onNavigate, onMemory }: HomeProps) {
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} />
+        <CareCard onNavigate={onNavigate} />
       </Section>
 
       <Section id="home-past" label="Brought to mind">

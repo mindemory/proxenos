@@ -1,4 +1,4 @@
-import { Ban, FileText, ListChecks, Mail, Map, Reply, Send, type LucideIcon } from "lucide-react";
+import { Ban, CheckCheck, FileText, ListChecks, Mail, Map, Reply, Send, type LucideIcon } from "lucide-react";
 
 import { SOURCES, SourceBadge } from "@/components/SourceBadge";
 import { channelLabel, kindLabel } from "@/lib/drafts";
@@ -38,6 +38,16 @@ export function ChannelBadge({ channel }: { channel: string }) {
     <span className={cn(BADGE, "border border-line-strong bg-surface-2 text-ink/90")}>
       <Send size={12} />
       {label}
+    </span>
+  );
+}
+
+/** The draft was sent: the reader pressed send in its app and said so. */
+export function SentBadge() {
+  return (
+    <span className={cn(BADGE, "border border-ok-line bg-ok-bg text-ok-ink")}>
+      <CheckCheck size={12} />
+      Sent
     </span>
   );
 }

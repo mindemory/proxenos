@@ -260,7 +260,7 @@ def test_the_model_writes_as_me_from_the_self_model(tmp_path, model):
     assert "- People who could help: Ada Placeholder (Spiral Lab); Jo Coauthor" in project
 
 
-def test_drafts_i_approved_discarded_or_edited_are_mine(tmp_path, model):
+def test_drafts_i_approved_discarded_sent_or_edited_are_mine(tmp_path, model):
     vault = make_vault(tmp_path)
     out = vault / "clones" / "drafts"
     work.work(vault, limit=50, now=NOW)
@@ -272,6 +272,7 @@ def test_drafts_i_approved_discarded_or_edited_are_mine(tmp_path, model):
 
     set_status("aaaaaaaaaaaa", "approved")
     set_status("outreach-o1", "Discarded")
+    set_status("project-j2", "sent")
     files["project-j0"].write_text(files["project-j0"].read_text() + "\nMy own words.\n")
     write_jsonl(out / "feedback.jsonl", [{"draft_id": "project-j0", "action": "edit"}])
     write(out / "bbbbbbbbbbbb.md", "Notes I wrote myself, no front matter.\n")
@@ -283,11 +284,11 @@ def test_drafts_i_approved_discarded_or_edited_are_mine(tmp_path, model):
     model.calls.clear()
     stats = work.work(vault, limit=50, now=datetime(2026, 3, 11, tzinfo=UTC))
 
-    assert stats["skipped_as_yours"] == 4
-    assert stats["drafts_written"] == len(before) - 4
+    assert stats["skipped_as_yours"] == 5
+    assert stats["drafts_written"] == len(before) - 5
     after = {key: path.read_text() for key, path in drafts(vault).items()}
     assert set(after) == set(before)  # the renamed draft was rewritten where it is
-    for key in ("aaaaaaaaaaaa", "outreach-o1", "project-j0", "bbbbbbbbbbbb"):
+    for key in ("aaaaaaaaaaaa", "outreach-o1", "project-j2", "project-j0", "bbbbbbbbbbbb"):
         assert after[key] == before[key]
     assert "created: 2026-03-11" in after["my-note"]
     assert "Send Asha the slides" not in json.dumps(model.calls)

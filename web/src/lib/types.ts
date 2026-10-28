@@ -314,9 +314,10 @@ export interface GraphThumb {
 
 // ── Drafts: clones/drafts/*.md ──────────────────────────────────────────────
 
-export type DraftAction = "approve" | "discard" | "edit" | "copy";
+/** opened: the draft was opened in its app; sent: the reader says they sent it. Both are logged. */
+export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "sent";
 
-export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy"];
+export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent"];
 
 /**
  * One drafts/<id>.md. kind, for, channel and status are strings so a new value still
@@ -331,7 +332,7 @@ export interface Draft {
   channel: string;
   to: string; // "" when the draft is not addressed to anyone
   created: string | null;
-  status: string; // "draft", "approved", "discarded"
+  status: string; // "draft", "approved", "discarded", "sent"
   body: string; // markdown
 }
 
@@ -340,6 +341,30 @@ export interface DraftsResponse {
   vault: VaultInfo;
   exists: boolean; // the drafts folder is present
   drafts: Draft[];
+}
+
+/** Where a draft's one-click action goes. "file" is a download. */
+export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "file";
+
+/** One way to open a draft in its app. The reader still presses send there. */
+export interface DraftOpenStep {
+  label: string; // the button's text
+  hint: string; // what it does, for a tooltip
+  url: string | null; // opened after the copy; null for a download
+  copy: boolean; // put the text on the clipboard first
+  note: string; // what to do next, shown once it has run
+}
+
+/** A draft's action: the way into the app it's meant for, and a second way where there is one (mailto). */
+export interface DraftOpen extends DraftOpenStep {
+  target: OpenTarget;
+  alt: DraftOpenStep | null;
+}
+
+/** GET /api/drafts: the drafts, what each can open, and how the reader's reviews have gone. */
+export interface DraftsViewResponse extends DraftsResponse {
+  actions: Record<string, DraftOpen>; // by draft id; drafts already sent or discarded have none
+  record: DraftReviews;
 }
 
 export interface HomeResponse {
@@ -489,8 +514,11 @@ export interface DraftReviews {
   approved: number; // approved as written
   edited: number; // edited, and not discarded since
   discarded: number;
+  sent: number; // marked sent (each also counts as approved, or as edited if it was)
   copied: number; // copy actions, all drafts
   last: string | null; // newest review
+  recentReviewed: number; // reviewed whose latest review is in the last 14 days
+  recentAccepted: number; // of those, approved or edited
 }
 
 export interface BriefingResponse {
@@ -498,4 +526,92 @@ export interface BriefingResponse {
   agenda: { exists: boolean; generated: string | null; events: AgendaEvent[] };
   activity: { indexed: boolean; days: string[]; series: ActivitySeries[] };
   reviews: DraftReviews;
+}
+
+// ── Care clone: clones/care/care.json ───────────────────────────────────────
+
+export type CareEventKind =
+  | "symptom"
+  | "visit"
+  | "test"
+  | "result"
+  | "referral"
+  | "call"
+  | "message"
+  | "bill"
+  | "claim"
+  | "records"
+  | "prescription";
+export type CareItemKind =
+  | "appointment"
+  | "referral"
+  | "bill"
+  | "claim"
+  | "records"
+  | "prescription"
+  | "form"
+  | "follow_up"
+  | "question";
+export type CareWaitingOn = "me" | "provider" | "insurer" | "other";
+export type CareStatus = "open" | "waiting" | "done";
+export type CareScriptKind = "call" | "email" | "portal_message" | "form";
+export type CareAction = "done" | "waiting" | "not_relevant";
+
+export const CARE_ACTIONS: readonly CareAction[] = ["done", "waiting", "not_relevant"];
+
+/** One dated step on the way through care, as the records tell it. */
+export interface CareEvent {
+  id: string;
+  date: string; // YYYY-MM-DD
+  kind: CareEventKind;
+  title: string;
+  detail: string;
+  with: string; // a clinic, organization or role, never a person's name; "" when none
+  evidence: string[]; // memory-index ids, looked up in `cited`
+}
+
+/** Something unresolved: an appointment, referral, bill, claim, records request, form, ... */
+export interface CareItem {
+  id: string;
+  title: string;
+  kind: CareItemKind;
+  waiting_on: CareWaitingOn;
+  next_step: string;
+  due: string | null; // YYYY-MM-DD
+  status: CareStatus;
+  evidence: string[];
+}
+
+export interface CareItemView extends CareItem {
+  action: CareAction | null; // the reader's latest, from feedback.jsonl
+  acted_at: string | null;
+}
+
+/** What to say on a call, in an email, a portal message or a form, for one item. */
+export interface CareScript {
+  id: string;
+  item_id: string;
+  kind: CareScriptKind;
+  title: string;
+  body: string;
+}
+
+/** Where one piece of evidence came from, without its text. */
+export interface CareCited {
+  source: string;
+  ts: string;
+}
+
+export interface CareResponse {
+  now: string;
+  vault: VaultInfo;
+  exists: boolean;
+  generated: string | null;
+  summary: string;
+  timeline: CareEvent[];
+  items: CareItemView[];
+  scripts: CareScript[];
+  visit_brief: string; // markdown
+  cited: Record<string, CareCited>;
+  records: Record<string, number>; // what the last run read, by source
 }
