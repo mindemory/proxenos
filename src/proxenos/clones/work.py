@@ -20,6 +20,9 @@ one call apiece, in this order until `--max` drafts are written:
 
 Ideas marked not me or done, tasks closed and feed items marked not me get no draft.
 
+`proxenos sync` also drafts replies when a model key is set (`replies`): only chats with no
+draft yet, at most five a sync, so a sync with nothing new waiting makes no model call.
+
 Each draft is clones/drafts/<id>.md: front matter (id, title, kind, for, channel, to, created,
 status) and a markdown body, which the page lists under Drafts. The id is the task's id, or
 the idea's or item's with what it's for in front ("outreach-...", "project-...",
@@ -49,6 +52,7 @@ from proxenos.config import env
 
 MAX_DRAFTS = 20
 REPLIES = 10
+SYNC_REPLIES = 5  # the most replies one `proxenos sync` drafts
 PAGES = 3  # links read per reply
 CARE_CHARS = 1500
 OUTREACH = 3
@@ -68,9 +72,8 @@ _FIELD = re.compile(r"([A-Za-z_][\w-]*)\s*:\s*(.*)")
 _SYSTEM = """\
 You draft work for {person}, written as {person}, for them to read before anything goes \
 out. Their digital twin found it: a message waiting for their reply, a task on their plate, \
-someone worth contacting, a project \
-they could start, or something worth reading. Write the deliverable itself, ready to send or \
-use as it stands.
+someone worth contacting, a project they could start, or something worth reading. Write the \
+deliverable itself, ready to send or use as it stands.
 
 Return:
 - title: what the draft is, under 12 words ("Reply to Priya with the poster PDF").
@@ -107,12 +110,28 @@ _SCHEMA = {
 }
 
 
+def replies(
+    vault: Path,
+    limit: int = SYNC_REPLIES,
+    now: datetime | None = None,
+    read: Callable[[str], dict] = links.read,
+) -> dict[str, int]:
+    """Only the replies with no draft yet, for `proxenos sync`: a chat newly waiting on the user,
+    or one where more came in since its draft. Nothing is drafted twice, so a sync with nothing
+    new waiting makes no model call."""
+    return work(vault, limit, now, read, only="reply", new_only=True)
+
+
 def work(
     vault: Path,
     limit: int = MAX_DRAFTS,
     now: datetime | None = None,
     read: Callable[[str], dict] = links.read,
+    only: str | None = None,
+    new_only: bool = False,
 ) -> dict[str, int]:
+    """Draft each job in turn, up to `limit`; `only` keeps one kind ("reply"), and `new_only`
+    skips any job that already has a draft."""
     now = now or datetime.now(UTC)
     out = vault / "clones" / "drafts"
     existing = _existing(out)
@@ -127,12 +146,14 @@ def work(
         if not _ID.fullmatch(job["id"]) or job["id"] in seen:
             continue  # no file name the page would read, or listed twice
         seen.add(job["id"])
+        if only and job["for"] != only:
+            continue
         found = existing.get(job["id"])
         if job["id"] in edited or (found and (found[1] is None or found[1] in _MINE)):
             mine += 1
         elif _already_reached(job, reached):
             already += 1
-        else:
+        elif not (new_only and found):
             jobs[job["id"]] = job
 
     # A reply draft still the clone's own goes once its chat stops waiting on that message.

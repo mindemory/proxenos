@@ -101,7 +101,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | Command | What it does |
 |---|---|
 | `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
-| `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall |
+| `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
 | `proxenos auth strava` / `slack` | One-time sign-ins that write tokens to `.env` |

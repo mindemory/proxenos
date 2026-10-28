@@ -481,3 +481,15 @@ def test_a_reply_draft_goes_once_answered_unless_it_is_yours(tmp_path, model):
     assert not first.exists()
     assert approved.exists()
     assert not any(c["prompt"].count("A chat waiting") for c in model.calls[1:])
+
+
+def test_a_sync_drafts_only_the_replies_not_drafted_yet(tmp_path, model):
+    vault = chat_vault(tmp_path)
+
+    first = work.replies(vault, now=NOW, read=FakePages())
+    again = work.replies(vault, now=NOW, read=FakePages())
+
+    assert (first["drafts_written"], again["drafts_written"]) == (1, 0)
+    assert len(model.calls) == 1  # nothing new waiting, so no model call
+    assert "A chat waiting for their reply" in model.calls[0]["prompt"]
+    assert all(key.startswith("reply-") for key in drafts(vault))  # no tasks, ideas or notes

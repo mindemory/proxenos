@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import importer, llm, memory, observe
-from proxenos.clones import recall
+from proxenos.clones import recall, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
     bluesky,
@@ -66,7 +66,9 @@ def run(vault: Path, since: str | None = None) -> dict[str, int]:
 
 
 def sync(vault: Path) -> dict[str, int]:
-    """Everything that needs no model: import new downloads, then refresh every set-up source."""
+    """Import new downloads, refresh every set-up source and the memory built from them. None
+    of that needs a model; with a key set, chats newly waiting on the user also get a reply
+    drafted, a few per sync."""
     os.environ.setdefault(env_key("FULL_NAME"), env("NAME"))
     stats = {"sources_synced": 0, "sources_failed": 0}
     stats.update(importer.run(vault))
@@ -95,6 +97,14 @@ def sync(vault: Path) -> dict[str, int]:
             stats["recall_triggers"] = recall.recall(vault)["triggers_with_memories"]
         except (Exception, SystemExit):  # noqa: BLE001
             stats["recall_failed"] = 1
+    # Chats newly waiting on the user get a reply drafted as they come in. Only with a key, and
+    # only chats with no draft yet, so a sync with nothing new waiting costs nothing.
+    if llm.configured():
+        try:
+            stats["replies_drafted"] = work.replies(vault)["drafts_written"]
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - drafts are extra, not the sync
+            stats["replies_failed"] = 1
+            print(f"sync: replies failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
     return stats
 
 

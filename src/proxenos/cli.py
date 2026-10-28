@@ -57,7 +57,9 @@ def main(argv: list[str] | None = None) -> None:
     boss.add_argument("--since", metavar="YYYY-MM", help="observe only months from this one")
     drop = commands.add_parser("import", help="import downloaded exports from the inboxes")
     drop.add_argument("paths", nargs="*", type=Path, help="zips or folders (default: inboxes)")
-    commands.add_parser("sync", help="import downloads and refresh every source; no model")
+    commands.add_parser(
+        "sync", help="import downloads and refresh every source; with a key, draft new replies"
+    )
     index = commands.add_parser("index", help="index the raw data for search; no model")
     index.add_argument("--rebuild", action="store_true", help="start the index over")
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")

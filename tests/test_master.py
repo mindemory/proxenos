@@ -4,7 +4,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from proxenos import master, observe
+from proxenos import llm, master, observe
 
 
 def write_month(path, records):
@@ -179,3 +179,24 @@ def test_spotify_and_website_sync_only_when_their_settings_are_set(monkeypatch):
     assert synced() == {"website"}
     monkeypatch.setenv("PROXENOS_SPOTIFY_EXPORT", "~/history")
     assert synced() == {"spotify", "website"}
+
+
+def test_sync_drafts_new_replies_only_with_a_key(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    monkeypatch.setattr(master, "_UNATTENDED", [])
+    calls = []
+    monkeypatch.setattr(master.work, "replies", lambda v: calls.append(v) or {"drafts_written": 2})
+
+    assert "replies_drafted" not in master.sync(vault)
+    assert calls == []
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    assert master.sync(vault)["replies_drafted"] == 2
+
+    def broken(vault):
+        raise llm.ModelError("model declined")
+
+    monkeypatch.setattr(master.work, "replies", broken)
+    stats = master.sync(vault)
+    assert stats["replies_failed"] == 1
+    assert "records_indexed" in stats  # the rest of the sync still ran

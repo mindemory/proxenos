@@ -66,6 +66,11 @@ def ask(
     return json.loads(text) if schema is not None else text
 
 
+def configured() -> bool:
+    """Whether a key is set, so steps that are optional can skip the model rather than fail."""
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
 def _get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
