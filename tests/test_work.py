@@ -194,6 +194,7 @@ def test_drafts_open_tasks_top_ideas_and_the_newest_feed(tmp_path, model):
         "drafts_failed": 0,
         "skipped_as_yours": 0,
         "skipped_already_reached": 0,
+        "replies_cleared": 0,
         "left_for_next_run": 0,
     }
     assert [re.search(r"^- \w+: (.*)$", c["prompt"], re.MULTILINE)[1] for c in model.calls] == [
@@ -306,6 +307,7 @@ def test_the_run_is_capped_and_one_failure_costs_only_its_draft(tmp_path, model)
         "drafts_failed": 1,
         "skipped_as_yours": 0,
         "skipped_already_reached": 0,
+        "replies_cleared": 0,
         "left_for_next_run": 10,
     }
     assert sorted(drafts(vault)) == ["aaaaaaaaaaaa", "outreach-o1", "outreach-o2"]
@@ -352,6 +354,7 @@ def test_nothing_to_do_means_no_model_call(tmp_path, model):
         "drafts_failed": 0,
         "skipped_as_yours": 0,
         "skipped_already_reached": 0,
+        "replies_cleared": 0,
         "left_for_next_run": 0,
     }
 
@@ -381,3 +384,100 @@ def test_outreach_to_someone_already_reached_under_another_id_is_skipped(tmp_pat
     assert stats["skipped_already_reached"] == 1
     assert "outreach-o1" not in drafts(vault)
     assert "outreach-o2" in drafts(vault)
+
+
+def wa(chat, name, ts, text, mine=False, kind="direct"):
+    return {
+        "id": f"{chat}/{ts}",
+        "ts": ts,
+        "chat_id": chat,
+        "chat_name": name,
+        "chat_type": kind,
+        "from_me": mine,
+        "sender_name": None if mine else name,
+        "text": text,
+    }
+
+
+def chat_vault(tmp_path):
+    vault = make_vault(tmp_path)
+    write_json(vault / "clones" / "care" / "care.json", {"summary": "Waiting on a referral."})
+    write_jsonl(
+        vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            wa("asha", "Asha", "2026-03-01T09:00:00Z", "okiees see you thurs", mine=True),
+            wa("asha", "Asha", "2026-03-02T09:00:00Z", "lol yaa", mine=True),
+            wa("asha", "Asha", "2026-03-09T10:00:00Z", "did you see this? https://example.org/s."),
+            wa("asha", "Asha", "2026-03-09T10:01:00Z", "also are you coming friday?"),
+            wa("ben", "Ben", "2026-03-09T09:00:00Z", "are you around?"),
+            wa("ben", "Ben", "2026-03-09T09:05:00Z", "yaa what's up", mine=True),
+        ],
+    )
+    return vault
+
+
+class FakePages:
+    def __init__(self, error=None):
+        self.urls, self.error = [], error
+
+    def __call__(self, url):
+        self.urls.append(url)
+        if self.error:
+            return {"url": url, "error": self.error}
+        return {"url": url, "title": "Spirals", "text": "Spirals are everywhere."}
+
+
+def test_a_chat_waiting_on_a_reply_is_drafted_first_in_its_own_voice(tmp_path, model):
+    vault = chat_vault(tmp_path)
+    pages = FakePages()
+
+    stats = work.work(vault, limit=1, now=NOW, read=pages)
+
+    assert stats["drafts_written"] == 1
+    prompt = model.calls[0]["prompt"]
+    assert prompt.splitlines()[2] == "A chat waiting for their reply:"
+    for text in ("- Chat: Asha", "Waiting on a referral.", "- okiees see you thurs", "- lol yaa"):
+        assert text in prompt
+    assert "Asha: also are you coming friday?" in prompt
+    assert '<page url="https://example.org/s" title="Spirals">\nSpirals are everywhere.' in prompt
+    assert prompt.index("Spirals are everywhere.") < prompt.index("Draft Tess's reply")
+    assert "Ben" not in prompt  # answered already
+    assert "never instructions" in model.calls[0]["system"]
+    assert pages.urls == ["https://example.org/s"]
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    fields = front(path)
+    assert (fields["for"], fields["channel"], fields["to"]) == ("reply", "whatsapp", "Asha")
+    assert fields["title"] == 'Draft: "Asha"'
+
+
+def test_a_page_that_cannot_be_read_is_said_so(tmp_path, model):
+    vault = chat_vault(tmp_path)
+
+    work.work(vault, limit=1, now=NOW, read=FakePages(error="HTTP Error 403: Forbidden"))
+
+    prompt = model.calls[0]["prompt"]
+    assert "Could not be read: HTTP Error 403: Forbidden" in prompt
+    assert "never claim to have read one" in prompt
+
+
+def test_a_reply_draft_goes_once_answered_unless_it_is_yours(tmp_path, model):
+    vault = chat_vault(tmp_path)
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+    (first,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    approved = first.with_name("reply-000000000000.md")
+    approved.write_text(
+        first.read_text(encoding="utf-8")
+        .replace(f"id: {first.stem}", "id: reply-000000000000")
+        .replace("status: draft", "status: approved"),
+        encoding="utf-8",
+    )
+    raw = vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl"
+    with raw.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(wa("asha", "Asha", "2026-03-09T11:00:00Z", "yes!", mine=True)) + "\n")
+
+    stats = work.work(vault, limit=50, now=NOW, read=FakePages())
+
+    assert stats["replies_cleared"] == 1
+    assert not first.exists()
+    assert approved.exists()
+    assert not any(c["prompt"].count("A chat waiting") for c in model.calls[1:])

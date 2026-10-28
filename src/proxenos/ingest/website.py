@@ -158,7 +158,7 @@ def _page(repo: Path, rel: str, first_added: FirstAdded) -> dict | None:
         return None  # a README or similar, which Jekyll copies without rendering
     front = front or {}
 
-    parser = _PageText()
+    parser = PageText()
     parser.feed(_markdown_as_html(body) if markdown else body)
     parser.close()
     text = parser.text()
@@ -264,7 +264,7 @@ def _iso(when: datetime) -> str:
     return when.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-class _PageText(HTMLParser):
+class PageText(HTMLParser):
     """The visible text of a page, a line per block, plus its title, first <h1> and date."""
 
     def __init__(self) -> None:

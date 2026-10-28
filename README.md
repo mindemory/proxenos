@@ -9,7 +9,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - advice grounded in your own patterns;
 - a map of the people you know and how they connect;
 - a searchable memory that brings the right past messages and notes to mind;
-- drafts of replies, emails and plans, written in your voice.
+- drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
 It drafts; it never sends, posts or buys anything by itself. You approve what goes out. The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
 
@@ -39,7 +39,8 @@ More detail: [architecture](docs/architecture.md), [data sources](docs/data_sour
 ## Privacy
 
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (`PROXENOS_VAULT`, default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
-- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Two clones also send recent records they need, picked out in code: tasks sends conversations you're part of, and care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat waiting on your reply.
+- **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites.
 - **Credentials** stay in `.env`, which git ignores.
 

@@ -5,6 +5,7 @@ import type { Draft, DraftReviews } from "./types";
 
 /** The groups, in the order the Drafts view shows them. */
 export const DRAFT_GROUPS: readonly { id: string; label: string }[] = [
+  { id: "reply", label: "Replies" },
   { id: "task", label: "Tasks" },
   { id: "care", label: "Care" },
   { id: "outreach", label: "Outreach" },
@@ -56,7 +57,7 @@ export interface DraftGroup {
 const createdMs = (d: Draft) => (d.created ? Date.parse(d.created) || 0 : 0);
 
 /**
- * Drafts grouped by what they're for: Tasks, Care, Outreach, Projects, Reading notes, then
+ * Drafts grouped by what they're for: Replies, Tasks, Care, Outreach, Projects, Reading notes, then
  * "Other" for any other value (or none), so a draft never goes missing for being new.
  * Each group lists the ones waiting first, newest first.
  */
