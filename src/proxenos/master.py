@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -78,8 +79,11 @@ def sync(vault: Path) -> dict[str, int]:
         try:
             module.run(vault, parser.parse_args([]))
             stats["sources_synced"] += 1
-        except (Exception, SystemExit):  # noqa: BLE001 - one broken source must not stop the rest
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - one broken source must not stop the rest
             stats["sources_failed"] += 1
+            name = module.__name__.rsplit(".", 1)[-1]
+            reason = str(e) if isinstance(e, SystemExit) else f"{type(e).__name__}: {e}"
+            print(f"sync: {name} failed ({' '.join(reason.split())[:200]})", file=sys.stderr)
     # What the sources just brought in becomes searchable, then today's recall is redone from it.
     # Both are derived data: a failure here never costs the sync.
     try:
