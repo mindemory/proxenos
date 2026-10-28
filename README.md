@@ -12,7 +12,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 
 It drafts; it never sends, posts or buys anything by itself. You approve what goes out. The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
 
-> **Status: early and personal-scale.** It's built and used by one person on macOS (Apple Silicon). Expect rough edges, and readers that assume a particular export format. Issues and ideas are very welcome, especially about making it useful for people navigating hard systems like healthcare. See [CONTRIBUTING.md](CONTRIBUTING.md).
+> **Status: very early.** It's built and used by one person on macOS (Apple Silicon), and it's still primitive: expect rough edges and readers that assume a particular export format. Help of any kind is welcome, whether code, an issue, or an idea over a message or a call, especially about making it useful for people navigating hard systems like healthcare. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
