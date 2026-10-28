@@ -65,9 +65,11 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
     commands.add_parser("web", help="start the local page and open it")
     sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
-    sign_in.add_argument("service", choices=["strava", "slack", "gmail"])
+    sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail"])
     sign_in.add_argument(
-        "account", nargs="*", help="for gmail: NAME ADDRESS, e.g. personal me@x.com"
+        "account",
+        nargs="*",
+        help="for gmail: NAME ADDRESS, e.g. personal me@x.com; for slackdump: the workspace",
     )
     args = parser.parse_args(argv)
 
@@ -78,6 +80,10 @@ def main(argv: list[str] | None = None) -> None:
         vault = vault_path()  # also loads .env
         if args.service == "slack":
             print(auth.slack(REPO_ROOT / ".env", vault / "state" / "slack_apps.json"))
+        elif args.service == "slackdump":
+            if len(args.account) != 1:
+                raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. clayspace")
+            print(auth.slackdump(args.account[0]))
         elif args.service == "gmail":
             if len(args.account) != 2:
                 raise SystemExit("usage: proxenos auth gmail NAME ADDRESS")

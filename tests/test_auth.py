@@ -169,3 +169,42 @@ def test_gmail_sign_in_saves_the_account_with_its_refresh_token(tmp_path, monkey
 def test_gmail_sign_in_needs_a_google_client(tmp_path):
     with pytest.raises(SystemExit, match="GOOGLE_CLIENT_ID"):
         auth.gmail("personal", "me@example.com", tmp_path / ".env", free_port(), print, None)
+
+
+def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from proxenos.ingest import slackdump
+
+    monkeypatch.setattr(auth.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackdump, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("PROXENOS_SLACKDUMP_DIR", raising=False)
+    calls = []
+
+    def run(command):
+        calls.append(command)
+        return SimpleNamespace(returncode=0)
+
+    now = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
+    said = auth.slackdump("https://clayspace.slack.com", tmp_path / "data", run, now)
+
+    login, archive = calls
+    assert login == ["slackdump", "workspace", "new", "clayspace"]
+    assert archive[:6] == [
+        "slackdump",
+        "archive",
+        "-workspace",
+        "clayspace",
+        "-files=false",
+        "-member-only",
+    ]
+    assert archive[archive.index("-time-from") + 1] == "2026-02-08T12:00:00"  # 30 days, in UTC
+    assert archive[-1].startswith(str(tmp_path / "data" / "slackdump_2026"))
+    assert "saved its last 30 days" in said
+
+    monkeypatch.setattr(slackdump, "archives", lambda: [tmp_path / "a" / "slackdump.sqlite"])
+    monkeypatch.setattr(slackdump, "_team", lambda db: "Clayspace")
+    calls.clear()
+    assert "fetches its new messages" in auth.slackdump("clayspace", tmp_path / "data", run, now)
+    assert len(calls) == 1  # signed in again; its archive is already there

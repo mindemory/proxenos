@@ -2,6 +2,10 @@
 
 import json
 import sqlite3
+import subprocess
+from types import SimpleNamespace
+
+import pytest
 
 from proxenos.ingest import slackdump
 
@@ -123,3 +127,39 @@ def test_without_a_root_the_setting_and_the_data_folder_are_searched(tmp_path, m
     monkeypatch.setenv("PROXENOS_SLACKDUMP_DIR", str(tmp_path / "elsewhere"))
     assert found() == ["slackdump_20250101_000000", "slackdump_20250202_000000"]
     assert found(tmp_path / "elsewhere") == ["slackdump_20250202_000000"]  # a root is all it reads
+
+
+def test_catch_up_resumes_the_newest_archive_of_each_signed_in_workspace(tmp_path, monkeypatch):
+    make_archive(tmp_path, "slackdump_20250101_000000")
+    make_archive(tmp_path, "slackdump_20250202_000000")
+    make_archive(tmp_path, "slackdump_20250303_000000")
+    con = sqlite3.connect(tmp_path / "slackdump_20250303_000000" / "slackdump.sqlite")
+    con.execute("update WORKSPACE set TEAM = 'Other Team'")  # not signed in
+    con.commit()
+    con.close()
+    monkeypatch.setattr(slackdump.shutil, "which", lambda name: "/bin/slackdump")
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[1] == "workspace":
+            return SimpleNamespace(stdout="Slackdump 4.5.2 (commit: x)\n*acme-lab\n", returncode=0)
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    stats = slackdump.catch_up(slackdump.archives(tmp_path), run)
+
+    (resume,) = calls[1:]
+    assert resume[:4] == ["slackdump", "resume", "-workspace", "acme-lab"]
+    assert "-files=false" in resume
+    assert resume[-1] == str(tmp_path / "slackdump_20250202_000000")
+    assert stats == {"workspaces_not_caught_up": 1}  # it timed out; the archive is read as it is
+
+
+def test_without_slackdump_or_when_offline_nothing_is_fetched(tmp_path, monkeypatch):
+    make_archive(tmp_path)
+    monkeypatch.setattr(slackdump.shutil, "which", lambda name: None)
+    assert slackdump.catch_up(slackdump.archives(tmp_path), run=None) == {}
+
+    monkeypatch.setattr(slackdump, "catch_up", lambda dbs: pytest.fail("fetched while offline"))
+    args = SimpleNamespace(root=tmp_path, offline=True)
+    assert slackdump.run(tmp_path / "vault", args)["archives"] == 1

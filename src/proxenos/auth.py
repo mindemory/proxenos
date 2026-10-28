@@ -13,6 +13,10 @@ only ever reads, and selects mail read-only), and saves GMAIL_<NAME>=address:oau
 api.slack.com/apps) into reading tokens: it creates a read-only "Proxenos reader" app in each
 workspace from a manifest, opens the app's install page, and takes the user token the page
 shows through a hidden prompt, replacing the configuration token in .env.
+
+`proxenos auth slackdump NAME` signs in to a Slack workspace through slackdump (which keeps the
+sign-in itself, not .env) and, the first time, saves its last 30 days into data/, without
+attachments. From then on every sync fetches its new messages.
 """
 
 import base64
@@ -20,18 +24,25 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import secrets
+import shutil
+import subprocess
 import time
 import urllib.parse
 import urllib.request
 import webbrowser
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from proxenos.config import REPO_ROOT
+from proxenos.ingest import slack as slack_api
+from proxenos.ingest import slackdump as slack_archives
 
 PORT = 8723
+SLACK_FIRST_DAYS = 30  # how far back a workspace's first archive goes
 _STRAVA_AUTHORIZE = "https://www.strava.com/oauth/authorize"
 _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
 _GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -167,6 +178,40 @@ def gmail(
         raise SystemExit("Google gave no refresh token. Run again and approve on the consent page.")
     set_env(env_path, f"GMAIL_{key}", f"{address}:oauth:{token['refresh_token']}")
     return f"saved GMAIL_{key} in .env; `proxenos sync` now reads {address} every run"
+
+
+def slackdump(
+    name: str,
+    data: Path = REPO_ROOT / "data",
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    now: datetime | None = None,
+) -> str:
+    if not shutil.which("slackdump"):
+        raise SystemExit("Install slackdump first: brew install slackdump")
+    # "clayspace", "clayspace.slack.com" or its address: slackdump knows it by "clayspace".
+    workspace = re.sub(r"^https?://", "", name.strip()).split(".")[0].strip("/")
+    if not workspace:
+        raise SystemExit(
+            "Name the workspace as in its address, e.g. clayspace for clayspace.slack.com."
+        )
+    if run(["slackdump", "workspace", "new", workspace]).returncode != 0:
+        raise SystemExit(f"slackdump didn't sign in to {workspace}")
+    saved = {slack_api._slug(slack_archives._team(db) or "") for db in slack_archives.archives()}
+    if slack_api._slug(workspace) in saved:
+        return f"signed in to {workspace}; `proxenos sync` now fetches its new messages every run"
+
+    now = (now or datetime.now()).astimezone()
+    since = now - timedelta(days=SLACK_FIRST_DAYS)
+    print(f"Saving the last {SLACK_FIRST_DAYS} days of {workspace}, without attachments.")
+    command = ["slackdump", "archive", "-workspace", workspace, "-files=false", "-member-only"]
+    command += ["-time-from", f"{since.astimezone(UTC):%Y-%m-%dT%H:%M:%S}"]  # it reads UTC
+    command += ["-o", str(data / f"slackdump_{now:%Y%m%d_%H%M%S}")]
+    if run(command).returncode != 0:
+        raise SystemExit(f"slackdump couldn't save {workspace}; run the same command again")
+    return (
+        f"signed in to {workspace} and saved its last {SLACK_FIRST_DAYS} days; "
+        "`proxenos sync` reads it and fetches new messages every run"
+    )
 
 
 def set_env(env_path: Path, name: str, value: str) -> None:
