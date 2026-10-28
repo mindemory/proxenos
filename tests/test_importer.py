@@ -192,3 +192,12 @@ def test_loose_pdfs_become_notes_and_are_filed_away(tmp_path):
     assert stats == {"notes_imported": 1}
     assert (folder / "Plan.pdf").exists()
     assert [p.name for p in (vault / "inbox").iterdir()] == ["partial.pdf.crdownload"]
+
+
+def test_a_file_that_cannot_be_unpacked_is_skipped_not_fatal(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    (vault / "inbox").mkdir(parents=True)
+    make_zip(vault / "inbox" / "a.zip", {"data/manifest.js": "x", "data/" + "n" * 300: "x"})
+    stats, calls = run(vault)
+    assert [source for source, _ in calls] == ["twitter"]
+    assert stats == {"twitter_imported": 1}

@@ -58,8 +58,13 @@ def run(vault: Path, paths: list[Path] | None = None, ingest=None) -> dict[str, 
     pdfs = groups.pop("__pdfs__", [])
     for name, parts in groups.items():
         dest = vault / "exports" / name
-        for part in parts:
-            _unpack(part, dest)
+        try:
+            for part in parts:
+                _unpack(part, dest)
+        except (OSError, zipfile.BadZipFile) as e:  # one broken download must not stop the rest
+            print(f"import: couldn't unpack {name}: {e}", file=sys.stderr)
+            stats["failed"] += 1
+            continue
         jobs = jobs_for(dest)
         if not jobs:
             stats["unrecognized"] += len(parts)
@@ -185,7 +190,12 @@ def _unpack(path: Path, dest: Path) -> None:
         # zipfile drops absolute paths and ".." parts, so nothing lands outside dest.
         with zipfile.ZipFile(path) as archive:
             for info in archive.infolist():
-                target = archive.extract(info, dest)
+                try:
+                    target = archive.extract(info, dest)
+                except OSError as e:
+                    # e.g. a Takeout file whose name is longer than the file system allows
+                    print(f"import: skipped {info.filename[:80]}...: {e.strerror}", file=sys.stderr)
+                    continue
                 # Files keep their time from the zip (local time), which notes fall back on.
                 if not info.is_dir():
                     when = time.mktime((*info.date_time, 0, 0, -1))
