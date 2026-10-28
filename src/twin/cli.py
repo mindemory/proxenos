@@ -10,12 +10,13 @@ from types import ModuleType
 
 import twin.clones
 import twin.ingest
-from twin import auth, importer, master, observe, webapp
+from twin import auth, importer, master, memory, observe, webapp
 from twin.config import REPO_ROOT, vault_path
 
 # What `twin night` runs after the master, in this order: the feed, then the tasks and advice
-# that read the fresh self-model, the people index and ideas, and last the drafts of them all.
-NIGHT_CLONES = ("tracker", "tasks", "advisor", "network", "work")
+# that read the fresh self-model, the people index and ideas, then what each of those brings to
+# mind from memory, and last the drafts of them all.
+NIGHT_CLONES = ("tracker", "tasks", "advisor", "network", "recall", "work")
 
 
 def _modules(package: ModuleType) -> dict[str, ModuleType]:
@@ -51,6 +52,8 @@ def main(argv: list[str] | None = None) -> None:
     drop = commands.add_parser("import", help="import downloaded exports from the inboxes")
     drop.add_argument("paths", nargs="*", type=Path, help="zips or folders (default: inboxes)")
     commands.add_parser("sync", help="import downloads and refresh every source; no model")
+    index = commands.add_parser("index", help="index the raw data for search; no model")
+    index.add_argument("--rebuild", action="store_true", help="start the index over")
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
     commands.add_parser("web", help="start the local page and open it")
     sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
@@ -79,6 +82,8 @@ def main(argv: list[str] | None = None) -> None:
         stats = importer.run(vault, args.paths or None)
     elif args.command == "sync":
         stats = master.sync(vault)
+    elif args.command == "index":
+        stats = memory.build(vault, args.rebuild)
     elif args.command == "master":
         actions = {
             "run": lambda: master.run(vault, args.since),

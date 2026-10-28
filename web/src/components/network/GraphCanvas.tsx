@@ -2,7 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 
-import { GraphEngine, type HoverInfo } from "@/lib/graphEngine";
+import { GraphEngine, type ColourBy, type HoverInfo } from "@/lib/graphEngine";
 import type { Filters, GraphModel } from "@/lib/graph";
 
 export interface GraphHandle {
@@ -17,6 +17,7 @@ interface GraphCanvasProps {
   filters: Filters;
   selected: number | null;
   highlight: ReadonlySet<number> | null;
+  colourBy: ColourBy;
   /** Pixels at the right and bottom covered by a panel, so fit and focus centre in what's left. */
   insetRight: number;
   insetBottom: number;
@@ -32,6 +33,7 @@ export function GraphCanvas({
   filters,
   selected,
   highlight,
+  colourBy,
   insetRight,
   insetBottom,
   label,
@@ -41,9 +43,11 @@ export function GraphCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engine = useRef<GraphEngine | null>(null);
   const callbacks = useRef({ onSelect, onHover });
+  const colouring = useRef(colourBy);
 
   useEffect(() => {
     callbacks.current = { onSelect, onHover };
+    colouring.current = colourBy;
   });
 
   // One engine per model. The effects below run after it exists, in this order.
@@ -52,6 +56,7 @@ export function GraphCanvas({
     if (!canvas) return;
     const e = new GraphEngine(canvas, model, {
       interactive: true,
+      colourBy: colouring.current,
       onSelect: (idx) => callbacks.current.onSelect(idx),
       onHover: (h) => callbacks.current.onHover(h),
     });
@@ -74,6 +79,9 @@ export function GraphCanvas({
   useEffect(() => {
     engine.current?.setHighlight(highlight);
   }, [model, highlight]);
+  useEffect(() => {
+    engine.current?.setColourBy(colourBy);
+  }, [model, colourBy]);
 
   useImperativeHandle(
     ref,

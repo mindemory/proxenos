@@ -16,7 +16,11 @@ from twin.ingest import slack
 ME = "U0001"
 USERS = [
     {"id": ME, "name": "kai", "profile": {"real_name": "Kai"}},
-    {"id": "U0002", "name": "asha", "profile": {"real_name": "Asha", "display_name": "ash"}},
+    {
+        "id": "U0002",
+        "name": "asha",
+        "profile": {"real_name": "Asha", "display_name": "ash", "email": "Asha@Example.com"},
+    },
     {"id": "U0003", "name": "ravi", "profile": {}},
     {"id": "U0004", "name": "meera", "real_name": "Meera"},
 ]
@@ -48,6 +52,8 @@ HISTORY = {
     "D0400": [msg("1738368300.000100", "U0002", "lunch?"), msg("1738368400.000100", ME, "yes")],
     "G0500": [msg("1738368500.000100", "U0003", "", subtype="channel_join")],
 }
+# Who is in each conversation. The token can't list the lab's members.
+MEMBERS = {"C0100": [ME, "U0002", "U0003"], "G0500": [ME, "U0002", "U0003"]}
 REPLIES = {
     ("C0100", FEB_1): [
         msg("1738368060.000350", "U0002", "ok", thread_ts=FEB_1),
@@ -80,6 +86,10 @@ class FakeSlack:
             channel, ts = params["channel"], params["ts"]
             parent = next(m for m in self.history[channel] if m["ts"] == ts)
             return self.page(params, "messages", [parent] + self.replies[channel, ts])
+        if method == "conversations.members":
+            if params["channel"] not in MEMBERS:
+                return {"ok": False, "error": "missing_scope", "needed": "groups:read"}
+            return self.page(params, "members", MEMBERS[params["channel"]])
         raise AssertionError(f"unexpected call to {method}")
 
     def page(self, params, key, items):
@@ -136,6 +146,29 @@ def test_conversations_are_named_and_typed_and_unjoined_channels_skipped(tmp_pat
 
     assert not any(r["channel_id"] == "C0200" for r in msgs.values())
     assert "C0200" not in {p["channel"] for p in api.made("conversations.history")}
+
+
+def test_who_is_in_each_channel_goes_to_the_channels_snapshot(tmp_path):
+    stats = slack.ingest(tmp_path, api := FakeSlack())
+    assert stats["channels"] == 2  # the lab's members can't be listed, and a DM is no group
+    assert "D0400" not in {p["channel"] for p in api.made("conversations.members")}
+    path = tmp_path / "raw" / "slack" / "acme-lab" / "channels" / "snapshot.jsonl"
+    rosters = {r["id"]: r for r in map(json.loads, path.read_text().splitlines())}
+    assert set(rosters) == {"C0100", "G0500"}
+    general = rosters["C0100"]
+    assert (general["channel_name"], general["channel_type"], general["joined"]) == (
+        "general",
+        "channel",
+        True,
+    )
+    assert general["members"] == [
+        {"id": ME, "name": "Kai", "email": None, "me": True},
+        {"id": "U0002", "name": "Asha", "email": "asha@example.com", "me": False},
+        {"id": "U0003", "name": "ravi", "email": None, "me": False},
+    ]
+    assert rosters["G0500"]["channel_type"] == "group_dm"
+    # The messages are untouched by it: the observers never read a snapshot.
+    assert not list(path.parent.glob("20*.jsonl"))
 
 
 def test_every_list_follows_the_cursor(tmp_path):

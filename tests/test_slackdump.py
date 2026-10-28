@@ -10,6 +10,8 @@ create table WORKSPACE (ID integer, LOAD_DTTM text, TEAM text, TEAM_ID text, USE
 create table S_USER (ID text, LOAD_DTTM text, DATA text);
 create table CHANNEL (ID text, LOAD_DTTM text, NAME text, DATA text);
 create table MESSAGE (CHANNEL_ID text, TS text, LOAD_DTTM text, DATA text);
+create table CHANNEL_USER (CHANNEL_ID text, USER_ID text, CHUNK_ID integer, LOAD_DTTM text,
+                           IDX integer);
 """
 
 
@@ -21,7 +23,8 @@ def make_archive(root, run="slackdump_20250101_000000"):
     con.execute("insert into WORKSPACE values (1, 't1', 'Acme Lab', 'T1', 'U_ME')")
     users = [
         ("U_ME", {"id": "U_ME", "real_name": "Me"}),
-        ("U_A", {"id": "U_A", "real_name": "Asha"}),
+        ("U_A", {"id": "U_A", "real_name": "Asha", "profile": {"email": "Asha@Example.org"}}),
+        ("U_B", {"id": "U_B", "real_name": "Bo Quiet"}),
     ]
     con.executemany(
         "insert into S_USER values (?, 't1', ?)", [(u, json.dumps(d)) for u, d in users]
@@ -54,6 +57,12 @@ def make_archive(root, run="slackdump_20250101_000000"):
             {"ts": "1735689700.000200", "user": "U_ME", "text": "hi"},
         ),
     ]
+    # Everyone in #general, Bo too though Bo never wrote; and the DM's two, which is no group.
+    con.executemany(
+        "insert into CHANNEL_USER values (?, ?, 1, 't1', ?)",
+        [("C1", "U_ME", 0), ("C1", "U_A", 1), ("C1", "U_B", 2), ("C1", "U_A", 3)]
+        + [("D1", "U_ME", 0), ("D1", "U_A", 1)],
+    )
     con.executemany(
         "insert into MESSAGE values (?, ?, ?, ?)",
         [(c, ts, t, json.dumps(d)) for c, ts, t, d in messages],
@@ -86,3 +95,17 @@ def test_rereading_the_same_archives_changes_nothing(tmp_path):
     slackdump.ingest(tmp_path / "vault", tmp_path / "Personal")
     again = slackdump.ingest(tmp_path / "vault", tmp_path / "Personal")
     assert (again["added"], again["updated"]) == (0, 0)
+
+
+def test_who_is_in_each_channel_comes_from_channel_user(tmp_path):
+    make_archive(tmp_path / "Personal")
+    stats = slackdump.ingest(tmp_path / "vault", tmp_path / "Personal")
+    assert stats["channels"] == 1
+    path = tmp_path / "vault" / "raw" / "slack" / "acme-lab" / "channels" / "snapshot.jsonl"
+    (general,) = map(json.loads, path.read_text().splitlines())
+    assert (general["id"], general["channel_name"], general["joined"]) == ("C1", "general", True)
+    assert general["members"] == [
+        {"id": "U_ME", "name": "Me", "email": None, "me": True},
+        {"id": "U_A", "name": "Asha", "email": "asha@example.org", "me": False},
+        {"id": "U_B", "name": "Bo Quiet", "email": None, "me": False},
+    ]

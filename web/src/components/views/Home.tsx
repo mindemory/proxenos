@@ -1,6 +1,18 @@
 "use client";
 
-import { ArrowRight, type LucideIcon, Lightbulb, ListTodo, Network as NetworkIcon, PenLine, Radar, Rss, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  Brain,
+  CalendarDays,
+  type LucideIcon,
+  Lightbulb,
+  ListTodo,
+  Network as NetworkIcon,
+  PenLine,
+  Radar,
+  Rss,
+  UserRound,
+} from "lucide-react";
 
 import { SuggestionCard } from "@/components/advice/SuggestionCard";
 import { ChannelBadge, KindBadge } from "@/components/drafts/badges";
@@ -8,10 +20,13 @@ import { ErrorBanner, LoadingRows, NoVault, QuietLine } from "@/components/Empty
 import { TitleLink } from "@/components/feed/ItemCard";
 import type { View } from "@/components/layout/nav";
 import { Markdown } from "@/components/Markdown";
+import { Marked } from "@/components/memory/Marked";
+import { MemorySourceBadge } from "@/components/memory/sources";
+import { whoWhere } from "@/components/memory/ResultRow";
 import { NetworkThumb } from "@/components/network/NetworkThumb";
 import { SourceIcon } from "@/components/SourceBadge";
 import { TaskRow } from "@/components/tasks/TaskRow";
-import { sendFeedback, type useHome } from "@/lib/client";
+import { sendFeedback, useJson, type useHome } from "@/lib/client";
 import {
   formatDateTime,
   freshness,
@@ -22,8 +37,9 @@ import {
   sourceLabel,
   timeAgo,
 } from "@/lib/format";
+import { plain } from "@/lib/memoryMarks";
 import { byUrgency, isUrgent } from "@/lib/tasks";
-import type { Draft, FeedItem, HomeResponse } from "@/lib/types";
+import type { Draft, FeedItem, HomeResponse, RecallKind, RecallResponse, RecallTrigger } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type HomeState = ReturnType<typeof useHome>;
@@ -31,6 +47,8 @@ type HomeState = ReturnType<typeof useHome>;
 interface HomeProps {
   home: HomeState;
   onNavigate: (view: View) => void;
+  /** Open the memory view, on one record's conversation when `id` is given. */
+  onMemory: (query: string, id?: string) => void;
 }
 
 /** One card of the briefing grid: a title, a link to the full view, and a little content. */
@@ -361,7 +379,115 @@ function ProfileCard({ data, onNavigate }: { data: HomeResponse; onNavigate: (v:
   );
 }
 
-export function Home({ home, onNavigate }: HomeProps) {
+// ── Memories for today ──────────────────────────────────────────────────────
+
+const RECALL_KIND: Record<RecallKind, { label: string; icon: LucideIcon }> = {
+  event: { label: "Coming up", icon: CalendarDays },
+  task: { label: "Task", icon: ListTodo },
+  feed: { label: "In your feed", icon: Rss },
+  person: { label: "Person", icon: UserRound },
+};
+const RECALL_SHOWN = 6;
+const MEMORIES_SHOWN = 2;
+
+/** Up to six triggers, a kind at a time (event, task, person, feed, then the next of each), shown by kind. */
+function pickTriggers(all: RecallTrigger[]): RecallTrigger[] {
+  const order: RecallKind[] = ["event", "task", "person", "feed"];
+  const lists = order.map((k) => all.filter((t) => t.kind === k));
+  const picked: RecallTrigger[] = [];
+  for (let round = 0; picked.length < RECALL_SHOWN && round < RECALL_SHOWN; round++) {
+    for (const list of lists) if (list[round] && picked.length < RECALL_SHOWN) picked.push(list[round]);
+  }
+  return picked.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+}
+
+function whenLine(t: RecallTrigger, now: string): string {
+  if (!t.when) return "";
+  if (t.kind === "event") return formatDateTime(t.when);
+  if (t.kind === "task") return `due ${shortDate(t.when, now)}`;
+  if (t.kind === "person") return `last seen ${shortDate(t.when, now)}`;
+  return shortDate(t.when, now);
+}
+
+function RecallBlock({ t, now, onMemory }: { t: RecallTrigger; now: string; onMemory: HomeProps["onMemory"] }) {
+  const { label, icon: Icon } = RECALL_KIND[t.kind];
+  const when = whenLine(t, now);
+  return (
+    <li className="min-w-0 rounded-xl border border-line bg-bg/40 p-3.5">
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+        <Icon size={13} className="flex-shrink-0 text-accent" />
+        <span className="eyebrow flex-shrink-0">{label}</span>
+        {when && <span className="num truncate">{when}</span>}
+      </div>
+      <h3 className="mt-1 break-words font-display text-lg leading-snug text-ink">{t.title}</h3>
+      <ul className="mt-2 space-y-1.5">
+        {t.memories.slice(0, MEMORIES_SHOWN).map((m) => (
+          <li key={m.id}>
+            <button
+              onClick={() => onMemory("", m.id)}
+              className="block w-full rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 text-xs text-muted">
+                <MemorySourceBadge source={m.source} />
+                <span className="min-w-0 flex-1 truncate">{whoWhere(m)}</span>
+                <span className="num flex-shrink-0">{shortDate(m.ts, now)}</span>
+              </span>
+              {plain(m.snippet).trim() && (
+                <span className="mt-0.5 block line-clamp-2 break-words text-sm leading-relaxed text-ink/85">
+                  <Marked text={m.snippet} />
+                </span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+function RecallCard({ now, onNavigate, onMemory }: { now: string } & Pick<HomeProps, "onNavigate" | "onMemory">) {
+  const { data, error } = useJson<RecallResponse>("/api/recall");
+  const picked = data ? pickTriggers(data.triggers) : [];
+  return (
+    <Card
+      icon={Brain}
+      title="Memories for today"
+      count={data?.exists ? data.triggers.length : undefined}
+      link="Search memory"
+      onLink={() => onNavigate("memory")}
+      className="md:col-span-2 lg:col-span-6 xl:col-span-12"
+    >
+      {error ? (
+        <Meta>Couldn&apos;t load today&apos;s memories.</Meta>
+      ) : !data ? (
+        <Meta>Looking back…</Meta>
+      ) : !data.exists ? (
+        <QuietLine command="twin clone recall">No memories for today yet. This looks through your past:</QuietLine>
+      ) : picked.length === 0 ? (
+        <Meta>Nothing in your past stood out for today&apos;s events, tasks or reading.</Meta>
+      ) : (
+        <>
+          <Meta>
+            What your messages, mail and notes say about what is coming up
+            {data.generated && (
+              <span title={formatDateTime(data.generated)}>
+                {" "}
+                · updated <span className="num">{timeAgo(data.generated, data.now)}</span>
+              </span>
+            )}
+          </Meta>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {picked.map((t) => (
+              <RecallBlock key={`${t.kind}:${t.id}`} t={t} now={now} onMemory={onMemory} />
+            ))}
+          </ul>
+        </>
+      )}
+    </Card>
+  );
+}
+
+export function Home({ home, onNavigate, onMemory }: HomeProps) {
   const { data, error, clearError } = home;
 
   if (!data) {
@@ -393,6 +519,7 @@ export function Home({ home, onNavigate }: HomeProps) {
         <TasksCard home={home} data={data} onNavigate={onNavigate} />
         <DraftsCard data={data} onNavigate={onNavigate} />
         <NetworkCard data={data} onNavigate={onNavigate} />
+        <RecallCard now={data.now} onNavigate={onNavigate} onMemory={onMemory} />
         <FeedCard data={data} onNavigate={onNavigate} />
         <AdviceCard home={home} data={data} onNavigate={onNavigate} />
         <FreshnessCard data={data} onNavigate={onNavigate} />

@@ -12,6 +12,10 @@ since a fold can split a UTF-8 character.
   RRULE, not expanded, plus a record for each changed instance (RECURRENCE-ID).
 - DESCRIPTION is cut to its first 500 characters.
 - organizer is ORGANIZER's email, and attendees counts the ATTENDEE lines.
+- guests lists the people among them, each with name (CN, when it's a name and not an address),
+  email and status (PARTSTAT, lower case: accepted, declined, tentative, needs-action). Rooms,
+  resources and mailing groups (CUTYPE other than INDIVIDUAL) aren't people and are left out.
+  Names and addresses stay in the vault: nothing but the network clone reads them.
 - DTSTART and DTEND are UTC ("...Z"), local with a TZID (an IANA zone name), or dates
   (VALUE=DATE) for all-day events. A local time without a TZID, or with one zoneinfo doesn't
   know, is taken as UTC. ts is the start in UTC (midnight for an all-day event). start and end
@@ -107,6 +111,7 @@ def _parse(lines: list[str]) -> dict | None:
 def _event(lines: list[str]) -> dict:
     props: dict[str, tuple[dict[str, str], str]] = {}
     attendees = 0
+    guests: dict[str, dict] = {}
     for line in lines:
         prop = _split(line)
         if prop is None:
@@ -114,6 +119,8 @@ def _event(lines: list[str]) -> dict:
         name, params, value = prop
         if name == "ATTENDEE":
             attendees += 1
+            if (guest := _guest(params, value)) is not None:
+                guests.setdefault(guest["email"], guest)
         props.setdefault(name, (params, value))
 
     start, all_day = _time(*props["DTSTART"])
@@ -138,6 +145,23 @@ def _event(lines: list[str]) -> dict:
         "status": _text(props, "STATUS"),
         "organizer": _email(organizer) if organizer else None,
         "attendees": attendees,
+        "guests": list(guests.values()),
+    }
+
+
+def _guest(params: dict[str, str], value: str) -> dict | None:
+    """One ATTENDEE who is a person, or None for a room, a resource, a group or no address."""
+    if params.get("CUTYPE", "INDIVIDUAL").upper() != "INDIVIDUAL":
+        return None
+    email = _email(value)
+    if "@" not in email:
+        return None
+    name = " ".join(params.get("CN", "").split())
+    status = params.get("PARTSTAT", "").strip().lower()
+    return {
+        "name": name if name and "@" not in name else None,
+        "email": email,
+        "status": status or None,
     }
 
 

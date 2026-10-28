@@ -349,7 +349,7 @@ export function Network({
   onFound?: () => void;
   onTab?: (tab: NetworkTab) => void;
 }) {
-  const { data, error, flashId, react, clearError } = useNetwork(onChange);
+  const { data, error, flashId, react, editPerson, refreshPeople, clearError } = useNetwork(onChange);
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load the network: ${error}`} /> : <LoadingRows />;
@@ -361,7 +361,16 @@ export function Network({
     <div className={tab === "graph" ? undefined : "pb-24 md:pb-20"}>
       {error && <ErrorBanner message={error} onDismiss={clearError} />}
       {tab === "graph" ? (
-        <GraphView data={data} flashId={flashId} onReact={react} find={find} onFound={onFound} onTab={onTab} />
+        <GraphView
+          data={data}
+          flashId={flashId}
+          onReact={react}
+          onEditPerson={editPerson}
+          onRefresh={refreshPeople}
+          find={find}
+          onFound={onFound}
+          onTab={onTab}
+        />
       ) : tab === "list" ? (
         <People data={data} />
       ) : !data.ideas.exists ? (

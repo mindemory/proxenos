@@ -15,7 +15,8 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from twin import importer, llm, observe
+from twin import importer, llm, memory, observe
+from twin.clones import recall
 from twin.ingest import (
     bluesky,
     gmail,
@@ -78,6 +79,17 @@ def sync(vault: Path) -> dict[str, int]:
             stats["sources_synced"] += 1
         except (Exception, SystemExit):  # noqa: BLE001 - one broken source must not stop the rest
             stats["sources_failed"] += 1
+    # What the sources just brought in becomes searchable, then today's recall is redone from it.
+    # Both are derived data: a failure here never costs the sync.
+    try:
+        stats["records_indexed"] = memory.build(vault).get("records_indexed", 0)
+    except (Exception, SystemExit):  # noqa: BLE001 - search is a convenience, not the sync
+        stats["index_failed"] = 1
+    else:
+        try:
+            stats["recall_triggers"] = recall.recall(vault)["triggers_with_memories"]
+        except (Exception, SystemExit):  # noqa: BLE001
+            stats["recall_failed"] = 1
     return stats
 
 

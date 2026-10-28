@@ -116,9 +116,11 @@ def _waiting(path: Path) -> bool:
 def jobs_for(dest: Path) -> list[tuple[str, list[str]]]:
     """(ingester, its CLI arguments) for every export recognized under dest.
 
-    Notes are only looked for outside Takeout folders, since Takeout's Drive can hold anything,
-    and a Notion export's PDFs are read as notes too. A pile of loose PDFs is never a zip or a
-    folder of its own, so it isn't imported: `twin ingest notes --pdf-dir DIR` reads one.
+    Takeout's Drive, Google Photos, Keep and Tasks folders each go to their own ingester (drive,
+    photos, keep, gtasks). Notes are only looked for outside Takeout folders, since Takeout's Drive
+    can hold anything, and a Notion export's PDFs are read as notes too. A pile of loose PDFs is
+    never a zip or a folder of its own, so it isn't imported: `twin ingest notes --pdf-dir DIR`
+    reads one.
     """
     jobs = []
     for mbox in sorted(dest.glob("**/Takeout/Mail/*.mbox")):
@@ -135,6 +137,14 @@ def jobs_for(dest: Path) -> list[tuple[str, list[str]]]:
         jobs.append(("youtube", ["--export", str(history)]))
     for chrome in sorted({p.parent for p in dest.glob("**/Takeout/Chrome/*History.json")}):
         jobs.append(("chrome", ["--export", str(chrome)]))
+    for folder, source in (
+        ("Drive", "drive"),
+        ("Google Photos", "photos"),
+        ("Keep", "keep"),
+        ("Tasks", "gtasks"),
+    ):
+        for found in sorted(p for p in dest.glob(f"**/Takeout/{folder}") if p.is_dir()):
+            jobs.append((source, ["--export", str(found)]))
     for activity in sorted(dest.glob("**/your_facebook_activity")):
         jobs.append(("facebook", ["--export", str(activity.parent)]))
     for posts in sorted(dest.glob("**/threads/threads_and_replies.json")):

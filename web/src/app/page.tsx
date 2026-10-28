@@ -12,6 +12,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Advice } from "@/components/views/Advice";
 import { Drafts } from "@/components/views/Drafts";
 import { Home } from "@/components/views/Home";
+import { Memory, type MemoryIntent } from "@/components/views/Memory";
 import { Network, NETWORK_TABS, type NetworkTab } from "@/components/views/Network";
 import { Saved } from "@/components/views/Saved";
 import { Status } from "@/components/views/Status";
@@ -36,6 +37,11 @@ export default function Page() {
   const [find, setFind] = useState<{ q: string; nonce: number } | null>(null);
   const findCount = useRef(0);
   const found = useCallback(() => setFind(null), []);
+  // A search or a record the command box or home page wants the memory view to open. The view
+  // takes it on mount and clears it; the key makes a new request start a fresh view.
+  const [memoryIntent, setMemoryIntent] = useState<MemoryIntent | null>(null);
+  const [memoryKey, setMemoryKey] = useState(0);
+  const memoryConsumed = useCallback(() => setMemoryIntent(null), []);
   // Bumped by Refresh: remounting the view makes it fetch again.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,6 +68,12 @@ export default function Page() {
     openNetworkTab("graph");
   };
 
+  const openMemory = (q: string, id?: string) => {
+    setMemoryIntent({ q, id: id ?? null });
+    setMemoryKey((k) => k + 1);
+    navigate("memory");
+  };
+
   const showNew = () => {
     feed.showPending();
     setView("feed");
@@ -85,7 +97,7 @@ export default function Page() {
   const renderView = () => {
     switch (view) {
       case "home":
-        return <Home home={home} onNavigate={navigate} />;
+        return <Home home={home} onNavigate={navigate} onMemory={openMemory} />;
       case "saved":
         return <Saved />;
       case "tasks":
@@ -96,6 +108,8 @@ export default function Page() {
         return <Advice onChange={home.reload} />;
       case "network":
         return <Network tab={netTab} onChange={home.reload} find={find} onFound={found} onTab={setNetTab} />;
+      case "memory":
+        return <Memory key={memoryKey} initial={memoryIntent} onConsumed={memoryConsumed} />;
       case "twin":
         return <Twin />;
       case "status":
@@ -144,6 +158,7 @@ export default function Page() {
           onNavigate={navigate}
           onFind={findPerson}
           onNetworkTab={openNetworkTab}
+          onMemory={openMemory}
           onRefresh={refresh}
         />
 

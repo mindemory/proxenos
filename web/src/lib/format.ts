@@ -100,6 +100,7 @@ const SOURCE_LABELS: Record<string, string> = {
   bluesky: "Bluesky",
   website: "Website",
   mentions: "Mentions",
+  calendar: "Calendar",
 };
 
 export function sourceLabel(source: string): string {

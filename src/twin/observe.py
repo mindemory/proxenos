@@ -8,6 +8,7 @@ fills in. Timestamps are shown in this machine's local time.
 
 import json
 import os
+import re
 from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
@@ -16,6 +17,7 @@ from urllib.parse import urlparse
 
 from twin import llm
 
+_MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 # Below this much rendered text a month says too little to be worth a model call.
 MIN_CHARS = 400
 # About 150k tokens. Longer months are cut, and the note says so.
@@ -162,6 +164,8 @@ def streams(vault: Path) -> list[tuple[str, list[Path]]]:
     """Every observable unit as (observation name, the stream directories it reads)."""
     units: dict[str, list[Path]] = {}
     for month_file in sorted((vault / "raw").glob("**/*.jsonl")):
+        if not _MONTH_FILE.fullmatch(month_file.name):
+            continue  # a snapshot of who's in which group, never something I wrote
         parts = month_file.parent.relative_to(vault / "raw").parts
         name = "/".join(parts[:2]) if parts[0] in _PER_ACCOUNT else parts[0]
         directories = units.setdefault(name, [])
@@ -177,6 +181,8 @@ def pending(vault: Path, since: str | None = None) -> list[tuple[str, str, Path]
         newest: dict[str, float] = {}
         for directory in directories:
             for month_file in directory.glob("*.jsonl"):
+                if not _MONTH_FILE.fullmatch(month_file.name):
+                    continue
                 mtime = month_file.stat().st_mtime
                 newest[month_file.stem] = max(newest.get(month_file.stem, 0.0), mtime)
         for month, mtime in sorted(newest.items()):

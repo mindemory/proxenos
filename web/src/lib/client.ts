@@ -16,6 +16,8 @@ import type {
   ItemsResponse,
   NetworkAction,
   NetworkResponse,
+  PeopleEdit,
+  PeopleEditResult,
   Reaction,
   SuggestionView,
   TaskAction,
@@ -54,6 +56,17 @@ export function sendTaskFeedback(taskId: string, action: TaskAction): Promise<vo
 
 export function sendNetworkFeedback(itemId: string, action: NetworkAction): Promise<void> {
   return postJson("/api/network/feedback", { item_id: itemId, action });
+}
+
+/** A POST whose answer matters. No keepalive: it can wait for a rebuild. */
+async function postForJson<T>(url: string, body: object): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+  return (await res.json()) as T;
 }
 
 /** Without keepalive: an edit can be longer than a keepalive request may carry. */
@@ -333,8 +346,63 @@ export function useNetwork(onChange?: () => void) {
     [setData, setError, flash, notify, onChange],
   );
 
-  return { data, error, flashId, react, clearError: () => setError(null) };
+  /** Fetch the index again, as after a rebuild. */
+  const reload = useCallback(
+    () =>
+      getJson<NetworkResponse>("/api/network").then(
+        (d) => setData(d),
+        (e: unknown) => setError(String(e)),
+      ),
+    [setData, setError],
+  );
+
+  /** Say who is who, then show the rebuilt index; a failed rebuild keeps the edit for the next. */
+  const editPerson = useCallback(
+    async (action: PeopleEdit, id: string, other?: { id: string } | { name: string }): Promise<PeopleEditResult> => {
+      let result: PeopleEditResult;
+      try {
+        const body = { action, id, ...(other && "id" in other ? { other: other.id } : other) };
+        result = await postForJson<PeopleEditResult>("/api/network/people", body);
+      } catch {
+        notify("Couldn't save that. Nothing was changed.", "info");
+        return { ok: false, saved: false, rebuilt: false, message: "Couldn't save that." };
+      }
+      if (result.rebuilt) {
+        await reload();
+        notify(PEOPLE_TOAST[action], "ok");
+      } else {
+        notify("Saved, applies on the next refresh", "info");
+      }
+      return result;
+    },
+    [notify, reload],
+  );
+
+  /** Rebuild people.json now, with every saved edit. */
+  const refreshPeople = useCallback(async (): Promise<PeopleEditResult> => {
+    let result: PeopleEditResult;
+    try {
+      result = await postForJson<PeopleEditResult>("/api/network/refresh", {});
+    } catch {
+      result = { ok: false, saved: false, rebuilt: false, message: "Couldn't reach the server." };
+    }
+    if (result.rebuilt) {
+      await reload();
+      notify("People index rebuilt", "ok");
+    } else {
+      notify(result.message || "The rebuild didn't finish", "info");
+    }
+    return result;
+  }, [notify, reload]);
+
+  return { data, error, flashId, react, editPerson, refreshPeople, clearError: () => setError(null) };
 }
+
+export const PEOPLE_TOAST: Record<PeopleEdit, string> = {
+  same: "Merged; the graph is rebuilt",
+  different: "Kept apart; the graph is rebuilt",
+  hide: "Hidden; the graph is rebuilt",
+};
 
 /** Put text on the clipboard. Falls back to a hidden textarea where the async API isn't allowed. */
 async function copyText(text: string): Promise<boolean> {

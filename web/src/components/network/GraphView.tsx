@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Minus, Network as NetworkIcon, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { Maximize2, Minus, Network as NetworkIcon, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Command, EmptyState } from "@/components/EmptyState";
 import type { NetworkTab } from "@/components/views/Network";
 import { plural } from "@/lib/format";
+import { clusterVar } from "@/lib/clusters";
 import { applyFilters, buildGraph, fold, searchNodes, type Filters } from "@/lib/graph";
-import type { HoverInfo } from "@/lib/graphEngine";
+import type { ColourBy, HoverInfo } from "@/lib/graphEngine";
 import { useBox, useMedia } from "@/lib/hooks";
-import { GROUP_KINDS, RELATIONS, type GroupKind, type NetworkResponse, type Relation } from "@/lib/types";
+import {
+  GROUP_KINDS,
+  RELATIONS,
+  type GroupKind,
+  type NetworkResponse,
+  type PeopleEdit,
+  type PeopleEditResult,
+  type Relation,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { GraphCanvas, type GraphHandle } from "./GraphCanvas";
@@ -23,6 +32,9 @@ interface GraphViewProps {
   data: NetworkResponse;
   flashId: string | null;
   onReact: OnReact;
+  /** Say who is who (aliases.json) and rebuild; and rebuild alone. */
+  onEditPerson?: (action: PeopleEdit, id: string, other?: { id: string } | { name: string }) => Promise<PeopleEditResult>;
+  onRefresh?: () => Promise<PeopleEditResult>;
   /** A name to find, sent from the command box. A new `nonce` finds it again. */
   find?: { q: string; nonce: number } | null;
   /** Called once `find` is used, so the page can drop it and a later visit doesn't find it again. */
@@ -76,7 +88,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
-export function GraphView({ data, flashId, onReact, find, onFound, onTab }: GraphViewProps) {
+export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, find, onFound, onTab }: GraphViewProps) {
   const model = useMemo(() => buildGraph(data.people, data.now), [data.people, data.now]);
   const handle = useRef<GraphHandle>(null);
   const [boxRef, box] = useBox<HTMLDivElement>();
@@ -88,14 +100,34 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
   const [relations, setRelations] = useState<ReadonlySet<Relation>>(new Set());
   const [kinds, setKinds] = useState<ReadonlySet<GroupKind>>(new Set());
   const [hideUnconnected, setHideUnconnected] = useState(false);
+  const [clusters, setClusters] = useState<ReadonlySet<number>>(new Set());
+  const [colourBy, setColourBy] = useState<ColourBy>("cluster");
+  const [refreshing, setRefreshing] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [seenFind, setSeenFind] = useState(0);
   const [focusReq, setFocusReq] = useState<{ idx: number; n: number } | null>(null);
+  // After a rebuild the model is new and indexes move: keep whoever was open, by id.
+  const [shownModel, setShownModel] = useState(model);
+  const [focusAfter, setFocusAfter] = useState<string[]>([]);
+  if (model !== shownModel) {
+    const before = selected !== null ? shownModel.nodes[selected]?.id : undefined;
+    const wanted = [...focusAfter, ...(before ? [before] : [])];
+    setShownModel(model);
+    setSelected(wanted.map((id) => model.byId.get(id)).find((i) => i !== undefined) ?? null);
+    setGroupFocus(null);
+    setFocusAfter([]);
+  }
 
-  const filters = useMemo<Filters>(() => ({ relations, kinds, hideUnconnected }), [relations, kinds, hideUnconnected]);
+  const clusterList = data.people.clusters;
+  const clusterById = useMemo(() => new Map(clusterList.map((c) => [c.id, c])), [clusterList]);
+  const byCluster = colourBy === "cluster" && clusterList.length > 0;
+  const filters = useMemo<Filters>(
+    () => ({ relations, kinds, clusters, hideUnconnected }),
+    [relations, kinds, clusters, hideUnconnected],
+  );
   const visibility = useMemo(() => applyFilters(model, filters), [model, filters]);
   const results = useMemo(() => searchNodes(model, text), [model, text]);
   const highlight = useMemo(
@@ -113,15 +145,17 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
 
   const shownNodes = visibility.node.filter(Boolean).length;
   const shownEdges = visibility.edge.filter(Boolean).length;
-  const filtered = relations.size > 0 || kinds.size > 0 || hideUnconnected;
+  const filtered = relations.size > 0 || kinds.size > 0 || clusters.size > 0 || hideUnconnected;
+  const clearFilters = () => {
+    setRelations(new Set());
+    setKinds(new Set());
+    setClusters(new Set());
+    setHideUnconnected(false);
+  };
 
   /** Select someone, make sure they're on screen, and bring them to the middle. */
   const choose = (idx: number) => {
-    if (!visibility.node[idx]) {
-      setRelations(new Set());
-      setKinds(new Set());
-      setHideUnconnected(false);
-    }
+    if (!visibility.node[idx]) clearFilters();
     setSelected(idx);
     setGroupFocus(null);
     // The panel opens next render; centre in what it will leave.
@@ -137,9 +171,7 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
     if (best !== undefined) {
       setSelected(best);
       setGroupFocus(null);
-      setRelations(new Set());
-      setKinds(new Set());
-      setHideUnconnected(false);
+      clearFilters();
       setFocusReq({ idx: best, n: find.nonce });
     }
   }
@@ -167,6 +199,22 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
       </EmptyState>
     );
   }
+
+  const editPerson =
+    onEditPerson &&
+    ((action: PeopleEdit, other?: { id: string } | { name: string }) => {
+      const id = selected !== null ? model.nodes[selected].id : null;
+      if (id === null) return Promise.resolve({ ok: false, saved: false, rebuilt: false, message: "" });
+      // Merged, they may go on under either id; hidden, under neither.
+      setFocusAfter(action === "hide" ? [] : action === "same" && other && "id" in other ? [id, other.id] : [id]);
+      return onEditPerson(action, id, other);
+    });
+  const refresh = async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  };
 
   const pick = (idx: number) => {
     choose(idx);
@@ -308,6 +356,18 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
             <span className="num">{model.nodes.length.toLocaleString()}</span> people ·{" "}
             <span className="num text-ink">{shownEdges.toLocaleString()}</span> ties
           </p>
+          {onRefresh && (
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              aria-label="Rebuild the people index"
+              title="Rebuild the people index with every saved change"
+              className="ml-auto lg:ml-0 inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5 text-[13px] text-muted hover:text-ink disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
+              <span className="hidden sm:inline">{refreshing ? "Rebuilding…" : "Refresh"}</span>
+            </button>
+          )}
         </div>
 
         <div className={cn("flex-wrap items-center gap-1.5", filtersOpen ? "flex" : "hidden sm:flex")}>
@@ -333,18 +393,49 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
             Hide unconnected
           </Chip>
           {filtered && (
-            <button
-              onClick={() => {
-                setRelations(new Set());
-                setKinds(new Set());
-                setHideUnconnected(false);
-              }}
-              className="text-[13px] text-accent px-2 hover:underline underline-offset-4"
-            >
+            <button onClick={clearFilters} className="text-[13px] text-accent px-2 hover:underline underline-offset-4">
               Clear
             </button>
           )}
         </div>
+
+        {clusterList.length > 0 && (
+          <div className={cn("flex-wrap items-center gap-1.5", filtersOpen ? "flex" : "hidden sm:flex")}>
+            <div role="group" aria-label="Colour people by" className="inline-flex rounded-full border border-line-strong p-0.5 text-[13px]">
+              {(["cluster", "relation"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColourBy(c)}
+                  aria-pressed={colourBy === c}
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 transition-colors",
+                    colourBy === c ? "bg-surface-2 text-ink" : "text-muted hover:text-ink",
+                  )}
+                >
+                  {c === "cluster" ? "Clusters" : "Relations"}
+                </button>
+              ))}
+            </div>
+            <span className="hidden sm:block w-px h-5 bg-line-strong mx-1" aria-hidden="true" />
+            {clusterList.map((c) => (
+              <Chip
+                key={c.id}
+                on={clusters.has(c.id)}
+                onClick={() => setClusters((cur) => toggled(cur, c.id))}
+                title={`Only the ${c.label} cluster`}
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: clusterVar(c.id) }} />
+                <span className="max-w-[14rem] truncate">{c.label}</span> <span className="num">{c.size}</span>
+              </Chip>
+            ))}
+            {byCluster && (
+              <span className="inline-flex items-center gap-1.5 px-1 text-[13px] text-muted whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: clusterVar(null) }} />
+                no cluster · ring: relation
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div ref={boxRef} className="relative flex-1 min-h-0 overflow-hidden">
@@ -354,6 +445,7 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
           filters={filters}
           selected={selected}
           highlight={highlight}
+          colourBy={byCluster ? "cluster" : "relation"}
           insetRight={insetRight}
           insetBottom={insetBottom}
           label={`Network graph of ${model.nodes.length} people and ${model.edges.length} ties. The List tab has the same people as text.`}
@@ -403,6 +495,12 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
               </span>
               {hoverNode.person.org && <span className="truncate">{hoverNode.person.org}</span>}
             </div>
+            {hoverNode.cluster !== null && clusterById.get(hoverNode.cluster) && (
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: clusterVar(hoverNode.cluster) }} />
+                <span className="truncate">{clusterById.get(hoverNode.cluster)!.label}</span>
+              </div>
+            )}
             {hoverNode.person.context && (
               <p className="mt-1 text-xs text-ink/80 leading-snug line-clamp-3 break-words">{hoverNode.person.context}</p>
             )}
@@ -428,6 +526,9 @@ export function GraphView({ data, flashId, onReact, find, onFound, onTab }: Grap
                 setGroupFocus(null);
               }}
               onReact={onReact}
+              clusters={clusterById}
+              onEdit={editPerson}
+              onRefresh={onRefresh}
             />
           </aside>
         )}

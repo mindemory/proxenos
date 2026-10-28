@@ -16,6 +16,7 @@ export interface GNode {
   idx: number;
   id: string;
   person: Person;
+  cluster: number | null; // the person's cluster id, from people.json
   r: number; // radius in world units, from interactions
   degree: number; // ties among the drawn edges
   x: number;
@@ -29,7 +30,8 @@ export interface GNode {
 export interface GEdge {
   a: number;
   b: number;
-  weight: number;
+  weight: number; // the sum of 1/log2(size + 1) over the groups they share
+  shared: number; // how many groups they share
   contexts: string[];
   kinds: GroupKind[]; // kinds of the groups both people are in
 }
@@ -80,6 +82,7 @@ export function buildGraph(people: NetworkResponse["people"], now: string): Grap
       idx,
       id,
       person,
+      cluster: person.cluster ?? null,
       r: nodeRadius(person.interactions),
       degree: 0,
       x: radius * Math.cos(angle),
@@ -114,7 +117,7 @@ export function buildGraph(people: NetworkResponse["people"], now: string): Grap
     seen.add(key);
     const shared = nodeGroups[a].filter((g) => nodeGroups[b].includes(g));
     const kinds = [...new Set(shared.map((g) => groups[g].group.kind))];
-    const ei = edges.push({ a, b, weight: e.weight, contexts: e.contexts, kinds }) - 1;
+    const ei = edges.push({ a, b, weight: e.weight, shared: e.shared, contexts: e.contexts, kinds }) - 1;
     adj[a].push({ other: b, edge: ei });
     adj[b].push({ other: a, edge: ei });
     nodes[a].degree++;
@@ -140,11 +143,14 @@ export function buildThumbGraph(thumb: GraphThumb): GraphModel {
       context: "",
       topics: [],
       org: null,
+      cluster: null,
+      aka: [],
     };
     return {
       idx,
       id: n.id,
       person,
+      cluster: null,
       r: 2 + Math.min(5, 0.9 * Math.log2(1 + n.interactions)),
       degree: 0,
       x: radius * Math.cos(angle),
@@ -162,7 +168,7 @@ export function buildThumbGraph(thumb: GraphThumb): GraphModel {
     const a = byId.get(l.source);
     const b = byId.get(l.target);
     if (a === undefined || b === undefined || a === b) continue;
-    const ei = edges.push({ a, b, weight: l.weight, contexts: [], kinds: [] }) - 1;
+    const ei = edges.push({ a, b, weight: l.weight, shared: 1, contexts: [], kinds: [] }) - 1;
     adj[a].push({ other: b, edge: ei });
     adj[b].push({ other: a, edge: ei });
     nodes[a].degree++;
@@ -176,6 +182,7 @@ export function buildThumbGraph(thumb: GraphThumb): GraphModel {
 export interface Filters {
   relations: ReadonlySet<Relation>; // none: every relation
   kinds: ReadonlySet<GroupKind>; // none: every kind of tie
+  clusters: ReadonlySet<number>; // none: every cluster, and people in none
   hideUnconnected: boolean;
 }
 
@@ -187,7 +194,9 @@ export interface Visibility {
 }
 
 export function applyFilters(g: GraphModel, f: Filters): Visibility {
-  const relationOk = (n: GNode) => f.relations.size === 0 || f.relations.has(n.person.relation);
+  const relationOk = (n: GNode) =>
+    (f.relations.size === 0 || f.relations.has(n.person.relation)) &&
+    (f.clusters.size === 0 || (n.cluster !== null && f.clusters.has(n.cluster)));
   const edge = g.edges.map(
     (e) =>
       relationOk(g.nodes[e.a]) &&
@@ -240,8 +249,8 @@ interface Link {
 }
 
 /**
- * A small force simulation: ties are springs (shorter and firmer the more
- * contexts two people share), every pair repels, overlapping nodes push apart,
+ * A small force simulation: ties are springs (shorter the closer two people
+ * are: a pair alone in a group weighs 0.63, a big channel 0.1), every pair repels, overlapping nodes push apart,
  * and a weak pull toward the middle keeps strangers from drifting off.
  * Same ideas as d3-force, with the repulsion done pair by pair: for the 600
  * nodes drawn that is 180k pairs a tick, about a millisecond.
@@ -266,7 +275,7 @@ export class Simulation {
       return {
         a: e.a,
         b: e.b,
-        dist: 34 + 60 / Math.sqrt(e.weight),
+        dist: 30 + 64 / Math.sqrt(1 + 3 * e.weight),
         strength: 1 / Math.min(da, db),
         bias: da / (da + db),
       };

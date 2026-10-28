@@ -16,6 +16,7 @@ export const RELATION_STYLE: Record<Relation, { dot: string; text: string; borde
 export const KIND_LABEL: Record<GroupKind, string> = {
   whatsapp_group: "WhatsApp",
   slack_channel: "Slack",
+  event: "Meetings",
   paper: "Papers",
   email_thread: "Email",
   org: "Orgs",
@@ -24,6 +25,7 @@ export const KIND_LABEL: Record<GroupKind, string> = {
 export const KIND_LABEL_ONE: Record<GroupKind, string> = {
   whatsapp_group: "WhatsApp group",
   slack_channel: "Slack channel",
+  event: "Meeting",
   paper: "Paper",
   email_thread: "Email thread",
   org: "Organization",

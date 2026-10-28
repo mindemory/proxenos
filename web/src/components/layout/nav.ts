@@ -1,6 +1,7 @@
 import {
   Activity,
   Bookmark,
+  Brain,
   House,
   Lightbulb,
   ListTodo,
@@ -11,7 +12,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type View = "home" | "feed" | "saved" | "tasks" | "drafts" | "advice" | "network" | "twin" | "status";
+export type View =
+  | "home"
+  | "feed"
+  | "saved"
+  | "tasks"
+  | "drafts"
+  | "advice"
+  | "network"
+  | "memory"
+  | "twin"
+  | "status";
 
 export interface NavItem {
   icon: LucideIcon;
@@ -29,6 +40,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: PenLine, label: "Drafts", id: "drafts", group: "clones" },
   { icon: Lightbulb, label: "Advice", id: "advice", group: "clones" },
   { icon: Network, label: "Network", id: "network", group: "clones" },
+  { icon: Brain, label: "Memory", id: "memory", group: "you" },
   { icon: UserRound, label: "Twin", id: "twin", group: "you" },
   { icon: Activity, label: "Status", id: "status", group: "you" },
 ];

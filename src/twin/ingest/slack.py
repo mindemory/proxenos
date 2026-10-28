@@ -11,6 +11,11 @@ in channel history, so the parents of recent threads have to be seen again to no
 latest_reply moved past the watermark. Those threads are re-read with conversations.replies. A
 thread that wakes up after more than a week is only caught by --full, which ignores the state
 and reads everything. Records merge by id, so the overlap is harmless.
+
+Who is in each channel and group DM (conversations.members) goes to
+raw/slack/<team>/channels/snapshot.jsonl, refreshed every run: each member's user id, name and
+profile email (with users:read.email), and whether I'm in it. A token without the scope to list
+members skips this; the messages still say who wrote.
 """
 
 import argparse
@@ -22,12 +27,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from twin.store import merge_monthly
+from twin.store import merge_monthly, merge_snapshot
 
 API_URL = "https://slack.com/api/"
 TOKEN_ENV = "SLACK_USER_TOKEN"
@@ -86,10 +91,12 @@ def ingest(
     watermarks = state.setdefault("channels", {})
 
     try:
-        users = {u["id"]: _user_name(u) for u in slack.pages("users.list", "members")}
+        listed_users = list(slack.pages("users.list", "members"))
     except SlackError:
         # Without users:read, names stay unresolved but every message still comes in.
-        users = {}
+        listed_users = []
+    users = {u["id"]: _user_name(u) for u in listed_users}
+    emails = {u["id"]: _email(u) for u in listed_users}
     listed = slack.pages("conversations.list", "channels", types=_TYPES, exclude_archived="false")
     channels = [_channel(c, users) for c in listed if _is_mine(c)]
 
@@ -105,6 +112,18 @@ def ingest(
             # Saved after each channel is written, so an interrupted backfill resumes there.
             watermarks[channel["id"]] = max(filter(None, [old, newest]), key=Decimal)
             _save_state(state_path, state)
+
+    rosters = []
+    for channel in channels:
+        if channel["type"] == "dm":
+            continue
+        try:
+            ids = list(slack.pages("conversations.members", "members", channel=channel["id"]))
+        except SlackError:
+            continue  # no scope to list members: who wrote is still in the messages
+        rosters.append(roster(channel, ids, users, emails, auth["user_id"]))
+    if rosters:
+        totals["channels"] = merge_snapshot(rosters, vault / "raw" / "slack" / team / "channels")
     return totals
 
 
@@ -230,6 +249,36 @@ def _user_name(user: dict) -> str | None:
         or user.get("name")
         or None
     )
+
+
+def _email(user: dict) -> str | None:
+    email = ((user.get("profile") or {}).get("email") or "").strip().lower()
+    return email or None
+
+
+def roster(
+    channel: dict,
+    member_ids: Iterable[str],
+    users: dict[str, str | None],
+    emails: dict[str, str | None],
+    me: str,
+) -> dict | None:
+    """Who is in a channel or group DM, as the channels snapshot keeps it. None for a DM, which
+    is two people and no group."""
+    if channel["type"] == "dm":
+        return None
+    ids = list(dict.fromkeys(member_ids))
+    return {
+        "id": channel["id"],
+        "channel_id": channel["id"],
+        "channel_name": channel["name"],
+        "channel_type": channel["type"],
+        "joined": me in ids,
+        "members": [
+            {"id": uid, "name": users.get(uid), "email": emails.get(uid), "me": uid == me}
+            for uid in ids
+        ],
+    }
 
 
 def _record(m: dict, channel: dict, users: dict[str, str | None], me: str) -> dict:

@@ -2,6 +2,7 @@ import {
   Activity,
   AtSign,
   Briefcase,
+  CalendarDays,
   Camera,
   Cloud,
   Database,
@@ -29,6 +30,7 @@ export const SOURCE_ICON: Record<string, LucideIcon> = {
   bluesky: Cloud,
   website: Globe,
   mentions: Megaphone,
+  calendar: CalendarDays,
 };
 
 export function SourceIcon({ kind, size = 12 }: { kind: string; size?: number }) {

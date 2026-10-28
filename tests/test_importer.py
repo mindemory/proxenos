@@ -103,7 +103,7 @@ def test_new_export_types_are_routed_by_their_distinctive_files(tmp_path):
             "Takeout/YouTube and YouTube Music/playlists/playlists.csv": "x",
             "Takeout/Chrome/History.json": "{}",
             "Takeout/Calendar/me@example.com.ics": "BEGIN:VCALENDAR",
-            # Takeout's Drive can hold anything; it isn't taken for notes.
+            # Takeout's Drive can hold anything; it goes to the drive reader, not to notes.
             "Takeout/Drive/Old notes/Page " + HEX + ".md": "# Page",
         },
     )
@@ -132,6 +132,7 @@ def test_new_export_types_are_routed_by_their_distinctive_files(tmp_path):
         [
             ("youtube", ["--export", str(takeout / "YouTube and YouTube Music")]),
             ("chrome", ["--export", str(takeout / "Chrome")]),
+            ("drive", ["--export", str(takeout / "Drive")]),
             ("calendar", ["--export", str(takeout / "Calendar")]),
             ("calendar", ["--export", str(exports / "me@example.com.ical")]),
             ("letterboxd", ["--export", str(exports / "letterboxd-me-2026")]),
@@ -152,6 +153,71 @@ def test_new_export_types_are_routed_by_their_distinctive_files(tmp_path):
     )
     assert stats["unrecognized"] == 1  # few-notes.zip
     assert stats["calendar_imported"] == 2 and stats["notes_imported"] == 3
+
+
+def test_takeouts_drive_photos_keep_and_tasks_go_to_their_own_readers(tmp_path):
+    vault = tmp_path / "vault"
+    inbox = vault / "inbox"
+    inbox.mkdir(parents=True)
+    make_zip(
+        inbox / "takeout-20261028T2Z-001.zip",
+        {
+            "Takeout/Drive/Thesis.docx": "x",
+            "Takeout/Drive/Notes/ideas.md": "# Ideas",
+            "Takeout/Google Photos/Album/metadata.json": "{}",
+            "Takeout/Google Photos/Photos from 2024/a.jpg.json": "{}",
+            "Takeout/Keep/Note.json": "{}",
+            "Takeout/Keep/Note.html": "x",
+            "Takeout/Tasks/Tasks.json": "{}",
+        },
+    )
+    # Another part of the same Takeout unpacks into the same folder, and another Takeout is its own.
+    make_zip(inbox / "takeout-20261028T2Z-002.zip", {"Takeout/Mail/All mail.mbox": MBOX})
+    make_zip(inbox / "takeout-20261028T3Z-001.zip", {"Takeout/Keep/Other.json": "{}"})
+    # Folders with these names outside a Takeout are not Google's exports.
+    make_zip(
+        inbox / "stray.zip", {"Drive/a.docx": "x", "Keep/b.json": "x", "Tasks/Tasks.json": "x"}
+    )
+
+    stats, calls = run(vault)
+    takeout = vault / "exports" / "takeout-20261028T2Z" / "Takeout"
+    other = vault / "exports" / "takeout-20261028T3Z" / "Takeout"
+    assert sorted(calls) == sorted(
+        [
+            ("drive", ["--export", str(takeout / "Drive")]),
+            ("photos", ["--export", str(takeout / "Google Photos")]),
+            ("keep", ["--export", str(takeout / "Keep")]),
+            ("gtasks", ["--export", str(takeout / "Tasks")]),
+            (
+                "email",
+                ["--account", "me-example-com", "--mbox", str(takeout / "Mail" / "All mail.mbox")],
+            ),
+            ("keep", ["--export", str(other / "Keep")]),
+        ]
+    )
+    assert stats["unrecognized"] == 1  # stray.zip
+    assert stats["drive_imported"] == stats["photos_imported"] == stats["gtasks_imported"] == 1
+    assert stats["keep_imported"] == 2
+
+
+def test_jobs_for_only_routes_folders_inside_a_takeout(tmp_path):
+    export = tmp_path / "export"
+    for name in ("Drive", "Google Photos", "Keep", "Tasks"):
+        (export / "Takeout" / name).mkdir(parents=True)
+    (export / "Takeout" / "Keep" / "Note.json").write_text("{}")
+    (export / "Takeout" / "Drive2").mkdir()
+    # Files with those names are not folders to read.
+    (export / "Takeout" / "Profile").mkdir()
+    (export / "Takeout" / "Profile" / "Drive").write_text("x")
+    (export / "Drive").mkdir()
+
+    jobs = importer.jobs_for(export)
+    assert jobs == [
+        ("drive", ["--export", str(export / "Takeout" / "Drive")]),
+        ("photos", ["--export", str(export / "Takeout" / "Google Photos")]),
+        ("keep", ["--export", str(export / "Takeout" / "Keep")]),
+        ("gtasks", ["--export", str(export / "Takeout" / "Tasks")]),
+    ]
 
 
 def test_an_export_is_unpacked_once_and_keeps_its_file_times(tmp_path):

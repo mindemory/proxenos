@@ -183,6 +183,29 @@ export interface Person {
   context: string;
   topics: string[];
   org: string | null;
+  /** The cluster (community) this person is in, for people the graph connects; null for none. */
+  cluster: number | null;
+  /** Other names this person was found under, merged into one: what "not the same as" can undo. */
+  aka: string[];
+}
+
+/** A community of people who share groups, from people.json "clusters". Ids are 1, 2, ... by size. */
+export interface Cluster {
+  id: number;
+  label: string; // the name of the group most of its people are in
+  size: number;
+}
+
+/** What the page can say about who is who: written to clones/network/aliases.json. */
+export type PeopleEdit = "same" | "different" | "hide";
+export const PEOPLE_EDITS: readonly PeopleEdit[] = ["same", "different", "hide"];
+
+/** The answer to a people edit or a refresh: whether people.json was rebuilt with it. */
+export interface PeopleEditResult {
+  ok: boolean;
+  saved: boolean;
+  rebuilt: boolean;
+  message: string;
 }
 
 /** The latest line about an idea from clones/network/feedback.jsonl. */
@@ -215,17 +238,22 @@ export interface ToRead extends Acted {
   why: string;
 }
 
-export type GroupKind = "whatsapp_group" | "slack_channel" | "paper" | "email_thread" | "org";
+export type GroupKind = "whatsapp_group" | "slack_channel" | "event" | "paper" | "email_thread" | "org";
 
 /** In the order the filter chips list them. */
-export const GROUP_KINDS: readonly GroupKind[] = ["whatsapp_group", "slack_channel", "paper", "email_thread", "org"];
+export const GROUP_KINDS: readonly GroupKind[] = ["whatsapp_group", "slack_channel", "event", "paper", "email_thread", "org"];
 
-/** Two people who share at least one group; `weight` is how many. */
+/**
+ * Two people who share at least one group. Each shared group of n people adds 1/log2(n + 1) to
+ * `weight`, so a pair alone adds 0.63 and a channel of thousands next to nothing; `shared` is how
+ * many groups.
+ */
 export interface Edge {
   source: string; // person id
   target: string; // person id
   weight: number;
-  contexts: string[]; // short names of the shared groups, e.g. "Slack: acme #methods"
+  shared: number;
+  contexts: string[]; // short names of the shared groups, closest first, e.g. "Slack: acme #methods"
 }
 
 /** One context people share: a chat, a thread, a paper or an organization. */
@@ -234,6 +262,7 @@ export interface Group {
   name: string;
   kind: GroupKind;
   members: string[]; // person ids, among the people the graph connects
+  size: number; // everyone in it besides me, drawn or not
 }
 
 export interface NetworkResponse {
@@ -247,6 +276,7 @@ export interface NetworkResponse {
     core: string[];
     edges: Edge[];
     groups: Group[];
+    clusters: Cluster[];
   };
   ideas: {
     exists: boolean;
@@ -353,4 +383,72 @@ export interface HomeResponse {
     latest: ChangelogSection | null;
   };
   sources: SourceSync[];
+}
+
+// ── Memory: search over everything in raw/, and recall ────────────────────
+
+/** One search hit. `snippet` has its matched words between U+0002 and U+0003 (see lib/memory.ts). */
+export interface MemoryHit {
+  id: string; // "<source>/<stream>/<record id>"
+  source: string;
+  stream: string;
+  ts: string;
+  who: string;
+  where_: string;
+  title: string;
+  snippet: string;
+  score: number; // bm25: lower is a better match
+  from_me: boolean | null;
+}
+
+export interface MemoryFacet {
+  source: string;
+  count: number;
+}
+
+export interface MemorySearchResponse {
+  indexed: boolean; // false until `twin index` has run
+  query: string;
+  hits: MemoryHit[];
+  /** Rows per source among everything the query matches, before the source filter. */
+  facets: MemoryFacet[];
+  /** Rows matched with every filter applied; null when there is no index. */
+  total: number | null;
+  took_ms: number;
+}
+
+/** A record of a conversation, with its whole text (cut to 4,000 characters). */
+export interface MemoryRecord {
+  id: string;
+  source: string;
+  stream: string;
+  ts: string;
+  who: string;
+  where_: string;
+  title: string;
+  text: string;
+  from_me: boolean | null;
+  target: boolean; // the record that was asked about
+}
+
+export interface MemoryContextResponse {
+  id: string;
+  records: MemoryRecord[];
+}
+
+export type RecallKind = "event" | "task" | "feed" | "person";
+
+export interface RecallTrigger {
+  kind: RecallKind;
+  id: string;
+  title: string;
+  when: string | null;
+  memories: MemoryHit[]; // at least one: a trigger with nothing to recall is left out
+}
+
+export interface RecallResponse {
+  exists: boolean; // today.json is present
+  generated: string | null;
+  now: string;
+  triggers: RecallTrigger[];
 }

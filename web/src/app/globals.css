@@ -44,6 +44,17 @@
   --c-rel-met: #a3b1ff;
   --c-rel-know: #6fd0cf;
   --c-rel-read: #dba6f2;
+
+  /* Clusters in the network graph: the four biggest, then any other, then none. The four are
+     the blue, yellow, magenta and green steps of the reference dark palette, the largest set of
+     it that stays apart pair by pair on this ground (worst colour-blind dE 6.9, so a cluster is
+     also named in the legend, the tooltip and the panel); all >= 3:1 on the ground. */
+  --c-cluster-1: #3987e5;
+  --c-cluster-2: #c98500;
+  --c-cluster-3: #d55181;
+  --c-cluster-4: #008300;
+  --c-cluster-other: #8b919c;
+  --c-cluster-none: #5f6672;
 }
 
 @theme {

@@ -3,6 +3,9 @@
 Records need an "id" and an ISO-8601 UTC "ts". Writes merge by id into what is already
 on disk, so re-running an ingester is safe: new ids are added, changed records replace
 the old ones, and records the source has since dropped are kept.
+
+State that isn't dated, such as who is in a group, goes to one snapshot.jsonl per stream
+instead, merged by id the same way. It isn't a month file, so the observers never read it.
 """
 
 import json
@@ -35,6 +38,22 @@ def merge_monthly(records: Iterable[dict], directory: Path) -> dict[str, int]:
             _write(path, sorted(merged.values(), key=lambda r: (r["ts"], r["id"])))
             stats["months_written"] += 1
     return stats
+
+
+SNAPSHOT = "snapshot.jsonl"
+
+
+def merge_snapshot(records: Iterable[dict], directory: Path) -> int:
+    """Write records with an "id" (and no "ts" needed) to directory/snapshot.jsonl: those read
+    now replace their old copies, the rest are kept. Returns how many were read."""
+    incoming = {record["id"]: record for record in records}
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / SNAPSHOT
+    existing = _load(path)
+    merged = existing | incoming
+    if merged != existing or not path.exists():
+        _write(path, sorted(merged.values(), key=lambda r: r["id"]))
+    return len(incoming)
 
 
 def _load(path: Path) -> dict[str, dict]:

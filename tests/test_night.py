@@ -3,7 +3,7 @@
 import pytest
 
 from twin import cli, llm, master
-from twin.clones import advisor, network, tasks, tracker, work
+from twin.clones import advisor, network, recall, tasks, tracker, work
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def steps(tmp_path, monkeypatch):
         return {"sources_synced": 2, "self_files_written": 1}
 
     monkeypatch.setattr(master, "run", fake_master)
-    for module in (tracker, tasks, advisor, network, work):
+    for module in (tracker, tasks, advisor, network, recall, work):
         name = module.__name__.rsplit(".", 1)[1]
 
         def fake_run(vault, args, name=name):
@@ -40,14 +40,17 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
         "tasks: 1 done",
         "advisor: 1 done",
         "network: 1 done",
+        "recall: 1 done",
         "work: 1 done",
     ]
     assert [name for name, *_ in steps] == ["master", *cli.NIGHT_CLONES]
+    assert cli.NIGHT_CLONES.index("recall") < cli.NIGHT_CLONES.index("work")
     assert all(vault == "vault" for _, vault, _ in steps)
     args = {name: a for name, _, a in steps}
     assert args["network"] == {"people_only": False}  # the full run, ideas too
     assert args["work"] == {"max": work.MAX_DRAFTS}
     assert args["tasks"] == {"days": tasks.DAYS}
+    assert args["recall"] == {"people": recall.PEOPLE}
 
 
 def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, capsys):
@@ -71,6 +74,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, ca
         "tasks: 1 done",
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
+        "recall: 1 done",
         "work: 1 done",
     ]
-    assert [name for name, *_ in steps] == ["tracker", "tasks", "network", "work"]
+    assert [name for name, *_ in steps] == ["tracker", "tasks", "network", "recall", "work"]

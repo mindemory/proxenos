@@ -63,7 +63,7 @@ function Count({
 }
 
 /** The top bar: the greeting, the command box, the open counts, and when things last synced. */
-export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onRefresh }: TopBarProps) {
+export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onMemory, onRefresh }: TopBarProps) {
   const sync = syncState(home);
   const data = home.data;
   return (
@@ -79,7 +79,7 @@ export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetwork
         {data && <p className="text-xs text-muted truncate">{longDay(data.now)}</p>}
       </div>
 
-      <CommandBox onNavigate={onNavigate} onFind={onFind} onNetworkTab={onNetworkTab} onRefresh={onRefresh} />
+      <CommandBox onNavigate={onNavigate} onFind={onFind} onNetworkTab={onNetworkTab} onMemory={onMemory} onRefresh={onRefresh} />
 
       <div className="ml-auto flex items-center gap-2 flex-shrink-0">
         <div className="hidden lg:flex items-center gap-1.5">

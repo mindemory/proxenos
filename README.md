@@ -28,7 +28,8 @@ cp .env.example .env    # then fill in keys
 | Command | What it does |
 |---|---|
 | `Twin.command` (double-click) or `twin web` | Open the local page at http://127.0.0.1:4747 |
-| `twin sync` | Import new downloads from `data/` and refresh every source that needs no model |
+| `twin sync` | Import new downloads from `data/` and refresh every source that needs no model, then update the memory index and today's recall |
+| `twin index [--rebuild]` | Index every record in the raw layer for full-text search (`vault/memory/index.sqlite`, private, derived: safe to delete). Only changed month files are read again; no model |
 | `twin import [PATH ...]` | Import downloaded exports (Takeout, X, LinkedIn, Instagram, Spotify, ...) |
 | `twin ingest <source>` | Pull one source into the vault (whatsapp, slack, slackdump, strava, gmail, ...) |
 | `twin auth strava` / `twin auth slack` | One-time sign-ins that write tokens to `.env` |
@@ -36,7 +37,8 @@ cp .env.example .env    # then fill in keys
 | `twin master` | Sync, observe and update the self-model (`twin master accept` applies proposals) |
 | `twin clone tracker\|tasks\|advisor` | Feed of new papers and news, tasks on my plate, and advice |
 | `twin clone network [--people-only]` | People I've met, know of or want to read, and who shares a chat, thread, paper or employer with whom (the page's graph); then project and outreach ideas. `--people-only` needs no model |
+| `twin clone recall [--people N]` | Memories for today, no model: for each calendar event in the next 48 hours, open task, top feed item and top person, the best past messages, mail and notes about it. Shown on the page's Home; the Memory view and ⌘K search the same index |
 | `twin clone work [--max N]` | Drafts written as me for open tasks, the top outreach and projects, and the top feed items, to approve, edit, copy or discard in the page's Drafts view. Never sends anything |
-| `twin night` | `twin master`, then the tracker, tasks, advisor, network and work clones, one line each; a failed step doesn't stop the rest. `scripts/install-night.sh` schedules it daily at 01:30 |
+| `twin night` | `twin master`, then the tracker, tasks, advisor, network, recall and work clones, one line each; a failed step doesn't stop the rest. `scripts/install-night.sh` schedules it daily at 01:30 |
 
 Tests: `pytest`. Lint: `ruff check src tests`.

@@ -6,6 +6,7 @@
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
 
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants as fsConstants, createReadStream, promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
@@ -17,6 +18,7 @@ import type {
   AdviceResponse,
   BatchInfo,
   ChangelogSection,
+  Cluster,
   Confidence,
   Draft,
   DraftAction,
@@ -32,6 +34,8 @@ import type {
   NetworkAction,
   NetworkResponse,
   Outreach,
+  PeopleEdit,
+  PeopleEditResult,
   Person,
   Project,
   Relation,
@@ -753,6 +757,7 @@ function toPerson(raw: unknown): Person | null {
   const name = str(r.name)?.trim();
   if (!id || !name) return null;
   const n = r.interactions;
+  const c = r.cluster;
   return {
     id,
     name,
@@ -763,6 +768,8 @@ function toPerson(raw: unknown): Person | null {
     context: str(r.context) ?? "",
     topics: strings(r.topics, 12),
     org: str(r.org)?.trim() || null,
+    cluster: typeof c === "number" && Number.isInteger(c) && c > 0 ? c : null,
+    aka: strings(r.aka, 5).map((x) => x.slice(0, 120)),
   };
 }
 
@@ -828,10 +835,14 @@ function toEdge(raw: unknown): Edge | null {
   const target = str(r?.target);
   if (!r || !source || !target || source === target) return null;
   const w = r.weight;
+  const weight = typeof w === "number" && Number.isFinite(w) && w > 0 ? w : 1;
+  const n = r.shared;
   return {
     source,
     target,
-    weight: typeof w === "number" && Number.isFinite(w) && w >= 1 ? Math.round(w) : 1,
+    weight,
+    // An index from before weights: the weight was the count.
+    shared: typeof n === "number" && Number.isInteger(n) && n > 0 ? n : Math.max(1, Math.round(weight)),
     contexts: strings(r.contexts, 8),
   };
 }
@@ -841,7 +852,32 @@ function toGroup(raw: unknown): Group | null {
   const id = str(r?.id);
   const name = str(r?.name)?.trim();
   if (!r || !id || !name || !GROUP_KINDS.includes(r.kind as GroupKind)) return null;
-  return { id, name, kind: r.kind as GroupKind, members: strings(r.members, GRAPH_MAX_NODES) };
+  const members = strings(r.members, GRAPH_MAX_NODES);
+  const n = r.size;
+  const size = typeof n === "number" && Number.isInteger(n) && n >= members.length ? n : members.length;
+  return { id, name, kind: r.kind as GroupKind, members, size };
+}
+
+function toCluster(raw: unknown): Cluster | null {
+  const r = record(raw);
+  const id = r?.id;
+  const label = str(r?.label)?.trim();
+  const n = r?.size;
+  if (!r || typeof id !== "number" || !Number.isInteger(id) || id <= 0 || !label) return null;
+  return { id, label: label.slice(0, 120), size: typeof n === "number" && n > 0 ? Math.round(n) : 0 };
+}
+
+function clustersOf(raws: unknown): Cluster[] {
+  const seen = new Set<number>();
+  const out: Cluster[] = [];
+  for (const raw of Array.isArray(raws) ? raws.slice(0, 200) : []) {
+    const c = toCluster(raw);
+    if (c && !seen.has(c.id)) {
+      seen.add(c.id);
+      out.push(c);
+    }
+  }
+  return out;
 }
 
 /** The file's edges, strongest first, as many as the graph draws. */
@@ -877,6 +913,7 @@ export async function getNetwork(): Promise<NetworkResponse> {
       core: strings(people?.core, GRAPH_MAX_NODES),
       edges: edgesOf(people?.edges),
       groups: uniqueBy(people?.groups, toGroup),
+      clusters: clustersOf(people?.clusters),
     },
     ideas: {
       exists: ideas !== null,
@@ -928,6 +965,143 @@ export async function appendNetworkFeedback(itemId: string, action: NetworkActio
   const entry = { item_id: itemId, action, ts: nowIso() };
   await appendJsonl(["clones", "network", "feedback.jsonl"], entry);
   return entry;
+}
+
+// ── Who is who: clones/network/aliases.json ─────────────────────────────────
+//
+// {"same": [[a, b], ...], "different": [[a, b], ...], "hide": [a, ...]}. The network clone
+// applies it before anything else when it builds people.json. The page writes each person as
+// their "ref" from people.json (a hash of one of their ids), which still names them after a
+// rebuild changes their id or name; a hand-written entry can be a name or an id too.
+
+export class PersonNotFoundError extends Error {}
+
+interface Aliases {
+  same: string[][];
+  different: string[][];
+  hide: string[];
+  [other: string]: unknown;
+}
+
+function aliasLists(v: unknown): string[][] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is unknown[] => Array.isArray(x))
+    .map((x) => x.filter((y): y is string => typeof y === "string" && y.trim() !== ""))
+    .filter((x) => x.length >= 2);
+}
+
+/**
+ * Apply one edit about a person to aliases.json: same and different name another person by id,
+ * or (for different) one of the names this person was merged from.
+ */
+export async function editPeople(
+  action: PeopleEdit,
+  id: string,
+  other?: { id: string } | { name: string },
+): Promise<void> {
+  const vault = vaultPath();
+  if (!(await isDir(vault))) throw new VaultMissingError(displayPath(vault));
+  const dir = path.join(vault, "clones", "network");
+  const doc = record(await readJsonFile(path.join(dir, "people.json"), MAX_PEOPLE_BYTES));
+  const list = Array.isArray(doc?.people) ? doc.people : [];
+  const find = (pid: string) => {
+    const found = list.map(record).find((p) => p && p.id === pid);
+    if (!found) throw new PersonNotFoundError(pid);
+    return found;
+  };
+  const refOf = (pid: string): string => {
+    const ref = str(find(pid).ref);
+    return ref && /^k:[0-9a-f]{16}$/.test(ref) ? ref : pid;
+  };
+  /** Every way an entry may name this person: ref, id, shown name, the names merged into it. */
+  const namesOf = (pid: string): Set<string> => {
+    const p = find(pid);
+    return new Set([refOf(pid), pid, str(p.name) ?? "", ...strings(p.aka, 20)].filter(Boolean));
+  };
+  // Splitting off a name this person was merged from: their ref may be that very identity (a
+  // first name alone with the most messages), so they're named by the name they're shown under.
+  const byName = other !== undefined && "name" in other;
+  const a = byName ? (str(find(id).name) ?? refOf(id)) : refOf(id);
+  const b = other === undefined ? null : "id" in other ? refOf(other.id) : other.name.trim();
+  const mine = namesOf(id);
+  const theirs = other === undefined ? new Set<string>() : "id" in other ? namesOf(other.id) : new Set([b ?? ""]);
+  const both = (xs: string[]) => xs.some((x) => mine.has(x)) && xs.some((x) => theirs.has(x));
+
+  const file = path.join(dir, "aliases.json");
+  const old = record(await readJsonFile(file)) ?? {};
+  const aliases: Aliases = {
+    ...old,
+    same: aliasLists(old.same),
+    different: aliasLists(old.different),
+    hide: Array.isArray(old.hide) ? old.hide.filter((x): x is string => typeof x === "string") : [],
+  };
+  // The newest word on a pair wins: saying they're the same undoes saying they differ, and the
+  // other way round. Splitting a name off someone undoes the merges I made of them by hand.
+  if (action === "hide") {
+    if (!aliases.hide.includes(a)) aliases.hide.push(a);
+  } else if (b !== null && a !== b) {
+    if (action === "same") {
+      aliases.different = aliases.different.filter((xs) => !both(xs));
+      if (!aliases.same.some(both)) aliases.same.push([a, b]);
+    } else {
+      aliases.same = aliases.same.filter((xs) => (byName ? !xs.some((x) => mine.has(x)) : !both(xs)));
+      if (!aliases.different.some(both)) aliases.different.push([a, b]);
+    }
+  }
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await replaceFile(file, JSON.stringify(aliases, null, 2) + "\n");
+}
+
+const REBUILD_MS = 120_000;
+let rebuilding: Promise<unknown> = Promise.resolve();
+
+/** The `twin` command: TWIN_BIN (environment or .env), else the first `twin` on PATH. */
+async function twinBin(): Promise<string | null> {
+  const set = process.env.TWIN_BIN?.trim() || fromDotEnv(path.join(REPO_ROOT, ".env"), "TWIN_BIN");
+  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, "bin"));
+  for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, "twin"))) {
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // Not here.
+    }
+  }
+  return null;
+}
+
+/**
+ * Rebuild people.json with `twin clone network --people-only` (no model, a few seconds), at
+ * most one at a time and each after the last, with a timeout. Never throws.
+ */
+export function rebuildPeople(): Promise<PeopleEditResult> {
+  const run = async (): Promise<PeopleEditResult> => {
+    const bin = await twinBin();
+    if (!bin) {
+      return { ok: false, saved: true, rebuilt: false, message: "Couldn't find the twin command. Set TWIN_BIN in .env." };
+    }
+    return new Promise((resolve) => {
+      execFile(
+        bin,
+        ["clone", "network", "--people-only"],
+        { cwd: REPO_ROOT, timeout: REBUILD_MS, maxBuffer: 1024 * 1024 },
+        (error, stdout) => {
+          if (error) {
+            const why = error.killed ? "it took too long" : "it failed";
+            resolve({ ok: false, saved: true, rebuilt: false, message: `The rebuild didn't finish: ${why}.` });
+          } else {
+            const line = stdout.trim().split("\n").pop() ?? "";
+            resolve({ ok: true, saved: true, rebuilt: true, message: line.slice(0, 300) });
+          }
+        },
+      );
+    });
+  };
+  const next = rebuilding.then(run, run);
+  rebuilding = next;
+  return next;
 }
 
 // ── Drafts ──────────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ There is exactly **one model of me**, and many clones that use it. Clones are ro
   - **tracker:** a research and news feed every few hours.
   - **inbox:** triage, plus reply drafts in my voice for email, Slack and WhatsApp. Drafts only.
   - **shopping:** later.
+- **Memory** (`twin index`, no model): a full-text index (SQLite FTS5, `vault/memory/index.sqlite`) over every raw record, searchable by words, person, source and date, with the surrounding conversation for any hit. It is derived data, rebuilt from `raw/` at any time, and `twin sync` keeps it current. The **recall** clone (`twin clone recall`) turns it into proactive memory: for today's calendar, open tasks, feed items and closest people it finds the past conversations, mail and notes that bear on them, or nothing when nothing fits.
 - **Web page** (`web/`): local only. Shows clone outputs, the current self-model, and sync status. My reactions there are the twin's best training signal.
 
 ## Ground rules

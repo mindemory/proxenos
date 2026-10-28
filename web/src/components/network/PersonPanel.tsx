@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { EyeOff, Search, Split, Users, X } from "lucide-react";
 
 import { SourceBadge } from "@/components/SourceBadge";
+import { clusterVar } from "@/lib/clusters";
 import { formatDateTime, plural, shortDate } from "@/lib/format";
-import type { GraphModel } from "@/lib/graph";
-import type { NetworkResponse } from "@/lib/types";
+import { searchNodes, type GraphModel } from "@/lib/graph";
+import type { Cluster, NetworkResponse, PeopleEdit, PeopleEditResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { Actions, Citation, KIND_LABEL_ONE, Label, RELATION_LABEL, RELATION_STYLE, type OnReact } from "./parts";
@@ -24,6 +25,172 @@ interface PersonPanelProps {
   onGroup: (groupIndex: number | null) => void;
   onClose: () => void;
   onReact: OnReact;
+  clusters: ReadonlyMap<number, Cluster>;
+  /** Say who this person is: the same as another, not the same as another or a name, or hidden. */
+  onEdit?: (action: PeopleEdit, other?: { id: string } | { name: string }) => Promise<PeopleEditResult>;
+  /** Rebuild the index now, for an edit that was saved without one. */
+  onRefresh?: () => Promise<PeopleEditResult>;
+}
+
+type Target = { idx: number } | { name: string };
+
+const EDIT_LABEL: Record<PeopleEdit, string> = {
+  same: "Same person as…",
+  different: "Not the same as…",
+  hide: "Hide",
+};
+
+/** Merge, split or hide: written to aliases.json, and the index is rebuilt with it. */
+function WhoIsThis({
+  model,
+  idx,
+  onEdit,
+  onRefresh,
+}: {
+  model: GraphModel;
+  idx: number;
+  onEdit: NonNullable<PersonPanelProps["onEdit"]>;
+  onRefresh?: PersonPanelProps["onRefresh"];
+}) {
+  const [mode, setMode] = useState<PeopleEdit | null>(null);
+  const [query, setQuery] = useState("");
+  const [target, setTarget] = useState<Target | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; retry: boolean } | null>(null);
+  const p = model.nodes[idx].person;
+  const results = useMemo(
+    () => (mode === "same" || mode === "different" ? searchNodes(model, query, 7).filter((i) => i !== idx) : []),
+    [model, query, mode, idx],
+  );
+
+  const reset = () => {
+    setMode(null);
+    setQuery("");
+    setTarget(null);
+  };
+  const save = async () => {
+    if (!mode || (mode !== "hide" && !target)) return;
+    setBusy(true);
+    setNote(null);
+    const other = target === null ? undefined : "idx" in target ? { id: model.nodes[target.idx].id } : { name: target.name };
+    const result = await onEdit(mode, other);
+    setBusy(false);
+    reset();
+    if (!result.saved) setNote({ text: "Couldn't save that. Nothing was changed.", retry: false });
+    else if (!result.rebuilt) setNote({ text: `Saved, applies on the next refresh. ${result.message}`, retry: !!onRefresh });
+  };
+  const refresh = async () => {
+    if (!onRefresh) return;
+    setBusy(true);
+    const result = await onRefresh();
+    setBusy(false);
+    setNote(result.rebuilt ? null : { text: result.message || "The rebuild didn't finish.", retry: true });
+  };
+  const otherName = target === null ? "" : "idx" in target ? model.nodes[target.idx].person.name : `the “${target.name}” merged in here`;
+  const sentence =
+    mode === "same"
+      ? `${p.name} and ${otherName} are one person.`
+      : mode === "different"
+        ? `${p.name} is not ${otherName}.`
+        : `Hide ${p.name} from the graph and the list.`;
+
+  const button = "inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] text-ink/90 hover:bg-surface-2 disabled:opacity-50";
+  return (
+    <Section title="Who is this">
+      {mode === null ? (
+        <div className="flex flex-wrap gap-1.5">
+          <button className={button} disabled={busy} onClick={() => setMode("same")}>
+            <Users size={13} /> {EDIT_LABEL.same}
+          </button>
+          <button className={button} disabled={busy} onClick={() => setMode("different")}>
+            <Split size={13} /> {EDIT_LABEL.different}
+          </button>
+          <button className={button} disabled={busy} onClick={() => setMode("hide")}>
+            <EyeOff size={13} /> {EDIT_LABEL.hide}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2 rounded-xl border border-line p-2.5">
+          {mode !== "hide" && target === null && (
+            <>
+              {mode === "different" && p.aka.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                  <span>Merged from</span>
+                  {p.aka.map((name) => (
+                    <button key={name} className={button} onClick={() => setTarget({ name })} title={`${p.name} is not this ${name}`}>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <label className="relative block">
+                <span className="sr-only">Find the other person</span>
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && reset()}
+                  placeholder="Find the other person"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-line-strong bg-surface pl-7 pr-2 py-1.5 text-sm text-ink placeholder:text-muted/80"
+                />
+              </label>
+              {results.length > 0 && (
+                <ul className="space-y-0.5">
+                  {results.map((i) => {
+                    const o = model.nodes[i].person;
+                    return (
+                      <li key={i}>
+                        <button
+                          onClick={() => setTarget({ idx: i })}
+                          className="w-full text-left rounded-lg px-2 py-1 hover:bg-surface-2"
+                        >
+                          <span className="block text-sm text-ink truncate">{o.name}</span>
+                          {(o.org || o.context) && <span className="block text-xs text-muted truncate">{o.org ?? o.context}</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+          {(mode === "hide" || target !== null) && (
+            <p className="text-sm text-ink/90 leading-relaxed break-words">
+              {sentence} <span className="text-muted">The index is rebuilt with it; aliases.json keeps it.</span>
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            {(mode === "hide" || target !== null) && (
+              <button
+                onClick={save}
+                disabled={busy}
+                className="rounded-lg bg-accent px-3 py-1 text-[13px] font-medium text-accent-ink disabled:opacity-60"
+              >
+                {busy ? "Saving and rebuilding…" : "Save"}
+              </button>
+            )}
+            <button onClick={reset} disabled={busy} className="text-[13px] text-muted hover:text-ink px-1">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {busy && mode === null && <p className="text-xs text-muted">Rebuilding…</p>}
+      {note && (
+        <p className="text-xs text-muted leading-relaxed">
+          {note.text}{" "}
+          {note.retry && (
+            <button onClick={refresh} disabled={busy} className="text-accent hover:underline underline-offset-4">
+              Refresh now
+            </button>
+          )}
+        </p>
+      )}
+    </Section>
+  );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -36,12 +203,26 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** One person: who they are, what the twin suggests for them, who they're tied to and why. */
-export function PersonPanel({ model, idx, data, flashId, groupFocus, onSelect, onGroup, onClose, onReact }: PersonPanelProps) {
+export function PersonPanel({
+  model,
+  idx,
+  data,
+  flashId,
+  groupFocus,
+  onSelect,
+  onGroup,
+  onClose,
+  onReact,
+  clusters,
+  onEdit,
+  onRefresh,
+}: PersonPanelProps) {
   const [allTies, setAllTies] = useState(false);
   const [allGroups, setAllGroups] = useState(false);
   const node = model.nodes[idx];
   const p = node.person;
   const style = RELATION_STYLE[p.relation];
+  const cluster = node.cluster !== null ? clusters.get(node.cluster) : undefined;
 
   const ties = model.adj[idx];
   const groups = model.nodeGroups[idx];
@@ -60,6 +241,13 @@ export function PersonPanel({ model, idx, data, flashId, groupFocus, onSelect, o
             </span>
             {p.org && <span className="break-words min-w-0">{p.org}</span>}
           </div>
+          {cluster && (
+            <div className="mt-1 flex items-center gap-1.5 text-sm text-muted min-w-0" title="The cluster this person is in">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: clusterVar(cluster.id) }} />
+              <span className="truncate">{cluster.label}</span>
+              <span className="num flex-shrink-0">· {cluster.size}</span>
+            </div>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -143,7 +331,8 @@ export function PersonPanel({ model, idx, data, flashId, groupFocus, onSelect, o
                     >
                       <span className="block break-words">{g.group.name}</span>
                       <span className="block text-xs text-muted">
-                        {KIND_LABEL_ONE[g.group.kind]} · {plural(g.members.length, "person", "people")}
+                        {KIND_LABEL_ONE[g.group.kind]} · {plural(g.group.size, "person", "people")}
+                        {g.group.size > g.members.length && <> · {g.members.length} drawn</>}
                       </span>
                     </button>
                   </li>
@@ -178,8 +367,11 @@ export function PersonPanel({ model, idx, data, flashId, groupFocus, onSelect, o
                       >
                         <span className="flex items-baseline justify-between gap-3">
                           <span className="min-w-0 break-words text-sm text-ink">{o.name}</span>
-                          <span className="num text-xs text-muted flex-shrink-0" title={plural(e.weight, "shared context")}>
-                            ×{e.weight}
+                          <span
+                            className="num text-xs text-muted flex-shrink-0"
+                            title={`${plural(e.shared, "shared context")}, closeness ${e.weight.toFixed(2)}`}
+                          >
+                            ×{e.shared}
                           </span>
                         </span>
                         {e.contexts.length > 0 && (
@@ -198,6 +390,8 @@ export function PersonPanel({ model, idx, data, flashId, groupFocus, onSelect, o
             </>
           )}
         </Section>
+
+        {onEdit && <WhoIsThis model={model} idx={idx} onEdit={onEdit} onRefresh={onRefresh} />}
       </div>
     </div>
   );

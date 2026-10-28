@@ -4,33 +4,48 @@ Two steps. The first, in code with no model, indexes people into clones/network/
 
 - met: people I exchanged messages with. Everyone in a WhatsApp, Instagram or LinkedIn
   direct chat or Slack DM I wrote in; in groups and channels I wrote in, each member who wrote
-  on a day I did. Email correspondents I wrote to (to or cc, on mail to at most 15 people) or
-  answered, named by the From name on their own mail, so an address that never wrote to me
-  stays out. LinkedIn connections count as met too.
+  on a day I did; and everyone in a WhatsApp group or Slack channel of at most 15 people I'm
+  in. Email correspondents I wrote to (to or cc, on mail to at most 15 people) or answered,
+  named by the From name on their own mail, so an address that never wrote to me stays out.
+  People at a meeting of 2 to 15 guests with me, from the calendars. LinkedIn connections.
 - know_of: co-authors of my papers and authors of papers citing them (raw/mentions), authors
   in my reading notes and my website's CV, and people named in my notes and website pages.
 - to_read: authors on a reading list, or in a reading collection marked to read (status "to
   read", "not started", ...), and names on note lines that say to read them ("want to read",
   "read up on", "look into"), or in note tasks that start "Read".
 
-A person found in several places is one entry, matched by normalized name: case, accents,
-titles, degrees and middle initials don't count, and "Last, First" is "First Last". Nothing
-looser, so "J. Smith" and "Jane Smith" stay two people. The strongest relation wins: met,
-then to_read, then know_of. My own names (TWIN_NAME, TWIN_FULL_NAME and the names on my own
-messages) are left out. So is any name with a digit or an @ in it, and contexts and topics are
-scrubbed of addresses and numbers, so no phone number or email lands in the index. Twitter DMs
+Who is who. Each source's people are identities: a WhatsApp jid (a person's phone and lid jids
+are one, as raw/whatsapp/groups links them), a Slack user, an email address, a LinkedIn
+connection, or, for sources with nothing better, a name. Identities are one person when:
+- I said so in clones/network/aliases.json, which comes before everything else:
+  {"same": [[a, b], ...], "different": [[a, b], ...], "hide": [a, ...]}, each a name or an id
+  (a ref or person id from people.json, a jid, an address, a Slack user id). The page writes it.
+- a source says so: a Slack profile's email is that address's person;
+- they go by the same full name, matched by normalized name: case, accents, titles, degrees
+  and middle initials don't count, and "Last, First" is "First Last". "J. Smith" and "Jane
+  Smith" stay two people;
+- one goes by a first name or nickname alone ("Tori", from a small table of nicknames such as
+  Tori for Victoria) that fits exactly one full-name person among those who share a group
+  with it, or share someone in one (groups of at most 80).
+Two different full names are never made one otherwise. The strongest relation wins: met, then
+to_read, then know_of. The name shown is the fullest, the one most sources use. My own names
+(TWIN_NAME, TWIN_FULL_NAME, the names on my own messages) and ids are left out. So is any name
+with a digit or an @ in it, and contexts and topics are scrubbed of addresses and numbers, so
+no phone number or email lands in the index; a person's "ref" is a hash of an id. Twitter DMs
 and Instagram likes carry only ids and handles, so they add no one.
 
-Connections come in the same pass, as people.json's "edges" and "groups". A group is one
-context people share: a WhatsApp group or Slack channel I wrote in (its members are those who
-wrote in it), an email thread or recipient list (at most 15 people, so a mailing list is no
-context), the authors of one OpenAlex paper (my works and the works citing them), or an
-organization (at most 40 people from the index share it, since a company of thousands says
-nothing about who knows whom). Two people are connected when they share a context, with the
-number of shared contexts as the edge's weight. I'm in all of them, so I'm left out. Only the
+Connections come in the same pass, as people.json's "edges", "groups" and "clusters". A group
+is one context people share: a WhatsApp group I'm in or a Slack channel I'm in or wrote in
+(everyone in it, from raw/whatsapp/groups and raw/slack/<team>/channels; without those, those
+who wrote), an email thread or recipient list (at most 15 addresses, so a mailing list is no
+context), a meeting of 2 to 15 guests, the authors of one OpenAlex paper (my works and the
+works citing them), or an organization (at most 40 people from the index share it, since a
+company of thousands says nothing about who knows whom). I'm in all of them, so I'm left out
+and don't count towards a group's size. Each group two people share adds 1/log2(size + 1) to
+their tie, so a pair alone adds 0.63, a group of 33 0.2 and a channel of 3,000 0.09. Only the
 top 600 people (by messages and recency, as top_people picks them) are connected, listed in
-"core", and only the strongest 4,000 edges stay: the most shared contexts first, then the
-smaller the contexts the closer, then the more active the people.
+"core", and only the strongest 4,000 edges stay. Clusters are communities among them (Louvain
+on all their ties), each labelled by the group most of its people are in.
 
 Names in notes come from a strict heuristic: two to four capitalized words in a row (middle
 initials allowed), none of them a stopword (days, months, places, institutions, headings, ...)
@@ -79,6 +94,12 @@ GRAPH_PEOPLE = 600  # people the graph connects
 GRAPH_EDGES = 4000  # connections kept, strongest first
 MAX_ORG = 40  # an organization with more people in the index than this connects no one
 EDGE_CONTEXTS = 5  # shared contexts named on an edge
+MIN_EVENT, MAX_EVENT = 2, 15  # guests, me included, at a meeting that makes a group
+CONTEXT_GROUP = 80  # a first name alone is placed only through groups this small
+LOUVAIN_LEVELS, LOUVAIN_PASSES = 20, 50
+MIN_CLUSTER = 3  # a community of two is a tie, not a cluster
+AKA = 5  # other names a person goes by, listed so the page can say which one is someone else
+ALIASES = "aliases.json"
 TOPICS = 5
 CONTEXT_CHARS = 240
 TOPIC_CHARS = 80
@@ -104,8 +125,17 @@ _SOURCES = {
     "notes/readings": "author in your readings",
     "notes/pages": "in your notes",
     "notes/tasks": "in your note tasks",
+    "calendar": "calendar",
 }
-_MESSAGES = {"whatsapp", "slack", "email", "linkedin/messages", "instagram"}
+# Sources whose interactions are counted on a person's context line, and what each one is.
+_COUNTED = {
+    "whatsapp": "message",
+    "slack": "message",
+    "email": "message",
+    "linkedin/messages": "message",
+    "instagram": "message",
+    "calendar": "event",
+}
 
 _TITLES = {"dr", "doctor", "prof", "professor", "mr", "mrs", "ms", "miss", "mx", "sir", "dame"}
 _DEGREES = {"phd", "md", "mba", "msc", "mphil", "dphil", "esq"}
@@ -129,11 +159,71 @@ _GENERIC = {
 _GROUP_KINDS = {
     "whatsapp_group": ("WhatsApp", "a group"),
     "slack_channel": ("Slack", "a channel"),
+    "event": ("Calendar", "an event"),
     "paper": ("Paper", "a paper"),
     "email_thread": ("Email", "an email thread"),
     "org": ("Org", "an organization"),
 }
 GROUP_KINDS = tuple(_GROUP_KINDS)
+# Groups whose members met me just by being in one small enough, and the source they count as.
+_GROUP_SOURCES = {"whatsapp_group": "whatsapp", "slack_channel": "slack"}
+_RECURRENCE = re.compile(r"/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")  # a moved instance's id
+# Common nicknames of first names: a first name alone ("Tori") can be someone whose full name
+# starts with the first name it stands for ("Victoria"). Only that way round, so two nicknames
+# of one name ("Sasha", "Alex") never match each other.
+_NICKNAME_TABLE = """
+    alexandra: alex alexa lexi lexie sasha sandra
+    alexander: alex lex xander sasha sandy
+    alexis: alex lexi lexie
+    abigail: abby gail
+    andrew: andy drew
+    anthony: tony
+    benjamin: ben benji
+    catherine katherine kathryn: kate katie kathy cathy kat
+    christina christine: chris tina
+    christopher: chris
+    daniel: dan danny
+    david: dave
+    deborah: deb debbie
+    edward: ed eddie ted teddy
+    elizabeth: liz lizzie beth betsy betty eliza libby
+    gabriel gabriella gabrielle: gabe gabby
+    gregory: greg
+    isabel isabella: izzy bella
+    james: jim jimmy jamie
+    jennifer: jen jenny
+    jessica: jess jessie
+    john: johnny jack
+    jonathan: jon
+    joseph: joe joey
+    joshua: josh
+    margaret: maggie meg peggy
+    matthew: matt
+    maximilian maxwell: max
+    megan: meg
+    michael: mike mikey
+    nathan nathaniel: nate
+    nicholas: nick nicky
+    nicole: nikki
+    patricia: pat patty trish
+    patrick: pat
+    rebecca rebekah: becky
+    richard: rich rick ricky
+    robert: rob robbie bob bobby bert
+    samantha samuel: sam sammy
+    stephen steven: steve
+    susan suzanne: sue susie
+    thomas: tom tommy
+    timothy: tim
+    victoria: vicky tori
+    william: will bill billy willy liam
+    zachary: zach zack
+"""
+_NICKNAMES: dict[str, frozenset[str]] = {}  # nickname → the first names it stands for
+for _line in _NICKNAME_TABLE.strip().splitlines():
+    _formal, _short = _line.split(":")
+    for _nick in _short.split():
+        _NICKNAMES[_nick] = _NICKNAMES.get(_nick, frozenset()) | set(_formal.split())
 # What a profile says as its organization when it has none.
 _ORG_GENERIC = {
     "self employed",
@@ -367,10 +457,15 @@ def build(vault: Path, people_only: bool = False, now: datetime | None = None) -
     now = now or datetime.now(UTC)
     out = vault / "clones" / "network"
     profile = None if people_only else read_self(vault / "self")  # fail before the slow part
-    book = _read_vault(vault)
-    people = book.entries()
+    book = _read_vault(vault, now)
+    people, groups = book.resolve(_aliases(out / ALIASES), _load_json(out / "people.json"))
     core = top_people(people, now, GRAPH_PEOPLE)
-    edges, groups = connections(book.contexts({p["id"] for p in people}), core, now)
+    edges, kept = connections(groups, core, now)
+    found, named = clusters(kept, core)
+    core_ids = {p["id"] for p in core}
+    for person in people:
+        if person["id"] in core_ids:
+            person["cluster"] = found.get(person["id"])
     _write_json(
         out / "people.json",
         {
@@ -378,13 +473,14 @@ def build(vault: Path, people_only: bool = False, now: datetime | None = None) -
             "people": people,
             "core": [p["id"] for p in core],
             "edges": edges,
-            "groups": groups,
+            "groups": kept,
+            "clusters": named,
         },
     )
     stats = {"people": len(people)} | {
         r: sum(p["relation"] == r for p in people) for r in RELATIONS
     }
-    stats |= {"edges": len(edges), "groups": len(groups)}
+    stats |= {"edges": len(edges), "groups": len(kept), "clusters": len(named)}
     if profile is None:
         return stats
     return stats | ideas(vault, people, profile, now)
@@ -403,13 +499,15 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 # The people index
 
 
-def _read_vault(vault: Path) -> "_Book":
-    """Everyone in the vault I've met, know of or want to read, merged by normalized name, and
-    the groups they share. Messages come first and notes last, so names in notes can match
-    people already found."""
+def _read_vault(vault: Path, now: datetime | None = None) -> "_Book":
+    """Everyone in the vault I've met, know of or want to read, as identities, and the groups
+    they share. Messages come first and notes last, so names in notes can match people already
+    found; calendars come after mail, which says which addresses are mine."""
     book = _Book([os.environ.get("TWIN_NAME", ""), os.environ.get("TWIN_FULL_NAME", "")])
     for read in (_whatsapp, _slack, _email, _linkedin, _instagram, _mentions, _writing):
         read(vault, book)
+        if read is _email:
+            _calendar(vault, book, now or datetime.now(UTC))
     return book
 
 
@@ -433,19 +531,66 @@ def _key_id(key: str) -> str:
     return hashlib.sha1(key.encode()).hexdigest()[:12]
 
 
+def _ref(key: str) -> str:
+    """An identity's key as people.json and aliases.json carry it: opaque, so no number or
+    address leaves the raw data."""
+    return "k:" + hashlib.sha1(key.encode()).hexdigest()[:16]
+
+
+def _identity() -> dict:
+    return {
+        "names": Counter(),
+        "name_sources": defaultdict(set),
+        "relations": set(),
+        "sources": Counter(),
+        "interactions": 0,
+        "first": None,
+        "last": None,
+        "where": defaultdict(dict),  # source → labels, oldest first, as an ordered set
+        "topics": Counter(),
+        "orgs": Counter(),
+    }
+
+
 class _Book:
-    """Everyone found so far, one entry per normalized name."""
+    """Everyone found so far, as identities: a WhatsApp jid (wa:), a Slack user (slack:team:),
+    an email address (email:), a LinkedIn connection (li:), or for a source with nothing
+    better, a normalized name (name:). Each carries the names it was seen under. resolve()
+    decides which identities are one person."""
 
     def __init__(self, me: Iterable[str]):
         self.me = {key for name in me if (key := normalize(name))}
-        self.people: dict[str, dict] = {}
-        # (kind, key) → what a group is called and who's in it, as normalized names
+        self.my_keys: set[str] = set()
+        self.my_addresses: set[str] = set()
+        self.ids: dict[str, dict] = {}
+        self.links: list[tuple[str, str]] = []  # one person, as a source says
+        self.jids: dict[str, str] = {}  # a WhatsApp jid → the one it's filed under
+        # (kind, key) → what a group is called and who's in it, as identity keys
         self.groups: dict[tuple[str, str], dict] = {}
+        self.wrote_in: set[tuple[str, str]] = set()  # groups with a message of mine
 
-    def mine(self, name: str | None) -> None:
-        """A name on my own messages, never to be indexed as someone else."""
-        if name and (key := normalize(name)):
-            self.me.add(key)
+    def mine(self, name: str | None = None, key: str | None = None) -> None:
+        """A name or an identity of my own, never to be indexed as someone else."""
+        if name and (norm := normalize(name)):
+            self.me.add(norm)
+        if key:
+            self.my_keys.add(key)
+
+    def name(self, key: str | None, name: str | None, source: str) -> str | None:
+        """Note a name an identity goes by and return its key. Without a key the name is the
+        identity; None when there's neither a key nor a name that can be one."""
+        norm = _name_key(name)
+        key = key or (f"name:{norm}" if norm else None)
+        if key is None:
+            return None
+        ident = self.ids.get(key)
+        if ident is None:
+            ident = self.ids[key] = _identity()
+        if norm:
+            display = _display(name or "")
+            ident["names"][display] += 1
+            ident["name_sources"][display].add(source)
+        return key
 
     def add(
         self,
@@ -453,31 +598,18 @@ class _Book:
         relation: str,
         source: str,
         *,
+        key: str | None = None,
         first: str | None = None,
         last: str | None = None,
         interactions: int = 0,
         where: str | None = None,
         topics: Iterable[str | None] = (),
         org: str | None = None,
-    ) -> None:
-        key = _name_key(name)
+    ) -> str | None:
+        key = self.name(key, name, source)
         if key is None:
-            return
-        display = _display(name)
-        person = self.people.get(key)
-        if person is None:
-            person = self.people[key] = {
-                "names": Counter(),
-                "relations": set(),
-                "sources": Counter(),
-                "interactions": 0,
-                "first": None,
-                "last": None,
-                "where": defaultdict(dict),  # source → labels, oldest first, as an ordered set
-                "topics": Counter(),
-                "orgs": Counter(),
-            }
-        person["names"][display] += 1
+            return None
+        person = self.ids[key]
         person["relations"].add(relation)
         person["sources"][source] += interactions
         person["interactions"] += interactions
@@ -492,59 +624,326 @@ class _Book:
                 person["topics"][topic] += 1
         if org and (org := _scrub(org)):
             person["orgs"][org] += 1
+        return key
 
-    def group(self, kind: str, key: str, label: str | None, names: Iterable[str | None]) -> None:
-        """People who share one context: members of a group I wrote in, the people on an email
-        thread, the authors of a paper. They needn't be in the index, which is checked later."""
-        members = {k for name in names if (k := _name_key(name))}
+    def link(self, a: str | None, b: str | None) -> None:
+        if a and b and a != b:
+            self.links.append((a, b))
+
+    def jid(self, jid: str | None) -> str | None:
+        """A WhatsApp jid's identity key; a person's phone and lid jids share one."""
+        return f"wa:{self.jids.get(jid, jid)}" if jid else None
+
+    def same_jid(self, jid: str | None, other: str | None) -> None:
+        if jid and other:
+            phone = next((j for j in (jid, other) if j.endswith("@s.whatsapp.net")), None)
+            filed = phone or self.jids.get(jid) or self.jids.get(other) or min(jid, other)
+            self.jids[jid] = self.jids[other] = filed
+
+    def group(self, kind: str, key: str, label: str | None, members: Iterable[str | None]) -> None:
+        """People who share one context, as identity keys: everyone in a group or channel,
+        everyone on an email thread or at a meeting, the authors of a paper. They needn't be
+        people of the index; they still count towards the group's size."""
+        members = {m for m in members if m}
         if members:
             found = self.groups.setdefault((kind, key), {"name": "", "members": set()})
             found["name"] = found["name"] or _clip(_scrub(label or ""), TOPIC_CHARS)
             found["members"] |= members
 
-    def contexts(self, ids: set[str]) -> list[dict]:
-        """Every group of two or more people in the index, with their ids: the groups added
-        with group() and the organizations people work at."""
-        found = []
+    def known_names(self) -> set[str]:
+        """The normalized names of the people found so far, for names in notes to match."""
+        return {normalize(n) for p in self.ids.values() if p["relations"] for n in p["names"]}
+
+    def resolve(self, aliases: dict, previous: dict) -> tuple[list[dict], list[dict]]:
+        """People and the groups they share, after deciding who is who:
+
+        1. My corrections in aliases.json: pairs kept apart, then pairs made one.
+        2. What the sources say: a Slack profile's email is that address.
+        3. One full name, one person, whatever the source.
+        4. A first name or nickname alone ("Tori") joins the one full-name person whose first
+           name it is (or, failing that, whose first name it stands for: Alexandra) among those
+           who share a group with it or someone in one; with two such, it stays apart.
+        Two different full names are never made one, except by a stable id or by me. Anyone
+        with one of my names or ids is me, and left out; so are those I hid."""
+        keys = set(self.ids)
+        for group in self.groups.values():
+            keys |= group["members"]
+        merger = _Merger(keys)
+        refs = _Refs(self, keys, previous)
+        for n, items in enumerate(aliases["different"]):
+            merger.keep_apart(n, [refs.find(item) for item in items])
+        for items in aliases["same"]:
+            found = [k for item in items for k in refs.find(item)]
+            for key in found[1:]:
+                merger.union(found[0], key)
+        for a, b in self.links:
+            merger.union(a, b)
+        busiest = sorted(self.ids, key=lambda k: (-self.ids[k]["interactions"], k))
+        for key in busiest:
+            for display in self.ids[key]["names"]:
+                norm = normalize(display)
+                if len(norm.split()) >= 2:
+                    merger.union(key, f"fullname:{norm}")
+
+        me = {merger.find(k) for k in self.my_keys if k in keys}
+        for key, ident in self.ids.items():
+            if any(_is_me(normalize(n), self.me) for n in ident["names"]):
+                me.add(merger.find(key))
+        self._nicknames(merger, me, busiest)
+
+        sets: dict[str, list[str]] = defaultdict(list)
+        for key in keys:
+            sets[merger.find(key)].append(key)
+        me = {merger.find(k) for k in me}
+        hidden = {merger.find(k) for item in aliases["hide"] for k in refs.find(item)}
+        rosters = {}
+        joined: dict[str, list[tuple[str, str]]] = defaultdict(list)
         for (kind, key), group in self.groups.items():
-            members = {i for name in group["members"] if (i := _key_id(name)) in ids}
-            found.append(_group(kind, key, group["name"], members))
-        orgs: dict[str, dict] = {}
-        for key, person in self.people.items():
-            if (pid := _key_id(key)) not in ids:
+            roots = {merger.find(m) for m in group["members"]} - me
+            rosters[kind, key] = roots
+            source = _GROUP_SOURCES.get(kind)
+            if source and len(roots) <= MAX_RECIPIENTS:
+                for root in roots:
+                    joined[root].append((source, group["name"] or _GROUP_KINDS[kind][1]))
+
+        found = []
+        for root, members in sets.items():
+            if root in me or root in hidden:
                 continue
-            for org, count in person["orgs"].items():
+            person = _merge([self.ids[k] for k in members if k in self.ids])
+            for source, label in joined.get(root, ()):
+                person["relations"].add("met")
+                person["sources"][source] += 0
+                person["where"][source].setdefault(label, None)
+            if person["relations"] and person["names"]:
+                primary = max(
+                    (k for k in members if k in self.ids),
+                    key=lambda k: (self.ids[k]["interactions"], not k.startswith("name:"), k),
+                )
+                found.append((root, person, _ref(primary)))
+
+        people, id_of = [], {}
+        taken: set[str] = set()
+        for root, person, ref in sorted(found, key=lambda f: (-f[1]["interactions"], f[0])):
+            entry = _entry(person)
+            pid = person_id(entry["name"])
+            if pid in taken:
+                pid = _key_id(f"{normalize(entry['name'])}\0{root}")
+            taken.add(pid)
+            id_of[root] = pid
+            people.append({"id": pid} | entry | {"ref": ref})
+        people.sort(key=lambda e: e["name"].casefold())
+        people.sort(key=lambda e: e["last_seen"] or "", reverse=True)
+        people.sort(key=lambda e: (RELATIONS.index(e["relation"]), -e["interactions"]))
+
+        groups = []
+        for (kind, key), group in self.groups.items():
+            roots = rosters[kind, key]
+            members = {id_of[r] for r in roots if r in id_of}
+            groups.append(_group(kind, key, group["name"], members, len(roots)))
+        orgs: dict[str, dict] = {}
+        for person in people:
+            for org in person.pop("_orgs"):
                 if org_key := _org_key(org):
                     named = orgs.setdefault(org_key, {"names": Counter(), "members": set()})
-                    named["names"][org] += count
-                    named["members"].add(pid)
+                    named["names"][org] += 1
+                    named["members"].add(person["id"])
         for org_key, named in orgs.items():
             if len(named["members"]) <= MAX_ORG:
                 name = named["names"].most_common(1)[0][0]
-                found.append(_group("org", org_key, name, named["members"]))
-        return [g for g in found if len(g["members"]) >= 2]
+                groups.append(_group("org", org_key, name, named["members"]))
+        return people, [g for g in groups if len(g["members"]) >= 2]
 
-    def entries(self) -> list[dict]:
-        found = [_entry(key, p) for key, p in self.people.items() if not _is_me(key, self.me)]
-        found.sort(key=lambda e: e["name"].casefold())
-        found.sort(key=lambda e: e["last_seen"] or "", reverse=True)
-        return sorted(found, key=lambda e: (RELATIONS.index(e["relation"]), -e["interactions"]))
+    def _nicknames(self, merger: "_Merger", me: set[str], busiest: list[str]) -> None:
+        """Step 4 of resolve(): a first name or nickname alone joins the one full-name person
+        it can only be."""
+        names: dict[str, set[str]] = defaultdict(set)
+        weight: Counter = Counter()
+        for key in busiest:
+            root = merger.find(key)
+            names[root] |= {normalize(n) for n in self.ids[key]["names"]}
+            weight[root] += self.ids[key]["interactions"]
+        groups_of: dict[str, set[int]] = defaultdict(set)
+        near: dict[str, set[str]] = defaultdict(set)
+        for n, group in enumerate(self.groups.values()):
+            roots = {merger.find(m) for m in group["members"]} - me
+            if 2 <= len(roots) <= CONTEXT_GROUP:
+                for root in roots:
+                    groups_of[root].add(n)
+                    near[root] |= roots
+        by_first: dict[str, set[str]] = defaultdict(set)
+        alone = []
+        for root, found in names.items():
+            if root in me or not found:
+                continue
+            full = [n for n in found if _full(n)]
+            for n in full:
+                by_first[n.split()[0]].add(root)
+            if not full:
+                alone.append(root)
+
+        def shares(a: str, b: str) -> bool:
+            return bool(groups_of[a] & groups_of[b] or (near[a] - {a, b}) & (near[b] - {a, b}))
+
+        for root in sorted(alone, key=lambda r: (-weight[r], r)):
+            if not groups_of[root]:
+                continue
+            firsts = {n.split()[0] for n in names[root]}
+            exact = {c for f in firsts for c in by_first.get(f, ())}
+            nick = {
+                c for f in firsts for alt in _NICKNAMES.get(f, ()) for c in by_first.get(alt, ())
+            }
+            for tier in (exact, nick - exact):
+                fits = {c for c in tier if c != root and shares(root, c)}
+                if fits:
+                    if len(fits) == 1:
+                        merger.union(root, fits.pop())
+                    break
+
+
+class _Merger:
+    """Union-find over identity keys. Identities I said are different carry marks, and a
+    union that would put two different marks of one correction into one person is refused."""
+
+    def __init__(self, keys: Iterable[str]):
+        self.parent = {k: k for k in keys}
+        self.marks: dict[str, dict[int, int]] = {}  # root → correction → side
+
+    def find(self, key: str) -> str:
+        parent = self.parent.setdefault(key, key)
+        root = key
+        while parent != root:
+            root, parent = parent, self.parent[parent]
+        while key != root:
+            following = self.parent[key]
+            self.parent[key] = root
+            key = following
+        return root
+
+    def union(self, a: str, b: str) -> bool:
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return True
+        ma, mb = self.marks.get(ra, {}), self.marks.get(rb, {})
+        if any(mb.get(n, side) != side for n, side in ma.items()):
+            return False
+        keep, gone = sorted((ra, rb))
+        self.parent[gone] = keep
+        if ma or mb:
+            self.marks[keep] = ma | mb
+        self.marks.pop(gone, None)
+        return True
+
+    def keep_apart(self, n: int, sides: list[list[str]]) -> None:
+        """Correction n: no two of these sides may become one person. A key on two sides
+        says nothing and is skipped."""
+        count = Counter(k for side in sides for k in set(side))
+        for i, side in enumerate(sides):
+            for key in side:
+                if count[key] == 1:
+                    self.marks.setdefault(self.find(key), {})[n] = i
+
+
+class _Refs:
+    """What a correction in aliases.json can name: a ref from people.json ("k:..."), a person
+    id from the last people.json, an identity key ("wa:...", "slack:team:U...", "email:...",
+    "li:...", "name:..."), a WhatsApp jid, an email address, a Slack user id, or a name (every
+    identity seen under it)."""
+
+    def __init__(self, book: _Book, keys: set[str], previous: dict):
+        self.book, self.keys = book, keys
+        self.hashed = {_ref(k): k for k in keys}
+        self.by_name: dict[str, set[str]] = defaultdict(set)
+        for key, ident in book.ids.items():
+            for display in ident["names"]:
+                self.by_name[normalize(display)].add(key)
+        listed = previous.get("people") if isinstance(previous.get("people"), list) else []
+        self.ids = {p["id"]: p.get("ref") for p in listed if isinstance(p, dict) and p.get("id")}
+
+    def find(self, text: str) -> list[str]:
+        text = text.strip()
+        if text.startswith("k:"):
+            return [self.hashed[text]] if text in self.hashed else []
+        if re.fullmatch(r"[0-9a-f]{12}", text):
+            return self.find(self.ids[text]) if self.ids.get(text) else []
+        if text.split(":", 1)[0] in ("wa", "slack", "email", "li", "name") and text in self.keys:
+            return [text]
+        if text.endswith(("@s.whatsapp.net", "@lid")):
+            key = self.book.jid(text)
+            return [key] if key in self.keys else []
+        if "@" in text:
+            key = f"email:{text.lower()}"
+            return [key] if key in self.keys else []
+        if re.fullmatch(r"[UW][A-Z0-9]{6,}", text):
+            return sorted(k for k in self.keys if k.startswith("slack:") and k.endswith(f":{text}"))
+        return sorted(self.by_name.get(normalize(text), ()))
+
+
+def _aliases(path: Path) -> dict[str, list]:
+    """My corrections: {"same": [[a, b, ...]], "different": [[a, b, ...]], "hide": [a, ...]},
+    each a name or an id as _Refs reads them. Anything malformed is skipped."""
+    data = _load_json(path)
+
+    def texts(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [v for v in value if isinstance(v, str) and v.strip()]
+
+    def sets(value: object) -> list[list[str]]:
+        found = [texts(v) for v in value] if isinstance(value, list) else []
+        return [v for v in found if len(v) >= 2]
+
+    return {
+        "same": sets(data.get("same")),
+        "different": sets(data.get("different")),
+        "hide": texts(data.get("hide")),
+    }
+
+
+def _merge(identities: list[dict]) -> dict:
+    """Identities found to be one person, as one."""
+    person = _identity()
+    for ident in identities:
+        person["names"].update(ident["names"])
+        for display, sources in ident["name_sources"].items():
+            person["name_sources"][display] |= sources
+        person["relations"] |= ident["relations"]
+        person["sources"].update(ident["sources"])
+        for source in ident["sources"]:
+            person["sources"][source] += 0  # a source with no interactions still counts
+        person["interactions"] += ident["interactions"]
+        for ts in filter(None, (ident["first"], ident["last"])):
+            person["first"] = min(person["first"] or ts, ts)
+            person["last"] = max(person["last"] or ts, ts)
+        for source, labels in ident["where"].items():
+            person["where"][source].update(labels)
+        person["topics"].update(ident["topics"])
+        person["orgs"].update(ident["orgs"])
+    return person
+
+
+def _full(norm: str) -> bool:
+    """A normalized name with a first and a last name, neither an initial."""
+    words = norm.split()
+    return len(words) >= 2 and len(words[0]) > 1 and len(words[-1]) > 1
 
 
 def _name_key(name: str | None) -> str | None:
-    """The normalized name a person is indexed under, or None for a name that can't be one."""
-    if not name or _CONTACT.search(name):
+    """The normalized name a person is indexed under, or None for a name that can't be one:
+    one with a digit or an @ in it, or a WhatsApp blob ("+AbCd...=")."""
+    if not name or _CONTACT.search(name) or name.strip().startswith("+"):
         return None
     key = normalize(_display(name))
     return key if _plausible(key) else None
 
 
-def _group(kind: str, key: str, name: str, members: set[str]) -> dict:
+def _group(kind: str, key: str, name: str, members: set[str], size: int | None = None) -> dict:
     return {
         "id": hashlib.sha1(f"{kind}\0{key}".encode()).hexdigest()[:12],
         "name": name or _GROUP_KINDS[kind][1],
         "kind": kind,
         "members": members,
+        "size": size if size is not None else len(members),
     }
 
 
@@ -558,21 +957,25 @@ def _org_key(org: str) -> str | None:
     return None if not key or key in _ORG_GENERIC else key
 
 
-def _entry(key: str, person: dict) -> dict:
+def _entry(person: dict) -> dict:
     parts = []
     sources = [source for source, _ in person["sources"].most_common()]
     for source in sources:
         where = list(person["where"].get(source, {}))[::-1]  # newest first
         details = where[:2] + ([f"{len(where) - 2} more"] if len(where) > 2 else [])
         count = person["sources"][source]
-        if source in _MESSAGES and count:
-            details.append(f"{count} message{'s' if count != 1 else ''}")
+        if source in _COUNTED and count:
+            details.append(f"{count} {_COUNTED[source]}{'s' if count != 1 else ''}")
         how = _SOURCES[source]
         parts.append(f"{how} ({', '.join(details)})" if details else how)
     orgs = person["orgs"].most_common(1)
+    name = _best(person["names"], person["name_sources"])
+    aka = {}  # the other names they go by, one way of writing each, the most used first
+    for other, _ in person["names"].most_common():
+        if (norm := normalize(other)) != normalize(name):
+            aka.setdefault(norm, other)
     return {
-        "id": _key_id(key),
-        "name": _best(person["names"]),
+        "name": name,
         "relation": next(r for r in _STRONGEST_FIRST if r in person["relations"]),
         "sources": sources,
         "interactions": person["interactions"],
@@ -581,12 +984,14 @@ def _entry(key: str, person: dict) -> dict:
         "context": _clip("; ".join(parts), CONTEXT_CHARS),
         "topics": [topic for topic, _ in person["topics"].most_common(TOPICS)],
         "org": orgs[0][0] if orgs else None,
+        "aka": list(aka.values())[:AKA],
+        "_orgs": list(person["orgs"]),
     }
 
 
 def _chat(direct: bool, label: str, topic: str | None = None, key: str | None = None) -> dict:
-    """A conversation as (ts, sender) pairs, where sender None is me and "" someone unnamed.
-    The key says which conversation it is, for the group it makes."""
+    """A conversation as (ts, sender) pairs, where sender is an identity key, None for me and
+    "" for someone unnamed. The key says which conversation it is, for the group it makes."""
     return {
         "direct": direct,
         "label": label,
@@ -602,7 +1007,8 @@ def _add_chats(
 ) -> None:
     """Direct chats I wrote in: the other person, with every message. Groups I wrote in: each
     member who wrote on a day I did, with their messages from those days. With a group_kind,
-    everyone who wrote in such a group, on any day, shares it as a context."""
+    everyone who wrote in such a group, on any day, is in it (a source's member list adds
+    everyone else)."""
     for chat in chats:
         days = {ts[:10] for ts, sender in chat["messages"] if sender is None}
         if not days:
@@ -610,21 +1016,24 @@ def _add_chats(
         if group_kind and not chat["direct"] and chat["key"]:
             writers = {sender for _, sender in chat["messages"] if sender}
             book.group(group_kind, chat["key"], chat["label"], writers)
+            book.wrote_in.add((group_kind, chat["key"]))
         topics = [chat["topic"]]
         if chat["direct"]:
             stamps = [ts for ts, _ in chat["messages"]]
-            partners = chat["partners"] | {sender for _, sender in chat["messages"] if sender}
-            found = {name: stamps for name in partners}
+            # Who wrote, by their id; the chat's own name only when they never did.
+            partners = {sender for _, sender in chat["messages"] if sender} or chat["partners"]
+            found = {key: stamps for key in partners}
         else:
             found = defaultdict(list)
             for ts, sender in chat["messages"]:
                 if sender and ts[:10] in days:
                     found[sender].append(ts)
-        for name, stamps in found.items():
+        for key, stamps in found.items():
             book.add(
-                name,
+                None,
                 "met",
                 source,
+                key=key,
                 first=min(stamps),
                 last=max(stamps),
                 interactions=len(stamps),
@@ -634,8 +1043,15 @@ def _add_chats(
 
 
 def _whatsapp(vault: Path, book: _Book) -> None:
+    """Chats by jid. raw/whatsapp/groups lists everyone in each group, and links a person's
+    phone and lid jids."""
+    root = vault / "raw" / "whatsapp"
+    rosters = list(_records(root / "groups"))
+    for roster in rosters:
+        for member in roster.get("members") or []:
+            book.same_jid(member.get("jid"), member.get("alt_jid"))
     chats: dict[str, dict] = {}
-    for r in _records(vault / "raw" / "whatsapp" / "messages"):
+    for r in _records(root / "messages"):
         kind = r.get("chat_type")
         if kind not in ("direct", "group") or r.get("kind") == "system":
             continue
@@ -644,48 +1060,90 @@ def _whatsapp(vault: Path, book: _Book) -> None:
             name = r.get("chat_name")
             if kind == "direct":
                 chat = _chat(True, "direct chat")
-                chat["partners"].update(filter(None, [name]))  # never the chat id: a number
+                # A chat named by its number has no name to go by; the key is never shown.
+                partner = book.name(book.jid(r["chat_id"]), name, "whatsapp")
+                chat["partners"].update(filter(None, [partner]))
             else:
                 chat = _chat(False, name or "a group", name, r["chat_id"])
             chats[r["chat_id"]] = chat
-        sender = None if r.get("from_me") else r.get("sender_name") or ""
+        if r.get("from_me"):
+            sender = None
+        else:
+            jid = r["chat_id"] if kind == "direct" else r.get("sender_id")
+            sender = book.name(book.jid(jid), r.get("sender_name"), "whatsapp") or ""
         chat["messages"].append((r["ts"], sender))
     _add_chats(book, "whatsapp", chats.values(), "whatsapp_group")
+    for roster in rosters:
+        members = []
+        for member in roster.get("members") or []:
+            key = book.jid(member.get("jid"))
+            for name in (member.get("name"), member.get("push_name")):
+                book.name(key, name, "whatsapp")
+            members.append(key)
+        book.group("whatsapp_group", roster["chat_id"], roster.get("chat_name"), members)
 
 
 def _slack(vault: Path, book: _Book) -> None:
-    for directory in sorted((vault / "raw" / "slack").glob("*/messages")):
-        team = directory.parent.name
+    """Each workspace's messages by user id, and raw/slack/<team>/channels for everyone in a
+    channel I'm in or wrote in. A profile's email is that address's person."""
+    for folder in sorted(p for p in (vault / "raw" / "slack").glob("*") if p.is_dir()):
+        team = folder.name
+
+        def user(uid: str | None, team: str = team) -> str | None:
+            return f"slack:{team}:{uid}" if uid else None
+
         chats: dict[str, dict] = {}
-        for r in _records(directory):
-            user, subtype = r.get("user_id") or "", r.get("subtype") or ""
-            bot = subtype == "bot_message" or user.startswith("B") or user == "USLACKBOT"
-            if not user or bot or _SLACK_EVENTS.fullmatch(subtype):
+        for r in _records(folder / "messages"):
+            uid, subtype = r.get("user_id") or "", r.get("subtype") or ""
+            bot = subtype == "bot_message" or uid.startswith("B") or uid == "USLACKBOT"
+            if not uid or bot or _SLACK_EVENTS.fullmatch(subtype):
                 continue
             if r.get("from_me"):
-                book.mine(r.get("user_name"))
+                book.mine(r.get("user_name"), user(uid))
             chat = chats.get(r["channel_id"])
             if chat is None:
                 kind, name = r.get("channel_type"), r.get("channel_name")
                 if kind == "dm":
                     chat = _chat(True, f"{team} DM")
-                    chat["partners"].update(filter(None, [name]))
-                elif kind == "group_dm":
-                    chat = _chat(False, f"{team} group DM", None, f"{team}/{r['channel_id']}")
+                    chat["partners"].update(filter(None, [book.name(None, name, "slack")]))
                 else:
-                    chat = _chat(
-                        False,
-                        f"{team} #{name or 'a channel'}",
-                        name and f"#{name}",
-                        f"{team}/{r['channel_id']}",
-                    )
+                    chat = _chat(False, _channel_label(team, kind, name), name and f"#{name}")
+                    chat["key"] = f"{team}/{r['channel_id']}"
                 chats[r["channel_id"]] = chat
-            sender = None if r.get("from_me") else r.get("user_name") or ""
+            if r.get("from_me"):
+                sender = None
+            else:
+                sender = book.name(user(uid), r.get("user_name"), "slack") or ""
             chat["messages"].append((r["ts"], sender))
         _add_chats(book, "slack", chats.values(), "slack_channel")
 
+        for roster in _records(folder / "channels"):
+            kind = roster.get("channel_type")
+            if kind == "dm" or not roster.get("channel_id"):
+                continue
+            members = []
+            for member in roster.get("members") or []:
+                key = user(member.get("id"))
+                if member.get("me"):
+                    book.mine(member.get("name"), key)
+                    continue
+                book.name(key, member.get("name"), "slack")
+                if email := (member.get("email") or "").strip().lower():
+                    book.link(key, f"email:{email}")
+                members.append(key)
+            group = f"{team}/{roster['channel_id']}"
+            if roster.get("joined") or ("slack_channel", group) in book.wrote_in:
+                label = _channel_label(team, kind, roster.get("channel_name"))
+                book.group("slack_channel", group, label, members)
+
+
+def _channel_label(team: str, kind: str | None, name: str | None) -> str:
+    return f"{team} group DM" if kind == "group_dm" else f"{team} #{name or 'a channel'}"
+
 
 def _email(vault: Path, book: _Book) -> None:
+    """People by address. A correspondent is one I wrote to (to or cc, on mail to at most
+    MAX_RECIPIENTS) or answered, named by the From name on their own mail."""
     mine = {a.strip().lower() for a in os.environ.get("TWIN_EMAILS", "").split(",") if a.strip()}
     mail = []
     for account in sorted(p for p in (vault / "raw" / "email").glob("*") if p.is_dir()):
@@ -708,6 +1166,10 @@ def _email(vault: Path, book: _Book) -> None:
                     "bulk": _bulk(r),
                 }
             )
+    mine.discard("")
+    book.my_addresses |= mine
+    for address in mine:
+        book.mine(key=f"email:{address}")
     by_id = {m["id"]: m for m in mail}
     names: dict[str, Counter] = defaultdict(Counter)
     theirs: dict[str, list[str]] = defaultdict(list)
@@ -717,6 +1179,8 @@ def _email(vault: Path, book: _Book) -> None:
         theirs[m["from"]].append(m["ts"])
         if name := _sender_name(m["name"]):
             names[m["from"]][name] += 1
+    for address, known in names.items():
+        book.name(f"email:{address}", _usual_name(known), "email")
     wrote: dict[str, dict[str, dict]] = defaultdict(dict)  # address → my mail to it, by id
     for m in mail:
         if not m["mine"]:
@@ -729,30 +1193,27 @@ def _email(vault: Path, book: _Book) -> None:
         if parent and not parent["mine"] and parent["from"] not in mine:
             wrote[parent["from"]][m["id"]] = m
     for address, sent in wrote.items():
-        known = names.get(address)
-        if not known or _NO_REPLY.match(address.split("@")[0]):
+        if not names.get(address) or _NO_REPLY.match(address.split("@")[0]):
             continue  # unnamed, or a robot: an address alone never goes in the index
-        name = _usual_name(known)
         stamps = [m["ts"] for m in sent.values()] + theirs[address]
         book.add(
-            name,
+            None,
             "met",
             "email",
+            key=f"email:{address}",
             first=min(stamps),
             last=max(stamps),
             interactions=len(stamps),
             topics=[_subject(m["subject"]) for m in sent.values()],
             org=_org(address),
         )
-    _email_threads(book, mail, by_id, names, mine)
+    _email_threads(book, mail, by_id, mine)
 
 
-def _email_threads(
-    book: _Book, mail: list[dict], by_id: dict[str, dict], names: dict[str, Counter], mine: set
-) -> None:
-    """Each thread, or one message with no replies, is a group of the people on it: senders and
-    recipients who've written to me under a name, unless it has more than MAX_RECIPIENTS
-    addresses besides mine. Bulk mail has no people to speak of."""
+def _email_threads(book: _Book, mail: list[dict], by_id: dict[str, dict], mine: set) -> None:
+    """Each thread, or one message with no replies, is a group of every address on it besides
+    mine, unless there are more than MAX_RECIPIENTS of them. Bulk mail has no people to speak
+    of. An address that never wrote under a name counts towards the size and is no one."""
     threads: dict[str, dict] = {}
     for m in mail:
         if m["bulk"]:
@@ -764,9 +1225,68 @@ def _email_threads(
     for key, thread in threads.items():
         if len(thread["addresses"]) > MAX_RECIPIENTS:
             continue
-        people = [_usual_name(names[a]) for a in sorted(thread["addresses"]) if names.get(a)]
         subject = thread["subjects"][0] if thread["subjects"] else None
-        book.group("email_thread", key, subject, people)
+        members = [f"email:{a}" for a in sorted(thread["addresses"])]
+        book.group("email_thread", key, subject, members)
+
+
+def _calendar(vault: Path, book: _Book, now: datetime) -> None:
+    """Meetings: each past event of MIN_EVENT to MAX_EVENT guests who didn't decline, with me
+    among them or organizing, is a group of the others, and each of them met me there. An
+    event in two calendars counts once, and a moved instance of a repeating one is the same
+    group as the series. A calendar is named after its owner's address (me@example.edu.ics
+    is calendar/me-example-edu), so that address is mine too, even if I never send mail
+    from it."""
+    streams = sorted(p for p in (vault / "raw" / "calendar").glob("*") if p.is_dir())
+    for stream in streams:
+        for r in _records(stream):
+            for address in [r.get("organizer"), *(g.get("email") for g in r.get("guests") or [])]:
+                address = (address or "").lower()
+                if "@" in address and re.sub(r"[^\w-]", "-", address) == stream.name:
+                    book.my_addresses.add(address)
+                    book.mine(key=f"email:{address}")
+    mine = book.my_addresses
+
+    def me(guest: dict) -> bool:
+        name = normalize(guest.get("name") or "")
+        return guest["email"].lower() in mine or (bool(name) and _is_me(name, book.me))
+
+    seen: set[str] = set()
+    for stream in streams:
+        for r in _records(stream):
+            guests = [g for g in r.get("guests") or [] if isinstance(g, dict) and g.get("email")]
+            if not guests or r["id"] in seen or (r.get("status") or "").upper() == "CANCELLED":
+                continue
+            seen.add(r["id"])
+            when = _when(r.get("ts"))
+            if when is None or when > now:
+                continue
+            present = [g for g in guests if (g.get("status") or "") != "declined"]
+            if not MIN_EVENT <= len(present) <= MAX_EVENT:
+                continue
+            with_me = any(map(me, present)) or (r.get("organizer") or "").lower() in mine
+            if mine and not with_me:
+                continue  # someone else's event on a calendar I can see
+            summary = r.get("summary")
+            members = []
+            for guest in present:
+                if me(guest):
+                    continue
+                key = f"email:{guest['email'].lower()}"
+                book.name(key, guest.get("name"), "calendar")
+                book.add(
+                    None,
+                    "met",
+                    "calendar",
+                    key=key,
+                    first=r["ts"],
+                    last=r["ts"],
+                    interactions=1,
+                    where=summary,
+                    topics=[summary],
+                )
+                members.append(key)
+            book.group("event", _RECURRENCE.sub("", r["id"]), summary, members)
 
 
 def _usual_name(known: Counter) -> str:
@@ -802,12 +1322,19 @@ def _linkedin(vault: Path, book: _Book) -> None:
             convo["messages"].append((r["ts"], None))
         else:
             convo["messages"].append((r["ts"], r.get("author") or ""))
+    source = "linkedin/messages"
     for convo in convos.values():
         others = convo["partners"] | {sender for _, sender in convo["messages"] if sender}
+        convo["partners"] = set()
         if len({normalize(n) for n in others} - book.me) <= 1:
             convo["direct"], convo["label"] = True, "direct"
-            convo["partners"] = {n for n in others if normalize(n) not in book.me}
-    _add_chats(book, "linkedin/messages", convos.values())
+            names = (n for n in others if normalize(n) not in book.me)
+            convo["partners"] = {k for n in names if (k := book.name(None, n, source))}
+        convo["messages"] = [
+            (ts, sender if sender is None else book.name(None, sender, source) or "")
+            for ts, sender in convo["messages"]
+        ]
+    _add_chats(book, source, convos.values())
 
     for r in _records(root / "connections"):
         role = " at ".join(filter(None, [r.get("position"), r.get("company")]))
@@ -815,6 +1342,7 @@ def _linkedin(vault: Path, book: _Book) -> None:
             r.get("name"),
             "met",
             "linkedin/connections",
+            key=f"li:{r['id']}" if r.get("id") else None,
             first=r["ts"],
             where=", ".join(filter(None, [f"since {r['ts'][:7]}", role])),
             org=r.get("company"),
@@ -833,7 +1361,9 @@ def _instagram(vault: Path, book: _Book) -> None:
             )
         if r.get("from_me"):
             book.mine(r.get("author"))
-        sender = None if r.get("from_me") else r.get("author") or ""
+            sender = None
+        else:
+            sender = book.name(None, r.get("author"), "instagram") or ""
         chat["messages"].append((r["ts"], sender))
     _add_chats(book, "instagram", chats.values())
 
@@ -846,7 +1376,8 @@ def _mentions(vault: Path, book: _Book) -> None:
                 authors = authors[:5] + authors[-1:]
             title = r.get("title")
             if key := r.get("id") or title:
-                book.group("paper", str(key), title, authors)
+                names = (_name_key(name) for name in authors)
+                book.group("paper", str(key), title, [f"name:{n}" for n in names if n])
             for name in authors:
                 _mention(
                     book, name, "know_of", f"mentions/{stream}", r["ts"], _quoted(title), [title]
@@ -886,7 +1417,7 @@ def _writing(vault: Path, book: _Book) -> None:
         for name in _cv_authors(r.get("entry")):
             _mention(book, name, "know_of", "website", r["ts"], _quoted(title), [title])
 
-    known = set(book.people)
+    known = book.known_names()
     for page in pages:
         for name, relation in _mentioned(page["body"], corpus, known, page["to_read"]):
             where = _where(page["title"], relation == "to_read")
@@ -1206,11 +1737,19 @@ def _is_me(key: str, me: set[str]) -> bool:
     return False
 
 
-def _best(names: Counter) -> str:
-    """The way of writing a name to show: mixed case, then most used, then with accents."""
+def _best(names: Counter, sources: dict[str, set[str]]) -> str:
+    """The way of writing a name to show: a full name before a first name alone, then the one
+    the most sources use, then mixed case, then most used, then with accents."""
     return max(
         names,
-        key=lambda n: (n != n.lower() and n != n.upper(), names[n], not n.isascii(), len(n)),
+        key=lambda n: (
+            _full(normalize(n)),
+            len(sources.get(n, ())),
+            n != n.lower() and n != n.upper(),
+            names[n],
+            not n.isascii(),
+            len(n),
+        ),
     )
 
 
@@ -1242,48 +1781,155 @@ def _bulk(record: dict) -> bool:
 # Connections
 
 
+def closeness(size: int) -> float:
+    """What sharing one group of `size` people adds to a tie: a pair alone counts most, and a
+    channel of thousands next to nothing."""
+    return 1 / math.log2(max(size, 2) + 1)
+
+
 def connections(
     groups: list[dict], core: list[dict], now: datetime
 ) -> tuple[list[dict], list[dict]]:
     """Edges between the people in core and the groups that make them, from every group of the
     index (members as sets of ids). Groups keep only their members in core, and those left
-    with fewer than two are dropped. Two people share an edge with a weight of their shared
-    groups, and only GRAPH_EDGES are kept: heavier first, then the smaller the groups they
-    share the closer, then the more active the pair, so a big channel never crowds out the
-    people who share a few small ones. A group's size is everyone in it from the index, not
-    just those in core, so a big channel with two people in core isn't a small group."""
+    with fewer than two are dropped. Each group two people share adds closeness(its size) to
+    their tie, so a few small groups outweigh a big channel; the size is everyone in it (from
+    "size", else its members), not just those in core. Only GRAPH_EDGES are kept: heaviest
+    first, then the most groups shared, then the more active pair. An edge names its closest
+    contexts first."""
     rank = {p["id"]: _score(p, now) for p in core}
-    size = {group["id"]: len(group["members"]) for group in groups}
     kept = []
     for group in groups:
-        members = sorted(group["members"] & rank.keys())
+        members = sorted(set(group["members"]) & rank.keys())
         if len(members) >= 2:
-            kept.append(group | {"members": members})
+            size = group.get("size") or len(group["members"])
+            kept.append(group | {"members": members, "size": size})
     kept.sort(key=lambda g: (GROUP_KINDS.index(g["kind"]), -len(g["members"]), g["name"], g["id"]))
 
-    shared: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for group in kept:
-        for pair in itertools.combinations(group["members"], 2):
-            shared[pair].append(group)
-
-    def closeness(item: tuple[tuple[str, str], list[dict]]) -> tuple:
-        (a, b), together = item
-        near = sum(1 / (size[g["id"]] - 1) for g in together)
-        return (-len(together), -near, -(rank[a] + rank[b]), a, b)
-
-    edges = [
-        {
-            "source": a,
-            "target": b,
-            "weight": len(together),
-            "contexts": [
-                _clip(f"{_GROUP_KINDS[g['kind']][0]}: {g['name']}", TOPIC_CHARS)
-                for g in together[:EDGE_CONTEXTS]
-            ],
-        }
-        for (a, b), together in sorted(shared.items(), key=closeness)[:GRAPH_EDGES]
-    ]
+    shared, weight = _pairs(kept)
+    order = sorted(
+        shared, key=lambda p: (-weight[p], -len(shared[p]), -(rank[p[0]] + rank[p[1]]), p)
+    )
+    edges = []
+    for a, b in order[:GRAPH_EDGES]:
+        together = sorted(
+            shared[a, b], key=lambda g: (g["size"], GROUP_KINDS.index(g["kind"]), g["name"])
+        )
+        edges.append(
+            {
+                "source": a,
+                "target": b,
+                "weight": round(weight[a, b], 4),
+                "shared": len(together),
+                "contexts": [
+                    _clip(f"{_GROUP_KINDS[g['kind']][0]}: {g['name']}", TOPIC_CHARS)
+                    for g in together[:EDGE_CONTEXTS]
+                ],
+            }
+        )
     return edges, kept
+
+
+def _pairs(groups: list[dict]) -> tuple[dict[tuple[str, str], list[dict]], dict]:
+    """Every pair of members who share a group: the groups, and the tie they make."""
+    shared: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for group in groups:
+        for pair in itertools.combinations(sorted(group["members"]), 2):
+            shared[pair].append(group)
+    weight = {pair: sum(closeness(g["size"]) for g in found) for pair, found in shared.items()}
+    return shared, weight
+
+
+def clusters(groups: list[dict], core: list[dict]) -> tuple[dict[str, int], list[dict]]:
+    """Communities among the people in core: Louvain on every pair that shares a group,
+    weighted as edges are (all of them, not only the edges kept). Each community of MIN_CLUSTER
+    or more gets an id, biggest first, and a label: the name of the group most of its people are in,
+    named groups before unnamed ones, and no label twice. People with no tie are in none."""
+    _, weight = _pairs(groups)
+    community = _louvain(sorted({p["id"] for p in core}), weight)
+    members: dict[str, list[str]] = defaultdict(list)
+    for node, label in community.items():
+        members[label].append(node)
+    found = [sorted(m) for m in members.values() if len(m) >= MIN_CLUSTER]
+    found.sort(key=lambda m: (-len(m), m))
+    by_person: dict[str, int] = {}
+    named, used = [], set()
+    for n, people in enumerate(found, 1):
+        by_person.update(dict.fromkeys(people, n))
+        label = _cluster_label(set(people), groups, used) or f"Cluster {n}"
+        named.append({"id": n, "label": label, "size": len(people)})
+    return by_person, named
+
+
+def _cluster_label(people: set[str], groups: list[dict], used: set[str]) -> str | None:
+    ranked = []
+    for g in groups:
+        inside = len(people.intersection(g["members"]))
+        if inside >= 2:
+            named = g["name"] != _GROUP_KINDS[g["kind"]][1]
+            ranked.append((named, inside, inside / len(g["members"]), -g["size"], g["name"]))
+    ranked.sort(reverse=True)
+    for *_, name in ranked:
+        if name not in used:
+            used.add(name)
+            return name
+    return None
+
+
+def _louvain(nodes: list[str], weight: dict[tuple[str, str], float]) -> dict[str, str]:
+    """Each node's community by Louvain's method (Blondel et al. 2008): move each node to the
+    neighbouring community that raises modularity most until none moves, make each community
+    one node, and repeat until no two merge. Nodes are visited in sorted order, so the same
+    graph always gives the same communities. A node with no tie is a community of one."""
+    graph: dict[str, dict[str, float]] = {n: {} for n in nodes}
+    for (a, b), w in weight.items():
+        if a in graph and b in graph:
+            graph[a][b] = graph[a].get(b, 0.0) + w
+            graph[b][a] = graph[b].get(a, 0.0) + w
+    of = {n: n for n in nodes}
+    for _ in range(LOUVAIN_LEVELS):
+        moved = _louvain_level(graph)
+        if len(set(moved.values())) == len(moved):
+            break
+        of = {n: moved[c] for n, c in of.items()}
+        merged: dict[str, dict[str, float]] = {c: {} for c in moved.values()}
+        for node, neighbours in graph.items():
+            here = merged[moved[node]]
+            for other, w in neighbours.items():
+                here[moved[other]] = here.get(moved[other], 0.0) + w
+        graph = merged
+    return of
+
+
+def _louvain_level(graph: dict[str, dict[str, float]]) -> dict[str, str]:
+    """One level of Louvain: each node's community, named by one of its nodes. A self-loop
+    (graph[n][n]) is the weight inside a node made of a community."""
+    degree = {n: sum(neighbours.values()) for n, neighbours in graph.items()}
+    total = sum(degree.values())  # twice the weight of all edges
+    community = {n: n for n in graph}
+    if total == 0:
+        return community
+    tot = dict(degree)  # community → the degrees of its nodes
+    for _ in range(LOUVAIN_PASSES):
+        moved = False
+        for node in sorted(graph):
+            here, k = community[node], degree[node]
+            links: dict[str, float] = defaultdict(float)
+            for other, w in graph[node].items():
+                if other != node:
+                    links[community[other]] += w
+            tot[here] -= k
+            best, gain = here, links.get(here, 0.0) - tot[here] * k / total
+            for c in sorted(links):
+                if (g := links[c] - tot[c] * k / total) > gain + 1e-12:
+                    best, gain = c, g
+            tot[best] += k
+            if best != here:
+                community[node] = best
+                moved = True
+        if not moved:
+            break
+    return community
 
 
 # Ideas

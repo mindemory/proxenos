@@ -15,7 +15,10 @@ import {
   type View,
   type Visibility,
 } from "./graph";
+import { CLUSTER_FALLBACK, clusterSlot, type ClusterSlot } from "./clusters";
 import type { Relation } from "./types";
+
+export type ColourBy = "cluster" | "relation";
 
 export interface HoverInfo {
   idx: number;
@@ -28,12 +31,15 @@ export interface EngineOptions {
   interactive: boolean;
   /** Ticks to run before the first frame; the rest of the settling plays out on screen. */
   warm?: number;
+  /** What fills a node: its cluster (with its relation as a ring) or its relation. */
+  colourBy?: ColourBy;
   onSelect?: (idx: number | null) => void;
   onHover?: (hover: HoverInfo | null) => void;
 }
 
 interface Theme {
   relation: Record<Relation, string>;
+  cluster: Record<ClusterSlot, string>;
   edge: string;
   edgeStrong: string;
   accent: string;
@@ -45,6 +51,7 @@ interface Theme {
 
 const FALLBACK: Theme = {
   relation: { met: "#a3b1ff", know_of: "#6fd0cf", to_read: "#dba6f2" },
+  cluster: CLUSTER_FALLBACK,
   edge: "#363b46",
   edgeStrong: "#4a5160",
   accent: "#a3b1ff",
@@ -63,6 +70,12 @@ function readTheme(): Theme {
       know_of: get("--c-rel-know", FALLBACK.relation.know_of),
       to_read: get("--c-rel-read", FALLBACK.relation.to_read),
     },
+    cluster: Object.fromEntries(
+      (Object.keys(CLUSTER_FALLBACK) as (keyof typeof CLUSTER_FALLBACK)[]).map((slot) => [
+        slot,
+        get(`--c-cluster-${slot}`, CLUSTER_FALLBACK[slot]),
+      ]),
+    ) as Record<ClusterSlot, string>,
     edge: get("--c-line-strong", FALLBACK.edge),
     edgeStrong: get("--c-muted", FALLBACK.edgeStrong),
     accent: get("--c-accent", FALLBACK.accent),
@@ -81,7 +94,7 @@ function alpha(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-const ALL: Filters = { relations: new Set(), kinds: new Set(), hideUnconnected: false };
+const ALL: Filters = { relations: new Set(), kinds: new Set(), clusters: new Set(), hideUnconnected: false };
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -102,6 +115,7 @@ export class GraphEngine {
   private selected: number | null = null;
   private highlight: ReadonlySet<number> | null = null;
   private hovered: number | null = null;
+  private colourBy: ColourBy;
   private inset = { left: 0, right: 0, bottom: 0 };
 
   private pointers = new Map<number, { x: number; y: number }>();
@@ -124,6 +138,7 @@ export class GraphEngine {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("canvas is not available");
     this.ctx = ctx;
+    this.colourBy = opts.colourBy ?? "relation";
     this.visibility = applyFilters(model, ALL);
     this.sim = new Simulation(model.nodes, model.edges);
 
@@ -154,6 +169,11 @@ export class GraphEngine {
 
   setHighlight(set: ReadonlySet<number> | null) {
     this.highlight = set;
+    this.frame();
+  }
+
+  setColourBy(colourBy: ColourBy) {
+    this.colourBy = colourBy;
     this.frame();
   }
 
@@ -351,14 +371,17 @@ export class GraphEngine {
       if (!visibility.node[i]) continue;
       const lit = focusSet === null ? visibility.active[i] : focusSet.has(i);
       const a = lit ? 1 : 0.16;
+      const byCluster = this.colourBy === "cluster";
       ctx.globalAlpha = a;
-      ctx.fillStyle = theme.relation[n.person.relation];
+      ctx.fillStyle = byCluster ? theme.cluster[clusterSlot(n.cluster)] : theme.relation[n.person.relation];
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fill();
       if (interactive) {
-        ctx.lineWidth = 1.2 / view.k;
-        ctx.strokeStyle = alpha(theme.bg, 0.9);
+        // By cluster, the relation still shows: as a ring, once a node is big enough to carry one.
+        const ring = byCluster && n.r * view.k >= 3.5;
+        ctx.lineWidth = (ring ? 1.6 : 1.2) / view.k;
+        ctx.strokeStyle = ring ? theme.relation[n.person.relation] : alpha(theme.bg, 0.9);
         ctx.stroke();
         const isSel = i === this.selected;
         if (isSel || i === this.hovered) {

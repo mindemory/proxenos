@@ -23,6 +23,9 @@ ICS = (
     "ORGANIZER;CN=Sam Sample:mailto:Sam@Example.com\r\n"
     'ATTENDEE;CN="Sample, Sam";PARTSTAT=ACCEPTED:mailto:sam@example.com\r\n'
     "ATTENDEE;CN=Kai:mailto:kai@example.com\r\n"
+    "ATTENDEE;CN=noa@example.com;PARTSTAT=DECLINED:mailto:Noa@Example.com\r\n"
+    "ATTENDEE;CUTYPE=RESOURCE;CN=Room 1:mailto:room1@resource.example.com\r\n"
+    "ATTENDEE;CUTYPE=GROUP;CN=All lab:mailto:lab-list@example.com\r\n"
     "SUMMARY:Lab meet\r\n ing \xe2\x98\r\n \x95\r\n"
     "LOCATION:Room 1\\, Building 2\r\n"
     "DESCRIPTION:Agenda:\\nfirst item\\; second\r\n"
@@ -98,12 +101,19 @@ def test_events_are_unfolded_and_parsed_with_their_zones(tmp_path):
     assert weekly["description"] == "Agenda:\nfirst item; second"  # not the alarm's
     assert (weekly["organizer"], weekly["attendees"], weekly["status"]) == (
         "sam@example.com",
-        2,
+        5,
         "CONFIRMED",
     )
+    # The people among them: a name only when CN is one, never a room or a list.
+    assert weekly["guests"] == [
+        {"name": "Sample, Sam", "email": "sam@example.com", "status": "accepted"},
+        {"name": "Kai", "email": "kai@example.com", "status": None},
+        {"name": None, "email": "noa@example.com", "status": "declined"},
+    ]
 
     moved = events["weekly@example.com/2024-03-12T13:00:00Z"]
     assert (moved["ts"], moved["rrule"], moved["attendees"]) == ("2024-03-12T15:00:00Z", None, 0)
+    assert moved["guests"] == []
     assert moved["description"] == "x" * 500
 
     (holiday,) = [e for e in events.values() if e["summary"] == "Holiday"]
