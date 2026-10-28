@@ -194,9 +194,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max", type=int, default=MAX_DRAFTS, help="the most drafts to write in one run"
     )
+    parser.add_argument(
+        "--replies",
+        action="store_true",
+        help="only replies with no draft yet, as sync drafts them (--max 0 counts them)",
+    )
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
+    if args.replies:
+        return replies(vault, limit=args.max)
     return work(vault, limit=args.max)
 
 

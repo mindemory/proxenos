@@ -49,7 +49,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
     assert all(vault == "vault" for _, vault, _ in steps)
     args = {name: a for name, _, a in steps}
     assert args["network"] == {"people_only": False}  # the full run, ideas too
-    assert args["work"] == {"max": work.MAX_DRAFTS}
+    assert args["work"] == {"max": work.MAX_DRAFTS, "replies": False}  # the full run
     assert args["tasks"] == {"days": tasks.DAYS}
     assert args["care"] == {"days": care.DAYS, "dry_run": False}
     assert args["recall"] == {"people": recall.PEOPLE}

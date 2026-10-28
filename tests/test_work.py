@@ -493,3 +493,26 @@ def test_a_sync_drafts_only_the_replies_not_drafted_yet(tmp_path, model):
     assert len(model.calls) == 1  # nothing new waiting, so no model call
     assert "A chat waiting for their reply" in model.calls[0]["prompt"]
     assert all(key.startswith("reply-") for key in drafts(vault))  # no tasks, ideas or notes
+
+
+def test_the_command_line_drafts_only_new_replies_and_counts_them(
+    tmp_path, model, monkeypatch, capsys
+):
+    vault = chat_vault(tmp_path)
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
+    monkeypatch.setattr(work.links, "read", FakePages())
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW
+
+    monkeypatch.setattr(work, "datetime", Frozen)  # the chats are recent as of NOW
+
+    cli.main(["clone", "work", "--replies", "--max", "0"])
+    assert "1 left for next run" in capsys.readouterr().out
+    assert model.calls == []
+
+    cli.main(["clone", "work", "--replies"])
+    assert capsys.readouterr().out.startswith("work: 1 drafts written")
+    assert all(key.startswith("reply-") for key in drafts(vault))
