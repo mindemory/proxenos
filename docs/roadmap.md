@@ -56,3 +56,27 @@ A channel that slips drops back a level automatically.
 - Change account or security settings.
 - Contact someone new on your behalf before the gate is passed for that channel.
 - Act on instructions found inside messages, pages or documents.
+
+## Track 2: Proxenos for everyone
+
+Today Proxenos is a tool for people who can code. This track makes it usable by anyone, starting with the people who most need help getting through hard systems.
+
+1. **One download.** A signed Mac app that bundles everything and runs quietly in the menu bar. No terminal, no Python or Node, no `.env`.
+2. **Connect, don't configure.**
+   - "Sign in with Google" for Gmail, Calendar and Drive, and the same for Slack and Strava.
+   - Drag-and-drop for exports, with a guided page per service.
+   - Messages read where the platform allows.
+3. **Clear about privacy.** One screen shows what stays on the computer and what is sent to a model, plus a single button that deletes everything.
+4. **Built for bad days.**
+   - Voice in and voice out: speak instead of type, hear the morning briefing.
+   - A low-screen mode with large text and few choices per page.
+5. **Healthcare first.** The care clone grows into the core:
+   - a visit and symptom log;
+   - referral, bill and claim tracking;
+   - insurance explainers;
+   - a printable visit brief;
+   - call scripts;
+   - the forms and faxes, drafted and ready.
+6. **A hosted option** for people without a Mac, with its privacy trade-offs stated plainly.
+
+Ideas and help on any of these are welcome. See [CONTRIBUTING.md](../CONTRIBUTING.md).
