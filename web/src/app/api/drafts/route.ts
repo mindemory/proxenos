@@ -1,6 +1,7 @@
-import { draftOpen, openTarget, recipientAddress, recipientQueries } from "@/lib/actions";
+import { draftOpen, normName, openTarget, recipientAddress, recipientQueries } from "@/lib/actions";
 import { isLive } from "@/lib/drafts";
 import { NO_STORE, rejectNonLocal } from "@/lib/guard";
+import { findPhones } from "@/lib/phones";
 import { findAddresses } from "@/lib/recipients";
 import type { DraftOpen, DraftsViewResponse } from "@/lib/types";
 import { getDraftReviews, getDrafts, vaultPath } from "@/lib/vault";
@@ -24,8 +25,13 @@ export async function GET(req: Request) {
   const found = await findAddresses(vaultPath(), mail.flatMap((d) => recipientQueries(d.to))).catch(
     () => new Map<string, string>(),
   );
+  // A WhatsApp reply opens its own chat when the chat has a number.
+  const chats = live.filter((d) => openTarget(d) === "whatsapp" && d.to);
+  const phones = await findPhones(vaultPath(), chats.map((d) => d.to)).catch(() => new Map<string, string>());
   const actions: Record<string, DraftOpen> = {};
-  for (const d of live) actions[d.id] = draftOpen(d, recipientAddress(d.to, found));
+  for (const d of live) {
+    actions[d.id] = draftOpen(d, recipientAddress(d.to, found), phones.get(normName(d.to)) ?? "");
+  }
 
   const body: DraftsViewResponse = { ...base, actions, record: await getDraftReviews() };
   return Response.json(body, { headers: NO_STORE });

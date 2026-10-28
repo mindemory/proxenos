@@ -3,8 +3,9 @@
 // page reads the same pieces back. Nothing here sends anything: every link ends at a compose
 // window, a chat picker or a clipboard, and the reader presses send.
 //
-// The only things that ever go into a link are the draft's own text (and its subject) and, for
-// an email, the recipient's address. Never an id, a vault path, or anything else from the vault.
+// The only things that ever go into a link are the draft's own text (and its subject) and the
+// recipient: an email address, or the number of the WhatsApp chat a reply answers. Never an id,
+// a vault path, or anything else from the vault.
 
 import type { Draft, DraftOpen, DraftOpenStep, OpenTarget } from "./types";
 
@@ -221,7 +222,7 @@ function emailSteps(d: Draft, address: string): { main: DraftOpenStep; alt: Draf
  * comma-joined), "" when it isn't known. Links carry the draft's text and subject and that
  * address, nothing else.
  */
-export function draftOpen(d: Draft, address: string): DraftOpen {
+export function draftOpen(d: Draft, address: string, phone = ""): DraftOpen {
   const target = openTarget(d);
   switch (target) {
     case "gmail": {
@@ -230,6 +231,21 @@ export function draftOpen(d: Draft, address: string): DraftOpen {
     }
     case "whatsapp": {
       const text = fits(d.body);
+      if (/^\d{7,15}$/.test(phone)) {
+        // The chat itself, not the picker: the reader reads it over and presses send.
+        return {
+          target,
+          label: text === null ? "Copy & open the chat" : "Open the chat",
+          hint:
+            text === null
+              ? `Copies the text and opens your chat with ${d.to}. Paste it, then press send.`
+              : `Opens your chat with ${d.to} with the text filled in. Read it over, then press send.`,
+          url: text === null ? `whatsapp://send?phone=${phone}` : `whatsapp://send?phone=${phone}&text=${text}`,
+          copy: text === null,
+          note: text === null ? "Copied, and the chat is open: paste it in and press send" : "The chat is open: press send when it reads right",
+          alt: null,
+        };
+      }
       return {
         target,
         label: text === null ? "Copy & open WhatsApp" : "Open in WhatsApp",
