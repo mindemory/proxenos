@@ -104,6 +104,8 @@ def work(vault: Path, limit: int = MAX_DRAFTS, now: datetime | None = None) -> d
     seen: set[str] = set()
     mine = 0
     limit = max(limit, 0)
+    reached = _reached(out, edited)
+    already = 0
     for job in _jobs(vault, now):
         if not _ID.fullmatch(job["id"]) or job["id"] in seen:
             continue  # no file name the page would read, or listed twice
@@ -111,6 +113,8 @@ def work(vault: Path, limit: int = MAX_DRAFTS, now: datetime | None = None) -> d
         found = existing.get(job["id"])
         if job["id"] in edited or (found and (found[1] is None or found[1] in _MINE)):
             mine += 1
+        elif _already_reached(job, reached):
+            already += 1
         else:
             jobs[job["id"]] = job
 
@@ -133,6 +137,7 @@ def work(vault: Path, limit: int = MAX_DRAFTS, now: datetime | None = None) -> d
         "drafts_written": written,
         "drafts_failed": failed,
         "skipped_as_yours": mine,
+        "skipped_already_reached": already,
         "left_for_next_run": max(len(jobs) - limit, 0),
     }
 
@@ -200,7 +205,8 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
     people = _people(network / "people.json") if outreach or projects else {}
     for idea in outreach:
         text = _outreach_text(idea, people.get(idea.get("person_id")) or {})
-        yield _job(f"outreach-{idea['id']}", "outreach", idea.get("name"), today, text)
+        job = _job(f"outreach-{idea['id']}", "outreach", idea.get("name"), today, text)
+        yield job | {"person": _one_line(idea.get("name"))}
     for idea in projects:
         text = _project_text(idea, people)
         yield _job(f"project-{idea['id']}", "project", idea.get("title"), today, text)
@@ -373,6 +379,30 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         "status": "draft",
         "body": body,
     }
+
+
+def _reached(directory: Path, edited: dict) -> list[str]:
+    """Who the user has already dealt with by outreach: the recipient line, case-folded, of every
+    outreach draft they approved, discarded, sent or edited. Ideas get new ids when the network
+    clone rewords them, so the same ask can come back under another id; this catches it."""
+    found = []
+    for path in directory.glob("outreach-*.md"):
+        try:
+            fields = _front(path.read_text(encoding="utf-8").removeprefix("\ufeff"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not fields:
+            continue
+        status = (fields.get("status") or "draft").strip().lower()
+        if status in _MINE or fields.get("id", path.stem) in edited:
+            found.append(" ".join((fields.get("to") or "").split()).casefold())
+    return [name for name in found if name]
+
+
+def _already_reached(job: dict, reached: list[str]) -> bool:
+    """An outreach job whose person appears in a recipient line the user already dealt with."""
+    person = " ".join((job.get("person") or "").split()).casefold()
+    return job["for"] == "outreach" and bool(person) and any(person in to for to in reached)
 
 
 def _existing(directory: Path) -> dict[str, tuple[Path, str | None]]:

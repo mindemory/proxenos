@@ -193,6 +193,7 @@ def test_drafts_open_tasks_top_ideas_and_the_newest_feed(tmp_path, model):
         "drafts_written": len(expected),
         "drafts_failed": 0,
         "skipped_as_yours": 0,
+        "skipped_already_reached": 0,
         "left_for_next_run": 0,
     }
     assert [re.search(r"^- \w+: (.*)$", c["prompt"], re.MULTILINE)[1] for c in model.calls] == [
@@ -304,6 +305,7 @@ def test_the_run_is_capped_and_one_failure_costs_only_its_draft(tmp_path, model)
         "drafts_written": 3,
         "drafts_failed": 1,
         "skipped_as_yours": 0,
+        "skipped_already_reached": 0,
         "left_for_next_run": 10,
     }
     assert sorted(drafts(vault)) == ["aaaaaaaaaaaa", "outreach-o1", "outreach-o2"]
@@ -349,6 +351,7 @@ def test_nothing_to_do_means_no_model_call(tmp_path, model):
         "drafts_written": 0,
         "drafts_failed": 0,
         "skipped_as_yours": 0,
+        "skipped_already_reached": 0,
         "left_for_next_run": 0,
     }
 
@@ -361,3 +364,20 @@ def test_the_command_line_reads_max(tmp_path, model, monkeypatch, capsys):
 
     assert len(model.calls) == 2
     assert capsys.readouterr().out.startswith("work: 2 drafts written, 0 drafts failed")
+
+
+def test_outreach_to_someone_already_reached_under_another_id_is_skipped(tmp_path, model):
+    vault = make_vault(tmp_path)
+    out = vault / "clones" / "drafts"
+    out.mkdir(parents=True, exist_ok=True)
+    # An earlier run's approved draft to Person 1, under an id the ideas no longer use.
+    write(
+        out / "outreach-old.md",
+        '---\nid: outreach-old\ntitle: "Hello"\nkind: reply\nfor: outreach\n'
+        'channel: email\nto: "Person 1 (Spiral Lab)"\ncreated: 2026-03-01T00:00:00Z\n'
+        "status: approved\n---\nHi!\n",
+    )
+    stats = work.work(vault, limit=50, now=NOW)
+    assert stats["skipped_already_reached"] == 1
+    assert "outreach-o1" not in drafts(vault)
+    assert "outreach-o2" in drafts(vault)
