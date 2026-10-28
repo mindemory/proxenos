@@ -1,9 +1,13 @@
-"""Gmail over IMAP with an app password, every account listed in .env.
+"""Gmail over IMAP, every account listed in .env, signed in with an app password or Google.
 
-Each account is one line in .env, `GMAIL_<NAME>=address:app-password`; NAME (lowercased)
-names the stream, vault/raw/email/<name>/, which matches the mbox ingester's records field
-for field (same parser), so a Takeout import and this sync merge by Message-ID. App
-passwords come from myaccount.google.com/apppasswords and need 2-Step Verification.
+Each account is one line in .env, `GMAIL_<NAME>=address:app-password`, or
+`GMAIL_<NAME>=address:oauth:<refresh token>` after `proxenos auth gmail NAME ADDRESS` (for
+accounts that can't make app passwords). NAME (lowercased) names the stream,
+vault/raw/email/<name>/, which matches the mbox ingester's records field for field (same
+parser), so a Takeout import and this sync merge by Message-ID. App passwords come from
+myaccount.google.com/apppasswords and need 2-Step Verification. A Google sign-in swaps its
+refresh token for a short-lived access token on each run (GOOGLE_CLIENT_ID and
+GOOGLE_CLIENT_SECRET in .env) and logs in with XOAUTH2.
 
 Reads "All Mail" (Gmail's every-message folder, without spam and trash) read-only. The first
 run backfills everything; later runs fetch only UIDs above the last one seen, kept in
@@ -17,6 +21,9 @@ import imaplib
 import json
 import os
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -26,6 +33,8 @@ from proxenos.ingest import email
 from proxenos.store import merge_monthly
 
 HOST = "imap.gmail.com"
+GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
+OAUTH = "oauth:"  # what a Google sign-in's secret starts with, in place of an app password
 FETCH_BYTES = 256 * 1024
 CHUNK = 100  # UIDs per FETCH
 BATCH = 2000  # records per merge
@@ -57,6 +66,7 @@ def ingest(
     me=(),
     full: bool = False,
     connect: Callable[[], imaplib.IMAP4] = lambda: imaplib.IMAP4_SSL(HOST),
+    access_token: Callable[[str], str] | None = None,
 ) -> dict[str, int]:
     mine = {a.strip().lower() for a in [address, *me] if a.strip()}
     state_path = vault / "state" / f"gmail_{name}.json"
@@ -65,11 +75,20 @@ def ingest(
     conn = connect()
     try:
         try:
-            conn.login(address, password)
+            if password.startswith(OAUTH):
+                token = (access_token or _access_token)(password.removeprefix(OAUTH))
+                xoauth = f"user={address}\x01auth=Bearer {token}\x01\x01".encode()
+                conn.authenticate("XOAUTH2", lambda _: xoauth)
+            else:
+                conn.login(address, password)
         except imaplib.IMAP4.error:
+            fix = (
+                f"Sign in again with `proxenos auth gmail {name} {address}`"
+                if password.startswith(OAUTH)
+                else "Check the app password in .env (myaccount.google.com/apppasswords)"
+            )
             raise SystemExit(
-                f"gmail: {name} refused the login. Check the app password in .env "
-                "(myaccount.google.com/apppasswords) and that IMAP is on in Gmail settings."
+                f"gmail: {name} refused the login. {fix}, and check IMAP is on in Gmail settings."
             ) from None
         conn.select(_all_mail(conn), readonly=True)
         validity = int(conn.response("UIDVALIDITY")[1][0])
@@ -107,12 +126,31 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
     if args.account:
         found = {k: v for k, v in found.items() if k == args.account.lower()}
     if not found:
-        raise SystemExit("gmail: no accounts. Add GMAIL_<NAME>=address:app-password to .env.")
+        raise SystemExit(
+            "gmail: no accounts. Add GMAIL_<NAME>=address:app-password to .env, or run "
+            "`proxenos auth gmail NAME ADDRESS`."
+        )
     me = env("EMAILS").split(",")
     total = Counter()
     for name, (address, password) in found.items():
         total.update(ingest(vault, name, address, password, me, args.full))
     return dict(total)
+
+
+def _access_token(refresh_token: str) -> str:
+    """A fresh access token for a Google sign-in's refresh token."""
+    form = {
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
+        "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
+    request = urllib.request.Request(GOOGLE_TOKEN, data=urllib.parse.urlencode(form).encode())
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read())["access_token"]
+    except (urllib.error.HTTPError, KeyError) as e:
+        raise imaplib.IMAP4.error(f"Google refused the refresh token ({e})") from None
 
 
 def _all_mail(conn: imaplib.IMAP4) -> str:

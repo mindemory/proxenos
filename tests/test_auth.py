@@ -1,5 +1,7 @@
 """Browser sign-in helper, with the browser and Strava faked out."""
 
+import base64
+import hashlib
 import json
 import socket
 import stat
@@ -126,3 +128,44 @@ def test_slack_reuses_the_app_and_refuses_tokens_that_cannot_read(tmp_path, monk
     auth.slack(env, state, lambda url: None, lambda prompt: "weak", fake)
     assert len(fake.created) == 1
     assert env.read_text() == "SLACK_USER_TOKEN_acme=config-token\n"
+
+
+def test_gmail_sign_in_saves_the_account_with_its_refresh_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    env = tmp_path / ".env"
+    env.write_text("GMAIL_PERSONAL=\n")
+    asked, sent = {}, {}
+
+    def open_browser(url):
+        asked.update(
+            {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlparse(url).query).items()}
+        )
+
+        def approve():
+            for _ in range(50):
+                try:
+                    urllib.request.urlopen(f"{asked['redirect_uri']}?code=abc", timeout=2)
+                    return
+                except OSError:
+                    time.sleep(0.05)
+
+        threading.Thread(target=approve, daemon=True).start()
+
+    def post(url, form):
+        sent.update(form)
+        return {"refresh_token": "r1", "access_token": "a1"}
+
+    auth.gmail("personal", "me@example.com", env, free_port(), open_browser, post)
+
+    assert asked["scope"] == auth.GMAIL_SCOPE and asked["login_hint"] == "me@example.com"
+    assert asked["access_type"] == "offline" and asked["code_challenge_method"] == "S256"
+    digest = hashlib.sha256(sent["code_verifier"].encode()).digest()
+    assert base64.urlsafe_b64encode(digest).decode().rstrip("=") == asked["code_challenge"]
+    assert sent["code"] == "abc" and sent["redirect_uri"] == asked["redirect_uri"]
+    assert env.read_text() == "GMAIL_PERSONAL=me@example.com:oauth:r1\n"
+
+
+def test_gmail_sign_in_needs_a_google_client(tmp_path):
+    with pytest.raises(SystemExit, match="GOOGLE_CLIENT_ID"):
+        auth.gmail("personal", "me@example.com", tmp_path / ".env", free_port(), print, None)

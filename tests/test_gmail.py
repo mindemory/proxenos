@@ -113,3 +113,42 @@ def test_accounts_come_from_env_lines(monkeypatch):
     monkeypatch.setenv("GMAIL_PERSONAL", "me@example.com:abcd efgh ijkl mnop")
     monkeypatch.setenv("GMAIL_BROKEN", "no-password-here")
     assert gmail.accounts() == {"personal": ("me@example.com", "abcd efgh ijkl mnop")}
+
+
+class FakeGoogleImap(FakeImap):
+    def authenticate(self, mechanism, respond):
+        self.signed_in = (mechanism, respond(b""))
+        if b"auth=Bearer good" not in self.signed_in[1]:
+            raise imaplib.IMAP4.error("invalid credentials")
+
+
+def test_a_google_sign_in_logs_in_with_xoauth2(tmp_path):
+    fake = FakeGoogleImap(dict(MAIL))
+
+    def token(refresh):
+        return "good" if refresh == "refresh-1" else "bad"
+
+    stats = gmail.ingest(
+        tmp_path,
+        "personal",
+        "me@example.com",
+        "oauth:refresh-1",
+        connect=lambda: fake,
+        access_token=token,
+    )
+
+    assert stats["added"] == 2
+    assert fake.signed_in == ("XOAUTH2", b"user=me@example.com\x01auth=Bearer good\x01\x01")
+
+
+def test_a_revoked_google_sign_in_says_how_to_sign_in_again(tmp_path):
+    fake = FakeGoogleImap(dict(MAIL))
+    with pytest.raises(SystemExit, match="proxenos auth gmail personal me@example.com"):
+        gmail.ingest(
+            tmp_path,
+            "personal",
+            "me@example.com",
+            "oauth:old",
+            connect=lambda: fake,
+            access_token=lambda refresh: "bad",
+        )

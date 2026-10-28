@@ -87,3 +87,58 @@ def test_linkedin_conversations_count_but_not_sponsored_ones(tmp_path):
 
     assert (chat["source"], chat["name"]) == ("linkedin", "Sara Example")
     assert chat["waiting"][0]["sender"] == "Sara Example"
+
+
+def mail(thread, ts, sender, to, text, mine=False, labels=("Inbox",)):
+    return {
+        "id": f"<{thread}.{ts}@x>",
+        "ts": ts,
+        "from_address": sender,
+        "from_name": None if mine else sender.split("@")[0].title(),
+        "from_me": mine,
+        "to": list(to),
+        "cc": None,
+        "subject": "Hi",
+        "gmail_thread": thread,
+        "gmail_labels": list(labels),
+        "body_new": text,
+    }
+
+
+def test_an_email_waits_when_addressed_to_the_user_by_someone_they_write_to(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+    many = [f"p{n}@x.org" for n in range(8)]
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            mail(
+                "t1", "2026-02-20T09:00:00Z", "me@x.org", ["Ana <ana@x.org>"], "Hi Ana, sure.", True
+            ),
+            mail(
+                "t2", "2026-03-09T09:00:00Z", "ana@x.org", ["me@x.org"], "Can you review my draft?"
+            ),
+            mail(
+                "t3",
+                "2026-03-09T09:00:00Z",
+                "ana@x.org",
+                ["list@x.org"],
+                "Talk at noon, all welcome?",
+            ),
+            mail("t4", "2026-03-09T09:00:00Z", "ana@x.org", ["me@x.org", *many], "Who is coming?"),
+            mail("t5", "2026-03-09T09:00:00Z", "news@x.org", ["me@x.org"], "Any questions? Reply!"),
+            mail(
+                "t6",
+                "2026-03-09T09:00:00Z",
+                "ana@x.org",
+                ["me@x.org"],
+                "Sale on now, want it?",
+                labels=("Inbox", "Category Promotions"),
+            ),
+        ],
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert (chat["source"], chat["chat"], chat["name"]) == ("email", "t2", "Ana")
+    assert [m["text"] for m in chat["waiting"]] == ["Can you review my draft?"]
+    assert chat["own"] == ["Hi Ana, sure."]  # what they wrote Ana in another thread

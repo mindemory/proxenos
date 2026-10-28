@@ -347,12 +347,17 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
             for m in messages
         ]
 
-    where = {"whatsapp": "WhatsApp", "linkedin": "LinkedIn", "facebook": "Messenger"}
+    where = {
+        "whatsapp": "WhatsApp, a direct chat",
+        "linkedin": "LinkedIn, a direct chat",
+        "facebook": "Messenger, a direct chat",
+        "email": "Email, a thread",
+    }
     head = _brief(
         "A chat waiting for their reply",
         [
             ("Chat", chat["name"]),
-            ("Where", f"{where.get(chat['source'], chat['source'])}, a direct chat"),
+            ("Where", where.get(chat["source"], chat["source"])),
             ("Waiting since", _day(chat["since"])),
             ("Their own health care, only for a chat that asks about it", health),
         ],

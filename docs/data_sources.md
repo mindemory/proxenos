@@ -30,7 +30,7 @@ The `ingest` commands in the tables are for reading one source by hand. Anything
 | Source | What it adds | How to get it | Command |
 |---|---|---|---|
 | **Email, any provider** | Sent mail is your professional and personal voice. Received mail is context. | An mbox export: Takeout's Mail folder, or one from your mail client. Set `PROXENOS_EMAILS` to all your addresses so Proxenos knows which mail is yours. | `proxenos ingest email --account NAME --mbox PATH` |
-| **Gmail over IMAP** | The same, kept current | Turn on IMAP in Gmail's settings and make an [app password](https://myaccount.google.com/apppasswords) (it needs 2-Step Verification). Add `GMAIL_<NAME>=address:app-password` to `.env`, one line per account. The first run backfills everything. | `proxenos ingest gmail` (`--account NAME`, `--full`) |
+| **Gmail over IMAP** | The same, kept current | Turn on IMAP in Gmail's settings. Then either make an [app password](https://myaccount.google.com/apppasswords) (it needs 2-Step Verification) and add `GMAIL_<NAME>=address:app-password` to `.env`, or, where app passwords aren't allowed, sign in with Google: in [Google Cloud](https://console.cloud.google.com/) make a project, turn on the Gmail API, set up the OAuth consent screen (External, add yourself as a test user), create an OAuth client of type *Desktop app*, put its ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and run `proxenos auth gmail NAME ADDRESS`. One account per name. The first run backfills everything. | `proxenos ingest gmail` (`--account NAME`, `--full`) |
 
 ### Google Takeout
 

@@ -85,7 +85,7 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | WhatsApp | The Mac app's local database (`proxenos ingest whatsapp`) |
 | Slack | [slackdump](https://github.com/rusq/slackdump) archives, or a user token |
 | Gmail, Google Calendar, Drive, Photos metadata, Keep, Tasks, YouTube, Chrome | Google Takeout zips (`proxenos import`) |
-| Email (any) | mbox exports; Gmail over IMAP with an app password |
+| Email (any) | mbox exports; Gmail over IMAP with an app password or a Google sign-in (`proxenos auth gmail`) |
 | Strava | API (`proxenos auth strava`) |
 | Spotify | Extended Streaming History export |
 | LinkedIn, X, Instagram, Facebook, Threads | Each service's data export |
@@ -104,7 +104,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
-| `proxenos auth strava` / `slack` | One-time sign-ins that write tokens to `.env` |
+| `proxenos auth strava` / `slack` / `gmail NAME ADDRESS` | One-time sign-ins that write tokens to `.env` |
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |

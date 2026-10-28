@@ -4,15 +4,23 @@
 code for a refresh token and writes it to .env. The Strava ingester notices the new value
 and switches to it.
 
+`proxenos auth gmail NAME ADDRESS` does the same with Google for a Gmail account that can't make
+app passwords: it needs a Google Cloud "Desktop app" OAuth client (GOOGLE_CLIENT_ID and
+GOOGLE_CLIENT_SECRET in .env), asks for mail access (IMAP needs the full mail scope; Proxenos
+only ever reads, and selects mail read-only), and saves GMAIL_<NAME>=address:oauth:<refresh token>.
+
 `proxenos auth slack` turns Slack app configuration tokens (SLACK_USER_TOKEN_<workspace>, from
 api.slack.com/apps) into reading tokens: it creates a read-only "Proxenos reader" app in each
 workspace from a manifest, opens the app's install page, and takes the user token the page
 shows through a hidden prompt, replacing the configuration token in .env.
 """
 
+import base64
 import getpass
+import hashlib
 import json
 import os
+import secrets
 import time
 import urllib.parse
 import urllib.request
@@ -26,6 +34,9 @@ from proxenos.config import REPO_ROOT
 PORT = 8723
 _STRAVA_AUTHORIZE = "https://www.strava.com/oauth/authorize"
 _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
+_GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
+GMAIL_SCOPE = "https://mail.google.com/"
 _SLACK_API = "https://slack.com/api/"
 SLACK_SCOPES = [
     "channels:read",
@@ -98,6 +109,64 @@ def strava(
     )
     set_env(env_path, "STRAVA_REFRESH_TOKEN", token["refresh_token"])
     return "saved a new STRAVA_REFRESH_TOKEN in .env; now run `proxenos ingest strava --full`"
+
+
+def gmail(
+    name: str,
+    address: str,
+    env_path: Path = REPO_ROOT / ".env",
+    port: int = PORT,
+    open_browser: Callable[[str], object] = webbrowser.open,
+    post: Callable[[str, dict], dict] | None = None,
+) -> str:
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        raise SystemExit(
+            "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env first: a Google Cloud OAuth "
+            "client of type Desktop app, with the Gmail API on (see docs/data_sources.md)."
+        )
+    key = "".join(c for c in name.upper() if c.isalnum() or c == "_")
+    if not key:
+        raise SystemExit("Name the account with letters, digits or _, e.g. personal.")
+
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    redirect = f"http://127.0.0.1:{port}/"
+    query = urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "response_type": "code",
+            "redirect_uri": redirect,
+            "scope": GMAIL_SCOPE,
+            "access_type": "offline",
+            "prompt": "consent",
+            "login_hint": address,
+            "code_challenge": challenge.decode().rstrip("="),
+            "code_challenge_method": "S256",
+        }
+    )
+    print(f"Opening Google in your browser. Sign in as {address} and allow access to your mail.")
+    open_browser(f"{_GOOGLE_AUTHORIZE}?{query}")
+    answer = _wait_for_redirect(port)
+    if "code" not in answer:
+        raise SystemExit(f"Google didn't approve: {answer.get('error', 'no answer')}")
+
+    token = (post or _post)(
+        _GOOGLE_TOKEN,
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": answer["code"],
+            "code_verifier": verifier,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect,
+        },
+    )
+    if "refresh_token" not in token:
+        raise SystemExit("Google gave no refresh token. Run again and approve on the consent page.")
+    set_env(env_path, f"GMAIL_{key}", f"{address}:oauth:{token['refresh_token']}")
+    return f"saved GMAIL_{key} in .env; `proxenos sync` now reads {address} every run"
 
 
 def set_env(env_path: Path, name: str, value: str) -> None:
