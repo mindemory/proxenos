@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from twin.ingest import spotify
+from proxenos.ingest import spotify
 
 # Every key an entry in the export carries, in the export's order.
 FIELDS = [

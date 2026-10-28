@@ -4,7 +4,7 @@ import json
 import os
 from datetime import UTC, datetime
 
-from twin.ingest import photos
+from proxenos.ingest import photos
 
 
 def put(path, data):

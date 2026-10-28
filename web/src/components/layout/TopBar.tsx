@@ -2,7 +2,7 @@ import { Lightbulb, ListTodo, PenLine, RefreshCw, type LucideIcon } from "lucide
 
 import { Logo } from "@/components/Logo";
 import type { useHome } from "@/lib/client";
-import { formatDateTime, freshness, freshnessLine, greeting, longDay, timeAgo } from "@/lib/format";
+import { formatDateTime, freshness, freshnessLine, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { CommandBox, type CommandBoxProps } from "./CommandBox";
@@ -62,22 +62,14 @@ function Count({
   );
 }
 
-/** The top bar: the greeting, the command box, the open counts, and when things last synced. */
+/** The top bar: the command box, the open counts, and when things last synced. */
 export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onMemory, onRefresh }: TopBarProps) {
   const sync = syncState(home);
-  const data = home.data;
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-line bg-bg/85 px-3 backdrop-blur-md sm:px-5">
-      <button onClick={() => onNavigate("home")} className="md:hidden flex-shrink-0 rounded-full p-1" aria-label="Twin, home">
+      <button onClick={() => onNavigate("home")} className="flex-shrink-0 rounded-full p-1 md:hidden" aria-label="Proxenos, home">
         <Logo size={26} className="text-accent" />
       </button>
-
-      <div className="hidden sm:block min-w-0 flex-shrink-0 max-w-[16rem] lg:max-w-[22rem] leading-tight">
-        <p className="font-display text-xl text-ink truncate">
-          {data ? `${greeting(data.now)}${data.name ? `, ${data.name}` : ""}` : "Twin"}
-        </p>
-        {data && <p className="text-xs text-muted truncate">{longDay(data.now)}</p>}
-      </div>
 
       <CommandBox onNavigate={onNavigate} onFind={onFind} onNetworkTab={onNetworkTab} onMemory={onMemory} onRefresh={onRefresh} />
 

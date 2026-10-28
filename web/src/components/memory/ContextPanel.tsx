@@ -91,7 +91,7 @@ export function ContextPanel({ id, onClose }: { id: string; onClose: () => void 
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6" aria-busy={loading}>
         {error && !data ? (
           <p className="p-4 text-sm text-bad-ink" role="alert">
-            {error === "not found" ? "That memory is no longer in the index. Run twin index." : `Couldn't load it: ${error}`}
+            {error === "not found" ? "That memory is no longer in the index. Run proxenos index." : `Couldn't load it: ${error}`}
           </p>
         ) : !data ? (
           <div className="space-y-3 p-4" aria-hidden="true">

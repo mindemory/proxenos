@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from twin.ingest import bluesky
+from proxenos.ingest import bluesky
 
 ME = "me.example.com"
 DID = "did:plc:testme"

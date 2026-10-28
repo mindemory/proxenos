@@ -9,7 +9,7 @@ import urllib.request
 
 import pytest
 
-from twin.ingest import mentions
+from proxenos.ingest import mentions
 
 NAME = "Kai Example"
 

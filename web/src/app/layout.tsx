@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { EB_Garamond, Geist, Geist_Mono, Newsreader } from "next/font/google";
 
 import { ToastProvider } from "@/components/Toasts";
 
@@ -13,16 +13,22 @@ const display = Newsreader({
   axes: ["opsz"],
   style: ["normal", "italic"],
 });
+// The wordmark's face. Greek too, for the word the name comes from.
+const brand = EB_Garamond({
+  subsets: ["latin", "greek"],
+  variable: "--font-garamond",
+  style: ["normal", "italic"],
+});
 
 export const metadata: Metadata = {
-  title: "Twin",
-  description: "Local brief, research feed, tasks, advice, self-model and sync status.",
+  title: "Proxenos",
+  description: "Proxenos acts on your behalf: a local briefing, research feed, tasks, drafts, network and memory.",
   robots: { index: false, follow: false },
 };
 
 // Always dark, so the browser chrome matches the ground.
 export const viewport: Viewport = {
-  themeColor: "#0f1114",
+  themeColor: "#0e1013",
   colorScheme: "dark",
 };
 
@@ -32,7 +38,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable} ${display.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${sans.variable} ${mono.variable} ${display.variable} ${brand.variable}`}
+    >
       <body suppressHydrationWarning className="antialiased bg-bg text-ink font-sans">
         <ToastProvider>{children}</ToastProvider>
       </body>

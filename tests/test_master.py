@@ -4,7 +4,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from twin import master, observe
+from proxenos import master, observe
 
 
 def write_month(path, records):
@@ -59,7 +59,7 @@ def fake_llm(monkeypatch, answer):
         calls.append(SimpleNamespace(prompt=prompt, **kwargs))
         return answer(prompt, kwargs) if callable(answer) else answer
 
-    monkeypatch.setattr("twin.llm.ask", ask)
+    monkeypatch.setattr("proxenos.llm.ask", ask)
     return calls
 
 

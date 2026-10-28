@@ -5,8 +5,8 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from twin import cli, memory
-from twin.clones import recall
+from proxenos import cli, memory
+from proxenos.clones import recall
 
 NOW = datetime(2025, 3, 10, 9, 0, tzinfo=UTC)  # a Monday
 
@@ -220,6 +220,24 @@ def test_it_writes_today_and_people(vault):
     assert stats["people"] == len(people)
 
 
+def test_every_event_in_the_window_is_on_the_agenda_with_or_without_memories(vault):
+    errand = {"id": "ev9", "ts": "2025-03-10T18:00:00Z", "summary": "Zzzunmatchable errand"}
+    write_month(vault, "raw/calendar/home", "2025-03", [errand])
+    memory.build(vault)
+
+    recall.recall(vault, now=NOW)
+
+    agenda = today(vault)["events"]
+    assert agenda == sorted(agenda, key=lambda e: e["when"])
+    assert {(e["title"], e["when"], e["all_day"]) for e in agenda} == {
+        ("Sequencing day", "2025-03-10T00:00:00Z", True),
+        ("Zzzunmatchable errand", "2025-03-10T18:00:00Z", False),
+        ("Lichen symposium kickoff", "2025-03-11T15:00:00Z", False),
+        ("Reimbursement office hours", "2025-03-11T13:00:00Z", False),
+    }
+    assert "Zzzunmatchable errand" not in {t["title"] for t in today(vault)["triggers"]}
+
+
 def test_a_memory_is_a_search_hit_with_marks(vault):
     recall.recall(vault, now=NOW)
 
@@ -325,7 +343,7 @@ def test_a_memory_per_trigger_is_capped(vault):
 
 
 def test_it_needs_the_index(tmp_path):
-    with pytest.raises(SystemExit, match="twin index"):
+    with pytest.raises(SystemExit, match="proxenos index"):
         recall.recall(tmp_path, now=NOW)
 
 
@@ -335,11 +353,11 @@ def test_an_empty_vault_recalls_nothing(tmp_path):
     stats = recall.recall(tmp_path, now=NOW)
 
     assert stats == {"triggers": 0, "triggers_with_memories": 0, "memories": 0, "people": 0}
-    assert today(tmp_path) == {"generated": "2025-03-10T09:00:00Z", "triggers": []}
+    assert today(tmp_path) == {"generated": "2025-03-10T09:00:00Z", "events": [], "triggers": []}
 
 
 def test_the_clone_runs_from_the_command_line(vault, monkeypatch, capsys):
-    monkeypatch.setenv("TWIN_VAULT", str(vault))
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
 
     cli.main(["clone", "recall"])
 

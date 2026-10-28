@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { ChevronRight, ListTodo } from "lucide-react";
 
-import { EmptyState, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { TaskSkeleton } from "@/components/Skeleton";
 import { TaskRow } from "@/components/tasks/TaskRow";
 import { useTasks } from "@/lib/client";
 import { formatDateTime, timeAgo } from "@/lib/format";
@@ -28,14 +29,14 @@ export function Tasks({ onChange }: { onChange?: () => void }) {
   const [showDone, setShowDone] = useState(false);
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load tasks: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load tasks: ${error}`} /> : <TaskSkeleton />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   if (!data.exists) {
     return (
-      <EmptyState icon={ListTodo} title="No task list yet" command="twin clone tasks">
+      <EmptyState icon={ListTodo} title="No task list yet" command="proxenos clone tasks">
         The tasks clone reads WhatsApp, Slack and email for things people asked you to do, and lists each one with who
         asked, when, and when it&apos;s due. Run it to build the list.
       </EmptyState>
@@ -82,7 +83,7 @@ export function Tasks({ onChange }: { onChange?: () => void }) {
           list(g.open)
         ) : (
           <p className="px-4 sm:px-6 py-4 text-sm text-muted border-b border-line">
-            {g.urgent.length ? "Nothing else open." : "Nothing open. New requests show up after the next run of twin clone tasks."}
+            {g.urgent.length ? "Nothing else open." : "Nothing open. New requests show up after the next run of proxenos clone tasks."}
           </p>
         )}
       </section>

@@ -10,7 +10,7 @@ import urllib.request
 
 import pytest
 
-from twin import auth
+from proxenos import auth
 
 
 def free_port():

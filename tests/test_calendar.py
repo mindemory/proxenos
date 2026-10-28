@@ -2,7 +2,7 @@
 
 import json
 
-from twin.ingest import calendar
+from proxenos.ingest import calendar
 
 LONG = "x" * 600
 ICS = (

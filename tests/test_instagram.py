@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin.ingest import instagram
+from proxenos.ingest import instagram
 
 
 def seconds(*args):

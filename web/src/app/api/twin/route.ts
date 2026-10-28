@@ -1,11 +1,5 @@
-import { NO_STORE, rejectNonLocal } from "@/lib/guard";
-import { getTwin } from "@/lib/vault";
+// The profile's earlier path, kept so anything that still calls it gets the same answer.
+// The page itself uses /api/profile.
+export { GET } from "../profile/route";
 
 export const dynamic = "force-dynamic";
-
-/** GET /api/twin: the self/*.md files, read-only. */
-export async function GET(req: Request) {
-  const denied = rejectNonLocal(req);
-  if (denied) return denied;
-  return Response.json(await getTwin(), { headers: NO_STORE });
-}

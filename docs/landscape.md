@@ -30,20 +30,20 @@ The most directly relevant idea is Letta's **sleep-time compute** ([coverage](ht
 
 ## Takeaways that shape the design
 
-1. **Keep the self-model in plain text I can read and edit.** Being able to correct the twin is the main way it gets accurate. That rules out fine-tuning as the foundation.
+1. **Keep the self-model in plain text I can read and edit.** Being able to correct the model is the main way it gets accurate. That rules out fine-tuning as the foundation.
 2. **Keep facts separate from voice.** Beliefs and facts go in text. Voice is a style guide plus example passages in the prompt. Fine-tune only if an eval shows prompting can't match my voice.
 3. **Make time first-class.** "Evolving" means beliefs carry `since` / `until` / evidence ("thought X until March, now Y") instead of being overwritten. That's Graphiti's idea, done in markdown frontmatter.
-4. **Only my own behavior counts as evidence.** The twin's outputs must never be fed back in as evidence about me. Tag provenance on everything: `me`, `me-reacting`, or `twin`. Without this, the twin learns from itself and drifts toward an LLM's average idea of me. It's the most common failure, and it's silent.
+4. **Only my own behavior counts as evidence.** Proxenos's outputs must never be fed back in as evidence about me. Tag provenance on everything: `me`, `me-reacting`, or `proxenos`. Without this, the model learns from itself and drifts toward an LLM's average idea of me. It's the most common failure, and it's silent.
 5. **Two timescales.** Fast state (what I'm into this week) updates nightly. Slow state (values, core beliefs, voice) changes only through proposed diffs that I approve weekly. Hippocampus fast, cortex slow: complementary learning systems.
-6. **Measure fidelity with predictions.** Before I read something, the twin predicts whether I'd pick it, how I'd rate it, and what I'd think. After I read it, compare. That number over time is the working definition of "replica." A short monthly re-interview gives a test-retest baseline.
-7. **Budget for exploration.** A twin that only picks what I'd pick builds a filter bubble. And if I read whatever it hands me, I converge on the twin instead of the other way round. Reserve a slice (~20%) for adjacent or contrarian material.
+6. **Measure fidelity with predictions.** Before I read something, Proxenos predicts whether I'd pick it, how I'd rate it, and what I'd think. After I read it, compare. That number over time is the working definition of "replica." A short monthly re-interview gives a test-retest baseline.
+7. **Budget for exploration.** A model that only picks what I'd pick builds a filter bubble. And if I read whatever it hands me, I converge on the model instead of the other way round. Reserve a slice (~20%) for adjacent or contrarian material.
 8. **Read-only first.** Researching and writing briefs is low-risk. Acting *as* me in the world (emails, posts, replies) is a different risk level and can wait.
 
 ## Proposed v0
 
 **Two repos.**
-- `digital_twin/` (this one): code for ingesters, the nightly loop, and evals. Public on GitHub.
-- The vault: the self-model and raw data, kept in its own private git repo *outside* this one. Code finds it through `TWIN_VAULT` in `.env`. Its `git log` becomes the record of how I changed.
+- `proxenos/` (this one): code for ingesters, the nightly loop, and evals. Public on GitHub.
+- The vault: the self-model and raw data, kept in its own private git repo *outside* this one. Code finds it through `PROXENOS_VAULT` in `.env`. Its `git log` becomes the record of how I changed.
 
 ```
 vault/
@@ -69,7 +69,7 @@ vault/
 
 **Morning:** I skim the brief and react in a line per item. Those reactions are the highest-quality signal there is. They score the predictions and feed the next night's consolidation.
 
-**Bootstrapping:** start with a structured ~2-hour interview, Stanford-style. The twin interviews me about my life story, values, how I choose what to read, and recent changes of mind. That produces the first draft of `self/`.
+**Bootstrapping:** start with a structured ~2-hour interview, Stanford-style. Proxenos interviews me about my life story, values, how I choose what to read, and recent changes of mind. That produces the first draft of `self/`.
 
 **Data I already have** (from sibling projects in `~/Documents/Personal`):
 
@@ -101,11 +101,11 @@ The v0 job is about intellectual taste, so reading, writing, and the interview c
 
 ## Ideas to borrow from Engramme
 
-Notes from [Memory is not search](https://www.engramme.com/index/memory-is-not-search). Not a competitor plan; these are the parts that fit this twin.
+Notes from [Memory is not search](https://www.engramme.com/index/memory-is-not-search). Not a competitor plan; these are the parts that fit Proxenos.
 
-- **Proactive recall, not just search.** Memory should surface what's relevant from the current situation, with no query. For the twin, that means a recall clone. Given today's calendar, open tasks and the feed, it would pull the past conversations, notes and people that bear on them, e.g. "you discussed this with X last March". Built: `twin index` and `twin clone recall`, shown on the page's Home and Memory view.
+- **Proactive recall, not just search.** Memory should surface what's relevant from the current situation, with no query. For Proxenos, that means a recall clone. Given today's calendar, open tasks and the feed, it would pull the past conversations, notes and people that bear on them, e.g. "you discussed this with X last March". Built: `proxenos index` and `proxenos clone recall`, shown on the page's Home and Memory view.
 - **Associative cues.** Useful recall often shares no words with the present. It runs through people, places, times and events. Index raw records by person, place and time, not only by text.
 - **Lossy but specific.** Keep the idiosyncratic particulars, like the place or the exact phrase, rather than generic summaries. Observers should favor concrete specifics.
 - **Grounding and abstention.** Every recalled memory or claim links to its evidence ids, and recall may return nothing when nothing fits.
-- **Right to forget.** Add a `twin forget` that removes matching raw records and notes, then re-consolidates.
+- **Right to forget.** Add a `proxenos forget` that removes matching raw records and notes, then re-consolidates.
 - **How to judge recall:** timeliness, informativeness, abstention and non-redundancy. Score it with the same useful / not-me reactions the page already collects.

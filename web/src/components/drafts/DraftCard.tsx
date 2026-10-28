@@ -53,8 +53,8 @@ export function DraftCard({ draft: d, now, flash, onCopy, onApprove, onDiscard, 
   return (
     <article
       className={cn(
-        "bg-surface border rounded-2xl p-4 sm:p-5 flex flex-col gap-3 min-w-0 transition-colors",
-        approved ? "border-ok-line/60" : "border-line",
+        "card card-hover flex min-w-0 flex-col gap-3 p-4 sm:p-5",
+        approved && "border-ok-line/60",
         flash && "row-flash",
       )}
     >

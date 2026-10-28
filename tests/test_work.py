@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin import cli, llm
-from twin.clones import work
+from proxenos import cli, llm
+from proxenos.clones import work
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 CREATED = "2026-03-10T12:00:00Z"
@@ -38,7 +38,7 @@ class FakeModel:
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
-    monkeypatch.setenv("TWIN_NAME", "Tess")
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
 
 
 @pytest.fixture
@@ -101,7 +101,7 @@ def feed_item(n, batch, score):
         "why": "Close to the spiral work.",
         "interest": "spirals",
         "explore": False,
-        "by": "twin",
+        "by": "proxenos",
     }
 
 
@@ -354,7 +354,7 @@ def test_nothing_to_do_means_no_model_call(tmp_path, model):
 
 def test_the_command_line_reads_max(tmp_path, model, monkeypatch, capsys):
     vault = make_vault(tmp_path)
-    monkeypatch.setenv("TWIN_VAULT", str(vault))
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
 
     cli.main(["clone", "work", "--max", "2"])
 

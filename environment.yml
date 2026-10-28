@@ -4,9 +4,9 @@
 # Rosetta, which caps PyTorch at 2.2 and can't run MLX at all. CONDA_SUBDIR
 # makes the env itself arm64 no matter which conda creates it:
 #   CONDA_SUBDIR=osx-arm64 conda env create -f environment.yml
-#   conda activate digital_twin
+#   conda activate proxenos
 #   conda config --env --set subdir osx-arm64   # keep later conda installs arm64
-name: digital_twin
+name: proxenos
 channels:
   - conda-forge
 dependencies:

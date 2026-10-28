@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin import config
-from twin.ingest import whatsapp
+from proxenos import config
+from proxenos.ingest import whatsapp
 
 SCHEMA = """
 create table ZWACHATSESSION (Z_PK integer primary key, ZCONTACTJID text, ZPARTNERNAME text,
@@ -161,7 +161,7 @@ def test_the_address_book_names_members_and_links_their_two_jids(tmp_path):
 
 
 def test_groups_are_a_snapshot_the_observers_skip(tmp_path):
-    from twin import observe
+    from proxenos import observe
 
     vault = tmp_path / "vault"
     whatsapp.ingest(vault, make_db(tmp_path / "c.sqlite", BASE))
@@ -172,6 +172,6 @@ def test_groups_are_a_snapshot_the_observers_skip(tmp_path):
 
 
 def test_vault_inside_the_public_repo_is_refused(monkeypatch):
-    monkeypatch.setenv("TWIN_VAULT", str(config.REPO_ROOT / "vault"))
+    monkeypatch.setenv("PROXENOS_VAULT", str(config.REPO_ROOT / "vault"))
     with pytest.raises(ValueError, match="inside the public repo"):
         config.vault_path()

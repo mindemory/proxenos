@@ -2,7 +2,7 @@
 
 import json
 
-from twin.ingest import gtasks
+from proxenos.ingest import gtasks
 
 
 def make_tasks(root):

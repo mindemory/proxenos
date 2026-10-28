@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from twin.ingest import twitter
+from proxenos.ingest import twitter
 
 ACCOUNT = [{"account": {"accountId": "1000", "username": "me_example", "email": "x@example.com"}}]
 

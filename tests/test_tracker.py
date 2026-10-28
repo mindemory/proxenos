@@ -9,8 +9,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from twin import llm
-from twin.clones import tracker
+from proxenos import llm
+from proxenos.clones import tracker
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 BATCH = "2026-03-10T12:00:00Z"
@@ -243,7 +243,7 @@ def test_without_a_profile_the_run_stops_and_says_how_to_build_one(tmp_path, mod
     (vault / "self").mkdir(parents=True)
     fake_web = web()
 
-    with pytest.raises(SystemExit, match="twin master"):
+    with pytest.raises(SystemExit, match="proxenos master"):
         track(vault, fake_web)
     assert model.calls == [] and fake_web.requested == []
 
@@ -428,7 +428,7 @@ def test_a_run_dedupes_ranks_stores_and_skips_failing_sources(tmp_path, model):
         "why": "Close to what they said about gain.",
         "interest": "memory",
         "explore": True,
-        "by": "twin",
+        "by": "proxenos",
     }
     assert items["Attractor dynamics in working memory"]["source"] == "arXiv"  # arXiv's copy wins
     assert items["Notes on rowing physiology"]["source"] == "Example Science Blog"

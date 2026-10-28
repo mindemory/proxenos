@@ -202,7 +202,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** One person: who they are, what the twin suggests for them, who they're tied to and why. */
+/** One person: who they are, what Proxenos suggests for them, who they're tied to and why. */
 export function PersonPanel({
   model,
   idx,
@@ -375,7 +375,7 @@ export function PersonPanel({
                           </span>
                         </span>
                         {e.contexts.length > 0 && (
-                          <span className="block text-xs text-muted line-clamp-2 break-words">{e.contexts.join(" · ")}</span>
+                          <span className="line-clamp-2 text-xs text-muted break-words">{e.contexts.join(" · ")}</span>
                         )}
                       </button>
                     </li>

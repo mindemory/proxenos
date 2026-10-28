@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin.ingest import chrome
+from proxenos.ingest import chrome
 
 
 def micros(*args):

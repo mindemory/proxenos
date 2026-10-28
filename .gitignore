@@ -1,7 +1,7 @@
 # ── Personal data ────────────────────────────────────────────────────────────
 # This repo is public and holds code only. Anything that *is* me (exports,
 # notes, chat logs, the compiled self-model, embeddings, research briefs)
-# lives in the vault, outside this repo (TWIN_VAULT in .env). These entries
+# lives in the vault, outside this repo (PROXENOS_VAULT in .env). These entries
 # are a backstop in case something lands here by mistake.
 # Un-ignore individual files deliberately (e.g. fixtures), never whole dirs.
 /data/

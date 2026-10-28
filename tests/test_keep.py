@@ -2,7 +2,7 @@
 
 import json
 
-from twin.ingest import keep
+from proxenos.ingest import keep
 
 # 2024-03-05T12:00:00Z, and a day before it, in microseconds.
 EDITED = 1709640000_123456

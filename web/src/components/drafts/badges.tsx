@@ -1,6 +1,6 @@
 import { Ban, FileText, ListChecks, Mail, Map, Reply, Send, type LucideIcon } from "lucide-react";
 
-import { SOURCE_ICON } from "@/components/SourceBadge";
+import { SOURCES, SourceBadge } from "@/components/SourceBadge";
 import { channelLabel, kindLabel } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 
@@ -33,10 +33,10 @@ export function KindBadge({ kind }: { kind: string }) {
 export function ChannelBadge({ channel }: { channel: string }) {
   const label = channelLabel(channel);
   if (!label) return null;
-  const Icon = SOURCE_ICON[channel] ?? Send;
+  if (SOURCES[channel]) return <SourceBadge kind={channel} label={label} />;
   return (
-    <span className={cn(BADGE, "bg-surface-2 text-ink/85")}>
-      <Icon size={12} />
+    <span className={cn(BADGE, "border border-line-strong bg-surface-2 text-ink/90")}>
+      <Send size={12} />
       {label}
     </span>
   );

@@ -1,3 +1,4 @@
+import { sourceStyle } from "@/components/SourceBadge";
 import { hasTime, plain, sameText } from "@/lib/memoryMarks";
 import type { MemoryHit } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -31,9 +32,10 @@ export function ResultRow({ hit, active, onOpen }: { hit: MemoryHit; active: boo
       <button
         onClick={onOpen}
         aria-current={active ? "true" : undefined}
+        style={sourceStyle(hit.source)}
         className={cn(
           "block w-full border-l-2 px-4 py-3 text-left transition-colors hover:bg-surface-2 sm:px-6",
-          active ? "border-accent bg-accent/10" : "border-transparent",
+          active ? "border-accent bg-accent/10" : "border-transparent hover:border-[color-mix(in_oklab,var(--src)_70%,transparent)]",
         )}
       >
         <span className="flex min-w-0 items-center gap-2 text-xs text-muted">
@@ -44,7 +46,7 @@ export function ResultRow({ hit, active, onOpen }: { hit: MemoryHit; active: boo
         </span>
         {showTitle && <span className="mt-1 block break-words font-display text-lg leading-snug text-ink">{hit.title}</span>}
         {plain(hit.snippet).trim() && (
-          <span className="mt-1 block line-clamp-3 break-words text-sm leading-relaxed text-ink/85">
+          <span className="mt-1 line-clamp-3 break-words text-sm leading-relaxed text-ink/85">
             <Marked text={hit.snippet} />
           </span>
         )}

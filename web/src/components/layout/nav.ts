@@ -21,7 +21,7 @@ export type View =
   | "advice"
   | "network"
   | "memory"
-  | "twin"
+  | "profile"
   | "status";
 
 export interface NavItem {
@@ -41,7 +41,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Lightbulb, label: "Advice", id: "advice", group: "clones" },
   { icon: Network, label: "Network", id: "network", group: "clones" },
   { icon: Brain, label: "Memory", id: "memory", group: "you" },
-  { icon: UserRound, label: "Twin", id: "twin", group: "you" },
+  { icon: UserRound, label: "Profile", id: "profile", group: "you" },
   { icon: Activity, label: "Status", id: "status", group: "you" },
 ];
 
@@ -50,3 +50,13 @@ export const PRIMARY_MOBILE: readonly View[] = ["home", "tasks", "drafts", "netw
 
 /** Small counts shown beside nav entries. */
 export type NavCounts = Partial<Record<View, number>>;
+
+/** The network view's tabs. Here rather than in the view, so the page can name them without loading it. */
+export type NetworkTab = "graph" | "list" | "projects" | "outreach";
+
+export const NETWORK_TABS: { id: NetworkTab; label: string }[] = [
+  { id: "graph", label: "Graph" },
+  { id: "list", label: "List" },
+  { id: "projects", label: "Projects" },
+  { id: "outreach", label: "Reach out" },
+];

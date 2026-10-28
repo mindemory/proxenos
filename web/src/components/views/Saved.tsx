@@ -2,7 +2,8 @@
 
 import { Bookmark } from "lucide-react";
 
-import { EmptyState, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { FeedSkeleton } from "@/components/Skeleton";
 import { ItemCard } from "@/components/feed/ItemCard";
 import { useItems } from "@/lib/client";
 
@@ -10,14 +11,14 @@ export function Saved() {
   const { data, error, flashId, react, open, clearError } = useItems("/api/items?view=saved");
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load saved items: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load saved items: ${error}`} /> : <FeedSkeleton label="Loading saved items" />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   if (data.items.length === 0) {
     return (
-      <EmptyState icon={Bookmark} title="Nothing saved yet" command="twin clone tracker">
+      <EmptyState icon={Bookmark} title="Nothing saved yet" command="proxenos clone tracker">
         Press Save on any feed item to keep it here. The feed itself comes from the tracker.
       </EmptyState>
     );

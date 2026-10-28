@@ -23,7 +23,7 @@ export interface Item {
   why: string;
   interest: string;
   explore: boolean;
-  by: string; // "twin"
+  by: string; // who made it: "proxenos"
 }
 
 /** One line of tracker/feedback.jsonl. */
@@ -65,7 +65,7 @@ export interface SelfFile {
   content: string;
 }
 
-export interface TwinResponse {
+export interface ProfileResponse {
   now: string;
   vault: VaultInfo;
   files: SelfFile[];
@@ -345,7 +345,7 @@ export interface DraftsResponse {
 export interface HomeResponse {
   now: string;
   vault: VaultInfo;
-  name: string | null; // first name from TWIN_NAME
+  name: string | null; // first name from PROXENOS_NAME
   since: string | null; // the baseline the counts below use
   feed: {
     newCount: number; // items newer than `since`, or in the latest batch when there is no baseline
@@ -407,7 +407,7 @@ export interface MemoryFacet {
 }
 
 export interface MemorySearchResponse {
-  indexed: boolean; // false until `twin index` has run
+  indexed: boolean; // false until `proxenos index` has run
   query: string;
   hits: MemoryHit[];
   /** Rows per source among everything the query matches, before the source filter. */
@@ -451,4 +451,51 @@ export interface RecallResponse {
   generated: string | null;
   now: string;
   triggers: RecallTrigger[];
+}
+
+// ── Landing: /api/summary ───────────────────────────────────────────────────
+
+export interface SummaryResponse {
+  now: string;
+  vault: VaultInfo;
+  memories: number | null; // records in the memory index; null without an index
+  people: number | null; // people in the network index; null without one
+  drafts: number | null; // drafts awaiting review; null without a drafts folder
+  sources: number; // sources with any synced data
+  lastSync: string | null; // newest sync across every source
+  /**
+   * The network's core as a picture: positions in 0..1 and a size in 0..1 per node, and
+   * pairs of node indexes per tie. No names and no ids.
+   */
+  constellation: { nodes: [number, number, number][]; edges: [number, number][] };
+}
+
+// ── Home briefing: /api/briefing ────────────────────────────────────────────
+
+export interface AgendaEvent {
+  title: string;
+  when: string; // ISO start; for an all-day event, midnight UTC of its day
+  all_day: boolean;
+}
+
+export interface ActivitySeries {
+  source: string;
+  counts: number[]; // one per day in `days`, oldest first
+  total: number;
+}
+
+export interface DraftReviews {
+  reviewed: number; // drafts with an approve, edit or discard
+  approved: number; // approved as written
+  edited: number; // edited, and not discarded since
+  discarded: number;
+  copied: number; // copy actions, all drafts
+  last: string | null; // newest review
+}
+
+export interface BriefingResponse {
+  now: string;
+  agenda: { exists: boolean; generated: string | null; events: AgendaEvent[] };
+  activity: { indexed: boolean; days: string[]; series: ActivitySeries[] };
+  reviews: DraftReviews;
 }

@@ -1,7 +1,8 @@
 // Server-side access to the private vault. Import only from route handlers.
 //
-// The vault path is TWIN_VAULT from the environment, else TWIN_VAULT from the
-// repo's root .env (one level above web/), else ~/twin_vault.
+// The vault path is PROXENOS_VAULT from the environment, else from the repo's root
+// .env (one level above web/), else ~/proxenos_vault. Every setting falls back to its
+// older TWIN_* name when the PROXENOS_* one isn't set, as the Python side does.
 //
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
@@ -53,8 +54,8 @@ import type {
   TasksResponse,
   TaskStatus,
   TaskView,
+  ProfileResponse,
   ToRead,
-  TwinResponse,
   VaultInfo,
 } from "./types";
 import { isAwaiting } from "./drafts";
@@ -98,17 +99,26 @@ function fromDotEnv(file: string, key: string): string | undefined {
   return value || undefined;
 }
 
-export function vaultPath(): string {
-  const configured =
-    process.env.TWIN_VAULT?.trim() ||
-    fromDotEnv(path.join(REPO_ROOT, ".env"), "TWIN_VAULT") ||
-    "~/twin_vault";
-  return path.resolve(REPO_ROOT, expandHome(configured));
+/**
+ * One setting: PROXENOS_<name> from the environment or the repo's .env, else the older
+ * TWIN_<name> from either. Empty values count as unset.
+ */
+export function setting(name: string): string | undefined {
+  const dotenv = path.join(REPO_ROOT, ".env");
+  for (const key of [`PROXENOS_${name}`, `TWIN_${name}`]) {
+    const value = process.env[key]?.trim() || fromDotEnv(dotenv, key);
+    if (value) return value;
+  }
+  return undefined;
 }
 
-/** First name from TWIN_NAME (environment, then the repo's .env), or null. */
+export function vaultPath(): string {
+  return path.resolve(REPO_ROOT, expandHome(setting("VAULT") ?? "~/proxenos_vault"));
+}
+
+/** First name from PROXENOS_NAME (environment, then the repo's .env), or null. */
 export function ownerName(): string | null {
-  const full = process.env.TWIN_NAME?.trim() || fromDotEnv(path.join(REPO_ROOT, ".env"), "TWIN_NAME") || "";
+  const full = setting("NAME") ?? "";
   const first = full.trim().split(/\s+/)[0] ?? "";
   return first ? first.slice(0, 40) : null;
 }
@@ -126,17 +136,17 @@ async function isDir(p: string): Promise<boolean> {
   }
 }
 
-async function vaultInfo(vault: string): Promise<VaultInfo> {
+export async function vaultInfo(vault: string): Promise<VaultInfo> {
   return { path: displayPath(vault), exists: await isDir(vault) };
 }
 
-function nowIso(): string {
+export function nowIso(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 // ── JSONL ───────────────────────────────────────────────────────────────────
 
-async function readJsonl(file: string): Promise<unknown[]> {
+export async function readJsonl(file: string): Promise<unknown[]> {
   let text: string;
   try {
     text = await fs.readFile(file, "utf8");
@@ -281,7 +291,7 @@ function toItem(raw: unknown): Item | null {
     why: str(r.why) ?? "",
     interest: str(r.interest) ?? "",
     explore: r.explore === true,
-    by: str(r.by) ?? "twin",
+    by: str(r.by) ?? "proxenos",
   };
 }
 
@@ -440,7 +450,7 @@ const SELF_ORDER = [
   "CHANGELOG.md",
 ];
 
-export async function getTwin(): Promise<TwinResponse> {
+export async function getProfile(): Promise<ProfileResponse> {
   const vault = vaultPath();
   const dir = path.join(vault, "self");
   let names: string[] = [];
@@ -522,7 +532,7 @@ async function subdirs(dir: string): Promise<string[]> {
 
 async function sourceStatus(id: string, kind: string, dir: string): Promise<SourceStatus> {
   const files = await monthFiles(dir);
-  const base = { id, kind, command: `twin ingest ${kind}` };
+  const base = { id, kind, command: `proxenos ingest ${kind}` };
   if (files.length === 0) {
     return { ...base, lastSync: null, newestMonth: null, newestMonthLines: 0, newestMonthFiles: 0 };
   }
@@ -611,7 +621,7 @@ export async function getStatus(): Promise<StatusResponse> {
 }
 
 /** Newest sync per source kind, from modification times only (no line counts). */
-async function sourceSyncs(vault: string): Promise<SourceSync[]> {
+export async function sourceSyncs(vault: string): Promise<SourceSync[]> {
   const { dirs } = await sourceDirs(path.join(vault, "raw"));
   const byKind = new Map<string, number>();
   for (const d of dirs) {
@@ -1056,12 +1066,12 @@ export async function editPeople(
 const REBUILD_MS = 120_000;
 let rebuilding: Promise<unknown> = Promise.resolve();
 
-/** The `twin` command: TWIN_BIN (environment or .env), else the first `twin` on PATH. */
-async function twinBin(): Promise<string | null> {
-  const set = process.env.TWIN_BIN?.trim() || fromDotEnv(path.join(REPO_ROOT, ".env"), "TWIN_BIN");
+/** The `proxenos` command: PROXENOS_BIN (environment or .env), else the first `proxenos` on PATH. */
+async function proxenosBin(): Promise<string | null> {
+  const set = setting("BIN");
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, "bin"));
-  for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, "twin"))) {
+  for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, "proxenos"))) {
     try {
       await fs.access(candidate, fsConstants.X_OK);
       return candidate;
@@ -1073,14 +1083,14 @@ async function twinBin(): Promise<string | null> {
 }
 
 /**
- * Rebuild people.json with `twin clone network --people-only` (no model, a few seconds), at
+ * Rebuild people.json with `proxenos clone network --people-only` (no model, a few seconds), at
  * most one at a time and each after the last, with a timeout. Never throws.
  */
 export function rebuildPeople(): Promise<PeopleEditResult> {
   const run = async (): Promise<PeopleEditResult> => {
-    const bin = await twinBin();
+    const bin = await proxenosBin();
     if (!bin) {
-      return { ok: false, saved: true, rebuilt: false, message: "Couldn't find the twin command. Set TWIN_BIN in .env." };
+      return { ok: false, saved: true, rebuilt: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
     }
     return new Promise((resolve) => {
       execFile(
@@ -1301,7 +1311,7 @@ export async function applyDraftAction(draftId: string, action: DraftAction, bod
 // ── Home ────────────────────────────────────────────────────────────────────
 
 /**
- * The newest dated section of a changelog. `twin master` appends "## YYYY-MM-DD"
+ * The newest dated section of a changelog. `proxenos master` appends "## YYYY-MM-DD"
  * and then free-form markdown that may carry its own headings, so a section runs
  * to the next dated heading, and on a repeated date the later entry wins.
  */

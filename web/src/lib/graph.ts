@@ -8,7 +8,7 @@
 
 import type { GraphThumb, Group, GroupKind, NetworkResponse, Person, Relation } from "./types";
 
-// The same as GRAPH_PEOPLE and GRAPH_EDGES in src/twin/clones/network.py.
+// The same as GRAPH_PEOPLE and GRAPH_EDGES in src/proxenos/clones/network.py.
 export const GRAPH_MAX_NODES = 600;
 export const GRAPH_MAX_EDGES = 4000;
 

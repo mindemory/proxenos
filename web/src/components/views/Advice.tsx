@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Lightbulb } from "lucide-react";
 
-import { Command, EmptyState, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
+import { Command, EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { ProseSkeleton } from "@/components/Skeleton";
 import { SuggestionCard } from "@/components/advice/SuggestionCard";
 import { useAdvice } from "@/lib/client";
 import { formatDateTime, shortDate, timeAgo } from "@/lib/format";
@@ -14,16 +15,16 @@ export function Advice({ onChange }: { onChange?: () => void }) {
   const { data, error, flashId, react, clearError } = useAdvice(date, onChange);
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load advice: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load advice: ${error}`} /> : <ProseSkeleton label="Loading advice" />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   if (!data.date) {
     return (
-      <EmptyState icon={Lightbulb} title="No advice yet" command="twin clone advisor">
+      <EmptyState icon={Lightbulb} title="No advice yet" command="proxenos clone advisor">
         The advisor compares what you do with what your profile says you want, and suggests one change at a time. It
-        writes advice once the profile exists, so run <code className="num">twin master</code> first if the Twin view is
+        writes advice once the profile exists, so run <code className="num">proxenos master</code> first if the Profile view is
         empty.
       </EmptyState>
     );
@@ -70,7 +71,7 @@ export function Advice({ onChange }: { onChange?: () => void }) {
           ))
         ) : (
           <p className="text-sm text-muted">
-            This file has no suggestions. <Command>twin clone advisor</Command> writes a new one.
+            This file has no suggestions. <Command>proxenos clone advisor</Command> writes a new one.
           </p>
         )}
         <p className="text-xs text-muted pt-2">

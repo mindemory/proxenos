@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from twin.ingest import strava
+from proxenos.ingest import strava
 
 START = datetime(2024, 1, 1, 6, 30, tzinfo=UTC)
 

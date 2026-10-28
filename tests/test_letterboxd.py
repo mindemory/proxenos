@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from twin.ingest import letterboxd
+from proxenos.ingest import letterboxd
 
 FILES = {
     "diary.csv": (

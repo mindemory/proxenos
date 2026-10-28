@@ -7,7 +7,7 @@ import stat
 
 import pytest
 
-from twin import cli, memory
+from proxenos import cli, memory
 
 
 def write_month(vault, folder, month, records):
@@ -554,7 +554,7 @@ def test_a_summary_row_has_a_context_of_itself(vault):
 
 
 def test_the_index_command_builds_and_reports(vault, monkeypatch, capsys):
-    monkeypatch.setenv("TWIN_VAULT", str(vault))
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
 
     cli.main(["index"])
     first = capsys.readouterr().out

@@ -186,7 +186,7 @@ export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, fin
 
   if (!data.people.exists) {
     return (
-      <EmptyState icon={NetworkIcon} title="No people index yet" command="twin clone network --people-only">
+      <EmptyState icon={NetworkIcon} title="No people index yet" command="proxenos clone network --people-only">
         The network clone indexes the people in your messages, mentions and reading, and who shares a chat, a thread,
         a paper or an employer with whom.
       </EmptyState>
@@ -194,7 +194,7 @@ export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, fin
   }
   if (model.nodes.length === 0) {
     return (
-      <EmptyState icon={NetworkIcon} title="No one to draw" command="twin clone network --people-only">
+      <EmptyState icon={NetworkIcon} title="No one to draw" command="proxenos clone network --people-only">
         The people index is empty. Run the network clone after syncing your sources.
       </EmptyState>
     );
@@ -458,7 +458,7 @@ export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, fin
 
         {model.edges.length === 0 && (
           <p className="absolute left-4 top-3 right-4 sm:right-auto sm:max-w-sm rounded-xl border border-line bg-surface/90 px-3 py-2 text-sm text-muted leading-relaxed">
-            No ties in this index yet. <Command>twin clone network --people-only</Command> adds who shares a chat, a thread, a
+            No ties in this index yet. <Command>proxenos clone network --people-only</Command> adds who shares a chat, a thread, a
             paper or an employer.
           </p>
         )}

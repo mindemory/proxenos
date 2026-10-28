@@ -519,7 +519,7 @@ export function useDrafts(onChange?: () => void) {
 
 // ── Last visit ──────────────────────────────────────────────────────────────
 
-const VISIT_KEY = "twin.visit";
+const VISIT_KEY = "proxenos.visit";
 const VISIT_GAP_MS = 30 * 60 * 1000;
 
 interface VisitRecord {

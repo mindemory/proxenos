@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Brain, Search, X } from "lucide-react";
 
-import { EmptyState, ErrorBanner, LoadingRows } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner } from "@/components/EmptyState";
+import { ResultSkeleton } from "@/components/Skeleton";
 import { ContextPanel } from "@/components/memory/ContextPanel";
 import { ResultRow } from "@/components/memory/ResultRow";
 import { MemorySourceIcon, memorySourceLabel } from "@/components/memory/sources";
@@ -157,9 +158,9 @@ export function Memory({ initial, onConsumed }: MemoryProps) {
         {error && !data ? (
           <ErrorBanner message={`Couldn't search: ${error}`} />
         ) : !data ? (
-          <LoadingRows />
+          <ResultSkeleton />
         ) : !data.indexed ? (
-          <EmptyState icon={Brain} title="Nothing is indexed yet" command="twin index">
+          <EmptyState icon={Brain} title="Nothing is indexed yet" command="proxenos index">
             Memory search reads an index of everything in the vault. Build it once, and syncs keep it current.
           </EmptyState>
         ) : !filtered ? (

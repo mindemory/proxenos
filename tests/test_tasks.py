@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from twin import llm
-from twin.clones import tasks
+from proxenos import llm
+from proxenos.clones import tasks
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
@@ -167,8 +167,8 @@ class FakeModel:
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
-    monkeypatch.delenv("TWIN_EMAILS", raising=False)
-    monkeypatch.delenv("TWIN_NAME", raising=False)
+    monkeypatch.delenv("PROXENOS_EMAILS", raising=False)
+    monkeypatch.delenv("PROXENOS_NAME", raising=False)
 
 
 @pytest.fixture
@@ -265,7 +265,7 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "Your build passed",
         "Claim your prize",
         "Talk on Friday",
-        "Sent to my other address",  # mine, but only TWIN_EMAILS could say so
+        "Sent to my other address",  # mine, but only PROXENOS_EMAILS could say so
         "15550001111",  # never a phone number
     ]
     assert [text for text in kept if text not in prompt] == []
@@ -287,8 +287,8 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
     assert saved(vault) == {"generated": GENERATED, "tasks": []}
 
 
-def test_my_other_addresses_come_from_twin_emails(tmp_path, model, monkeypatch):
-    monkeypatch.setenv("TWIN_EMAILS", " Alias@Example.com ,")
+def test_my_other_addresses_come_from_proxenos_emails(tmp_path, model, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", " Alias@Example.com ,")
     vault = make_vault(tmp_path)
 
     tasks.plan(vault, now=NOW)

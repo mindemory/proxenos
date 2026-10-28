@@ -57,7 +57,7 @@ const FALLBACK: Theme = {
   accent: "#a3b1ff",
   ink: "#ebe8e2",
   muted: "#9ca2ad",
-  bg: "#0f1114",
+  bg: "#0e1013",
   font: "system-ui, sans-serif",
 };
 

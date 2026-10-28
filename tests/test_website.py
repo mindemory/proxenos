@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from twin.ingest import website
+from proxenos.ingest import website
 
 FIRST = "2023-01-15T10:00:00-05:00"
 SECOND = "2024-06-01T12:00:00+00:00"

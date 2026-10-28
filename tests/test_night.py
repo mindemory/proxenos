@@ -1,16 +1,16 @@
-"""`twin night` with the master and every clone faked out. No network, no model, no real data."""
+"""`proxenos night` with the master and every clone faked out. No network, no model, no real data."""
 
 import pytest
 
-from twin import cli, llm, master
-from twin.clones import advisor, network, recall, tasks, tracker, work
+from proxenos import cli, llm, master
+from proxenos.clones import advisor, network, recall, tasks, tracker, work
 
 
 @pytest.fixture
 def steps(tmp_path, monkeypatch):
     """Fakes every step to record its call and return one count; returns the call log."""
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
-    monkeypatch.setenv("TWIN_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path / "vault"))
     calls = []
 
     def fake_master(vault, since=None):

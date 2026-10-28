@@ -1,10 +1,10 @@
 # Roadmap: from suggesting to acting
 
-The twin's job is to do my work while I'm away, not to describe me. Everything so far (sources, the self-model, clones) is the groundwork for that. This plan moves it up one level of autonomy at a time. Each step is earned per channel by measured accuracy, not granted all at once.
+Proxenos's job is to do my work while I'm away, not to describe me. Everything so far (sources, the self-model, clones) is the groundwork for that. This plan moves it up one level of autonomy at a time. Each step is earned per channel by measured accuracy, not granted all at once.
 
 ## Levels
 
-| Level | The twin... | Status |
+| Level | Proxenos... | Status |
 |---|---|---|
 | 0. Observe | ingests every source and keeps a self-model current | done |
 | 1. Suggest | ranks the feed, lists tasks, advises, maps the network | done |
@@ -15,9 +15,9 @@ The twin's job is to do my work while I'm away, not to describe me. Everything s
 
 ## The gate between levels
 
-A channel (Gmail, Slack, calendar, Notion, GitHub, ...) moves up a level only when the twin's work there is consistently right:
+A channel (Gmail, Slack, calendar, Notion, GitHub, ...) moves up a level only when Proxenos's work there is consistently right:
 - **Drafts:** at least 80% approved with light edits over two weeks, measured from the Drafts view's approve, edit and discard log.
-- **Predictions:** the twin predicts my reactions to its own picks before I make them, and its hit rate is tracked.
+- **Predictions:** Proxenos predicts my reactions to its own picks before I make them, and its hit rate is tracked.
 
 A channel that slips drops back a level automatically.
 
@@ -26,7 +26,7 @@ A channel that slips drops back a level automatically.
 **Week 1: finish the ground.**
 - Observer notes for every source, and a self-model refresh.
 - Network corrections: real memberships, merged identities, aliases I can fix from the page.
-- An ANTHROPIC_API_KEY and `scripts/install-night.sh`, so `twin night` runs every night with no session.
+- An ANTHROPIC_API_KEY and `scripts/install-night.sh`, so `proxenos night` runs every night with no session.
 - An evaluation harness for the gate: draft approval and edit rates, and reaction predictions.
 
 **Week 2: act on approval (level 3).**

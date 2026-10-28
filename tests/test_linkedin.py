@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from twin.ingest import linkedin
+from proxenos.ingest import linkedin
 
 NOTES = [
     ["Notes:"],

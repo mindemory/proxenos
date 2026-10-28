@@ -25,7 +25,7 @@ export function NetworkThumb({ onOpen }: { onOpen: () => void }) {
   if (error) return <p className="text-sm text-muted">Couldn&apos;t load the graph.</p>;
   if (!data) return <div className="h-44 rounded-xl bg-bg animate-pulse" aria-busy="true" />;
   if (!data.exists) {
-    return <QuietLine command="twin clone network --people-only">No people index yet:</QuietLine>;
+    return <QuietLine command="proxenos clone network --people-only">No people index yet:</QuietLine>;
   }
 
   return (

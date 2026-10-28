@@ -5,7 +5,7 @@ import os
 import zipfile
 from datetime import UTC, datetime
 
-from twin.ingest import drive
+from proxenos.ingest import drive
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 A = (

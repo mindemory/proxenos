@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Ellipsis, RefreshCw, X } from "lucide-react";
+import { DoorOpen, Ellipsis, RefreshCw, X } from "lucide-react";
 
+import { Logo, Wordmark } from "@/components/Logo";
+import { forgetEntered } from "@/lib/entry";
 import { cn } from "@/lib/utils";
 
 import { NAV_ITEMS, PRIMARY_MOBILE, type NavCounts, type NavItem, type View } from "./nav";
@@ -86,7 +89,10 @@ export function MobileNav({ onNavigate, currentView, hasNew = false, counts = {}
           <div className="sheet-in absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-line-strong bg-surface px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" aria-hidden="true" />
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-display text-xl text-ink">More</h2>
+              <h2 className="flex items-center gap-2">
+                <Logo size={22} className="text-accent" />
+                <Wordmark className="text-2xl" />
+              </h2>
               <button ref={close} onClick={() => setOpen(false)} aria-label="Close" className="p-2 -m-2 rounded-full text-muted hover:text-ink">
                 <X size={20} />
               </button>
@@ -122,16 +128,26 @@ export function MobileNav({ onNavigate, currentView, hasNew = false, counts = {}
                 );
               })}
             </ul>
-            <button
-              onClick={() => {
-                setOpen(false);
-                onRefresh();
-              }}
-              className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl border border-line-strong py-3 text-sm text-ink hover:bg-surface-2"
-            >
-              <RefreshCw size={16} />
-              Refresh everything
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onRefresh();
+                }}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-line-strong py-3 text-sm text-ink hover:bg-surface-2"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+              <Link
+                href="/"
+                onClick={forgetEntered}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-line-strong py-3 text-sm text-ink hover:bg-surface-2"
+              >
+                <DoorOpen size={16} />
+                Landing page
+              </Link>
+            </div>
           </div>
         </div>
       )}

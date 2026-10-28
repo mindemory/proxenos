@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin.ingest import threads
+from proxenos.ingest import threads
 
 
 def seconds(*args):

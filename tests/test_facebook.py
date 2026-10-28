@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin.ingest import facebook
+from proxenos.ingest import facebook
 
 
 def seconds(*args):

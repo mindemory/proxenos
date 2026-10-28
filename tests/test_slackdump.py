@@ -3,7 +3,7 @@
 import json
 import sqlite3
 
-from twin.ingest import slackdump
+from proxenos.ingest import slackdump
 
 SCHEMA = """
 create table WORKSPACE (ID integer, LOAD_DTTM text, TEAM text, TEAM_ID text, USER_ID text);

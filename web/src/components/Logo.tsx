@@ -1,6 +1,6 @@
 /**
- * The mark: a filled disc and its outline, offset and overlapping. One is you,
- * the other the model of you; the overlap is the part the twin gets right.
+ * The mark: a filled disc and its outline, offset and overlapping. One is you, the other the
+ * one who acts for you; the overlap is where Proxenos gets you right.
  * Drawn inline so it takes `currentColor` and needs no asset.
  */
 export function Logo({ size = 28, className = "" }: { size?: number; className?: string }) {
@@ -12,11 +12,7 @@ export function Logo({ size = 28, className = "" }: { size?: number; className?:
   );
 }
 
+/** The name, set in the classical face. */
 export function Wordmark({ className = "" }: { className?: string }) {
-  return (
-    <span className={`flex items-center gap-2.5 ${className}`}>
-      <Logo className="text-accent" />
-      <span className="font-display text-[1.65rem] leading-none tracking-tight text-ink">Twin</span>
-    </span>
-  );
+  return <span className={`font-brand leading-none tracking-[0.01em] text-ink ${className}`}>Proxenos</span>;
 }

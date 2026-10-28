@@ -1,6 +1,7 @@
 import { Compass, Sparkles } from "lucide-react";
 
-import { EmptyState, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { FeedSkeleton } from "@/components/Skeleton";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { FeedItem, ItemsResponse, Reaction } from "@/lib/types";
 
@@ -20,14 +21,14 @@ interface FeedProps {
 
 export function Feed({ data, error, flashId, tab, onReact, onOpen, onDismissError }: FeedProps) {
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load the feed: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load the feed: ${error}`} /> : <FeedSkeleton />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   if (data.items.length === 0) {
     return (
-      <EmptyState icon={Sparkles} title="No items yet" command="twin clone tracker">
+      <EmptyState icon={Sparkles} title="No items yet" command="proxenos clone tracker">
         The tracker fetches papers, news and posts every few hours and ranks them against your profile. Run it once to
         fill this feed.
       </EmptyState>
@@ -42,7 +43,7 @@ export function Feed({ data, error, flashId, tab, onReact, onOpen, onDismissErro
       <EmptyState
         icon={explore ? Compass : Sparkles}
         title={explore ? "Nothing to explore in these batches" : "Nothing picked for you in these batches"}
-        command="twin clone tracker"
+        command="proxenos clone tracker"
       >
         {explore
           ? "About a fifth of each batch is adjacent or contrarian material. The next batch should bring some."

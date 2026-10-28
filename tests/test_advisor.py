@@ -7,8 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from twin import llm
-from twin.clones import advisor
+from proxenos import llm
+from proxenos.clones import advisor
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
@@ -175,7 +175,7 @@ class FakeModel:
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
-    monkeypatch.delenv("TWIN_NAME", raising=False)
+    monkeypatch.delenv("PROXENOS_NAME", raising=False)
 
 
 @pytest.fixture
@@ -203,7 +203,7 @@ def test_without_a_self_model_it_stops_and_says_how_to_build_one(tmp_path, model
     for name, text in files.items():
         write(vault / "self" / name, text)
 
-    with pytest.raises(SystemExit, match="`twin master` builds it"):
+    with pytest.raises(SystemExit, match="`proxenos master` builds it"):
         advisor.advise(vault, now=NOW)
     assert model.calls == []
 
@@ -236,7 +236,7 @@ def test_the_model_gets_the_self_model_three_months_of_evidence_and_earlier_advi
     assert positions == sorted(positions) and "TOO OLD" not in prompt
     assert "Seen in observations/slack/lab/2026-02.md." in prompt
 
-    assert '# Task list, kept by the twin from their recent messages (cite as "tasks")' in prompt
+    assert '# Task list, kept up to date from their recent messages (cite as "tasks")' in prompt
     assert "1 open, 1 waiting, 0 done lately." in prompt
     assert (
         "- [open, high, due 2026-03-12] Submit the travel form. Prof asked for it. "

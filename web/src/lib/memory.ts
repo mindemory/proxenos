@@ -1,17 +1,18 @@
 // Server-side access to the memory index (vault/memory/index.sqlite) and to today's recall
 // (vault/clones/recall/today.json). Import only from route handlers.
 //
-// The index is written by `twin index` and only ever read here: each request opens it read-only,
+// The index is written by `proxenos index` and only ever read here: each request opens it read-only,
 // runs parameterised queries and closes it, so a rebuild that swaps the file in is picked up at
 // once. SQLite comes from Node itself (node:sqlite, Node 22.13 or newer), so there is no native
 // package to install. Text typed by the reader is never put into SQL, and is quoted word by word
 // before it reaches FTS5, so it can't mean anything but words; ftsQuery mirrors fts_query in
-// src/twin/memory.py.
+// src/proxenos/memory.py.
 
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
 import type {
+  ActivitySeries,
   MemoryContextResponse,
   MemoryFacet,
   MemoryHit,
@@ -274,7 +275,7 @@ function toRecord(r: Record<string, unknown>, target: boolean): MemoryRecord {
 /**
  * The record and up to `before` and `after` of its neighbours in the same chat, channel or mail
  * thread (or the same source and day), oldest first. Null for an id the index doesn't have.
- * Same records as `twin.memory.context`, taken from the index instead of the month files.
+ * Same records as `proxenos.memory.context`, taken from the index instead of the month files.
  */
 export function memoryContext(id: string, before = 10, after = 10): MemoryContextResponse | null {
   return withIndex<MemoryContextResponse | null>(null, (db) => {
@@ -359,4 +360,65 @@ export async function getRecall(): Promise<RecallResponse> {
     .map(recallTrigger)
     .filter((t): t is RecallTrigger => t !== null);
   return { exists: true, generated: text(d.generated) || null, now, triggers };
+}
+
+// ── Counts and activity ─────────────────────────────────────────────────────
+
+/** How many records the index holds, from its per-file counts (no scan). Null without an index. */
+export function memoryCount(): number | null {
+  return withIndex<number | null>(null, (db) => {
+    const row = db.prepare("SELECT coalesce(sum(records), 0) AS n FROM files").get();
+    return row ? Number(row.n) : 0;
+  });
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/**
+ * Records per source per day for the last `days` days (today included), by the server's
+ * local calendar. Only the month files those days fall in are read, through the index on
+ * `file`, so this stays quick on a large index.
+ */
+export function memoryActivity(days = 30, now = new Date()): { indexed: boolean; days: string[]; series: ActivitySeries[] } {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const labels: string[] = [];
+  for (let i = 0; i < days; i++) labels.push(dayOf(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)));
+
+  // Month files are named by UTC month; the window's UTC months, with a day to spare each side.
+  const months = new Set<string>();
+  for (let t = start.getTime() - 86_400_000; t <= now.getTime() + 86_400_000; t += 86_400_000) {
+    months.add(new Date(t).toISOString().slice(0, 7));
+  }
+  const globs = [...months].map((m) => `*/${m}.jsonl`);
+  const empty = { indexed: false, days: labels, series: [] as ActivitySeries[] };
+
+  return withIndex(empty, (db) => {
+    const rows = db
+      .prepare(
+        `SELECT source, substr(ts, 1, 13) AS hour, count(*) AS n FROM records
+         WHERE file IN (SELECT path FROM files WHERE ${globs.map(() => "path GLOB ?").join(" OR ")})
+           AND ts >= ? AND ts <= ?
+         GROUP BY source, hour`,
+      )
+      .all(...globs, start.toISOString().slice(0, 13), now.toISOString());
+    const index = new Map(labels.map((d, i) => [d, i]));
+    const bySource = new Map<string, number[]>();
+    for (const r of rows) {
+      // An hour bucket ("2026-10-28T14") to the local day it falls in; a bare date is that day.
+      const hour = String(r.hour);
+      const local = hour.length >= 13 ? dayOf(new Date(`${hour}:00:00Z`)) : hour.slice(0, 10);
+      const i = index.get(local);
+      if (i === undefined) continue;
+      const source = String(r.source);
+      const counts = bySource.get(source) ?? new Array<number>(days).fill(0);
+      counts[i] += Number(r.n);
+      bySource.set(source, counts);
+    }
+    const series = [...bySource]
+      .map(([source, counts]) => ({ source, counts, total: counts.reduce((a, b) => a + b, 0) }))
+      .filter((s) => s.total > 0)
+      .sort((a, b) => b.total - a.total || a.source.localeCompare(b.source));
+    return { indexed: true, days: labels, series };
+  });
 }

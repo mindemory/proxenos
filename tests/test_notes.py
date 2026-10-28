@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin.ingest import notes
+from proxenos.ingest import notes
 
 HEX = "0123456789abcdef0123456789abcdef"
 HEX2 = "fedcba9876543210fedcba9876543210"

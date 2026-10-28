@@ -42,7 +42,8 @@ export function SuggestionCard({
   return (
     <article
       className={cn(
-        "bg-surface border border-line rounded-2xl p-4 sm:p-5 space-y-4 transition-opacity",
+        "card space-y-4 p-4 transition-opacity sm:p-5",
+        compact && "tile shadow-none",
         flash && "row-flash",
         s.action === "not_me" && "opacity-60 hover:opacity-90",
       )}
@@ -66,8 +67,10 @@ export function SuggestionCard({
 
       {/* The citation card: the one thing to take away. */}
       <div className="rounded-xl border border-accent/25 bg-accent/[0.06] p-4">
-        <div className="text-[11px] leading-4 font-medium uppercase tracking-[0.08em] text-accent mb-1.5">Try instead</div>
-        <p className="font-display text-xl leading-snug text-ink break-words">{s.suggestion}</p>
+        <div className="smallcaps mb-1.5 text-accent">Try instead</div>
+        <p className={cn("break-words font-display leading-snug text-ink", compact ? "line-clamp-6 text-[1.0625rem]" : "text-xl")}>
+          {s.suggestion}
+        </p>
       </div>
 
       {!compact && s.why && (

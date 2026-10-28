@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from twin import llm
-from twin.clones import network
+from proxenos import llm
+from proxenos.clones import network
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
@@ -88,9 +88,9 @@ Saw Theo Margin at the poster, with Dr. Tess Wintest.
 
 
 def make_vault(tmp_path, monkeypatch, notes=True):
-    monkeypatch.setenv("TWIN_NAME", "Tess")
-    monkeypatch.setenv("TWIN_FULL_NAME", "Tess Wintest")
-    monkeypatch.setenv("TWIN_EMAILS", ME)
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    monkeypatch.setenv("PROXENOS_FULL_NAME", "Tess Wintest")
+    monkeypatch.setenv("PROXENOS_EMAILS", ME)
     vault = tmp_path / "vault"
     raw = vault / "raw"
     write_jsonl(
@@ -605,7 +605,7 @@ def test_without_a_self_model_it_stops(tmp_path, monkeypatch):
     vault = make_vault(tmp_path, monkeypatch)
     write(vault / "self" / "CHANGELOG.md", "## history only")
     monkeypatch.setattr(llm, "ask", no_model)
-    with pytest.raises(SystemExit, match="twin master"):
+    with pytest.raises(SystemExit, match="proxenos master"):
         network.build(vault, now=NOW)
 
 
@@ -839,9 +839,9 @@ def test_ideas(tmp_path, monkeypatch):
 def connected_vault(tmp_path, monkeypatch):
     """People who share groups: Ann and Ben four ways, Ann with Cy, Eve and Fay, and others
     with a company in common. Names are made up; Tess is me and in every context."""
-    monkeypatch.setenv("TWIN_NAME", "Tess")
-    monkeypatch.setenv("TWIN_FULL_NAME", "Tess Wintest")
-    monkeypatch.setenv("TWIN_EMAILS", ME)
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    monkeypatch.setenv("PROXENOS_FULL_NAME", "Tess Wintest")
+    monkeypatch.setenv("PROXENOS_EMAILS", ME)
     vault = tmp_path / "vault"
     raw = vault / "raw"
     write_jsonl(
@@ -1126,7 +1126,7 @@ def test_a_big_group_stays_big_when_few_of_it_are_connected():
 
 
 def test_papers_with_no_id_or_title_are_no_group(tmp_path, monkeypatch):
-    monkeypatch.setenv("TWIN_NAME", "Tess Wintest")
+    monkeypatch.setenv("PROXENOS_NAME", "Tess Wintest")
     vault = tmp_path / "vault"
     write_jsonl(
         vault / "raw" / "mentions" / "works" / "2025-05.jsonl",
@@ -1169,9 +1169,9 @@ def identity_vault(tmp_path, monkeypatch, cohort_extra=()):
     """A lab group on WhatsApp where Tori goes by her first name, a cohort channel on Slack
     where she has her full name, and a flatmate saved as "Raj Flatmate" on one jid who writes as
     Raj Tester on the other and by email. All made up; Tess is me."""
-    monkeypatch.setenv("TWIN_NAME", "Tess")
-    monkeypatch.setenv("TWIN_FULL_NAME", "Tess Wintest")
-    monkeypatch.setenv("TWIN_EMAILS", ME)
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    monkeypatch.setenv("PROXENOS_FULL_NAME", "Tess Wintest")
+    monkeypatch.setenv("PROXENOS_EMAILS", ME)
     vault = tmp_path / "vault"
     raw = vault / "raw"
     me = [member("900@lid", push="Tess Wintest", alt="900@s.whatsapp.net")]

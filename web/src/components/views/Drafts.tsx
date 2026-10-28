@@ -4,20 +4,21 @@ import { useState } from "react";
 import { PenLine, ShieldCheck } from "lucide-react";
 
 import { DraftCard } from "@/components/drafts/DraftCard";
-import { EmptyState, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
 import { groupDrafts, isAwaiting } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 
 type Show = "awaiting" | "approved";
 
-/** The twin acting as you: replies, emails, plans and docs it wrote, waiting for you to approve. */
+/** Proxenos acting as you: replies, emails, plans and docs it wrote, waiting for you to approve. */
 export function Drafts({ onChange }: { onChange?: () => void }) {
   const { data, error, flashId, approve, discard, edit, copy, clearError } = useDrafts(onChange);
   const [show, setShow] = useState<Show>("awaiting");
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load the drafts: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load the drafts: ${error}`} /> : <DraftSkeleton />;
   }
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
@@ -29,8 +30,8 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
     return (
       <div className="pb-24 md:pb-20">
         {error && <ErrorBanner message={error} onDismiss={clearError} />}
-        <EmptyState icon={PenLine} title="No drafts yet" command="twin clone work">
-          Drafts appear when the twin works through your tasks, outreach, projects and reading: replies, emails, plans
+        <EmptyState icon={PenLine} title="No drafts yet" command="proxenos clone work">
+          Drafts appear when Proxenos works through your tasks, outreach, projects and reading: replies, emails, plans
           and notes written as you, waiting here for your approval. Nothing is ever sent for you.
         </EmptyState>
       </div>

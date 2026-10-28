@@ -9,8 +9,8 @@ Goal: a page I keep open while I work. Every few hours it shows new things worth
    - **News and blogs:** RSS feeds from a list in the vault. Seed the list from the domains I actually share on WhatsApp. Add newsletters I open or reply to.
    - **Hacker News:** front page plus topic search.
 2. **Rank.** An LLM reads `self/interests.md`, `self/taste.md` and recent feedback. It scores each candidate: relevance, one line on why it matters to *me*, and which interest it hits. Keep ~20% of slots for exploration (adjacent or contrarian material) so the feed doesn't harden into a bubble.
-3. **Store** in `$TWIN_VAULT/tracker/items/<date>.jsonl`, deduplicated by URL.
-4. **React.** On the page I mark items useful, not-me, or save. Opening an item is logged too. Feedback goes to `$TWIN_VAULT/tracker/feedback.jsonl`. This is the "morning reaction" signal from the landscape doc, at a few-hours cadence. It scores the twin's predictions and feeds the next profile update.
+3. **Store** in `$PROXENOS_VAULT/tracker/items/<date>.jsonl`, deduplicated by URL.
+4. **React.** On the page I mark items useful, not-me, or save. Opening an item is logged too. Feedback goes to `$PROXENOS_VAULT/tracker/feedback.jsonl`. This is the "morning reaction" signal from the landscape doc, at a few-hours cadence. It scores Proxenos's predictions and feeds the next profile update.
 
 ## The page
 
@@ -24,12 +24,12 @@ Goal: a page I keep open while I work. Every few hours it shows new things worth
 - **Views:**
   - **Feed:** new items, refreshed when a batch lands.
   - **Saved.**
-  - **Twin:** what it currently thinks my interests are. This view is editable, so I can correct it directly.
+  - **Profile:** what it currently thinks my interests are. This view is editable, so I can correct it directly.
   - **Status:** when each source last synced.
 
 ## Where it runs
 
-A launchd job runs `twin ingest` for each source, then `twin track`, every ~3 hours. A closed laptop means no run; it catches up next time.
+A launchd job runs `proxenos ingest` for each source, then `proxenos clone tracker`, every ~3 hours. A closed laptop means no run; it catches up next time.
 
 ## Before building
 

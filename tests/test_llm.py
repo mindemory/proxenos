@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from twin import llm
+from proxenos import llm
 
 
 class FakeMessages:

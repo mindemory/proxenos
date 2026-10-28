@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from twin.ingest import email as email_ingest
+from proxenos.ingest import email as email_ingest
 
 # Used when a message doesn't bring its own From_ line.
 FROM_LINE = "From sender@example.com Sat Feb  1 00:00:00 2025"
@@ -225,7 +225,7 @@ def test_encoded_headers_and_bad_charsets_are_decoded_not_fatal(tmp_path):
     assert bad["subject"].endswith("byte") and "�" in bad["subject"]
 
 
-def test_from_me_matches_my_addresses_and_falls_back_to_twin_emails(tmp_path, monkeypatch):
+def test_from_me_matches_my_addresses_and_falls_back_to_proxenos_emails(tmp_path, monkeypatch):
     mbox = make_mbox(tmp_path / "m.mbox", [ALTERNATIVE, GMAIL_REPLY])
     assert by_id(mbox)["reply-1@example.com"]["from_me"] is True  # case-insensitive
 
@@ -237,7 +237,7 @@ def test_from_me_matches_my_addresses_and_falls_back_to_twin_emails(tmp_path, mo
         lines = [line for path in out.iterdir() for line in path.read_text().splitlines()]
         return {r["id"]: r["from_me"] for r in map(json.loads, lines)}
 
-    monkeypatch.setenv("TWIN_EMAILS", "old@example.org, ME@example.com")
+    monkeypatch.setenv("PROXENOS_EMAILS", "old@example.org, ME@example.com")
     assert from_me([]) == {"alt-1@example.com": False, "reply-1@example.com": True}
     # An explicit --me replaces the env var.
     assert from_me(["old@example.org"]) == {

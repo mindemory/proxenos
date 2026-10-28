@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Twin is always dark: a quiet ground for reading late, with one cool accent.
+   Proxenos is always dark: a quiet ground for reading late, with one cool accent.
 
    The accent is periwinkle on purpose. Green, amber and red are reserved for
    state (done, due soon, overdue; confident, unsure), so the colour that marks
@@ -17,13 +17,15 @@
 :root {
   color-scheme: dark;
 
-  --c-bg: #0f1114; /* page ground */
-  --c-surface: #171a1f; /* cards, sidebars */
-  --c-surface-2: #1f232a; /* chips, hover, raised controls */
-  --c-ink: #ebe8e2; /* body text, warm off-white: 15:1 on the ground */
-  --c-muted: #9ca2ad; /* secondary text: 7:1 on the ground, 6.8:1 on surface */
-  --c-line: #272b33; /* hairlines */
-  --c-line-strong: #363b46; /* control borders */
+  --c-bg: #0e1013; /* page ground */
+  --c-surface: #161920; /* cards, sidebars */
+  --c-surface-2: #1e222a; /* chips, hover, raised controls */
+  --c-surface-3: #262b34; /* a raised control under the pointer */
+  --c-ink: #ece9e3; /* body text, warm off-white: 15.7:1 on the ground */
+  --c-muted: #9ea4af; /* secondary text: 7.6:1 on the ground, 7:1 on surface, 6.4:1 on surface-2 */
+  --c-faint: #7d838f; /* tertiary labels: 5:1 on the ground, 4.6:1 on surface; never on surface-2 */
+  --c-line: #252930; /* hairlines */
+  --c-line-strong: #353b46; /* control borders */
   --c-accent: #a3b1ff; /* periwinkle: 9:1 on the ground */
   --c-accent-ink: #0d1020; /* text on an accent fill */
 
@@ -60,14 +62,21 @@
 @theme {
   --color-*: initial;
   --shadow-pop: 0 10px 30px -10px rgb(0 0 0 / 0.7);
+  /* Resting cards: a hairline of light on the top edge and a short contact shadow. */
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 1px 2px rgb(0 0 0 / 0.35);
+  /* A card the pointer is on: lifted a little off the ground. */
+  --shadow-raise: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 14px 32px -14px rgb(0 0 0 / 0.75),
+    0 3px 8px -3px rgb(0 0 0 / 0.5);
 }
 
 @theme inline {
   --color-bg: var(--c-bg);
   --color-surface: var(--c-surface);
   --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
   --color-ink: var(--c-ink);
   --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
   --color-line: var(--c-line);
   --color-line-strong: var(--c-line-strong);
   --color-accent: var(--c-accent);
@@ -87,9 +96,11 @@
   --color-rel-know: var(--c-rel-know);
   --color-rel-read: var(--c-rel-read);
 
-  /* Body in Geist, headings in Newsreader, every number in Geist Mono. */
+  /* Body in Geist, headings in Newsreader, every number in Geist Mono, and the name itself in
+     EB Garamond, a classical face kept for the wordmark and the landing. */
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-newsreader), ui-serif, "Iowan Old Style", Georgia, serif;
+  --font-brand: var(--font-garamond), "Iowan Old Style", Garamond, Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -112,6 +123,55 @@
   color: var(--c-muted);
 }
 
+/* ---------------------------------------------------------------------------
+   Type scale. Five steps and a label, each with its own leading and tracking:
+     display  the wordmark on the landing
+     title-1  a view's heading and the greeting (Newsreader)
+     title-2  a card's or section's heading
+     title-3  an item's title inside a card
+     lede     the sentence under a heading
+     smallcaps  a section label: small capitals, tracked out
+--------------------------------------------------------------------------- */
+
+@utility title-1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 1.4rem + 1.6vw, 2.625rem);
+  line-height: 1.08;
+  letter-spacing: -0.018em;
+  font-weight: 400;
+  color: var(--c-ink);
+}
+
+@utility title-2 {
+  font-family: var(--font-display);
+  font-size: 1.3125rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--c-ink);
+}
+
+@utility title-3 {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  color: var(--c-ink);
+}
+
+@utility lede {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--c-muted);
+}
+
+@utility smallcaps {
+  font-size: 0.8125rem;
+  line-height: 1rem;
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.09em;
+  color: var(--c-muted);
+}
+
 html,
 body {
   background: var(--c-bg);
@@ -131,6 +191,100 @@ body {
 :focus-visible {
   outline: 2px solid var(--c-accent);
   outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Cards. A resting card has a hairline border and a contact shadow; one you
+   can act on lifts a little under the pointer and shows a ring while
+   something inside it has keyboard focus.
+--------------------------------------------------------------------------- */
+
+@layer components {
+  .card {
+    border: 1px solid var(--c-line);
+    background: var(--c-surface);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-card);
+    transition:
+      border-color 160ms ease,
+      box-shadow 200ms ease,
+      transform 200ms cubic-bezier(0.2, 0.7, 0.3, 1),
+      background-color 160ms ease;
+  }
+
+  .card-hover:hover {
+    border-color: var(--c-line-strong);
+    box-shadow: var(--shadow-raise);
+  }
+
+  .card-hover:focus-within:has(:focus-visible) {
+    border-color: color-mix(in oklab, var(--c-accent) 45%, var(--c-line-strong));
+  }
+
+  /* The cards that ask something of the reader today: a warmer edge along the top. */
+  .card-priority {
+    border-color: color-mix(in oklab, var(--c-accent) 22%, var(--c-line));
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--c-accent) 6%, transparent), transparent 9rem),
+      var(--c-surface);
+  }
+
+  /* A quieter card: outline only, for what's there when wanted. */
+  .card-quiet {
+    background: color-mix(in oklab, var(--c-surface) 55%, transparent);
+    box-shadow: none;
+  }
+
+  /* A row or tile inside a card. */
+  .tile {
+    border: 1px solid var(--c-line);
+    background: color-mix(in oklab, var(--c-bg) 45%, transparent);
+    border-radius: 0.75rem;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      box-shadow 200ms ease,
+      transform 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .tile-hover:hover {
+    border-color: var(--c-line-strong);
+    background: var(--c-surface-2);
+  }
+
+  /* Skeleton blocks shimmer while a view loads. */
+  .skeleton {
+    background: var(--c-surface-2);
+    border-radius: 0.375rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-hover:hover,
+  .tile-hover:hover {
+    transform: translateY(-1px);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+        100deg,
+        transparent 20%,
+        color-mix(in oklab, var(--c-ink) 5%, transparent) 50%,
+        transparent 80%
+      )
+      var(--c-surface-2);
+    background-size: 220% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -164,6 +318,28 @@ body {
   /* Marks the row an action just touched, so a change in a long list is findable. */
   .row-flash {
     animation: row-flash 1400ms ease-out both;
+  }
+
+  /* The landing's words: each line rises into place a moment after the one above. */
+  .landing-in > * {
+    animation: landing-in 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .landing-in > :nth-child(2) {
+    animation-delay: 80ms;
+  }
+  .landing-in > :nth-child(3) {
+    animation-delay: 220ms;
+  }
+  .landing-in > :nth-child(n + 4) {
+    animation-delay: 380ms;
+  }
+}
+
+@keyframes landing-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
   }
 }
 

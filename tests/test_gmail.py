@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from twin.ingest import gmail
+from proxenos.ingest import gmail
 
 
 def message(msgid, sender, to, subject, date="Fri, 31 Jan 2025 10:00:00 +0000"):

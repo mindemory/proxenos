@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Network as NetworkIcon, Search } from "lucide-react";
 
-import { EmptyState, ErrorBanner, LoadingRows, NoVault, QuietLine } from "@/components/EmptyState";
+import { EmptyState, ErrorBanner, NoVault, QuietLine } from "@/components/EmptyState";
+import { GraphSkeleton } from "@/components/Skeleton";
 import { GraphView } from "@/components/network/GraphView";
 import { Actions, Citation, Generated, Label, RELATION_LABEL, type OnReact } from "@/components/network/parts";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -12,14 +13,9 @@ import { formatDateTime, shortDate } from "@/lib/format";
 import type { NetworkResponse, Person, Relation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export type NetworkTab = "graph" | "list" | "projects" | "outreach";
+import type { NetworkTab } from "@/components/layout/nav";
 
-export const NETWORK_TABS: { id: NetworkTab; label: string }[] = [
-  { id: "graph", label: "Graph" },
-  { id: "list", label: "List" },
-  { id: "projects", label: "Projects" },
-  { id: "outreach", label: "Reach out" },
-];
+export { NETWORK_TABS, type NetworkTab } from "@/components/layout/nav";
 
 const PAGE = 100;
 
@@ -77,7 +73,7 @@ function People({ data }: { data: NetworkResponse }) {
 
   if (!data.people.exists) {
     return (
-      <EmptyState icon={NetworkIcon} title="No people index yet" command="twin clone network --people-only">
+      <EmptyState icon={NetworkIcon} title="No people index yet" command="proxenos clone network --people-only">
         The network clone indexes the people in your messages, mentions and reading: who you&apos;ve met, who you know
         of, and whose work you read.
       </EmptyState>
@@ -188,9 +184,9 @@ function People({ data }: { data: NetworkResponse }) {
 
 function NoIdeas() {
   return (
-    <EmptyState icon={NetworkIcon} title="No projects or outreach yet" command="twin clone network">
+    <EmptyState icon={NetworkIcon} title="No projects or outreach yet" command="proxenos clone network">
       A full run of the network clone suggests projects that fit you and people worth contacting.{" "}
-      <code className="num">twin clone network --people-only</code> builds just the people index.
+      <code className="num">proxenos clone network --people-only</code> builds just the people index.
     </EmptyState>
   );
 }
@@ -206,13 +202,13 @@ function Projects({ data, flashId, onReact }: { data: NetworkResponse; flashId: 
       </Generated>
       <div className="p-4 sm:p-6 space-y-4">
         {projects.length === 0 && (
-          <QuietLine command="twin clone network">No project ideas in the last run. A new run may find some:</QuietLine>
+          <QuietLine command="proxenos clone network">No project ideas in the last run. A new run may find some:</QuietLine>
         )}
         {projects.map((p) => (
           <article
             key={p.id}
             className={cn(
-              "bg-surface border border-line rounded-2xl p-4 sm:p-5 space-y-4 transition-opacity",
+              "card card-hover space-y-4 p-4 transition-opacity sm:p-5",
               flashId === p.id && "row-flash",
               p.action === "not_me" && "opacity-60 hover:opacity-90",
             )}
@@ -293,7 +289,7 @@ function Outreach({ data, flashId, onReact }: { data: NetworkResponse; flashId: 
       </Generated>
       <div className="p-4 sm:p-6 space-y-4">
         {outreach.length === 0 && (
-          <QuietLine command="twin clone network">No one to reach out to in the last run. A new run may suggest someone:</QuietLine>
+          <QuietLine command="proxenos clone network">No one to reach out to in the last run. A new run may suggest someone:</QuietLine>
         )}
         {outreach.map((o) => {
           const who = o.person_id ? people.get(o.person_id) : undefined;
@@ -301,7 +297,7 @@ function Outreach({ data, flashId, onReact }: { data: NetworkResponse; flashId: 
             <article
               key={o.id}
               className={cn(
-                "bg-surface border border-line rounded-2xl p-4 sm:p-5 space-y-4 transition-opacity",
+                "card card-hover space-y-4 p-4 transition-opacity sm:p-5",
                 flashId === o.id && "row-flash",
                 o.action === "not_me" && "opacity-60 hover:opacity-90",
               )}
@@ -352,7 +348,7 @@ export function Network({
   const { data, error, flashId, react, editPerson, refreshPeople, clearError } = useNetwork(onChange);
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load the network: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load the network: ${error}`} /> : <GraphSkeleton />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;

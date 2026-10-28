@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from twin.ingest import youtube
+from proxenos.ingest import youtube
 
 WATCHED_JSON = [
     {

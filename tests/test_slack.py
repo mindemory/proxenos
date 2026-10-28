@@ -11,7 +11,7 @@ import urllib.request
 
 import pytest
 
-from twin.ingest import slack
+from proxenos.ingest import slack
 
 ME = "U0001"
 USERS = [
@@ -280,3 +280,30 @@ def test_a_missing_token_fails_with_a_clear_message(monkeypatch, tmp_path):
     monkeypatch.delenv("SLACK_USER_TOKEN", raising=False)
     with pytest.raises(SystemExit, match="SLACK_USER_TOKEN is not set"):
         slack.run(tmp_path, argparse.Namespace(full=False, workspace=None))
+
+
+def _tokens_failing_with(monkeypatch, error):
+    monkeypatch.setenv("SLACK_USER_TOKEN_ACME", "xoxp-acme")
+    monkeypatch.setenv("SLACK_USER_TOKEN_BETA", "xoxp-beta")
+    monkeypatch.setattr(
+        slack, "http_call", lambda token: lambda method, params: {"ok": False, "error": error}
+    )
+
+
+@pytest.mark.parametrize("error", ["missing_scope", "token_expired", "invalid_auth"])
+def test_tokens_that_cannot_read_are_counted_without_a_line_each(
+    monkeypatch, tmp_path, capsys, error
+):
+    _tokens_failing_with(monkeypatch, error)
+    stats = slack.run(tmp_path, argparse.Namespace(full=False, workspace=None))
+    assert stats["workspaces_without_read_access"] == 2
+    assert (stats["workspaces"], stats["workspaces_failed"]) == (0, 0)
+    assert capsys.readouterr().err == ""
+
+
+def test_other_failures_are_still_reported_per_workspace(monkeypatch, tmp_path, capsys):
+    _tokens_failing_with(monkeypatch, "team_access_not_granted")
+    stats = slack.run(tmp_path, argparse.Namespace(full=False, workspace=None))
+    assert stats["workspaces_failed"] == 2
+    assert "workspaces_without_read_access" not in stats
+    assert capsys.readouterr().err.count("team_access_not_granted") == 2

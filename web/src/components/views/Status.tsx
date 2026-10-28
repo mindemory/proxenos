@@ -2,23 +2,25 @@
 
 import { Radar } from "lucide-react";
 
-import { Command, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
-import { SourceIcon } from "@/components/SourceBadge";
+import { Command, ErrorBanner, NoVault } from "@/components/EmptyState";
+import { StatusSkeleton } from "@/components/Skeleton";
+import { SourceChip, sourceMeta } from "@/components/SourceBadge";
 import { useJson } from "@/lib/client";
-import { formatDateTime, freshness, joinAnd, sourceLabel, timeAgo } from "@/lib/format";
+import { formatDateTime, freshness, joinAnd, timeAgo } from "@/lib/format";
 import type { SourceStatus, StatusResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function SourceRow({ s, now }: { s: SourceStatus; now: string }) {
   const fresh = freshness(s.lastSync, now);
   return (
-    <div className="bg-surface px-4 py-3.5 rounded-xl border border-line flex items-start gap-3.5">
-      <div className="p-2.5 rounded-full flex-shrink-0 bg-surface-2 text-muted">
-        <SourceIcon kind={s.kind} size={17} />
-      </div>
+    <div className="card flex items-start gap-3.5 px-4 py-3.5">
+      <SourceChip kind={s.kind} size={36} />
       <div className="flex-1 min-w-0 pt-0.5">
         <div className="flex items-center justify-between gap-3">
-          <span className="font-medium text-ink truncate">{s.id}</span>
+          <span className="min-w-0 truncate font-medium text-ink">
+            {sourceMeta(s.kind).label}
+            {s.id !== s.kind && <span className="num ml-2 text-xs font-normal text-muted">{s.id}</span>}
+          </span>
           <span className={cn("flex items-center gap-1.5 text-xs whitespace-nowrap", fresh.text)}>
             <span className={cn("w-2 h-2 rounded-full", fresh.dot)} />
             {fresh.label}
@@ -55,7 +57,7 @@ export function Status() {
   const { data, error } = useJson<StatusResponse>("/api/status");
 
   if (!data) {
-    return error ? <ErrorBanner message={`Couldn't load status: ${error}`} /> : <LoadingRows />;
+    return error ? <ErrorBanner message={`Couldn't load status: ${error}`} /> : <StatusSkeleton />;
   }
 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
@@ -65,12 +67,15 @@ export function Status() {
 
   return (
     <div className="p-4 sm:p-6 pb-24 md:pb-20 space-y-8">
-      <section className="bg-surface border border-line rounded-2xl p-5 sm:p-6">
+      <section className="card p-5 sm:p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 rounded-full text-accent bg-accent/10">
             <Radar size={17} />
           </div>
-          <h2 className="font-display text-2xl text-ink">Tracker</h2>
+          <div>
+            <p className="smallcaps">Research feed</p>
+            <h2 className="title-2">Tracker</h2>
+          </div>
         </div>
         {t.lastBatch ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -88,14 +93,17 @@ export function Status() {
           </div>
         ) : (
           <p className="text-muted">
-            No batches yet. Run <Command>twin clone tracker</Command> to fetch and rank the first one.
+            No batches yet. Run <Command>proxenos clone tracker</Command> to fetch and rank the first one.
           </p>
         )}
       </section>
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <h2 className="font-display text-2xl text-ink">Sources</h2>
+          <div>
+            <p className="smallcaps">Raw data</p>
+            <h2 className="title-2">Sources</h2>
+          </div>
           <span className="text-sm text-muted">
             <span className="num">{synced}</span> of <span className="num">{data.sources.length}</span> synced
           </span>
@@ -105,8 +113,8 @@ export function Status() {
         ))}
         {data.missing.length > 0 && (
           <p className="text-sm text-muted px-1 leading-relaxed">
-            Not set up: {joinAnd(data.missing.map(sourceLabel))}. Each one appears here after its first{" "}
-            <Command>twin ingest &lt;source&gt;</Command>
+            Not set up: {joinAnd(data.missing.map((m) => sourceMeta(m).label))}. Each one appears here after its first{" "}
+            <Command>proxenos ingest &lt;source&gt;</Command>
           </p>
         )}
         <p className="text-xs text-muted break-all px-1 pt-2">
