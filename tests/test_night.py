@@ -1,0 +1,76 @@
+"""`twin night` with the master and every clone faked out. No network, no model, no real data."""
+
+import pytest
+
+from twin import cli, llm, master
+from twin.clones import advisor, network, tasks, tracker, work
+
+
+@pytest.fixture
+def steps(tmp_path, monkeypatch):
+    """Fakes every step to record its call and return one count; returns the call log."""
+    monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
+    monkeypatch.setenv("TWIN_VAULT", str(tmp_path / "vault"))
+    calls = []
+
+    def fake_master(vault, since=None):
+        calls.append(("master", vault.name, since))
+        return {"sources_synced": 2, "self_files_written": 1}
+
+    monkeypatch.setattr(master, "run", fake_master)
+    for module in (tracker, tasks, advisor, network, work):
+        name = module.__name__.rsplit(".", 1)[1]
+
+        def fake_run(vault, args, name=name):
+            calls.append((name, vault.name, vars(args)))
+            return {"done": 1}
+
+        monkeypatch.setattr(module, "run", fake_run)
+    return calls
+
+
+def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
+    cli.main(["night"])
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("night: started ")
+    assert lines[1:] == [
+        "master: 2 sources synced, 1 self files written",
+        "tracker: 1 done",
+        "tasks: 1 done",
+        "advisor: 1 done",
+        "network: 1 done",
+        "work: 1 done",
+    ]
+    assert [name for name, *_ in steps] == ["master", *cli.NIGHT_CLONES]
+    assert all(vault == "vault" for _, vault, _ in steps)
+    args = {name: a for name, _, a in steps}
+    assert args["network"] == {"people_only": False}  # the full run, ideas too
+    assert args["work"] == {"max": work.MAX_DRAFTS}
+    assert args["tasks"] == {"days": tasks.DAYS}
+
+
+def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, capsys):
+    def broken(vault, since=None):
+        raise SystemExit("ANTHROPIC_API_KEY is not set.\nPut a key in .env")
+
+    def crash(vault, args):
+        raise KeyError("tasks")
+
+    monkeypatch.setattr(master, "run", broken)
+    monkeypatch.setattr(advisor, "run", crash)
+
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(["night"])
+
+    assert exit_.value.code == 1
+    lines = capsys.readouterr().out.splitlines()[1:]
+    assert lines == [
+        "master: failed (ANTHROPIC_API_KEY is not set. Put a key in .env)",
+        "tracker: 1 done",
+        "tasks: 1 done",
+        "advisor: failed (KeyError: 'tasks')",
+        "network: 1 done",
+        "work: 1 done",
+    ]
+    assert [name for name, *_ in steps] == ["tracker", "tasks", "network", "work"]

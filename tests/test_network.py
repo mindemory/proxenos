@@ -480,7 +480,16 @@ def test_people_index(tmp_path, monkeypatch):
         "Rhea Inkwell",
         "Uma Quill",
     }
-    assert stats == {"people": 17, "met": 7, "know_of": 7, "to_read": 3}
+    assert stats == {"people": 17, "met": 7, "know_of": 7, "to_read": 3, "edges": 1, "groups": 1}
+    # The only context two of them share: a paper Ada and Jo wrote, and Tess is left out.
+    assert [(e["weight"], e["contexts"]) for e in data["edges"]] == [
+        (1, ["Paper: Spirals in the brain"])
+    ]
+    assert {network.person_id("Ada Placeholder"), network.person_id("Jo Coauthor")} == {
+        data["edges"][0]["source"],
+        data["edges"][0]["target"],
+    }
+    assert [(g["kind"], g["name"]) for g in data["groups"]] == [("paper", "Spirals in the brain")]
 
     ada = people["Ada Placeholder"]
     assert ada["id"] == network.person_id("Ada Placeholder")
@@ -727,6 +736,8 @@ def test_ideas(tmp_path, monkeypatch):
         "met": 7,
         "know_of": 7,
         "to_read": 3,
+        "edges": 1,
+        "groups": 1,
         "projects": 1,
         "outreach": 2,
         "suggested_reads": 1,
@@ -791,3 +802,304 @@ def test_ideas(tmp_path, monkeypatch):
     ideas = json.loads((out / "ideas.json").read_text(encoding="utf-8"))
     assert [p["title"] for p in ideas["projects"]] == ["Spiral atlas"]
     assert hana not in [o["person_id"] for o in ideas["outreach"]]
+
+
+# Connections
+
+
+def connected_vault(tmp_path, monkeypatch):
+    """People who share groups: Ann and Ben four ways, Ann with Cy, Eve and Fay, and others
+    with a company in common. Names are made up; Tess is me and in every context."""
+    monkeypatch.setenv("TWIN_NAME", "Tess")
+    monkeypatch.setenv("TWIN_FULL_NAME", "Tess Wintest")
+    monkeypatch.setenv("TWIN_EMAILS", ME)
+    vault = tmp_path / "vault"
+    raw = vault / "raw"
+    write_jsonl(
+        raw / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            # Cy only wrote on a day I didn't, but wrote in a group I'm in.
+            wa(1, "g1", "2026-03-01T08:00:00Z", None, "Lab Chat", "group"),
+            wa(2, "g1", "2026-03-01T09:00:00Z", "Ann Alpha", "Lab Chat", "group"),
+            wa(3, "g1", "2026-03-01T09:30:00Z", "Ben Beta", "Lab Chat", "group"),
+            wa(4, "g1", "2026-03-05T09:00:00Z", "Cy Gamma", "Lab Chat", "group"),
+            # A group I never wrote in connects no one, and neither does a direct chat.
+            wa(5, "g2", "2026-03-02T09:00:00Z", "Dee Delta", "Quiet Club", "group"),
+            wa(6, "g2", "2026-03-02T09:10:00Z", "Ann Alpha", "Quiet Club", "group"),
+            wa(7, "c1", "2026-03-02T10:00:00Z", "Ann Alpha", "Ann Alpha"),
+            wa(8, "c1", "2026-03-02T10:05:00Z", None, "Ann Alpha"),
+            # A group named with a phone number.
+            wa(9, "g3", "2026-03-03T08:00:00Z", None, "Call +44 20 7946 0000 now", "group"),
+            wa(10, "g3", "2026-03-03T09:00:00Z", "Gus Org", "Call +44 20 7946 0000 now", "group"),
+            wa(11, "g3", "2026-03-03T09:05:00Z", "Hal Org", "Call +44 20 7946 0000 now", "group"),
+        ],
+    )
+    write_jsonl(
+        raw / "slack" / "acme" / "messages" / "2026-03.jsonl",
+        [
+            slack(
+                1, "C1", "channel", "2026-03-02T10:00:00Z", "U1", "Tess Wintest", True, "methods"
+            ),
+            slack(2, "C1", "channel", "2026-03-02T10:05:00Z", "U2", "Ann Alpha", False, "methods"),
+            slack(3, "C1", "channel", "2026-03-02T10:06:00Z", "U3", "Ben Beta", False, "methods"),
+            slack(4, "C1", "channel", "2026-03-02T10:07:00Z", "B9", "Build Bot", False, "methods"),
+            slack(5, "D1", "dm", "2026-03-02T11:00:00Z", "U2", "Ann Alpha", False, "Ann Alpha"),
+            slack(6, "D1", "dm", "2026-03-02T11:01:00Z", "U1", "Tess Wintest", True, "Ann Alpha"),
+        ],
+    )
+    ann, ben, eve = "ann@acme.test", "ben@acme.test", "eve@other.test"
+    many = [f"r{i}@example.com" for i in range(16)]
+    write_jsonl(
+        raw / "email" / "personal" / "2026-03.jsonl",
+        [
+            # One thread by its replies: Ann, Ben and Eve.
+            mail(1, "2026-03-04T09:00:00Z", ME, [ann, ben, eve], "Tess Wintest", "Plan"),
+            mail(2, "2026-03-04T10:00:00Z", ann, [ME, ben, eve], "Ann Alpha", "Re: Plan", "m1"),
+            mail(3, "2026-03-04T11:00:00Z", ben, [ME, ann, eve], "Ben Beta", "Re: Plan", "m2"),
+            mail(4, "2026-03-04T12:00:00Z", eve, [ME], "Eve Epsilon", "Re: Plan", "m1"),
+            # One by Gmail's thread id, with no reply header.
+            mail(5, "2026-03-05T09:00:00Z", ME, [ann, eve], "Tess Wintest", "Grant")
+            | {"gmail_thread": "T9"},
+            mail(6, "2026-03-05T10:00:00Z", eve, [ME, ann], "Eve Epsilon", "Re: Grant")
+            | {"gmail_thread": "T9"},
+            # Mail to eighteen people is no context.
+            mail(7, "2026-03-06T09:00:00Z", ME, [*many, ann, ben], "Tess Wintest", "Everyone"),
+        ],
+    )
+    connection = {"from_me": False, "position": None}
+    people = [("Cy Gamma", "Solo Co"), ("Dee Delta", None)]
+    people += [("Gus Org", "Small Labs Inc"), ("Hal Org", "Small Labs")]
+    people += [("Ina Org", "Small Labs"), ("Jon Free", "Self-employed")]
+    people += [("Kit Free", "Self-employed")]
+    # An organization too big to say who knows whom.
+    people += [(f"Worker {chr(65 + i // 26)}{chr(97 + i % 26)}", "Big Corp") for i in range(41)]
+    write_jsonl(
+        raw / "linkedin" / "connections" / "2025-06.jsonl",
+        [
+            connection | {"id": f"k{i}", "ts": "2025-06-01T00:00:00Z", "name": n, "company": c}
+            for i, (n, c) in enumerate(people)
+        ],
+    )
+    write_jsonl(
+        raw / "mentions" / "works" / "2025-05.jsonl",
+        [
+            {
+                "id": "W1",
+                "ts": "2025-05-01T00:00:00Z",
+                "title": "Spirals in the brain",
+                "coauthors": ["Ann Alpha", "Fay Zeta"],
+            }
+        ],
+    )
+    write_jsonl(
+        raw / "mentions" / "citations" / "2025-09.jsonl",
+        [
+            {
+                "id": "W2",
+                "ts": "2025-09-01T00:00:00Z",
+                "title": "More on spirals",
+                "authors": ["Ann Alpha", "Fay Zeta", "T. Wintest"],
+            }
+        ],
+    )
+    return vault
+
+
+def connections_of(vault):
+    data = json.loads((vault / "clones" / "network" / "people.json").read_text(encoding="utf-8"))
+    name = {p["id"]: p["name"] for p in data["people"]}
+    edges = {
+        frozenset((name[e["source"]], name[e["target"]])): (e["weight"], e["contexts"])
+        for e in data["edges"]
+    }
+    return data, name, edges
+
+
+def pair(a, b):
+    return frozenset((a, b))
+
+
+def test_edges_connect_people_who_share_a_context(tmp_path, monkeypatch):
+    vault = connected_vault(tmp_path, monkeypatch)
+    monkeypatch.setattr(llm, "ask", no_model)
+
+    stats = network.build(vault, people_only=True, now=NOW)
+
+    data, _, edges = connections_of(vault)
+    assert (stats["edges"], stats["groups"]) == (len(data["edges"]), len(data["groups"]))
+    assert edges == {
+        # WhatsApp, Slack, the thread, and the domain they both write from.
+        pair("Ann Alpha", "Ben Beta"): (
+            4,
+            ["WhatsApp: Lab Chat", "Slack: acme #methods", "Email: Plan", "Org: acme.test"],
+        ),
+        pair("Ann Alpha", "Cy Gamma"): (1, ["WhatsApp: Lab Chat"]),
+        pair("Ben Beta", "Cy Gamma"): (1, ["WhatsApp: Lab Chat"]),
+        pair("Ann Alpha", "Eve Epsilon"): (2, ["Email: Plan", "Email: Grant"]),
+        pair("Ben Beta", "Eve Epsilon"): (1, ["Email: Plan"]),
+        # Two papers, one of them with me on it.
+        pair("Ann Alpha", "Fay Zeta"): (
+            2,
+            ["Paper: More on spirals", "Paper: Spirals in the brain"],
+        ),
+        pair("Gus Org", "Hal Org"): (2, ["WhatsApp: Call now", "Org: Small Labs"]),
+        pair("Gus Org", "Ina Org"): (1, ["Org: Small Labs"]),
+        pair("Hal Org", "Ina Org"): (1, ["Org: Small Labs"]),
+    }
+    for edge in data["edges"]:
+        assert set(edge) == {"source", "target", "weight", "contexts"}
+        assert edge["source"] < edge["target"]
+        assert edge["weight"] >= len(edge["contexts"])
+    weights = [e["weight"] for e in data["edges"]]
+    assert weights == sorted(weights, reverse=True)  # strongest first
+    # Nothing connects me, a group I never wrote in, a direct chat, or a company with no name.
+    me = network.person_id("Tess Wintest")
+    assert me not in {i for e in data["edges"] for i in (e["source"], e["target"])}
+    assert not any("Quiet Club" in c or "Self" in c for _, cs in edges.values() for c in cs)
+    assert pair("Ann Alpha", "Dee Delta") not in edges
+    assert pair("Jon Free", "Kit Free") not in edges
+
+
+def test_groups_list_who_shares_each_context(tmp_path, monkeypatch):
+    vault = connected_vault(tmp_path, monkeypatch)
+    monkeypatch.setattr(llm, "ask", no_model)
+    network.build(vault, people_only=True, now=NOW)
+
+    data, name, _ = connections_of(vault)
+    groups = {(g["kind"], g["name"]): sorted(name[i] for i in g["members"]) for g in data["groups"]}
+    assert groups == {
+        ("whatsapp_group", "Lab Chat"): ["Ann Alpha", "Ben Beta", "Cy Gamma"],  # Cy too
+        ("whatsapp_group", "Call now"): ["Gus Org", "Hal Org"],  # no number in a name
+        ("slack_channel", "acme #methods"): ["Ann Alpha", "Ben Beta"],
+        ("paper", "More on spirals"): ["Ann Alpha", "Fay Zeta"],
+        ("paper", "Spirals in the brain"): ["Ann Alpha", "Fay Zeta"],
+        ("email_thread", "Plan"): ["Ann Alpha", "Ben Beta", "Eve Epsilon"],
+        ("email_thread", "Grant"): ["Ann Alpha", "Eve Epsilon"],
+        ("org", "acme.test"): ["Ann Alpha", "Ben Beta"],
+        ("org", "Small Labs"): ["Gus Org", "Hal Org", "Ina Org"],
+    }
+    kinds = [g["kind"] for g in data["groups"]]
+    assert kinds == sorted(kinds, key=network.GROUP_KINDS.index)
+    for g in data["groups"]:
+        assert set(g) == {"id", "name", "kind", "members"}
+        assert re.fullmatch(r"[0-9a-f]{12}", g["id"])
+        assert len(g["members"]) >= 2
+    assert len({g["id"] for g in data["groups"]}) == len(data["groups"])
+    text = json.dumps(data["groups"]) + json.dumps(data["edges"])
+    assert not re.search(r"@|7946|0000", text)
+
+
+def test_mail_to_many_people_is_no_context(tmp_path, monkeypatch):
+    vault = connected_vault(tmp_path, monkeypatch)
+    network.build(vault, people_only=True, now=NOW)
+    data, _, _ = connections_of(vault)
+    assert "Everyone" not in {g["name"] for g in data["groups"]}
+
+    # Fifteen others is the most: one fewer and the same mail is a thread.
+    path = vault / "raw" / "email" / "personal" / "2026-03.jsonl"
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    records[-1]["to"] = [f"r{i}@example.com" for i in range(13)] + [
+        "ann@acme.test",
+        "ben@acme.test",
+    ]
+    write_jsonl(path, records)
+    network.build(vault, people_only=True, now=NOW)
+    data, name, _ = connections_of(vault)
+    (everyone,) = (g for g in data["groups"] if g["name"] == "Everyone")
+    assert sorted(name[i] for i in everyone["members"]) == ["Ann Alpha", "Ben Beta"]
+
+
+def test_only_the_top_people_are_connected(tmp_path, monkeypatch):
+    vault = connected_vault(tmp_path, monkeypatch)
+    monkeypatch.setattr(network, "GRAPH_PEOPLE", 4)
+    network.build(vault, people_only=True, now=NOW)
+
+    data, _, edges = connections_of(vault)
+    core = data["core"]
+    assert len(core) == len(set(core)) == 4
+    assert core == [p["id"] for p in network.top_people(data["people"], NOW, 4)]
+    assert len(data["people"]) > 50  # the list keeps everyone
+    assert edges
+    for edge in data["edges"]:
+        assert {edge["source"], edge["target"]} <= set(core)
+    for group in data["groups"]:
+        assert set(group["members"]) <= set(core)
+        assert len(group["members"]) >= 2
+
+
+def test_strongest_edges_are_kept(tmp_path, monkeypatch):
+    vault = connected_vault(tmp_path, monkeypatch)
+    monkeypatch.setattr(network, "GRAPH_EDGES", 3)
+    stats = network.build(vault, people_only=True, now=NOW)
+
+    _, _, edges = connections_of(vault)
+    assert stats["edges"] == 3
+    # The most contexts first. Of the pairs with two, Ann and Fay share two papers of two
+    # people, closer than Ann and Eve's thread of three and thread of two.
+    assert set(edges) == {
+        pair("Ann Alpha", "Ben Beta"),
+        pair("Ann Alpha", "Fay Zeta"),
+        pair("Ann Alpha", "Eve Epsilon"),
+    }
+
+
+def ranked_people(n):
+    """n people as the index lists them, the first the most active."""
+    return [
+        {"id": f"p{i:02}", "relation": "met", "interactions": 100 - i, "last_seen": None}
+        for i in range(n)
+    ]
+
+
+def test_small_groups_beat_big_ones_at_the_same_weight():
+    people = ranked_people(12)
+    crowd = {
+        "id": "big",
+        "name": "Crowd",
+        "kind": "slack_channel",
+        "members": {p["id"] for p in people[:10]},
+    }
+    pair_ = {"id": "duo", "name": "Duo", "kind": "paper", "members": {"p10", "p11"}}
+
+    edges, groups = network.connections([crowd, pair_], people, NOW)
+
+    assert (edges[0]["source"], edges[0]["target"], edges[0]["weight"]) == ("p10", "p11", 1)
+    assert len(edges) == 1 + 45
+    assert [g["name"] for g in groups] == ["Crowd", "Duo"]  # by kind, as the page lists them
+    assert sum(len(g["members"]) for g in groups) == 12
+    # A group with one person in the top is no group.
+    edges, groups = network.connections([crowd, pair_], people[:1] + people[10:11], NOW)
+    assert (edges, groups) == ([], [])
+
+
+def test_a_big_group_stays_big_when_few_of_it_are_connected():
+    people = ranked_people(12)
+    crowd = {
+        "id": "big",
+        "name": "Crowd",
+        "kind": "slack_channel",
+        "members": {p["id"] for p in people[:10]},
+    }
+    pair_ = {"id": "duo", "name": "Duo", "kind": "paper", "members": {"p10", "p11"}}
+    # Only two of the crowd are among the top, and they're the most active pair. The crowd is
+    # still a channel of ten, so the two who wrote a paper together are closer.
+    core = people[:2] + people[10:]
+    edges, groups = network.connections([crowd, pair_], core, NOW)
+    assert [(e["source"], e["target"]) for e in edges] == [("p10", "p11"), ("p00", "p01")]
+    assert [len(g["members"]) for g in groups] == [2, 2]  # listed with who's in the top
+
+
+def test_papers_with_no_id_or_title_are_no_group(tmp_path, monkeypatch):
+    monkeypatch.setenv("TWIN_NAME", "Tess Wintest")
+    vault = tmp_path / "vault"
+    write_jsonl(
+        vault / "raw" / "mentions" / "works" / "2025-05.jsonl",
+        [
+            {"id": None, "ts": "2025-05-01T00:00:00Z", "title": None, "coauthors": authors}
+            for authors in (["Ann Alpha", "Ben Beta"], ["Cy Gamma", "Dee Delta"])
+        ],
+    )
+    network.build(vault, people_only=True, now=NOW)
+    data, _, edges = connections_of(vault)
+    assert len(data["people"]) == 4
+    assert (data["groups"], edges) == ([], {})

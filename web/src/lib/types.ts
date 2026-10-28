@@ -172,13 +172,13 @@ export type NetworkAction = "useful" | "not_me" | "done";
 export const RELATIONS: readonly Relation[] = ["met", "know_of", "to_read"];
 export const NETWORK_ACTIONS: readonly NetworkAction[] = ["useful", "not_me", "done"];
 
+/** One person from people.json. Its first_seen is left out: nothing on the page shows it. */
 export interface Person {
   id: string;
   name: string;
   relation: Relation;
   sources: string[];
   interactions: number;
-  first_seen: string | null;
   last_seen: string | null;
   context: string;
   topics: string[];
@@ -215,10 +215,39 @@ export interface ToRead extends Acted {
   why: string;
 }
 
+export type GroupKind = "whatsapp_group" | "slack_channel" | "paper" | "email_thread" | "org";
+
+/** In the order the filter chips list them. */
+export const GROUP_KINDS: readonly GroupKind[] = ["whatsapp_group", "slack_channel", "paper", "email_thread", "org"];
+
+/** Two people who share at least one group; `weight` is how many. */
+export interface Edge {
+  source: string; // person id
+  target: string; // person id
+  weight: number;
+  contexts: string[]; // short names of the shared groups, e.g. "Slack: acme #methods"
+}
+
+/** One context people share: a chat, a thread, a paper or an organization. */
+export interface Group {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  members: string[]; // person ids, among the people the graph connects
+}
+
 export interface NetworkResponse {
   now: string;
   vault: VaultInfo;
-  people: { exists: boolean; generated: string | null; list: Person[] };
+  people: {
+    exists: boolean;
+    generated: string | null;
+    list: Person[];
+    /** Ids of the people the graph connects, strongest first; empty in an index from before connections. */
+    core: string[];
+    edges: Edge[];
+    groups: Group[];
+  };
   ideas: {
     exists: boolean;
     generated: string | null;
@@ -239,6 +268,48 @@ export interface ChangelogSection {
 export interface SourceSync {
   kind: string;
   lastSync: string | null;
+}
+
+/** What the home thumbnail draws: the busiest people and the strongest ties among them. */
+export interface GraphThumb {
+  now: string;
+  exists: boolean;
+  people: number; // everyone in the index
+  connected: number; // people the graph connects
+  edges: number; // connections between them
+  groups: number;
+  nodes: { id: string; relation: Relation; interactions: number }[];
+  links: { source: string; target: string; weight: number }[];
+}
+
+// ── Drafts: clones/drafts/*.md ──────────────────────────────────────────────
+
+export type DraftAction = "approve" | "discard" | "edit" | "copy";
+
+export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy"];
+
+/**
+ * One drafts/<id>.md. kind, for, channel and status are strings so a new value still
+ * renders; lib/drafts.ts has the known ones (kind: reply, email, doc, plan, checklist,
+ * blocked; for: task, outreach, project, reading).
+ */
+export interface Draft {
+  id: string;
+  title: string;
+  kind: string;
+  for: string;
+  channel: string;
+  to: string; // "" when the draft is not addressed to anyone
+  created: string | null;
+  status: string; // "draft", "approved", "discarded"
+  body: string; // markdown
+}
+
+export interface DraftsResponse {
+  now: string;
+  vault: VaultInfo;
+  exists: boolean; // the drafts folder is present
+  drafts: Draft[];
 }
 
 export interface HomeResponse {
@@ -270,6 +341,11 @@ export interface HomeResponse {
     people: number;
     met: number;
     outreach: Outreach | null; // first suggestion not yet acted on
+  };
+  drafts: {
+    exists: boolean;
+    awaiting: number; // not approved or discarded
+    top: Draft[]; // up to three of them, newest first
   };
   self: {
     exists: boolean; // self/ has any markdown

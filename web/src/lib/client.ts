@@ -8,6 +8,9 @@ import type {
   Action,
   AdviceAction,
   AdviceResponse,
+  Draft,
+  DraftAction,
+  DraftsResponse,
   FeedItem,
   HomeResponse,
   ItemsResponse,
@@ -30,12 +33,13 @@ export async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function postJson(url: string, body: object): Promise<void> {
+/** keepalive lets a feedback line land even as the page closes, but caps the body at 64 KB. */
+async function postJson(url: string, body: object, keepalive = true): Promise<void> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-    keepalive: true,
+    keepalive,
   });
   if (!res.ok) throw new Error(`${url} returned ${res.status}`);
 }
@@ -50,6 +54,11 @@ export function sendTaskFeedback(taskId: string, action: TaskAction): Promise<vo
 
 export function sendNetworkFeedback(itemId: string, action: NetworkAction): Promise<void> {
   return postJson("/api/network/feedback", { item_id: itemId, action });
+}
+
+/** Without keepalive: an edit can be longer than a keepalive request may carry. */
+export function sendDraftAction(draftId: string, action: DraftAction, body?: string): Promise<void> {
+  return postJson("/api/drafts/feedback", { draft_id: draftId, action, body }, false);
 }
 
 export function sendAdviceFeedback(suggestionId: string, action: AdviceAction): Promise<void> {
@@ -71,6 +80,13 @@ export const ADVICE_TOAST: Record<AdviceAction, string> = {
   useful: "Marked useful",
   not_me: "Marked not you",
   doing: "Noted: you're doing it",
+};
+
+export const DRAFT_TOAST: Record<DraftAction, string> = {
+  approve: "Approved. Nothing was sent: copy it when you're ready",
+  discard: "Draft discarded",
+  edit: "Draft saved",
+  copy: "Copied to the clipboard",
 };
 
 export const NETWORK_TOAST: Record<NetworkAction, string> = {
@@ -318,6 +334,119 @@ export function useNetwork(onChange?: () => void) {
   );
 
   return { data, error, flashId, react, clearError: () => setError(null) };
+}
+
+/** Put text on the clipboard. Falls back to a hidden textarea where the async API isn't allowed. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+    }
+  }
+}
+
+/**
+ * The drafts and the four things to do with one. Approve and discard change the
+ * draft's status in its file, edit saves a new body, copy only logs. None of them
+ * sends anything. `onChange` runs after a write lands, to refresh counts elsewhere.
+ */
+export function useDrafts(onChange?: () => void) {
+  const { data, error, setData, setError } = useJson<DraftsResponse>("/api/drafts");
+  const notify = useToast();
+  const { flashId, flash } = useFlash();
+
+  const patch = useCallback(
+    (id: string, change: Partial<Draft>) =>
+      setData((d) => (d ? { ...d, drafts: d.drafts.map((x) => (x.id === id ? { ...x, ...change } : x)) } : d)),
+    [setData],
+  );
+
+  const resync = useCallback(
+    () =>
+      getJson<DraftsResponse>("/api/drafts").then(
+        (d) => setData(d),
+        () => {
+          // The error banner already says the write failed.
+        },
+      ),
+    [setData],
+  );
+
+  const setStatus = useCallback(
+    (draft: Draft, action: "approve" | "discard") => {
+      const status = action === "approve" ? "approved" : "discarded";
+      if (draft.status === status) return;
+      flash(draft.id);
+      patch(draft.id, { status });
+      sendDraftAction(draft.id, action).then(
+        () => {
+          notify(DRAFT_TOAST[action], action === "approve" ? "ok" : "info");
+          onChange?.();
+        },
+        () => {
+          patch(draft.id, { status: draft.status });
+          setError(SAVE_FAILED);
+          resync();
+        },
+      );
+    },
+    [patch, flash, notify, onChange, setError, resync],
+  );
+
+  /** Resolves true once the new body is saved in the file. */
+  const edit = useCallback(
+    async (draft: Draft, body: string): Promise<boolean> => {
+      try {
+        await sendDraftAction(draft.id, "edit", body);
+      } catch {
+        setError(SAVE_FAILED);
+        return false;
+      }
+      patch(draft.id, { body: body.trim() });
+      flash(draft.id);
+      notify(DRAFT_TOAST.edit, "ok");
+      return true;
+    },
+    [patch, flash, notify, setError],
+  );
+
+  const copy = useCallback(
+    async (draft: Draft) => {
+      if (!(await copyText(draft.body))) {
+        setError("Couldn't reach the clipboard. Select the text and copy it by hand.");
+        return;
+      }
+      notify(DRAFT_TOAST.copy, "ok");
+      sendDraftAction(draft.id, "copy").catch(() => {
+        // The text is copied; only the log line is lost.
+      });
+    },
+    [notify, setError],
+  );
+
+  return {
+    data,
+    error,
+    flashId,
+    approve: (d: Draft) => setStatus(d, "approve"),
+    discard: (d: Draft) => setStatus(d, "discard"),
+    edit,
+    copy,
+    clearError: () => setError(null),
+  };
 }
 
 // ── Last visit ──────────────────────────────────────────────────────────────

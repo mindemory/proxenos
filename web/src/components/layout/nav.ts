@@ -2,42 +2,39 @@ import {
   Activity,
   Bookmark,
   House,
-  Inbox,
   Lightbulb,
   ListTodo,
   Network,
+  PenLine,
   Rss,
-  ShoppingBag,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 
-export type View = "home" | "feed" | "saved" | "tasks" | "advice" | "network" | "twin" | "status";
+export type View = "home" | "feed" | "saved" | "tasks" | "drafts" | "advice" | "network" | "twin" | "status";
 
 export interface NavItem {
   icon: LucideIcon;
   label: string;
   id: View;
-  /** Built by a clone; listed under "Clones" in the sidebar. */
-  clone?: boolean;
+  /** Where it sits in the rail: the home button, the clones' views, and the views about you. */
+  group: "home" | "clones" | "you";
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { icon: House, label: "Home", id: "home" },
-  { icon: Rss, label: "Feed", id: "feed", clone: true },
-  { icon: Bookmark, label: "Saved", id: "saved", clone: true },
-  { icon: ListTodo, label: "Tasks", id: "tasks", clone: true },
-  { icon: Lightbulb, label: "Advice", id: "advice", clone: true },
-  { icon: Network, label: "Network", id: "network", clone: true },
-  { icon: UserRound, label: "Twin", id: "twin" },
-  { icon: Activity, label: "Status", id: "status" },
+  { icon: House, label: "Home", id: "home", group: "home" },
+  { icon: Rss, label: "Feed", id: "feed", group: "clones" },
+  { icon: Bookmark, label: "Saved", id: "saved", group: "clones" },
+  { icon: ListTodo, label: "Tasks", id: "tasks", group: "clones" },
+  { icon: PenLine, label: "Drafts", id: "drafts", group: "clones" },
+  { icon: Lightbulb, label: "Advice", id: "advice", group: "clones" },
+  { icon: Network, label: "Network", id: "network", group: "clones" },
+  { icon: UserRound, label: "Twin", id: "twin", group: "you" },
+  { icon: Activity, label: "Status", id: "status", group: "you" },
 ];
 
-/** Clones that aren't built yet. Listed, disabled, so the nav shows what's coming. */
-export const SOON_ITEMS: readonly { icon: LucideIcon; label: string }[] = [
-  { icon: Inbox, label: "Inbox" },
-  { icon: ShoppingBag, label: "Shopping" },
-];
+/** The phone's tab bar: four views, then "More" for the rest. */
+export const PRIMARY_MOBILE: readonly View[] = ["home", "tasks", "drafts", "network"];
 
 /** Small counts shown beside nav entries. */
 export type NavCounts = Partial<Record<View, number>>;

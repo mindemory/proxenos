@@ -38,6 +38,12 @@
   --c-bad-bg: #2f1618;
   --c-bad-ink: #f5a5a0;
   --c-bad-line: #6e2f31;
+
+  /* The network graph's three relations. Distinct from the state hues above: met is the
+     accent itself, known of is a cool teal, to read is a soft orchid. */
+  --c-rel-met: #a3b1ff;
+  --c-rel-know: #6fd0cf;
+  --c-rel-read: #dba6f2;
 }
 
 @theme {
@@ -65,6 +71,10 @@
   --color-bad-bg: var(--c-bad-bg);
   --color-bad-ink: var(--c-bad-ink);
   --color-bad-line: var(--c-bad-line);
+
+  --color-rel-met: var(--c-rel-met);
+  --color-rel-know: var(--c-rel-know);
+  --color-rel-read: var(--c-rel-read);
 
   /* Body in Geist, headings in Newsreader, every number in Geist Mono. */
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
@@ -126,6 +136,20 @@ body {
     animation: toast-in 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
 
+  /* A panel sliding up from the bottom edge (the More sheet, the person panel on a phone). */
+  .sheet-in {
+    animation: sheet-in 240ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  /* A panel sliding in from the right edge. */
+  .panel-in {
+    animation: panel-in 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .fade-in {
+    animation: fade-in 180ms ease-out both;
+  }
+
   /* Marks the row an action just touched, so a change in a long list is findable. */
   .row-flash {
     animation: row-flash 1400ms ease-out both;
@@ -136,6 +160,26 @@ body {
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
   }
 }
 

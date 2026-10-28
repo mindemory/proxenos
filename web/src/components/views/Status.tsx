@@ -5,17 +5,9 @@ import { Radar } from "lucide-react";
 import { Command, ErrorBanner, LoadingRows, NoVault } from "@/components/EmptyState";
 import { SourceIcon } from "@/components/SourceBadge";
 import { useJson } from "@/lib/client";
-import { formatDateTime, hoursSince, joinAnd, sourceLabel, timeAgo } from "@/lib/format";
+import { formatDateTime, freshness, joinAnd, sourceLabel, timeAgo } from "@/lib/format";
 import type { SourceStatus, StatusResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function freshness(lastSync: string | null, now: string): { label: string; dot: string; text: string } {
-  const h = hoursSince(lastSync, now);
-  if (h < 6) return { label: "Fresh", dot: "bg-ok-ink", text: "text-ok-ink" };
-  if (h < 72) return { label: "Behind", dot: "bg-warn-ink", text: "text-warn-ink" };
-  if (h < Infinity) return { label: "Stale", dot: "bg-bad-ink", text: "text-bad-ink" };
-  return { label: "Never", dot: "bg-muted/60", text: "text-muted" };
-}
 
 function SourceRow({ s, now }: { s: SourceStatus; now: string }) {
   const fresh = freshness(s.lastSync, now);

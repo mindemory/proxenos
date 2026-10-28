@@ -21,6 +21,17 @@ messages) are left out. So is any name with a digit or an @ in it, and contexts 
 scrubbed of addresses and numbers, so no phone number or email lands in the index. Twitter DMs
 and Instagram likes carry only ids and handles, so they add no one.
 
+Connections come in the same pass, as people.json's "edges" and "groups". A group is one
+context people share: a WhatsApp group or Slack channel I wrote in (its members are those who
+wrote in it), an email thread or recipient list (at most 15 people, so a mailing list is no
+context), the authors of one OpenAlex paper (my works and the works citing them), or an
+organization (at most 40 people from the index share it, since a company of thousands says
+nothing about who knows whom). Two people are connected when they share a context, with the
+number of shared contexts as the edge's weight. I'm in all of them, so I'm left out. Only the
+top 600 people (by messages and recency, as top_people picks them) are connected, listed in
+"core", and only the strongest 4,000 edges stay: the most shared contexts first, then the
+smaller the contexts the closer, then the more active the people.
+
 Names in notes come from a strict heuristic: two to four capitalized words in a row (middle
 initials allowed), none of them a stopword (days, months, places, institutions, headings, ...)
 and none a word the notes also use in lower case, which rules out title-case headings. A name
@@ -43,6 +54,7 @@ after its idea has left ideas.json.
 
 import argparse
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -63,6 +75,10 @@ QUOTAS = {"met": 150, "know_of": 100, "to_read": 50}  # places kept per relation
 HALF_LIFE_DAYS = 365  # how fast an old conversation stops counting when ranking people
 MAX_RECIPIENTS = 15  # mail to more people than this doesn't make them my correspondents
 MAX_AUTHORS = 15  # a citing paper with more authors keeps its first five and its last
+GRAPH_PEOPLE = 600  # people the graph connects
+GRAPH_EDGES = 4000  # connections kept, strongest first
+MAX_ORG = 40  # an organization with more people in the index than this connects no one
+EDGE_CONTEXTS = 5  # shared contexts named on an edge
 TOPICS = 5
 CONTEXT_CHARS = 240
 TOPIC_CHARS = 80
@@ -108,6 +124,43 @@ _GENERIC = {
     "meta ai",
     "anonymous",
 }
+# Each kind of group, in the order groups are listed: how it reads in an edge's contexts, and
+# what a group of that kind is called when it has no name.
+_GROUP_KINDS = {
+    "whatsapp_group": ("WhatsApp", "a group"),
+    "slack_channel": ("Slack", "a channel"),
+    "paper": ("Paper", "a paper"),
+    "email_thread": ("Email", "an email thread"),
+    "org": ("Org", "an organization"),
+}
+GROUP_KINDS = tuple(_GROUP_KINDS)
+# What a profile says as its organization when it has none.
+_ORG_GENERIC = {
+    "self employed",
+    "selfemployed",
+    "freelance",
+    "freelancer",
+    "independent",
+    "independent consultant",
+    "consultant",
+    "confidential",
+    "stealth",
+    "stealth startup",
+    "stealth mode",
+    "startup",
+    "n a",
+    "na",
+    "none",
+    "student",
+    "unemployed",
+    "retired",
+    "private",
+    "self",
+    "own business",
+    "personal",
+    "various",
+}
+_ORG_SUFFIXES = {"inc", "llc", "ltd", "limited", "corp", "corporation", "co", "gmbh", "plc"}
 _WEBMAIL = {
     "gmail.com",
     "googlemail.com",
@@ -314,11 +367,24 @@ def build(vault: Path, people_only: bool = False, now: datetime | None = None) -
     now = now or datetime.now(UTC)
     out = vault / "clones" / "network"
     profile = None if people_only else read_self(vault / "self")  # fail before the slow part
-    people = people_index(vault)
-    _write_json(out / "people.json", {"generated": _iso(now), "people": people})
+    book = _read_vault(vault)
+    people = book.entries()
+    core = top_people(people, now, GRAPH_PEOPLE)
+    edges, groups = connections(book.contexts({p["id"] for p in people}), core, now)
+    _write_json(
+        out / "people.json",
+        {
+            "generated": _iso(now),
+            "people": people,
+            "core": [p["id"] for p in core],
+            "edges": edges,
+            "groups": groups,
+        },
+    )
     stats = {"people": len(people)} | {
         r: sum(p["relation"] == r for p in people) for r in RELATIONS
     }
+    stats |= {"edges": len(edges), "groups": len(groups)}
     if profile is None:
         return stats
     return stats | ideas(vault, people, profile, now)
@@ -337,13 +403,14 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 # The people index
 
 
-def people_index(vault: Path) -> list[dict]:
-    """Everyone in the vault I've met, know of or want to read, merged by normalized name.
-    Messages come first and notes last, so names in notes can match people already found."""
+def _read_vault(vault: Path) -> "_Book":
+    """Everyone in the vault I've met, know of or want to read, merged by normalized name, and
+    the groups they share. Messages come first and notes last, so names in notes can match
+    people already found."""
     book = _Book([os.environ.get("TWIN_NAME", ""), os.environ.get("TWIN_FULL_NAME", "")])
     for read in (_whatsapp, _slack, _email, _linkedin, _instagram, _mentions, _writing):
         read(vault, book)
-    return book.entries()
+    return book
 
 
 def normalize(name: str) -> str:
@@ -359,7 +426,11 @@ def normalize(name: str) -> str:
 
 
 def person_id(name: str) -> str:
-    return hashlib.sha1(normalize(name).encode()).hexdigest()[:12]
+    return _key_id(normalize(name))
+
+
+def _key_id(key: str) -> str:
+    return hashlib.sha1(key.encode()).hexdigest()[:12]
 
 
 class _Book:
@@ -368,6 +439,8 @@ class _Book:
     def __init__(self, me: Iterable[str]):
         self.me = {key for name in me if (key := normalize(name))}
         self.people: dict[str, dict] = {}
+        # (kind, key) → what a group is called and who's in it, as normalized names
+        self.groups: dict[tuple[str, str], dict] = {}
 
     def mine(self, name: str | None) -> None:
         """A name on my own messages, never to be indexed as someone else."""
@@ -387,12 +460,10 @@ class _Book:
         topics: Iterable[str | None] = (),
         org: str | None = None,
     ) -> None:
-        if not name or _CONTACT.search(name):
+        key = _name_key(name)
+        if key is None:
             return
         display = _display(name)
-        key = normalize(display)
-        if not _plausible(key):
-            return
         person = self.people.get(key)
         if person is None:
             person = self.people[key] = {
@@ -422,11 +493,69 @@ class _Book:
         if org and (org := _scrub(org)):
             person["orgs"][org] += 1
 
+    def group(self, kind: str, key: str, label: str | None, names: Iterable[str | None]) -> None:
+        """People who share one context: members of a group I wrote in, the people on an email
+        thread, the authors of a paper. They needn't be in the index, which is checked later."""
+        members = {k for name in names if (k := _name_key(name))}
+        if members:
+            found = self.groups.setdefault((kind, key), {"name": "", "members": set()})
+            found["name"] = found["name"] or _clip(_scrub(label or ""), TOPIC_CHARS)
+            found["members"] |= members
+
+    def contexts(self, ids: set[str]) -> list[dict]:
+        """Every group of two or more people in the index, with their ids: the groups added
+        with group() and the organizations people work at."""
+        found = []
+        for (kind, key), group in self.groups.items():
+            members = {i for name in group["members"] if (i := _key_id(name)) in ids}
+            found.append(_group(kind, key, group["name"], members))
+        orgs: dict[str, dict] = {}
+        for key, person in self.people.items():
+            if (pid := _key_id(key)) not in ids:
+                continue
+            for org, count in person["orgs"].items():
+                if org_key := _org_key(org):
+                    named = orgs.setdefault(org_key, {"names": Counter(), "members": set()})
+                    named["names"][org] += count
+                    named["members"].add(pid)
+        for org_key, named in orgs.items():
+            if len(named["members"]) <= MAX_ORG:
+                name = named["names"].most_common(1)[0][0]
+                found.append(_group("org", org_key, name, named["members"]))
+        return [g for g in found if len(g["members"]) >= 2]
+
     def entries(self) -> list[dict]:
         found = [_entry(key, p) for key, p in self.people.items() if not _is_me(key, self.me)]
         found.sort(key=lambda e: e["name"].casefold())
         found.sort(key=lambda e: e["last_seen"] or "", reverse=True)
         return sorted(found, key=lambda e: (RELATIONS.index(e["relation"]), -e["interactions"]))
+
+
+def _name_key(name: str | None) -> str | None:
+    """The normalized name a person is indexed under, or None for a name that can't be one."""
+    if not name or _CONTACT.search(name):
+        return None
+    key = normalize(_display(name))
+    return key if _plausible(key) else None
+
+
+def _group(kind: str, key: str, name: str, members: set[str]) -> dict:
+    return {
+        "id": hashlib.sha1(f"{kind}\0{key}".encode()).hexdigest()[:12],
+        "name": name or _GROUP_KINDS[kind][1],
+        "kind": kind,
+        "members": members,
+    }
+
+
+def _org_key(org: str) -> str | None:
+    """An organization as its words, without a company suffix; None for "self-employed" and
+    the like, which name no one's organization."""
+    words = re.findall(r"\w+", org.casefold())
+    while words and words[-1] in _ORG_SUFFIXES:
+        words.pop()
+    key = " ".join(words)
+    return None if not key or key in _ORG_GENERIC else key
 
 
 def _entry(key: str, person: dict) -> dict:
@@ -442,7 +571,7 @@ def _entry(key: str, person: dict) -> dict:
         parts.append(f"{how} ({', '.join(details)})" if details else how)
     orgs = person["orgs"].most_common(1)
     return {
-        "id": hashlib.sha1(key.encode()).hexdigest()[:12],
+        "id": _key_id(key),
         "name": _best(person["names"]),
         "relation": next(r for r in _STRONGEST_FIRST if r in person["relations"]),
         "sources": sources,
@@ -455,18 +584,32 @@ def _entry(key: str, person: dict) -> dict:
     }
 
 
-def _chat(direct: bool, label: str, topic: str | None = None) -> dict:
-    """A conversation as (ts, sender) pairs, where sender None is me and "" someone unnamed."""
-    return {"direct": direct, "label": label, "topic": topic, "partners": set(), "messages": []}
+def _chat(direct: bool, label: str, topic: str | None = None, key: str | None = None) -> dict:
+    """A conversation as (ts, sender) pairs, where sender None is me and "" someone unnamed.
+    The key says which conversation it is, for the group it makes."""
+    return {
+        "direct": direct,
+        "label": label,
+        "topic": topic,
+        "key": key,
+        "partners": set(),
+        "messages": [],
+    }
 
 
-def _add_chats(book: _Book, source: str, chats: Iterable[dict]) -> None:
+def _add_chats(
+    book: _Book, source: str, chats: Iterable[dict], group_kind: str | None = None
+) -> None:
     """Direct chats I wrote in: the other person, with every message. Groups I wrote in: each
-    member who wrote on a day I did, with their messages from those days."""
+    member who wrote on a day I did, with their messages from those days. With a group_kind,
+    everyone who wrote in such a group, on any day, shares it as a context."""
     for chat in chats:
         days = {ts[:10] for ts, sender in chat["messages"] if sender is None}
         if not days:
             continue
+        if group_kind and not chat["direct"] and chat["key"]:
+            writers = {sender for _, sender in chat["messages"] if sender}
+            book.group(group_kind, chat["key"], chat["label"], writers)
         topics = [chat["topic"]]
         if chat["direct"]:
             stamps = [ts for ts, _ in chat["messages"]]
@@ -503,11 +646,11 @@ def _whatsapp(vault: Path, book: _Book) -> None:
                 chat = _chat(True, "direct chat")
                 chat["partners"].update(filter(None, [name]))  # never the chat id: a number
             else:
-                chat = _chat(False, name or "a group", name)
+                chat = _chat(False, name or "a group", name, r["chat_id"])
             chats[r["chat_id"]] = chat
         sender = None if r.get("from_me") else r.get("sender_name") or ""
         chat["messages"].append((r["ts"], sender))
-    _add_chats(book, "whatsapp", chats.values())
+    _add_chats(book, "whatsapp", chats.values(), "whatsapp_group")
 
 
 def _slack(vault: Path, book: _Book) -> None:
@@ -528,13 +671,18 @@ def _slack(vault: Path, book: _Book) -> None:
                     chat = _chat(True, f"{team} DM")
                     chat["partners"].update(filter(None, [name]))
                 elif kind == "group_dm":
-                    chat = _chat(False, f"{team} group DM")
+                    chat = _chat(False, f"{team} group DM", None, f"{team}/{r['channel_id']}")
                 else:
-                    chat = _chat(False, f"{team} #{name or 'a channel'}", name and f"#{name}")
+                    chat = _chat(
+                        False,
+                        f"{team} #{name or 'a channel'}",
+                        name and f"#{name}",
+                        f"{team}/{r['channel_id']}",
+                    )
                 chats[r["channel_id"]] = chat
             sender = None if r.get("from_me") else r.get("user_name") or ""
             chat["messages"].append((r["ts"], sender))
-        _add_chats(book, "slack", chats.values())
+        _add_chats(book, "slack", chats.values(), "slack_channel")
 
 
 def _email(vault: Path, book: _Book) -> None:
@@ -555,6 +703,7 @@ def _email(vault: Path, book: _Book) -> None:
                     "mine": bool(r.get("from_me")),
                     "to": {a.lower() for a in [*(r.get("to") or []), *(r.get("cc") or [])]},
                     "parent": r.get("in_reply_to"),
+                    "thread": r.get("gmail_thread"),
                     "subject": r.get("subject"),
                     "bulk": _bulk(r),
                 }
@@ -583,7 +732,7 @@ def _email(vault: Path, book: _Book) -> None:
         known = names.get(address)
         if not known or _NO_REPLY.match(address.split("@")[0]):
             continue  # unnamed, or a robot: an address alone never goes in the index
-        name = max(known, key=lambda n: (known[n], len(n.split())))
+        name = _usual_name(known)
         stamps = [m["ts"] for m in sent.values()] + theirs[address]
         book.add(
             name,
@@ -595,6 +744,48 @@ def _email(vault: Path, book: _Book) -> None:
             topics=[_subject(m["subject"]) for m in sent.values()],
             org=_org(address),
         )
+    _email_threads(book, mail, by_id, names, mine)
+
+
+def _email_threads(
+    book: _Book, mail: list[dict], by_id: dict[str, dict], names: dict[str, Counter], mine: set
+) -> None:
+    """Each thread, or one message with no replies, is a group of the people on it: senders and
+    recipients who've written to me under a name, unless it has more than MAX_RECIPIENTS
+    addresses besides mine. Bulk mail has no people to speak of."""
+    threads: dict[str, dict] = {}
+    for m in mail:
+        if m["bulk"]:
+            continue
+        thread = threads.setdefault(_thread_key(m, by_id), {"addresses": set(), "subjects": []})
+        thread["addresses"] |= ({m["from"]} | m["to"]) - mine - {""}
+        if subject := _subject(m["subject"]):
+            thread["subjects"].append(subject)
+    for key, thread in threads.items():
+        if len(thread["addresses"]) > MAX_RECIPIENTS:
+            continue
+        people = [_usual_name(names[a]) for a in sorted(thread["addresses"]) if names.get(a)]
+        subject = thread["subjects"][0] if thread["subjects"] else None
+        book.group("email_thread", key, subject, people)
+
+
+def _usual_name(known: Counter) -> str:
+    """The name an address writes under most, the fuller one on a tie."""
+    return max(known, key=lambda n: (known[n], len(n.split())))
+
+
+def _thread_key(m: dict, by_id: dict[str, dict]) -> str:
+    """A message's thread: Gmail's id when it has one, else the oldest message it replies to
+    that I have (or the one it replies to, when that's missing)."""
+    if m["thread"]:
+        return f"gmail/{m['thread']}"
+    root, seen = m, {m["id"]}
+    while (parent := root["parent"]) and parent not in seen:
+        seen.add(parent)
+        if parent not in by_id:
+            return f"reply/{parent}"
+        root = by_id[parent]
+    return f"reply/{root['id']}"
 
 
 def _linkedin(vault: Path, book: _Book) -> None:
@@ -654,6 +845,8 @@ def _mentions(vault: Path, book: _Book) -> None:
             if len(authors) > MAX_AUTHORS:
                 authors = authors[:5] + authors[-1:]
             title = r.get("title")
+            if key := r.get("id") or title:
+                book.group("paper", str(key), title, authors)
             for name in authors:
                 _mention(
                     book, name, "know_of", f"mentions/{stream}", r["ts"], _quoted(title), [title]
@@ -1044,6 +1237,53 @@ def _bulk(record: dict) -> bool:
     }
     local_part = (record.get("from_address") or "").split("@")[0]
     return bool(labels & _BULK_LABELS) or bool(_NO_REPLY.match(local_part))
+
+
+# Connections
+
+
+def connections(
+    groups: list[dict], core: list[dict], now: datetime
+) -> tuple[list[dict], list[dict]]:
+    """Edges between the people in core and the groups that make them, from every group of the
+    index (members as sets of ids). Groups keep only their members in core, and those left
+    with fewer than two are dropped. Two people share an edge with a weight of their shared
+    groups, and only GRAPH_EDGES are kept: heavier first, then the smaller the groups they
+    share the closer, then the more active the pair, so a big channel never crowds out the
+    people who share a few small ones. A group's size is everyone in it from the index, not
+    just those in core, so a big channel with two people in core isn't a small group."""
+    rank = {p["id"]: _score(p, now) for p in core}
+    size = {group["id"]: len(group["members"]) for group in groups}
+    kept = []
+    for group in groups:
+        members = sorted(group["members"] & rank.keys())
+        if len(members) >= 2:
+            kept.append(group | {"members": members})
+    kept.sort(key=lambda g: (GROUP_KINDS.index(g["kind"]), -len(g["members"]), g["name"], g["id"]))
+
+    shared: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for group in kept:
+        for pair in itertools.combinations(group["members"], 2):
+            shared[pair].append(group)
+
+    def closeness(item: tuple[tuple[str, str], list[dict]]) -> tuple:
+        (a, b), together = item
+        near = sum(1 / (size[g["id"]] - 1) for g in together)
+        return (-len(together), -near, -(rank[a] + rank[b]), a, b)
+
+    edges = [
+        {
+            "source": a,
+            "target": b,
+            "weight": len(together),
+            "contexts": [
+                _clip(f"{_GROUP_KINDS[g['kind']][0]}: {g['name']}", TOPIC_CHARS)
+                for g in together[:EDGE_CONTEXTS]
+            ],
+        }
+        for (a, b), together in sorted(shared.items(), key=closeness)[:GRAPH_EDGES]
+    ]
+    return edges, kept
 
 
 # Ideas

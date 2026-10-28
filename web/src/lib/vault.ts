@@ -6,7 +6,8 @@
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
 
-import { createReadStream, promises as fs, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { constants as fsConstants, createReadStream, promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -17,8 +18,15 @@ import type {
   BatchInfo,
   ChangelogSection,
   Confidence,
+  Draft,
+  DraftAction,
+  DraftsResponse,
+  Edge,
   FeedbackEntry,
   FeedItem,
+  GraphThumb,
+  Group,
+  GroupKind,
   HomeResponse,
   Item,
   NetworkAction,
@@ -45,7 +53,9 @@ import type {
   TwinResponse,
   VaultInfo,
 } from "./types";
-import { ACTIONS, ADVICE_ACTIONS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
+import { isAwaiting } from "./drafts";
+import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
+import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
 
 const REPO_ROOT = path.resolve(process.cwd(), "..");
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
@@ -749,7 +759,6 @@ function toPerson(raw: unknown): Person | null {
     relation: RELATIONS.includes(r.relation as Relation) ? (r.relation as Relation) : "know_of",
     sources: strings(r.sources, 20).map((x) => x.toLowerCase()),
     interactions: typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.round(n) : 0,
-    first_seen: str(r.first_seen),
     last_seen: str(r.last_seen),
     context: str(r.context) ?? "",
     topics: strings(r.topics, 12),
@@ -813,6 +822,39 @@ function toToRead(raw: unknown): ToRead | null {
   return { id, name, why: str(r.why) ?? "", ...unacted };
 }
 
+function toEdge(raw: unknown): Edge | null {
+  const r = record(raw);
+  const source = str(r?.source);
+  const target = str(r?.target);
+  if (!r || !source || !target || source === target) return null;
+  const w = r.weight;
+  return {
+    source,
+    target,
+    weight: typeof w === "number" && Number.isFinite(w) && w >= 1 ? Math.round(w) : 1,
+    contexts: strings(r.contexts, 8),
+  };
+}
+
+function toGroup(raw: unknown): Group | null {
+  const r = record(raw);
+  const id = str(r?.id);
+  const name = str(r?.name)?.trim();
+  if (!r || !id || !name || !GROUP_KINDS.includes(r.kind as GroupKind)) return null;
+  return { id, name, kind: r.kind as GroupKind, members: strings(r.members, GRAPH_MAX_NODES) };
+}
+
+/** The file's edges, strongest first, as many as the graph draws. */
+function edgesOf(raws: unknown): Edge[] {
+  const out: Edge[] = [];
+  for (const raw of Array.isArray(raws) ? raws : []) {
+    if (out.length >= GRAPH_MAX_EDGES) break;
+    const e = toEdge(raw);
+    if (e) out.push(e);
+  }
+  return out;
+}
+
 /** The people index and the ideas built on it, with feedback folded into the ideas. */
 export async function getNetwork(): Promise<NetworkResponse> {
   const vault = vaultPath();
@@ -832,6 +874,9 @@ export async function getNetwork(): Promise<NetworkResponse> {
       exists: people !== null,
       generated: people ? str(people.generated) : null,
       list: uniqueBy(people?.people, toPerson),
+      core: strings(people?.core, GRAPH_MAX_NODES),
+      edges: edgesOf(people?.edges),
+      groups: uniqueBy(people?.groups, toGroup),
     },
     ideas: {
       exists: ideas !== null,
@@ -843,9 +888,239 @@ export async function getNetwork(): Promise<NetworkResponse> {
   };
 }
 
+/** The busiest connected people and the ties among them: a small picture of the network. */
+export async function getGraphThumb(limit = 140): Promise<GraphThumb> {
+  const vault = vaultPath();
+  const doc = record(await readJsonFile(path.join(vault, "clones", "network", "people.json"), MAX_PEOPLE_BYTES));
+  const list = uniqueBy(doc?.people, toPerson);
+  const edges = edgesOf(doc?.edges);
+  const groups = uniqueBy(doc?.groups, toGroup);
+  const byId = new Map(list.map((p) => [p.id, p]));
+
+  // People with a tie first, the busiest of them, so the picture isn't mostly strangers.
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+  const core = strings(doc?.core, GRAPH_MAX_NODES).filter((id) => byId.has(id));
+  const chosen = core
+    .filter((id) => degree.has(id))
+    .sort((a, b) => byId.get(b)!.interactions - byId.get(a)!.interactions)
+    .slice(0, limit);
+  const keep = new Set(chosen);
+  return {
+    now: nowIso(),
+    exists: doc !== null,
+    people: list.length,
+    connected: core.length,
+    edges: edges.length,
+    groups: groups.length,
+    nodes: chosen.map((id) => ({ id, relation: byId.get(id)!.relation, interactions: byId.get(id)!.interactions })),
+    links: edges
+      .filter((e) => keep.has(e.source) && keep.has(e.target))
+      .slice(0, 600)
+      .map((e) => ({ source: e.source, target: e.target, weight: e.weight })),
+  };
+}
+
 export async function appendNetworkFeedback(itemId: string, action: NetworkAction) {
   const entry = { item_id: itemId, action, ts: nowIso() };
   await appendJsonl(["clones", "network", "feedback.jsonl"], entry);
+  return entry;
+}
+
+// ── Drafts ──────────────────────────────────────────────────────────────────
+//
+// clones/drafts/<id>.md: front matter ("key: value" lines between two "---"
+// lines) and a markdown body. Nothing here sends anything; a draft is text for
+// the reader to copy.
+
+/** A draft file bigger than this isn't read, so an edit may not make one bigger either. */
+export const MAX_DRAFT_BYTES = 256 * 1024;
+const MAX_DRAFTS = 500;
+export const DRAFT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export class DraftNotFoundError extends Error {}
+/** A draft with no front matter: it can be read and copied, but there's nowhere to record a status. */
+export class DraftFormatError extends Error {}
+export class DraftTooLargeError extends Error {}
+
+interface DraftFile {
+  name: string; // file name in the drafts folder
+  text: string;
+  fields: Record<string, string>;
+  /** The front matter's lines, and the offset where the body starts. */
+  head: { lines: string[]; end: number } | null;
+}
+
+/** A front matter value: bare text, or a quoted string as a writer might have emitted it. */
+function fieldValue(raw: string): string {
+  const v = raw.trim();
+  if (v.length >= 2 && v[0] === '"' && v.endsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(v);
+      if (typeof parsed === "string") return parsed;
+    } catch {
+      // Not JSON after all: use it as written, without the quotes.
+    }
+    return v.slice(1, -1);
+  }
+  if (v.length >= 2 && v[0] === "'" && v.endsWith("'")) return v.slice(1, -1);
+  return v;
+}
+
+function readDraftFile(name: string, text: string): DraftFile {
+  const bare = text.replace(/^\uFEFF/, "");
+  const m = bare.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+  if (!m) return { name, text: bare, fields: {}, head: null };
+  const fields: Record<string, string> = {};
+  const lines = m[1].split(/\r?\n/);
+  for (const line of lines) {
+    const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    if (kv && !(kv[1].toLowerCase() in fields)) fields[kv[1].toLowerCase()] = fieldValue(kv[2]);
+  }
+  return { name, text: bare, fields, head: { lines, end: m[0].length } };
+}
+
+function toDraft(file: DraftFile): Draft {
+  const f = file.fields;
+  const stem = file.name.replace(/\.md$/i, "");
+  const body = file.head ? file.text.slice(file.head.end) : file.text;
+  const created = f.created && !Number.isNaN(Date.parse(f.created)) ? f.created : null;
+  return {
+    id: f.id && DRAFT_ID.test(f.id) ? f.id : stem,
+    title: f.title?.trim() || "Untitled draft",
+    kind: (f.kind ?? "").trim().toLowerCase(),
+    for: (f.for ?? "").trim().toLowerCase(),
+    channel: (f.channel ?? "").trim().toLowerCase(),
+    to: (f.to ?? "").trim(),
+    created,
+    status: (f.status ?? "draft").trim().toLowerCase() || "draft",
+    body: body.replace(/\r\n?/g, "\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, ""),
+  };
+}
+
+function draftsDir(vault: string): string {
+  return path.join(vault, "clones", "drafts");
+}
+
+/**
+ * The draft files, most recently written first, at most MAX_DRAFTS of them. Only
+ * plain files count: a symlink in the folder could point anywhere, so it's never
+ * read, and never written through.
+ */
+async function readDraftFiles(vault: string): Promise<DraftFile[]> {
+  const dir = draftsDir(vault);
+  let names: string[];
+  try {
+    names = (await fs.readdir(dir)).filter((n) => n.toLowerCase().endsWith(".md") && !n.startsWith("."));
+  } catch {
+    return [];
+  }
+  const found: { name: string; mtime: number }[] = [];
+  for (const name of names) {
+    try {
+      const st = await fs.lstat(path.join(dir, name));
+      if (st.isFile() && st.size <= MAX_DRAFT_BYTES) found.push({ name, mtime: st.mtimeMs });
+    } catch {
+      // Vanished: skip it.
+    }
+  }
+  found.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name));
+  const out: DraftFile[] = [];
+  for (const { name } of found.slice(0, MAX_DRAFTS)) {
+    try {
+      // O_NOFOLLOW: a file swapped for a symlink since the lstat above isn't followed either.
+      const fh = await fs.open(path.join(dir, name), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      try {
+        out.push(readDraftFile(name, await fh.readFile("utf8")));
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      // Vanished or unreadable: skip it.
+    }
+  }
+  return out;
+}
+
+/** Every draft, newest first. Each is exactly what its file says; nothing is made up for a bad file. */
+export async function getDrafts(): Promise<DraftsResponse> {
+  const vault = vaultPath();
+  const seen = new Set<string>();
+  const drafts: Draft[] = [];
+  for (const file of await readDraftFiles(vault)) {
+    const d = toDraft(file);
+    if (seen.has(d.id)) continue;
+    seen.add(d.id);
+    drafts.push(d);
+  }
+  drafts.sort((a, b) => time(b.created ?? "") - time(a.created ?? "") || a.title.localeCompare(b.title));
+  return { now: nowIso(), vault: await vaultInfo(vault), exists: await isDir(draftsDir(vault)), drafts };
+}
+
+/**
+ * Write a file next to its old self and swap it in, so a reader never sees half of it.
+ * The new file is private to the user, like everything else the page writes to the vault,
+ * and the temporary one is created fresh ("wx"), never opened through something already there.
+ */
+async function replaceFile(file: string, text: string): Promise<void> {
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
+  try {
+    await fs.writeFile(tmp, text, { mode: 0o600, flag: "wx" });
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await fs.rm(tmp, { force: true });
+    throw e;
+  }
+}
+
+/** The file's text with one front matter field set, added at the end of the front matter if it's missing. */
+function withField(file: DraftFile, key: string, value: string): string {
+  const head = file.head;
+  if (!head) throw new Error("no front matter");
+  const eol = file.text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = [...head.lines];
+  const at = lines.findIndex((l) => new RegExp(`^${key}\\s*:`, "i").test(l));
+  if (at === -1) lines.push(`${key}: ${value}`);
+  else lines[at] = `${key}: ${value}`;
+  return `---${eol}${lines.join(eol)}${eol}---${eol}${file.text.slice(head.end)}`;
+}
+
+/** The file's text with a new body under the same front matter. */
+function withBody(file: DraftFile, body: string): string {
+  const head = file.head;
+  if (!head) throw new Error("no front matter");
+  const eol = file.text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = head.lines.join(eol);
+  return `---${eol}${lines}${eol}---${eol}${eol}${body.replace(/\r\n?/g, "\n").replace(/\s+$/, "").replace(/\n/g, eol)}${eol}`;
+}
+
+/**
+ * Apply one action to a draft: approve and discard set its status, edit
+ * replaces its body, copy only logs. Each is then appended to
+ * clones/drafts/feedback.jsonl as {draft_id, action, ts}. The draft is found by
+ * matching the id against the files that exist, never by building a path from it.
+ */
+export async function applyDraftAction(draftId: string, action: DraftAction, body?: string) {
+  const vault = vaultPath();
+  if (!(await isDir(vault))) throw new VaultMissingError(displayPath(vault));
+  const file = (await readDraftFiles(vault)).find((f) => toDraft(f).id === draftId);
+  if (!file) throw new DraftNotFoundError(draftId);
+
+  if (action !== "copy") {
+    if (!file.head) throw new DraftFormatError(draftId);
+    const text =
+      action === "edit"
+        ? withBody(file, body ?? "")
+        : withField(file, "status", action === "approve" ? "approved" : "discarded");
+    if (Buffer.byteLength(text, "utf8") > MAX_DRAFT_BYTES) throw new DraftTooLargeError(draftId);
+    await replaceFile(path.join(draftsDir(vault), file.name), text);
+  }
+
+  const entry = { draft_id: draftId, action, ts: nowIso() };
+  await appendJsonl(["clones", "drafts", "feedback.jsonl"], entry);
   return entry;
 }
 
@@ -938,6 +1213,8 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
   const advice = await getAdvice();
   const network = await getNetwork();
   const unanswered = advice.suggestions.filter((s) => s.action === null);
+  const drafts = await getDrafts();
+  const awaiting = drafts.drafts.filter((d) => isAwaiting(d.status));
 
   return {
     now: nowIso(),
@@ -965,6 +1242,7 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
       met: network.people.list.filter((p) => p.relation === "met").length,
       outreach: network.ideas.outreach.find((o) => o.action === null) ?? null,
     },
+    drafts: { exists: drafts.exists, awaiting: awaiting.length, top: awaiting.slice(0, 3) },
     self: await selfSummary(vault),
     sources: await sourceSyncs(vault),
   };

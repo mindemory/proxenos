@@ -142,6 +142,15 @@ export function freshnessLine(sources: { kind: string; lastSync: string | null }
   return parts.length ? `${parts.join(", ")}.` : "";
 }
 
+/** How fresh a source's last sync is: a label, and Tailwind classes for its dot and text. */
+export function freshness(lastSync: string | null, now: string): { label: string; dot: string; text: string } {
+  const h = hoursSince(lastSync, now);
+  if (h < 6) return { label: "Fresh", dot: "bg-ok-ink", text: "text-ok-ink" };
+  if (h < 72) return { label: "Behind", dot: "bg-warn-ink", text: "text-warn-ink" };
+  if (h < Infinity) return { label: "Stale", dot: "bg-bad-ink", text: "text-bad-ink" };
+  return { label: "Never", dot: "bg-muted/60", text: "text-muted" };
+}
+
 export function percent(score: number): number {
   return Math.round(score * 100);
 }

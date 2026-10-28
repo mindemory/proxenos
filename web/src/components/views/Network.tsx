@@ -1,91 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Network as NetworkIcon, Search, ThumbsDown, ThumbsUp, type LucideIcon } from "lucide-react";
+import { Network as NetworkIcon, Search } from "lucide-react";
 
-import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { EmptyState, ErrorBanner, LoadingRows, NoVault, QuietLine } from "@/components/EmptyState";
+import { GraphView } from "@/components/network/GraphView";
+import { Actions, Citation, Generated, Label, RELATION_LABEL, type OnReact } from "@/components/network/parts";
 import { SourceBadge } from "@/components/SourceBadge";
 import { useNetwork } from "@/lib/client";
-import { formatDateTime, shortDate, timeAgo } from "@/lib/format";
-import type { NetworkAction, NetworkResponse, Person, Relation } from "@/lib/types";
+import { formatDateTime, shortDate } from "@/lib/format";
+import type { NetworkResponse, Person, Relation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export type NetworkTab = "people" | "projects" | "outreach";
+export type NetworkTab = "graph" | "list" | "projects" | "outreach";
 
 export const NETWORK_TABS: { id: NetworkTab; label: string }[] = [
-  { id: "people", label: "People" },
+  { id: "graph", label: "Graph" },
+  { id: "list", label: "List" },
   { id: "projects", label: "Projects" },
   { id: "outreach", label: "Reach out" },
 ];
 
-const RELATION_LABEL: Record<Relation, string> = { met: "Met", know_of: "Know of", to_read: "To read" };
-
-const ACTIONS: { action: NetworkAction; label: string; icon: LucideIcon; tone: ActionTone; done: string }[] = [
-  { action: "useful", label: "Useful", icon: ThumbsUp, tone: "ok", done: "You marked this useful" },
-  { action: "not_me", label: "Not me", icon: ThumbsDown, tone: "bad", done: "You said this isn't for you" },
-  { action: "done", label: "Done", icon: Check, tone: "ok", done: "You marked this done" },
-];
-
-type Idea = { id: string; action: NetworkAction | null; acted_at: string | null };
-type OnReact = (item: Idea, action: NetworkAction) => void;
-
 const PAGE = 100;
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <div className="eyebrow mb-1">{children}</div>;
-}
-
-/** The accent-tinted box for the one line to act on. */
-function Citation({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-accent/25 bg-accent/[0.06] p-4">
-      <div className="text-[11px] leading-4 font-medium uppercase tracking-[0.08em] text-accent mb-1.5">{label}</div>
-      <p className="font-display text-lg leading-snug text-ink break-words">{children}</p>
-    </div>
-  );
-}
-
-function Actions({ item, now, onReact }: { item: Idea; now: string; onReact: OnReact }) {
-  const state = ACTIONS.find((a) => a.action === item.action);
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {ACTIONS.map((a) => (
-        <ActionButton
-          key={a.action}
-          icon={a.icon}
-          label={a.label}
-          tone={a.tone}
-          active={item.action === a.action}
-          onClick={() => onReact(item, a.action)}
-        />
-      ))}
-      {state && (
-        <span className="text-xs text-muted sm:ml-auto">
-          {state.done}
-          {item.acted_at && (
-            <>
-              , <span className="num">{timeAgo(item.acted_at, now)}</span>
-            </>
-          )}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function Generated({ at, now, children }: { at: string | null; now: string; children?: React.ReactNode }) {
-  return (
-    <div className="px-4 sm:px-6 py-3 border-b border-line flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm text-muted">
-      <span>{children}</span>
-      {at && (
-        <span title={formatDateTime(at)}>
-          Generated <span className="num">{timeAgo(at, now)}</span>
-        </span>
-      )}
-    </div>
-  );
-}
 
 // ── People ──────────────────────────────────────────────────────────────────
 
@@ -399,7 +335,20 @@ function Outreach({ data, flashId, onReact }: { data: NetworkResponse; flashId: 
   );
 }
 
-export function Network({ tab, onChange }: { tab: NetworkTab; onChange?: () => void }) {
+export function Network({
+  tab,
+  onChange,
+  find,
+  onFound,
+  onTab,
+}: {
+  tab: NetworkTab;
+  onChange?: () => void;
+  /** A person to find in the graph, from the command box, and what to call once it's used. */
+  find?: { q: string; nonce: number } | null;
+  onFound?: () => void;
+  onTab?: (tab: NetworkTab) => void;
+}) {
   const { data, error, flashId, react, clearError } = useNetwork(onChange);
 
   if (!data) {
@@ -409,9 +358,11 @@ export function Network({ tab, onChange }: { tab: NetworkTab; onChange?: () => v
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   return (
-    <div className="pb-24 md:pb-20">
+    <div className={tab === "graph" ? undefined : "pb-24 md:pb-20"}>
       {error && <ErrorBanner message={error} onDismiss={clearError} />}
-      {tab === "people" ? (
+      {tab === "graph" ? (
+        <GraphView data={data} flashId={flashId} onReact={react} find={find} onFound={onFound} onTab={onTab} />
+      ) : tab === "list" ? (
         <People data={data} />
       ) : !data.ideas.exists ? (
         <NoIdeas />

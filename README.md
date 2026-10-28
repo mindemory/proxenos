@@ -35,5 +35,8 @@ cp .env.example .env    # then fill in keys
 | `twin observe [--dry-run]` | Write per-month notes on what each source says about me |
 | `twin master` | Sync, observe and update the self-model (`twin master accept` applies proposals) |
 | `twin clone tracker\|tasks\|advisor` | Feed of new papers and news, tasks on my plate, and advice |
+| `twin clone network [--people-only]` | People I've met, know of or want to read, and who shares a chat, thread, paper or employer with whom (the page's graph); then project and outreach ideas. `--people-only` needs no model |
+| `twin clone work [--max N]` | Drafts written as me for open tasks, the top outreach and projects, and the top feed items, to approve, edit, copy or discard in the page's Drafts view. Never sends anything |
+| `twin night` | `twin master`, then the tracker, tasks, advisor, network and work clones, one line each; a failed step doesn't stop the rest. `scripts/install-night.sh` schedules it daily at 01:30 |
 
 Tests: `pytest`. Lint: `ruff check src tests`.
