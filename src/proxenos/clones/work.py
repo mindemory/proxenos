@@ -351,6 +351,8 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
         "whatsapp": "WhatsApp, a direct chat",
         "linkedin": "LinkedIn, a direct chat",
         "facebook": "Messenger, a direct chat",
+        "instagram": "Instagram, a direct chat",
+        "slack": "Slack, a direct message or a channel thread (named with #) they're in",
         "email": "Email, a thread",
     }
     head = _brief(

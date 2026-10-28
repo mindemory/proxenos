@@ -39,7 +39,7 @@ More detail: [architecture](docs/architecture.md), [data sources](docs/data_sour
 ## Privacy
 
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (`PROXENOS_VAULT`, default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
-- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat waiting on your reply.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites.
 - **Credentials** stay in `.env`, which git ignores.

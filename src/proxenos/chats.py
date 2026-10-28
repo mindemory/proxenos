@@ -1,12 +1,15 @@
 """Conversations waiting on the user: direct chats where someone else had the last word.
 
-Reads the message streams in raw/ (WhatsApp and Facebook Messenger chats, LinkedIn
-conversations, and the last six months of email threads) and finds each direct chat whose
+Reads the message streams in raw/ (WhatsApp, Messenger and Instagram chats, LinkedIn
+conversations, Slack, and the last six months of email threads) and finds each direct chat whose
 newest message with text isn't the user's and came within the last `days`. A chat counts only
 when the user has written in it before (for an email, in the thread or to that sender at all),
 so businesses, newsletters and strangers they never answered stay out (and an email must be
 addressed to one of their PROXENOS_EMAILS among a few people), and only when what's
-waiting says something: a question, a link or a few words, not a lone "ok" or emoji.
+waiting says something: a question, a link or a few words, not a lone "ok" or emoji. In Slack,
+a direct message counts, and so does a channel thread that mentions the user or that they've
+written in; a thread that only mentions them is answered in their way of writing in that
+workspace.
 
 Each one comes with what a reply needs: the messages waiting, the recent conversation around
 them, and the user's own last messages in that chat, which show how they write to that person
@@ -35,6 +38,7 @@ MAX_RECIPIENTS = 6  # more than this on To and Cc is an announcement, not a ques
 _LINKEDIN_FOLDERS = ("INBOX", "ARCHIVE", None)  # not sponsored messages or InMail offers
 _ADDRESS = re.compile(r"[^\s<>\"',;]+@[^\s<>\"',;]+")
 _BULK_LABELS = {"category promotions", "category social", "category updates", "category forums"}
+_MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")  # Slack's <@U123> or <@U123|name>
 
 
 def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
@@ -55,6 +59,10 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
         for key, messages in chats.items():
             if chat := _waiting(messages, since, start):
                 found.append({"source": source, "chat": key, **chat})
+
+    # Slack, one workspace at a time: who the user is differs between workspaces.
+    for folder in sorted((vault / "raw" / "slack").glob("*/messages")):
+        found += _slack(folder.parent.name, sorted(folder.glob("*.jsonl")), since, start)
 
     # Email: a thread counts when the user wrote in it, or has written to its sender anywhere.
     months = sorted({p.name for p in (vault / "raw" / "email").glob("*/*.jsonl")})[-EMAIL_MONTHS:]
@@ -108,6 +116,50 @@ def _waiting(
     }
 
 
+def _slack(workspace: str, paths: list[Path], since: str, start: str) -> list[dict]:
+    """A workspace's chats waiting on the user, as waiting() finds them: each direct message,
+    and each channel thread where someone mentioned the user or that the user has written in."""
+    records = [r for r in _records(paths) if r.get("channel_id")]
+    me = {r["user_id"] for r in records if r.get("from_me") and r.get("user_id")}
+    names = {
+        r["user_id"]: r["user_name"] for r in records if r.get("user_id") and r.get("user_name")
+    }
+
+    def readable(text: object) -> str:
+        return _MENTION.sub(lambda m: "@" + names.get(m[1], "someone"), str(text or ""))
+
+    chats: dict[str, list[dict]] = defaultdict(list)
+    threads = set()
+    for r in records:
+        dm = r.get("channel_type") == "dm"
+        key = (
+            r["channel_id"]
+            if dm
+            else f"{r['channel_id']}/{r.get('thread_ts') or r.get('slack_ts')}"
+        )
+        name = r.get("channel_name") if dm else f"#{r.get('channel_name') or 'a channel'}"
+        message = _message(
+            {**r, "text": readable(r.get("text"))}, key, name, dm, r.get("user_name")
+        )
+        if message:
+            mentioned = bool(me & set(_MENTION.findall(str(r.get("text") or ""))))
+            chats[key].append({**message, "direct": dm or mentioned})
+            if not dm:
+                threads.add(key)
+
+    mine = sorted(
+        (m for ms in chats.values() for m in ms if m["mine"] and m["text"]), key=lambda m: m["ts"]
+    )
+    found = []
+    for key, messages in chats.items():
+        if key in threads and any(m["mine"] for m in messages):
+            messages = [{**m, "direct": True} for m in messages]
+        examples = (lambda _: [m["text"] for m in mine]) if key in threads else None
+        if chat := _waiting(messages, since, start, examples):
+            found.append({"source": "slack", "chat": f"{workspace}/{key}", **chat})
+    return found
+
+
 def _shown(message: dict) -> dict:
     return {key: message[key] for key in ("ts", "mine", "sender", "text")}
 
@@ -123,7 +175,8 @@ def _whatsapp(r: dict) -> dict | None:
     )
 
 
-def _facebook(r: dict) -> dict | None:
+def _meta(r: dict) -> dict | None:
+    """A Messenger or Instagram message: the two exports share a shape."""
     if not r.get("chat_id"):
         return None
     return _message(
@@ -169,7 +222,8 @@ def _email(r: dict, me: set[str]) -> dict | None:
 _SOURCES: dict[str, Callable[[dict], dict | None]] = {
     "whatsapp": _whatsapp,
     "linkedin": _linkedin,
-    "facebook": _facebook,
+    "facebook": _meta,
+    "instagram": _meta,
 }
 
 
@@ -194,6 +248,10 @@ def _message(
 
 
 def _messages(paths: list[Path], read: Callable[[dict], dict | None]) -> Iterator[dict]:
+    return (message for record in _records(paths) if (message := read(record)))
+
+
+def _records(paths: list[Path]) -> Iterator[dict]:
     for path in paths:
         with path.open(encoding="utf-8") as f:
             for line in f:
@@ -201,8 +259,8 @@ def _messages(paths: list[Path], read: Callable[[dict], dict | None]) -> Iterato
                     record = json.loads(line)
                 except ValueError:
                     continue
-                if isinstance(record, dict) and (message := read(record)):
-                    yield message
+                if isinstance(record, dict):
+                    yield record
 
 
 def _iso(when: datetime) -> str:

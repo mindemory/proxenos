@@ -142,3 +142,79 @@ def test_an_email_waits_when_addressed_to_the_user_by_someone_they_write_to(tmp_
     assert (chat["source"], chat["chat"], chat["name"]) == ("email", "t2", "Ana")
     assert [m["text"] for m in chat["waiting"]] == ["Can you review my draft?"]
     assert chat["own"] == ["Hi Ana, sure."]  # what they wrote Ana in another thread
+
+
+def slack(channel, ts, text, user="U2", name="Ana", kind="channel", thread=None, mine=False):
+    return {
+        "id": f"{channel}/{ts}",
+        "ts": ts,
+        "slack_ts": ts,
+        "thread_ts": thread,
+        "channel_id": channel,
+        "channel_name": name if kind == "dm" else "lab",
+        "channel_type": kind,
+        "user_id": "U1" if mine else user,
+        "user_name": "Me" if mine else name,
+        "from_me": mine,
+        "text": text,
+    }
+
+
+def test_slack_dms_and_threads_that_mention_the_user_or_they_are_in(tmp_path):
+    write_jsonl(
+        tmp_path / "raw" / "slack" / "lab" / "messages" / "2026-03.jsonl",
+        [
+            slack("D1", "2026-03-01T09:00:00Z", "sure thing", kind="dm", mine=True),
+            slack("D1", "2026-03-09T09:00:00Z", "can you send the slides?", kind="dm"),
+            slack("C1", "2026-03-09T09:00:00Z", "<@U1> could you check the run?"),
+            slack("C1", "2026-03-09T10:00:00Z", "anyone free for lunch today?"),  # not to them
+            slack("C1", "2026-03-08T09:00:00Z", "the new data is up"),
+            slack(
+                "C1",
+                "2026-03-08T09:05:00Z",
+                "nice, thanks",
+                mine=True,
+                thread="2026-03-08T09:00:00Z",
+            ),
+            slack(
+                "C1", "2026-03-09T11:00:00Z", "did it load for you?", thread="2026-03-08T09:00:00Z"
+            ),
+        ],
+    )
+
+    found = {c["chat"]: c for c in chats.waiting(tmp_path, NOW)}
+
+    assert set(found) == {"lab/D1", "lab/C1/2026-03-09T09:00:00Z", "lab/C1/2026-03-08T09:00:00Z"}
+    assert found["lab/D1"]["name"] == "Ana"
+    mention = found["lab/C1/2026-03-09T09:00:00Z"]
+    assert (mention["source"], mention["name"]) == ("slack", "#lab")
+    assert [m["text"] for m in mention["waiting"]] == ["@Me could you check the run?"]
+    assert mention["own"] == ["sure thing", "nice, thanks"]  # how they write in the workspace
+    assert [m["text"] for m in found["lab/C1/2026-03-08T09:00:00Z"]["waiting"]] == [
+        "did it load for you?"
+    ]
+
+
+def test_instagram_chats_count_like_messenger(tmp_path):
+    def ig(ts, text, mine=False):
+        return {
+            "ts": ts,
+            "chat_id": "ana_1",
+            "chat_name": "Ana",
+            "chat_type": "direct",
+            "from_me": mine,
+            "author": None if mine else "Ana",
+            "text": text,
+        }
+
+    write_jsonl(
+        tmp_path / "raw" / "instagram" / "messages" / "2026-03.jsonl",
+        [
+            ig("2026-03-08T09:00:00Z", "haha yes", mine=True),
+            ig("2026-03-09T09:00:00Z", "coming sat?"),
+        ],
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert (chat["source"], chat["name"], chat["own"]) == ("instagram", "Ana", ["haha yes"])
