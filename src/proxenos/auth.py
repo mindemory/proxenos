@@ -188,12 +188,10 @@ def slackdump(
 ) -> str:
     if not shutil.which("slackdump"):
         raise SystemExit("Install slackdump first: brew install slackdump")
-    # "clayspace", "clayspace.slack.com" or its address: slackdump knows it by "clayspace".
+    # "acme", "acme.slack.com" or its address: slackdump knows it by "acme".
     workspace = re.sub(r"^https?://", "", name.strip()).split(".")[0].strip("/")
     if not workspace:
-        raise SystemExit(
-            "Name the workspace as in its address, e.g. clayspace for clayspace.slack.com."
-        )
+        raise SystemExit("Name the workspace as in its address, e.g. acme for acme.slack.com.")
     if run(["slackdump", "workspace", "new", workspace]).returncode != 0:
         raise SystemExit(f"slackdump didn't sign in to {workspace}")
     saved = {slack_api._slug(slack_archives._team(db) or "") for db in slack_archives.archives()}

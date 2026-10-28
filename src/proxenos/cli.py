@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
             print(auth.slack(REPO_ROOT / ".env", vault / "state" / "slack_apps.json"))
         elif args.service == "slackdump":
             if len(args.account) != 1:
-                raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. clayspace")
+                raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. acme")
             print(auth.slackdump(args.account[0]))
         elif args.service == "gmail":
             if len(args.account) != 2:

@@ -187,15 +187,15 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
         return SimpleNamespace(returncode=0)
 
     now = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
-    said = auth.slackdump("https://clayspace.slack.com", tmp_path / "data", run, now)
+    said = auth.slackdump("https://acme.slack.com", tmp_path / "data", run, now)
 
     login, archive = calls
-    assert login == ["slackdump", "workspace", "new", "clayspace"]
+    assert login == ["slackdump", "workspace", "new", "acme"]
     assert archive[:6] == [
         "slackdump",
         "archive",
         "-workspace",
-        "clayspace",
+        "acme",
         "-files=false",
         "-member-only",
     ]
@@ -204,7 +204,7 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
     assert "saved its last 30 days" in said
 
     monkeypatch.setattr(slackdump, "archives", lambda: [tmp_path / "a" / "slackdump.sqlite"])
-    monkeypatch.setattr(slackdump, "_team", lambda db: "Clayspace")
+    monkeypatch.setattr(slackdump, "_team", lambda db: "Acme")
     calls.clear()
-    assert "fetches its new messages" in auth.slackdump("clayspace", tmp_path / "data", run, now)
+    assert "fetches its new messages" in auth.slackdump("acme", tmp_path / "data", run, now)
     assert len(calls) == 1  # signed in again; its archive is already there
