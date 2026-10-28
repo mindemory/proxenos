@@ -1,12 +1,12 @@
-"""Research and news feed, ranked against my profile.
+"""Research and news feed, ranked against the user's profile.
 
 Each run pulls the last couple of days from public sources (arXiv, OpenAlex, RSS and Atom
 feeds, the Hacker News front page), drops whatever was offered before, and asks the model to
-score the rest against `self/` and my recent reactions on the page. The best go into
+score the rest against `self/` and their recent reactions on the page. The best go into
 tracker/items as monthly JSONL, tagged as made by Proxenos.
 
-The sources live in tracker/sources.json, which is mine to edit. When it's missing, the model
-proposes a first set from the profile and from the sites I link to most on WhatsApp. Only
+The sources live in tracker/sources.json, which is the user's to edit. When it's missing, the model
+proposes a first set from the profile and from the sites they link to most on WhatsApp. Only
 those domain names go to the model, nothing else from the messages. A source that fails is
 counted and skipped, so one dead feed never costs a run.
 
@@ -253,7 +253,8 @@ def read_profile(self_dir: Path) -> str:
 
 
 def shared_domains(directory: Path, limit: int = TOP_DOMAINS) -> list[str]:
-    """The sites I link to most on WhatsApp, most shared first. Only my own messages count."""
+    """The sites the user links to most on WhatsApp, most shared first. Only their own messages
+    count."""
     counts: Counter[str] = Counter()
     for path in sorted(directory.glob("*.jsonl")):
         with path.open(encoding="utf-8") as f:
@@ -524,7 +525,7 @@ def _dedupe(candidates: list[dict], known: set[str]) -> list[dict]:
 
 
 def _reactions(path: Path, items: dict[str, dict], now: datetime) -> dict[str, list[str]]:
-    """Titles of the items I marked lately, by reaction, newest first. Opens don't count."""
+    """Titles of the items the user marked lately, by reaction, newest first. Opens don't count."""
     if not path.exists():
         return {}
     cutoff = now - FEEDBACK_WINDOW
@@ -607,7 +608,7 @@ def _record(item: dict, batch: str) -> dict:
         "why": item["why"],
         "interest": item["interest"],
         "explore": item["explore"],
-        "by": "proxenos",  # made by Proxenos, so it's never read back as something I wrote
+        "by": "proxenos",  # made by Proxenos, so it's never read back as something the user wrote
     }
 
 

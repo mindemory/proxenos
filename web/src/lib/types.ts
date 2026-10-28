@@ -262,7 +262,7 @@ export interface Group {
   name: string;
   kind: GroupKind;
   members: string[]; // person ids, among the people the graph connects
-  size: number; // everyone in it besides me, drawn or not
+  size: number; // everyone in it besides the user, drawn or not
 }
 
 export interface NetworkResponse {

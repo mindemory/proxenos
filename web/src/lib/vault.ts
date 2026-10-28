@@ -1047,7 +1047,7 @@ export async function editPeople(
     hide: Array.isArray(old.hide) ? old.hide.filter((x): x is string => typeof x === "string") : [],
   };
   // The newest word on a pair wins: saying they're the same undoes saying they differ, and the
-  // other way round. Splitting a name off someone undoes the merges I made of them by hand.
+  // other way round. Splitting a name off someone undoes the merges the user made of them by hand.
   if (action === "hide") {
     if (!aliases.hide.includes(a)) aliases.hide.push(a);
   } else if (b !== null && a !== b) {

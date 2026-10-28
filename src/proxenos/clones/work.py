@@ -1,28 +1,30 @@
-"""Drafts of the work on my plate, written as me, for me to approve. Nothing is ever sent.
+"""Drafts of the work on the user's plate, written as them, for their approval. Nothing is
+ever sent.
 
 Each run takes what the other clones found and has the model draft a deliverable for each,
 one call apiece, in this order until `--max` drafts are written:
 
 - every open task in clones/tasks/tasks.json: the reply or email that answers it, or the doc,
-  plan or checklist it asks for, or, when it needs something only I have, a note saying what
+  plan or checklist it asks for, or, when it needs something only the user has, a note saying what
   is missing ("blocked");
 - the top three outreach ideas and the top three projects in clones/network/ideas.json: the
   message that makes the ask, and a plan to start the project;
 - the top six items of the newest batch in tracker/items: a reading note.
 
-Ideas I marked not me or done, tasks I closed and feed items I marked not me get no draft.
+Ideas marked not me or done, tasks closed and feed items marked not me get no draft.
 
 Each draft is clones/drafts/<id>.md: front matter (id, title, kind, for, channel, to, created,
 status) and a markdown body, which the page lists under Drafts. The id is the task's id, or
 the idea's or item's with what it's for in front ("outreach-...", "project-...",
 "reading-..."), so each thing has one draft, which later runs write again as it changes;
-things with no draft yet come first when `--max` cuts a run short. A draft becomes mine once I approve, discard or edit it on the page: its status says approved
-or discarded, or clones/drafts/feedback.jsonl has an edit for it, and no run touches it
-again. Nor does a run touch a file without front matter, since no run wrote it.
+things with no draft yet come first when `--max` cuts a run short. A draft becomes the user's
+once they approve, discard or edit it on the page: its status says approved or discarded, or
+clones/drafts/feedback.jsonl has an edit for it, and no run touches it again. Nor does a run
+touch a file without front matter, since no run wrote it.
 
-The model gets the self-model's identity, voice and interests, so drafts sound like me, and
+The model gets the self-model's identity, voice and interests, so drafts sound like the user, and
 the task, idea or feed item as the other clones wrote it. No raw messages are sent. The
-drafts are text for me to copy: this clone only writes files.
+drafts are text for the user to copy: this clone only writes files.
 """
 
 import argparse
@@ -45,7 +47,7 @@ SELF_FILES = ("identity", "voice", "interests")
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
 CHANNELS = ("email", "whatsapp", "slack", "linkedin", "instagram", "in_person", "other")
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
-_MINE = ("approved", "discarded")  # statuses the page sets; a draft with one is mine
+_MINE = ("approved", "discarded")  # statuses the page sets; a draft with one is the user's
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the draft ids the page accepts
 _FRONT = re.compile(r"---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", re.DOTALL)
 _FIELD = re.compile(r"([A-Za-z_][\w-]*)\s*:\s*(.*)")
@@ -198,7 +200,7 @@ def _job(key: object, kind: str, title: object, today: str, text: str) -> dict:
 
 
 def _open_ideas(items: object, shut: set[str], field: str) -> list[dict]:
-    """The ideas in one list of ideas.json, in order, without the ones I closed."""
+    """The ideas in one list of ideas.json, in order, without the ones the user closed."""
     return [
         i
         for i in (items if isinstance(items, list) else [])
@@ -208,7 +210,7 @@ def _open_ideas(items: object, shut: set[str], field: str) -> list[dict]:
 
 
 def _newest_batch(directory: Path, reactions: dict[str, str]) -> list[dict]:
-    """The feed's newest batch, best first, without what I marked not me."""
+    """The feed's newest batch, best first, without what the user marked not me."""
     months = sorted(directory.glob("*.jsonl"))
     items = [i for i in _jsonl(months[-1]) if isinstance(i.get("id"), str)] if months else []
     batch = max(map(_batch, items), default="")
@@ -388,7 +390,7 @@ def _unquote(value: str) -> str:
 
 
 def _write(path: Path, text: str) -> None:
-    """Swap the file in whole, private to me, so the page never reads half of it."""
+    """Swap the file in whole, private to the user, so the page never reads half of it."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.unlink(missing_ok=True)

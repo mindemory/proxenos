@@ -1,6 +1,6 @@
-"""Observer clones: one per source, each turning a month of raw data into notes about me.
+"""Observer clones: one per source, each turning a month of raw data into notes about the user.
 
-An observer only sees my side: my own messages, my sent mail, my plays and activities.
+An observer only sees the user's side: their own messages, sent mail, plays and activities.
 Other people's words never leave the vault. Notes land in observations/<source>/YYYY-MM.md
 and are redone whenever that month's raw data changes, so the current month keeps up as it
 fills in. Timestamps are shown in this machine's local time.
@@ -220,7 +220,7 @@ def streams(vault: Path) -> list[tuple[str, list[Path]]]:
     units: dict[str, list[Path]] = {}
     for month_file in sorted((vault / "raw").glob("**/*.jsonl")):
         if not _MONTH_FILE.fullmatch(month_file.name):
-            continue  # a snapshot of who's in which group, never something I wrote
+            continue  # a snapshot of who's in which group, never something the user wrote
         parts = month_file.parent.relative_to(vault / "raw").parts
         name = "/".join(parts[:2]) if parts[0] in _PER_ACCOUNT else parts[0]
         directories = units.setdefault(name, [])

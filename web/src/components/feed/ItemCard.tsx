@@ -77,7 +77,7 @@ export function ItemCard({ item, flash = false, onReact, onOpen }: ItemCardProps
             </span>
           </div>
 
-          {/* Why it matters to me */}
+          {/* Why it matters to the user */}
           {item.why && <p className="text-[15px] text-ink leading-relaxed">{item.why}</p>}
 
           {(item.interest || item.explore) && (

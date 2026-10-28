@@ -248,16 +248,16 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "Cy: Who books the wall?",
         "me: I'll book it",
         "Dana: Please send the poster PDF",
-        "Dana: @me can you fix the cluster script?",  # a channel I only got mentioned in
+        "Dana: @me can you fix the cluster script?",  # a channel the user only got mentioned in
         "me: I'll present on Thursday",
         "Prof Example: Please submit the travel form",
-        "Prof Example: Who can host?",  # to a list, but I answered
+        "Prof Example: Who can host?",  # to a list, but the user answered
         "me: I can host",
     ]
     dropped = [
         "Ancient ask",
         "Old note from me",
-        "Lost cat",  # a group I didn't write in this window
+        "Lost cat",  # a group the user didn't write in this window
         "joined",
         "Free pizza",
         "an old message of mine",
@@ -265,7 +265,7 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "Your build passed",
         "Claim your prize",
         "Talk on Friday",
-        "Sent to my other address",  # mine, but only PROXENOS_EMAILS could say so
+        "Sent to my other address",  # the user's, but only PROXENOS_EMAILS could say so
         "15550001111",  # never a phone number
     ]
     assert [text for text in kept if text not in prompt] == []

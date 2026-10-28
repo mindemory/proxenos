@@ -1,7 +1,7 @@
 """Calendar events from iCalendar (.ics) files, such as Google Calendar's export.
 
 Reads every .ics file under --export and writes one stream per file into vault/raw/calendar/,
-named after the file: mdd@example.edu.ics goes to calendar/mdd-example-edu. Google's export
+named after the file: user@example.edu.ics goes to calendar/user-example-edu. Google's export
 (Settings, Import & export) is a zip with one .ics per calendar, and Takeout has the same files
 under Takeout/Calendar/. Every file is a full snapshot, so each run re-reads one and merges by id.
 

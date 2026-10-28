@@ -96,18 +96,18 @@ def make_vault(tmp_path, monkeypatch, notes=True):
     write_jsonl(
         raw / "whatsapp" / "messages" / "2026-02.jsonl",
         [
-            # A direct chat I answered: all three messages count.
+            # A direct chat the user answered: all three messages count.
             wa(1, "c1", "2026-02-01T10:00:00Z", "Ada Placeholder", "Ada Placeholder"),
             wa(2, "c1", "2026-02-01T10:05:00Z", None, "Ada Placeholder"),
             wa(3, "c1", "2026-02-20T09:00:00Z", "Ada Placeholder", "Ada Placeholder"),
-            # A group: Bram wrote on a day I did, Cleo only on another day.
+            # A group: Bram wrote on a day the user did, Cleo only on another day.
             wa(4, "c2", "2026-02-03T08:00:00Z", None, "Spiral Club", "group"),
             wa(5, "c2", "2026-02-03T09:00:00Z", "Bram Sample", "Spiral Club", "group"),
             wa(6, "c2", "2026-02-03T09:30:00Z", "Bram Sample", "Spiral Club", "group"),
             wa(7, "c2", "2026-02-05T09:00:00Z", "Cleo Example", "Spiral Club", "group"),
             wa(8, "c2", "2026-02-03T09:40:00Z", "", "Spiral Club", "group"),
             wa(9, "c2", "2026-02-03T09:50:00Z", "Gil Joiner", "Spiral Club", "group", "system"),
-            # A chat known only by its number, one I never wrote in, and my own notes chat.
+            # A chat known only by its number, one never written in, and the user's own notes chat.
             wa(10, "c3", "2026-02-04T08:00:00Z", "+1 555 010 0000", "+1 555 010 0000"),
             wa(11, "c3", "2026-02-04T08:01:00Z", None, "+1 555 010 0000"),
             wa(12, "c4", "2026-02-04T08:00:00Z", "Dov Fixture", "Dov Fixture"),
@@ -508,7 +508,7 @@ def test_people_index(tmp_path, monkeypatch):
         ("whatsapp_group", "Spiral Club", 2),
         ("paper", "Spirals in the brain", 2),
     ]
-    # Cleo only wrote on a day I didn't, but a group of two is people I've met.
+    # Cleo only wrote on a day the user didn't, but a group of two is people they've met.
     cleo = people["Cleo Example"]
     assert (cleo["interactions"], cleo["sources"], cleo["context"]) == (
         0,
@@ -838,7 +838,7 @@ def test_ideas(tmp_path, monkeypatch):
 
 def connected_vault(tmp_path, monkeypatch):
     """People who share groups: Ann and Ben four ways, Ann with Cy, Eve and Fay, and others
-    with a company in common. Names are made up; Tess is me and in every context."""
+    with a company in common. Names are made up; Tess is the user and in every context."""
     monkeypatch.setenv("PROXENOS_NAME", "Tess")
     monkeypatch.setenv("PROXENOS_FULL_NAME", "Tess Wintest")
     monkeypatch.setenv("PROXENOS_EMAILS", ME)
@@ -847,12 +847,12 @@ def connected_vault(tmp_path, monkeypatch):
     write_jsonl(
         raw / "whatsapp" / "messages" / "2026-03.jsonl",
         [
-            # Cy only wrote on a day I didn't, but wrote in a group I'm in.
+            # Cy only wrote on a day the user didn't, but wrote in a group they're in.
             wa(1, "g1", "2026-03-01T08:00:00Z", None, "Lab Chat", "group"),
             wa(2, "g1", "2026-03-01T09:00:00Z", "Ann Alpha", "Lab Chat", "group"),
             wa(3, "g1", "2026-03-01T09:30:00Z", "Ben Beta", "Lab Chat", "group"),
             wa(4, "g1", "2026-03-05T09:00:00Z", "Cy Gamma", "Lab Chat", "group"),
-            # A group I never wrote in connects no one, and neither does a direct chat.
+            # A group the user never wrote in connects no one, and neither does a direct chat.
             wa(5, "g2", "2026-03-02T09:00:00Z", "Dee Delta", "Quiet Club", "group"),
             wa(6, "g2", "2026-03-02T09:10:00Z", "Ann Alpha", "Quiet Club", "group"),
             wa(7, "c1", "2026-03-02T10:00:00Z", "Ann Alpha", "Ann Alpha"),
@@ -968,7 +968,7 @@ def test_edges_connect_people_who_share_a_context(tmp_path, monkeypatch):
         pair("Ben Beta", "Cy Gamma"): (0.5, ["WhatsApp: Lab Chat"]),
         pair("Ann Alpha", "Eve Epsilon"): (1.1309, ["Email: Grant", "Email: Plan"]),
         pair("Ben Beta", "Eve Epsilon"): (0.5, ["Email: Plan"]),
-        # Two papers, one of them with me on it: I don't count towards its size.
+        # Two papers, one of them with the user on it: they don't count towards its size.
         pair("Ann Alpha", "Fay Zeta"): (
             1.2619,
             ["Paper: More on spirals", "Paper: Spirals in the brain"],
@@ -983,7 +983,7 @@ def test_edges_connect_people_who_share_a_context(tmp_path, monkeypatch):
         assert edge["shared"] >= len(edge["contexts"])
     weights = [e["weight"] for e in data["edges"]]
     assert weights == sorted(weights, reverse=True)  # strongest first
-    # Nothing connects me, a group I never wrote in, a direct chat, or a company with no name.
+    # Nothing connects the user, a group never written in, a direct chat, or a company with no name.
     me = network.person_id("Tess Wintest")
     assert me not in {i for e in data["edges"] for i in (e["source"], e["target"])}
     assert not any("Quiet Club" in c or "Self" in c for _, cs in edges.values() for c in cs)
@@ -1005,7 +1005,7 @@ def test_groups_list_who_shares_each_context(tmp_path, monkeypatch):
         ("whatsapp_group", "Lab Chat"): (["Ann Alpha", "Ben Beta", "Cy Gamma"], 3),  # Cy too
         ("whatsapp_group", "Call now"): (["Gus Org", "Hal Org"], 2),  # no number in a name
         ("slack_channel", "acme #methods"): (["Ann Alpha", "Ben Beta"], 2),
-        ("paper", "More on spirals"): (["Ann Alpha", "Fay Zeta"], 2),  # not me
+        ("paper", "More on spirals"): (["Ann Alpha", "Fay Zeta"], 2),  # T. Wintest is the user
         ("paper", "Spirals in the brain"): (["Ann Alpha", "Fay Zeta"], 2),
         ("email_thread", "Plan"): (["Ann Alpha", "Ben Beta", "Eve Epsilon"], 3),
         ("email_thread", "Grant"): (["Ann Alpha", "Eve Epsilon"], 2),
@@ -1168,7 +1168,7 @@ def channel(cid, name, members, joined=True):
 def identity_vault(tmp_path, monkeypatch, cohort_extra=()):
     """A lab group on WhatsApp where Tori goes by her first name, a cohort channel on Slack
     where she has her full name, and a flatmate saved as "Raj Flatmate" on one jid who writes as
-    Raj Tester on the other and by email. All made up; Tess is me."""
+    Raj Tester on the other and by email. All made up; Tess is the user."""
     monkeypatch.setenv("PROXENOS_NAME", "Tess")
     monkeypatch.setenv("PROXENOS_FULL_NAME", "Tess Wintest")
     monkeypatch.setenv("PROXENOS_EMAILS", ME)
@@ -1282,7 +1282,7 @@ def test_one_person_across_jids_sources_and_a_first_name(tmp_path, monkeypatch):
     assert raj["interactions"] == 4 + 2
     # A different full name is never merged, whoever shares what.
     assert people["Tori Other"]["sources"] == ["linkedin/connections"]
-    # Nothing of mine: not my push name, not my own contact card.
+    # Nothing of the user's: not their push name, not their own contact card.
     assert not names & {"Tess Wintest", "Tess US", "Tess"}
     text = json.dumps(data)
     assert not re.search(r"@|900|200|lid|whatsapp\.net", text.replace("whatsapp_group", ""))
@@ -1292,7 +1292,7 @@ def test_every_member_of_a_group_counts_with_its_size(tmp_path, monkeypatch):
     data, people = built(identity_vault(tmp_path, monkeypatch))
     name = {p["id"]: p["name"] for p in data["people"]}
     groups = {g["name"]: g for g in data["groups"]}
-    # Everyone in the lab group, writers or not, and I don't count towards its size.
+    # Everyone in the lab group, writers or not, and the user doesn't count towards its size.
     lab = groups["Spiral Lab"]
     assert sorted(name[i] for i in lab["members"]) == [
         "Mo Ample",
@@ -1302,8 +1302,8 @@ def test_every_member_of_a_group_counts_with_its_size(tmp_path, monkeypatch):
     ]
     assert (lab["kind"], lab["size"]) == ("whatsapp_group", 4)
     assert groups["summer #cohort"]["size"] == 3
-    assert "summer #random" not in groups  # a channel I'm not in
-    # A silent member of a small group is someone I've met.
+    assert "summer #random" not in groups  # a channel the user isn't in
+    # A silent member of a small group is someone the user has met.
     nia = people["Nia Quiet"]
     assert (nia["relation"], nia["interactions"], nia["sources"]) == ("met", 0, ["whatsapp"])
     edges = {frozenset((name[e["source"]], name[e["target"]])): e for e in data["edges"]}
@@ -1401,7 +1401,7 @@ def test_meetings_are_groups_of_who_came(tmp_path, monkeypatch):
             ),
         ],
     )
-    # A calendar named after an address I never send mail from: that address is mine.
+    # A calendar named after an address the user never sends mail from: that address is theirs.
     write_jsonl(
         vault / "raw" / "calendar" / "tess-lab-test" / "2026-02.jsonl",
         [

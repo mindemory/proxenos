@@ -21,14 +21,14 @@ your_instagram_activity/ and older ones at the top of the export, so both are se
 - personal_information/personal_information/personal_information.json, or
   personal_information/personal_information.json in older exports:
   profile_user[0].string_map_data with Name and Username. Those mark from_me in messages.
-  Without the file, the participant in the most threads is taken to be me (no one on a tie).
+  Without the file, the participant in the most threads is taken to be the user (no one on a tie).
 A missing file reads as empty. A file that isn't JSON, and an entry in any other layout or
 without a time, is counted as skipped.
 
 Meta writes non-ASCII text as UTF-8 bytes read as latin-1 ("cafÃ©"), so every string is decoded
 back, and one that wasn't garbled that way is left as it is.
 
-from_me says who wrote the words. Posts and comments are mine. A like is something I did to
+from_me says who wrote the words. Posts and comments are the user's. A like is something they did to
 someone else's post, so it's from_me false with the post's owner as author.
 
 Nothing in the export has an id. A message is keyed by its thread and timestamp_ms. The thread
@@ -67,7 +67,7 @@ _VIDEO = {".mp4", ".mov", ".m4v", ".webm"}
 
 
 def read_owner(export: Path) -> list[str]:
-    """My Name and Username from personal_information.json, or [] without it."""
+    """The user's Name and Username from personal_information.json, or [] without it."""
     for relative in _PERSONAL:
         if names := _names(export / relative):
             return names
@@ -144,7 +144,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         metavar="NAME",
-        help="my name as messages show it (repeatable; default: from personal_information)",
+        help="your name as messages show it (repeatable; default: from personal_information)",
     )
 
 

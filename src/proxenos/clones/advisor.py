@@ -1,13 +1,14 @@
-"""What I could do better: specific changes, from evidence, judged by my own goals.
+"""What the user could do better: specific changes, from evidence, judged by their own goals.
 
 Each run gives the model the whole self-model, the last three months of observer notes, the
-task list, and summaries of my Strava training and Spotify listening worked out here, and
-asks for five to eight changes to how I spend time, work, train, sleep, handle tasks, decide
-and communicate. Each one names the pattern it starts from and cites its evidence. A run
+task list, and summaries of the user's Strava training and Spotify listening worked out here,
+and asks for five to eight changes to how they spend time, work, train, sleep, handle tasks,
+decide and communicate. Each one names the pattern it starts from and cites its evidence. A run
 lands in clones/advisor/<date>.json, and a second run on the same day replaces it.
 
 The page marks suggestions useful, not me, or doing in clones/advisor/feedback.jsonl. Later
-runs never bring back what I marked not me, and follow up on what I said I'm doing.
+runs never bring back what the user marked not me, and follow up on what they said they're
+doing.
 """
 
 import argparse
@@ -321,8 +322,8 @@ def _asked(task: dict) -> str | None:
 
 
 def _history(out: Path, since: datetime) -> tuple[str, set[str]]:
-    """Earlier advice and my reactions to it as prompt text, and the ids I marked not_me.
-    What I'm doing or rejected comes back however old; the rest only from the window."""
+    """Earlier advice and the user's reactions to it as prompt text, and the ids marked not_me.
+    What the user is doing or rejected comes back however old; the rest only from the window."""
     given: dict[str, tuple[str, dict]] = {}
     for path in sorted(out.glob("*.json")):
         if not _DAY.fullmatch(path.stem):
@@ -356,7 +357,7 @@ def _history(out: Path, since: datetime) -> tuple[str, set[str]]:
 
 
 def _feedback(path: Path) -> dict[str, str]:
-    """My latest reaction to each suggestion: {suggestion_id: action}."""
+    """The user's latest reaction to each suggestion: {suggestion_id: action}."""
     if not path.exists():
         return {}
     latest: dict[str, tuple[datetime, str]] = {}
@@ -429,7 +430,7 @@ def _monday(ts: str) -> date:
 
 
 def _local(when: str | datetime) -> datetime:
-    """A UTC timestamp in this machine's time zone, where the hours of my day make sense."""
+    """A UTC timestamp in this machine's time zone, where the hours of the user's day make sense."""
     return (datetime.fromisoformat(when) if isinstance(when, str) else when).astimezone()
 
 

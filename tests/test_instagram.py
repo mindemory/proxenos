@@ -243,7 +243,7 @@ def test_missing_files_are_empty_and_malformed_entries_are_skipped(tmp_path):
     stats = instagram.ingest(tmp_path / "vault", tmp_path / "e")
     assert stats == {"read": 3, "added": 3, "updated": 0, "months_written": 3, "skipped": 5}
     (msg,) = stream(tmp_path / "vault", "messages")
-    assert msg["from_me"] is False  # no profile, and one thread can't say who I am
+    assert msg["from_me"] is False  # no profile, and one thread can't say who the user is
 
 
 def test_reingest_through_run_is_idempotent_and_keys_that_collide_get_a_suffix(tmp_path):

@@ -1,7 +1,7 @@
-"""Worker clones: each does one job for me, using the shared self-model.
+"""Worker clones: each does one job for the user, using the shared self-model.
 
 Clones read `vault/self/` (written only by the master) and never change it. Each writes its
-output under its own corner of the vault, and anything it learns about me goes back through
+output under its own corner of the vault, and anything it learns about the user goes back through
 the master as feedback or observations, never directly into `self/`.
 
 `proxenos clone <name>` finds every module here that defines `run`. A module provides:

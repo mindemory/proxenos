@@ -1,67 +1,100 @@
 # Data sources
 
-Decided 2026-10-27: everything is in bounds. That covers all three email accounts, WhatsApp, Slack, Facebook, Instagram, Strava, Spotify, and the rest.
+Every source is optional and works on its own. Start with one or two and add more later, in any order. Each ingester writes monthly files into your vault, and re-running one is always safe: records merge by id, so nothing is duplicated.
 
-Two things this data can't do on its own:
-- **It records what I did and said, not why.** Reasons, doubts, and the things I thought but never wrote down only come from the interview and the morning reactions. Those stay in the plan.
-- **Most of it is who I *have been*.** A 2016 message is evidence about 2016-me. Every record keeps its date. The self-model is always "as of" some date, and recent evidence counts for more. The upside is that Proxenos can model the *trajectory*, not just a snapshot.
+## How data gets in
 
-## Build status (2026-10-27)
+- **Downloads.** Request an export from the service, put the zip (or the unzipped folder) in the repo's `data/` folder or in `<vault>/inbox/`, and run `proxenos import`. It recognizes each export, unpacks it, hands it to the right ingester and files the download away. Exports that arrive in several zips (Google Takeout, Meta) are imported together.
+- **Live sources.** WhatsApp (its local store), Gmail (IMAP), Slack, Strava, Bluesky and public mentions are read directly, and `proxenos sync` refreshes them. `sync` also imports anything waiting in the inboxes, so one command keeps everything current.
+- **Folders you name.** A Spotify export, a website repo and slackdump runs live wherever you keep them. Point Proxenos at them in `.env` (see [the settings below](#folder-settings)).
 
-| Source | Command | State |
+The `ingest` commands in the tables are for reading one source by hand. Anything that arrives as a download can go through `proxenos import` instead. Credentials and settings live in `.env`; [.env.example](../.env.example) lists them all.
+
+## Sources
+
+### Messages and social
+
+| Source | What it adds | How to get it | Command |
+|---|---|---|---|
+| **WhatsApp** | Your messages, your groups and who is in them: your everyday voice and your relationships | The WhatsApp Mac app, signed in. Proxenos reads the app's local database, so the terminal that runs it needs Full Disk Access (System Settings, Privacy & Security). The Mac app may hold less history than your phone. | `proxenos ingest whatsapp` (`--db PATH` for a copy elsewhere) |
+| **Slack** (token) | Your work-casual voice and your collaborators | A user OAuth token (`xoxp-...`) as `SLACK_USER_TOKEN` in `.env`, one per workspace (`SLACK_USER_TOKEN_<name>` for more). `proxenos auth slack` can create a read-only app and fetch the token from a configuration token. A workspace admin may need to approve the app, since the workspace owns the data. | `proxenos ingest slack` (`--full` to re-read everything) |
+| **Slack** (slackdump) | The same, with no token or app | Run [slackdump](https://github.com/rusq/slackdump) once per workspace. Each run makes a `slackdump_<date>_<time>/` folder. Set `PROXENOS_SLACKDUMP_DIR` to the folder that holds them, or drop them in `data/`. | `proxenos ingest slackdump` (`--root DIR`) |
+| **LinkedIn** | Profile, career, posts, comments, messages and connections | Settings, Data privacy, Get a copy of your data | `proxenos ingest linkedin --export DIR` |
+| **X / Twitter** | Posts, DMs and likes | Settings, Your account, Download an archive of your data | `proxenos ingest twitter --export DIR` |
+| **Instagram**, **Facebook** | Messages, posts and comments (Instagram likes too): how you present yourself and your older social life | Accounts Center, Your information and permissions, Download your information. Choose JSON, all time, and include messages. A big export arrives as several zips; unzip them into one folder. | `proxenos ingest instagram --export DIR`, `proxenos ingest facebook --export DIR` |
+| **Threads** | Posts and replies | The same Download your information page, with Threads selected | `proxenos ingest threads --export DIR` |
+| **Bluesky** | Your public posts, replies and reposts | Your handle as `PROXENOS_BLUESKY_HANDLE`. No sign-in needed. | `proxenos ingest bluesky` (`--full`) |
+
+### Email
+
+| Source | What it adds | How to get it | Command |
+|---|---|---|---|
+| **Email, any provider** | Sent mail is your professional and personal voice. Received mail is context. | An mbox export: Takeout's Mail folder, or one from your mail client. Set `PROXENOS_EMAILS` to all your addresses so Proxenos knows which mail is yours. | `proxenos ingest email --account NAME --mbox PATH` |
+| **Gmail over IMAP** | The same, kept current | Turn on IMAP in Gmail's settings and make an [app password](https://myaccount.google.com/apppasswords) (it needs 2-Step Verification). Add `GMAIL_<NAME>=address:app-password` to `.env`, one line per account. The first run backfills everything. | `proxenos ingest gmail` (`--account NAME`, `--full`) |
+
+### Google Takeout
+
+Request one export at [takeout.google.com](https://takeout.google.com) with the products below, then `proxenos import` the zips. For YouTube history, pick JSON if Takeout offers the choice (HTML is read too).
+
+| Product | What it adds | Command |
 |---|---|---|
-| WhatsApp | `proxenos ingest whatsapp` | Running on real data. The Mac app holds only recent years; older chats live on the phone. |
-| Spotify | `proxenos ingest spotify` | Running on real data from an Extended Streaming History export |
-| Strava | `proxenos ingest strava` | Running on real data. `proxenos auth strava` gets a token with activity access. |
-| Slack | `proxenos ingest slack` | Built and tested; needs `SLACK_USER_TOKEN` |
-| Email | `proxenos ingest email --account NAME --mbox PATH` | Built and tested; waiting on mbox exports |
-| Facebook, Instagram, Paperpile, blog, notes, Mac activity, AI conversations | | Not built yet |
+| **Mail** | As above, one stream per address | `proxenos ingest email ...` |
+| **Calendar** | Events, guests and repeating events: your schedule and the people you meet. Google Calendar's own export (Settings, Import & export) works too. | `proxenos ingest calendar --export DIR` |
+| **Drive** | The text of documents, slides, spreadsheets, PDFs and plain-text files: what you write and work on | `proxenos ingest drive --export DIR` |
+| **Google Photos** | Metadata only (dates, places, tagged people, albums). The photos and videos stay in the zip. | `proxenos ingest photos --export DIR` |
+| **Keep**, **Tasks** | Your notes and task lists | `proxenos ingest keep --export DIR`, `proxenos ingest gtasks --export DIR` |
+| **YouTube and YouTube Music** | What you watch and search for: interests and taste | `proxenos ingest youtube --export DIR` |
+| **Chrome** | Browsing history that Chrome synced to your Google account | `proxenos ingest chrome --export DIR` |
 
-## Every source needs two paths
+### Activity and habits
 
-- **Backfill:** a one-time pull of all history.
-- **Daily sync:** the nightly delta.
+| Source | What it adds | How to get it | Command |
+|---|---|---|---|
+| **Strava** | Your training: routine and discipline | Create an app at [strava.com/settings/api](https://www.strava.com/settings/api), put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env`, then run `proxenos auth strava` and approve in the browser. The refresh token is saved to `.env`. | `proxenos ingest strava` (`--full`) |
+| **Spotify** | What you listen to, when: taste, mood and daily rhythm | Account, Privacy settings, then request your **Extended streaming history**. It can take up to 30 days. Unzip it and set `PROXENOS_SPOTIFY_EXPORT` to the folder holding `Streaming_History_Audio_*.json`. Request a newer export now and then: plays you already have are a no-op, and new ones are added. | `proxenos ingest spotify` (`--export DIR` for another folder) |
+| **Letterboxd** | Your diary, ratings, reviews and watchlist | Settings, Data, Export your data | `proxenos ingest letterboxd --export DIR` |
 
-Some sources only offer a bulk export. Those get refreshed by re-requesting the export now and then.
+### Writing and reading
 
-| Source | What it tells Proxenos | Backfill | Daily sync | Notes |
-|---|---|---|---|---|
-| **Gmail** (personal) | Personal life, plans, relationships. Sent mail is the voice. | Google Takeout → Mail (mbox) | Gmail API, read-only scope, `after:` query | Add Calendar, Chrome history, and YouTube history to the same Takeout request. |
-| **University email** | Work, research, professional voice | Export from the mail client to mbox | Microsoft Graph or IMAP, whichever the university allows | Institutional account, see ground rules. |
-| **Third email** | ? | ? | ? | Provider TBD |
-| **WhatsApp** | Closest thing to my unfiltered voice. Relationships. | The Mac app's local SQLite (`~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`) | Same DB, new rows since the last run | Reading it needs Full Disk Access for the terminal. The desktop app may not hold full history (the phone does), so check how far back it goes. |
-| **Slack** | Work-casual voice, collaborations | Members' workspace exports cover public channels only. My DMs need the API with a user token. | Slack API, same token | Installing a token-bearing app may need workspace admin approval. The workspace owns the data. |
-| **Facebook + Instagram** | Older social self, interests, how I present publicly | Accounts Center → Download your information → JSON, all time, include messages | None. No API for personal messages, so re-request quarterly. | Mostly past-me |
-| **Strava** | Routine, discipline, physical life | Settings → My Account → request archive (activities + GPX) | `proxenos ingest strava` (API) | |
-| **Spotify** | Taste, mood, daily rhythm | Extended Streaming History export. Re-request it now and then; it takes up to 30 days. | Web API recently-played (last 50 tracks only) | 50 tracks is a few hours, so either poll several times a day or accept gaps and patch them from the next extended export. |
-| **Paperpile** | What I read for research | `.bib` already auto-exported to GitHub (`notion_paperpile`) | `git pull` | |
-| **Blog** | Long-form voice and thinking | `mindemory.github.io` repo | `git pull` | |
-| **Notes** | Personal writing | `Notes/*.pages` | Watch the folder | Needs conversion: Pages can export text via AppleScript. |
-| **Mac activity** | How I actually spend time | `phronesis` DB | Same DB | |
-| **AI conversations** | What I'm curious about, and how I think out loud | Claude and ChatGPT data exports; Claude Code transcripts in `~/.claude/projects` | Re-export periodically | Not mentioned yet, but high signal. |
+| Source | What it adds | How to get it | Command |
+|---|---|---|---|
+| **Notion**, **Obsidian**, **PDFs** | Your notes and what you read | Notion: Settings, Export, as Markdown & CSV (or PDF). Obsidian: the vault folder. PDFs: any folder of them. | `proxenos ingest notes --export DIR` (`--pdf-dir DIR` for PDFs) |
+| **Personal website** | Your long-form voice and thinking: pages, posts and a CV data file if the site keeps one | A local git repo of the site (Jekyll or plain HTML or Markdown). Set `PROXENOS_WEBSITE_REPO` to it. Pages are dated from their front matter, their own markup, their path, or the day git first saw them. | `proxenos ingest website` (`--repo DIR`) |
+| **Papers and mentions** | Public mentions of you in the news, your papers on OpenAlex and the papers that cite them | Your name as `PROXENOS_FULL_NAME`. Add `PROXENOS_OPENALEX_ID` if the name search picks the wrong author profile. | `proxenos ingest mentions` |
 
-## Start these today (they take hours to weeks)
+Services with no API for personal messages (Facebook, Instagram, LinkedIn, X, Spotify's full history) only update when you request a fresh export. Do it every few months and import it; what overlaps is a no-op.
 
-1. **Google Takeout:** Gmail, Calendar, Chrome, YouTube.
-2. **Meta Download Your Information**, once each for Facebook and Instagram. Use JSON format, all time, messages included.
-3. **Spotify Extended Streaming History.** This takes up to 30 days.
-4. **Strava** full archive.
-5. **Claude and ChatGPT** data exports.
+Missing a source? [CONTRIBUTING.md](../CONTRIBUTING.md) shows how to add one.
 
-Downloads go in `$PROXENOS_VAULT/raw/<source>/<export-date>/`. They never go anywhere inside this repo, because it's public.
+## Folder settings
 
-## Ground rules for this much data
+Three sources live in folders Proxenos can't guess, so each has a setting in `.env`. A leading `~` is expanded.
 
-1. **Raw data stays on this Mac, outside this repo.** The repo is public on GitHub, so the vault lives elsewhere (`PROXENOS_VAULT`, default `~/proxenos_vault`). It shouldn't be under Desktop or Documents either, since iCloud may sync those. FileVault should be on.
-2. **Other people are in this data.** I can consent for myself, not for the people I've talked to. Proxenos models *me*: my side of conversations and how I relate to people. It does not build profiles of others. Their words are kept as context, not as subjects.
-3. **University email and Slack are institutional.** They may contain student or research-participant information. Check the institution's policy on sending this to an external model, and filter if needed.
-4. **Raw data never goes to an API model wholesale.** Years of email is tens of millions of tokens, mostly newsletters and notifications. Filter and distill locally first. Sent mail and my own messages come first; received mail is context.
-5. **Secrets** (API tokens, OAuth credentials) go in `.env`, which is already ignored.
+| Setting | Points at | When it's not set |
+|---|---|---|
+| `PROXENOS_SPOTIFY_EXPORT` | The folder holding `Streaming_History_Audio_*.json` | `proxenos ingest spotify` stops and names the setting. `proxenos sync` skips Spotify. |
+| `PROXENOS_WEBSITE_REPO` | Your site's local git repo | `proxenos ingest website` stops and names the setting. `proxenos sync` skips the website. |
+| `PROXENOS_SLACKDUMP_DIR` | A folder holding `slackdump_*` runs | Only the repo's `data/` folder is searched. |
 
-## Ingestion order
+A path passed on the command line (`--export`, `--repo`, `--root`) always wins over the setting.
 
-1. **What I wrote:** sent email, my WhatsApp and Slack messages, the blog, notes. This gives voice and beliefs.
-2. **What I read and watched:** Paperpile, browser history, YouTube, AI conversations. This gives interests and taste.
-3. **How I live:** Calendar, Strava, Spotify, Phronesis. This gives routine and rhythm.
+## What the data can and can't tell Proxenos
 
-Voice comes in registers: professional (email), work-casual (Slack), and personal (WhatsApp). `voice.md` should keep them apart rather than averaging them.
+- **It records what you did and said, not why.** Your reasons, doubts and the things you thought but never wrote down only come from what you tell Proxenos directly and from your reactions on the page.
+- **Most of it is who you have been.** A message from years ago is evidence about you then. Every record keeps its date, the self-model is always "as of" a date, and recent evidence counts for more. The upside is that Proxenos can model how you change, not just a snapshot.
+
+## Where to start
+
+Voice comes in registers (personal chat, work chat, email), and the self-model keeps them apart instead of averaging them. A good order:
+
+1. **What you wrote:** your messages (WhatsApp, Slack), sent email, your website and notes. This gives voice and beliefs.
+2. **What you read and watched:** YouTube, Chrome, notes, papers. This gives interests and taste.
+3. **How you live:** Calendar, Strava, Spotify. This gives routine and rhythm.
+
+## Privacy
+
+1. **Raw data stays on your computer, outside this repo.** The repo is public code, so the vault lives elsewhere (`PROXENOS_VAULT`, default `~/proxenos_vault`) and Proxenos refuses a vault inside the repo. Keep it out of folders a cloud service syncs (iCloud syncs Desktop and Documents by default), and turn on FileVault.
+2. **Other people are in your data.** You can consent for yourself, not for everyone you've talked to. Proxenos models you: your side of conversations and how you relate to people. It doesn't build profiles of others, and their words are kept as context, not as subjects.
+3. **Work and school accounts are institutional.** Mail and chat from them may hold information about colleagues, students, patients or research participants that isn't yours to share. Check your institution's policy on sending it to an external model, and leave those sources out if in doubt.
+4. **Raw data never goes to the model wholesale.** Years of email is tens of millions of tokens, mostly newsletters and notifications. Observers read one month of one source at a time and only your own side (sent mail, your messages, your plays). Later steps read the distilled self-model. The one exception is the tasks clone: to find what is asked of you, it sends recent conversations you're part of, and leaves newsletters, notifications and promotions out.
+5. **Secrets stay in `.env`,** which git ignores: API keys, tokens and app passwords. Never put them, or any personal data, in an issue or a commit.

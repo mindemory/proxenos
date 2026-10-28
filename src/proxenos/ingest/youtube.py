@@ -15,7 +15,7 @@ caption cell with the details. The HTML names the zone by abbreviation, read wit
 offset in _ZONES.
 
 watched has title (the video), url, channel, channel_url and product. searched has text (the
-query, which is my own words, so from_me) and url. Other entries (a community post viewed, a
+query, which is the user's own words, so from_me) and url. Other entries (a community post viewed, a
 survey answered) are left out, and so are ads: entries whose details say "From Google Ads".
 The id hashes the time and the video's url (the query's, for a search). An entry whose time
 won't parse, or that isn't laid out as above, is counted as skipped.

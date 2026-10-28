@@ -19,7 +19,7 @@ The files and keys below were checked against a real export (names and keys only
   title, data[].comment (comment, author) and attachments like a post's. Reactions aren't read.
 - personal_information/profile_information/profile_information.json: profile_v2.name.full_name.
   It marks from_me in messages and is the author of posts and comments. Without it, the
-  participant in the most threads is taken to be me (no one on a tie).
+  participant in the most threads is taken to be the user (no one on a tie).
 A missing file reads as empty. A file that isn't JSON, and an entry without a time, is counted
 as skipped, and so is a post or comment with no text, title or attachment.
 
@@ -52,7 +52,7 @@ _PROFILE = "personal_information/profile_information/profile_information.json"
 
 
 def read_owner(export: Path) -> list[str]:
-    """My full name from profile_information.json, or [] without it."""
+    """The user's full name from profile_information.json, or [] without it."""
     try:
         name = _load(export / _PROFILE)["profile_v2"]["name"]["full_name"]
     except Exception:  # noqa: BLE001  missing, or not the layout this expects
@@ -128,7 +128,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         metavar="NAME",
-        help="my name as messages show it (repeatable; default: from profile_information)",
+        help="your name as messages show it (repeatable; default: from profile_information)",
     )
 
 

@@ -88,7 +88,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         metavar="ADDRESS",
-        help="an address of mine, marks from_me (repeatable; default: $PROXENOS_EMAILS)",
+        help="an address of yours, marks from_me (repeatable; default: $PROXENOS_EMAILS)",
     )
 
 

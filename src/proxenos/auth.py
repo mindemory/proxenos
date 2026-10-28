@@ -41,7 +41,7 @@ SLACK_SCOPES = [
 _SLACK_MANIFEST = {
     "display_information": {
         "name": "Proxenos reader",
-        "description": "Read-only access to my own conversations for my personal digital twin.",
+        "description": "Read-only access to your own conversations, for Proxenos.",
     },
     "oauth_config": {"scopes": {"user": SLACK_SCOPES}},
     "settings": {

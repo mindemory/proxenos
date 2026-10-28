@@ -45,7 +45,7 @@ def make_db(path, messages):
         "insert into ZWACHATSESSION values (?, ?, ?, ?)",
         [(1, "111@s.whatsapp.net", "Asha", 0), (2, "999@g.us", "Lab group", 1)],
     )
-    # Meera, Ravi, someone who left, and me; the store's first names are encoded blobs.
+    # Meera, Ravi, someone who left, and the user; the store's first names are encoded blobs.
     con.executemany(
         "insert into ZWAGROUPMEMBER values (?, ?, ?, ?, ?, ?)",
         [

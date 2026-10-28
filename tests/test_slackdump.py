@@ -109,3 +109,17 @@ def test_who_is_in_each_channel_comes_from_channel_user(tmp_path):
         {"id": "U_A", "name": "Asha", "email": "asha@example.org", "me": False},
         {"id": "U_B", "name": "Bo Quiet", "email": None, "me": False},
     ]
+
+
+def test_without_a_root_the_setting_and_the_data_folder_are_searched(tmp_path, monkeypatch):
+    monkeypatch.setattr(slackdump, "REPO_ROOT", tmp_path / "repo")
+    make_archive(tmp_path / "repo" / "data", "slackdump_20250101_000000")
+    make_archive(tmp_path / "elsewhere", "slackdump_20250202_000000")
+
+    def found(*root):
+        return sorted(db.parent.name for db in slackdump.archives(*root))
+
+    assert found() == ["slackdump_20250101_000000"]  # no setting: the data/ folder alone
+    monkeypatch.setenv("PROXENOS_SLACKDUMP_DIR", str(tmp_path / "elsewhere"))
+    assert found() == ["slackdump_20250101_000000", "slackdump_20250202_000000"]
+    assert found(tmp_path / "elsewhere") == ["slackdump_20250202_000000"]  # a root is all it reads

@@ -164,3 +164,18 @@ def test_a_broken_source_does_not_stop_the_run(tmp_path, monkeypatch):
     stats = master.run(vault)
     assert (stats["sources_synced"], stats["sources_failed"]) == (1, 1)
     assert stats["self_files_written"] == 6
+
+
+def test_spotify_and_website_sync_only_when_their_settings_are_set(monkeypatch):
+    def synced():
+        return {
+            module.__name__.rsplit(".", 1)[-1]
+            for module, configured in master._UNATTENDED
+            if module in (master.spotify, master.website) and configured()
+        }
+
+    assert synced() == set()
+    monkeypatch.setenv("PROXENOS_WEBSITE_REPO", "~/site")
+    assert synced() == {"website"}
+    monkeypatch.setenv("PROXENOS_SPOTIFY_EXPORT", "~/history")
+    assert synced() == {"spotify", "website"}

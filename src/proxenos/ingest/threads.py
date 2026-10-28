@@ -31,7 +31,7 @@ _PROFILE = "threads/personal_information.json"
 
 
 def read_owner(export: Path) -> str | None:
-    """My Threads username, or None without personal_information.json."""
+    """The user's Threads username, or None without personal_information.json."""
     try:
         profile = _load(export / _PROFILE)["text_post_app_text_post_app_profile"][0]
         return profile["string_map_data"]["Username"]["value"] or None

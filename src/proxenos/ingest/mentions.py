@@ -1,14 +1,15 @@
-"""Public mentions of me and my published work: news, my papers and the papers citing them.
+"""Public mentions of the user and their published work: news, their papers and the papers
+citing them.
 
 Three sub-sources, each written to its own stream under raw/mentions/:
 
 - news: Google News RSS for the exact name in PROXENOS_FULL_NAME. The feed only holds recent
   articles, so each run adds what's new and keeps what has dropped off.
-- works: my papers from OpenAlex. PROXENOS_OPENALEX_ID picks the author profile. Without it the
-  top hit of an author search on the name is used and printed with its works count, since a
-  name can match someone else. Every work keeps the author id it was read under.
-- citations: works citing my papers, the 25 most recent per paper. A work citing several of
-  my papers is one record listing them all, and the list only grows, so a paper whose newest
+- works: the user's papers from OpenAlex. PROXENOS_OPENALEX_ID picks the author profile.
+  Without it the top hit of an author search on the name is used and printed with its works
+  count, since a name can match someone else. Every work keeps the author id it was read under.
+- citations: works citing their papers, the 25 most recent per paper. A work citing several of
+  their papers is one record listing them all, and the list only grows, so a paper whose newest
   25 have moved on doesn't drop out of it.
 
 Ids are the article link or the OpenAlex id, and ts is the publication date, at midnight UTC

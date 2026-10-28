@@ -74,6 +74,8 @@ proxenos web                    # http://127.0.0.1:4747
 
 `px` is a short alias for `proxenos`.
 
+Some sources read a folder on your computer. Set those folders in `.env`: `PROXENOS_SPOTIFY_EXPORT`, `PROXENOS_WEBSITE_REPO` and `PROXENOS_SLACKDUMP_DIR`. `.env.example` lists every setting.
+
 ## Sources
 
 | Source | How it gets in |

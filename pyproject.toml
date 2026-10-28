@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "proxenos"
 version = "0.1.0"
-description = "Proxenos: acts on my behalf, from a model of me that keeps learning from my own data."
+description = "Proxenos: acts on your behalf, from a model of you that keeps learning from your own data."
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=2.3",

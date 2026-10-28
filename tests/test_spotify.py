@@ -1,5 +1,6 @@
 """Spotify ingester against a synthetic Extended Streaming History export. No real data here."""
 
+import argparse
 import json
 
 import pytest
@@ -169,3 +170,14 @@ def test_reingest_is_idempotent_and_newer_exports_only_add(tmp_path):
 def test_an_export_without_history_files_is_refused(tmp_path):
     with pytest.raises(FileNotFoundError, match="Streaming_History"):
         spotify.read_plays(tmp_path)
+
+
+def test_without_an_export_argument_the_setting_names_the_folder(tmp_path, monkeypatch):
+    export = make_export(tmp_path / "history", AUDIO, VIDEO)
+    monkeypatch.setenv("PROXENOS_SPOTIFY_EXPORT", str(export))
+    assert spotify.run(tmp_path / "vault", argparse.Namespace(export=None))["added"] == 5
+
+
+def test_with_neither_an_argument_nor_the_setting_it_names_the_setting(tmp_path):
+    with pytest.raises(SystemExit, match="PROXENOS_SPOTIFY_EXPORT"):
+        spotify.ingest(tmp_path / "vault")

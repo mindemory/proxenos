@@ -1,4 +1,4 @@
-"""Pages and posts of my website, read from its local git repo.
+"""Pages and posts of the user's website, read from its local git repo.
 
 Reads every tracked HTML page, and Markdown with front matter (what Jekyll renders), and
 writes its title, site path, date and plain text into the vault. A page's date is the first
@@ -17,6 +17,8 @@ are dealt with; a file that still won't parse is skipped with a note.
 
 Every run re-reads the repo and merges by id, the path relative to the repo. A page whose
 date source changes (say, front matter added later) moves month and leaves its old record.
+
+Without --repo, the repo named by PROXENOS_WEBSITE_REPO is read.
 """
 
 import argparse
@@ -30,9 +32,8 @@ from functools import cache
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 
+from proxenos.config import env
 from proxenos.store import merge_monthly
-
-DEFAULT_REPO = Path("~/Documents/Personal/mindemory.github.io").expanduser()
 
 _HTML = {".html", ".htm"}
 _MARKDOWN = {".md", ".markdown"}
@@ -76,7 +77,18 @@ _JS_TOKEN = re.compile(
 FirstAdded = Callable[[str], datetime | None]
 
 
-def ingest(vault: Path, repo: Path = DEFAULT_REPO) -> dict[str, int]:
+def default_repo() -> Path:
+    """The site repo from PROXENOS_WEBSITE_REPO; stops with a message when it isn't set."""
+    folder = env("WEBSITE_REPO")
+    if not folder:
+        raise SystemExit(
+            "website: set PROXENOS_WEBSITE_REPO in .env to your site's git repo, or pass --repo DIR"
+        )
+    return Path(folder).expanduser()
+
+
+def ingest(vault: Path, repo: Path | None = None) -> dict[str, int]:
+    repo = repo or default_repo()
     out = vault / "raw" / "website"
     files = [rel for rel in _tracked(repo) if (repo / rel).is_file()]
     first_added = cache(lambda rel: _first_added(repo, rel))
@@ -101,12 +113,15 @@ def ingest(vault: Path, repo: Path = DEFAULT_REPO) -> dict[str, int]:
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--repo", type=Path, default=DEFAULT_REPO, metavar="DIR", help="the site's git repo"
+        "--repo",
+        type=Path,
+        metavar="DIR",
+        help="the site's git repo (default: $PROXENOS_WEBSITE_REPO)",
     )
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
-    return ingest(vault, args.repo.expanduser())
+    return ingest(vault, args.repo.expanduser() if args.repo else None)
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:

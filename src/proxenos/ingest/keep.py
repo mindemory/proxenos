@@ -8,7 +8,7 @@ A note has title (None when it has none), text, labels (their names), archived, 
 and color. text is the note's textContent, or for a checklist its items joined by line breaks.
 ts is when the note was last edited, else created. The id is the file's name without .json, so
 a note's id changes with its title, and the old record stays. Notes in the trash are left out.
-Keep notes are my own words, so every record is from_me.
+Keep notes are the user's own words, so every record is from_me.
 
 A file that isn't a JSON object, or whose time is missing or won't parse, is counted as skipped.
 """

@@ -1,5 +1,5 @@
 # ── Personal data ────────────────────────────────────────────────────────────
-# This repo is public and holds code only. Anything that *is* me (exports,
+# This repo is public and holds code only. Anything that *is* the user's own (exports,
 # notes, chat logs, the compiled self-model, embeddings, research briefs)
 # lives in the vault, outside this repo (PROXENOS_VAULT in .env). These entries
 # are a backstop in case something lands here by mistake.
@@ -68,8 +68,6 @@ node_modules/
 .next/
 *.tsbuildinfo
 
-# ── Claude Code ──────────────────────────────────────────────────────────────
-.claude/settings.local.json
 CLAUDE.local.md
 
 # ── OS / editors ─────────────────────────────────────────────────────────────

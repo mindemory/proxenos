@@ -1,15 +1,17 @@
-"""Who I've met, know of and want to read, and what I could do with them.
+"""Who the user has met, knows of and wants to read, and what they could do with them.
 
 Two steps. The first, in code with no model, indexes people into clones/network/people.json:
 
-- met: people I exchanged messages with. Everyone in a WhatsApp, Instagram or LinkedIn
-  direct chat or Slack DM I wrote in; in groups and channels I wrote in, each member who wrote
-  on a day I did; and everyone in a WhatsApp group or Slack channel of at most 15 people I'm
-  in. Email correspondents I wrote to (to or cc, on mail to at most 15 people) or answered,
-  named by the From name on their own mail, so an address that never wrote to me stays out.
-  People at a meeting of 2 to 15 guests with me, from the calendars. LinkedIn connections.
-- know_of: co-authors of my papers and authors of papers citing them (raw/mentions), authors
-  in my reading notes and my website's CV, and people named in my notes and website pages.
+- met: people the user exchanged messages with. Everyone in a WhatsApp, Instagram or LinkedIn
+  direct chat or Slack DM they wrote in; in groups and channels they wrote in, each member who
+  wrote on a day they did; and everyone in a WhatsApp group or Slack channel of at most 15
+  people they're in. Email correspondents they wrote to (to or cc, on mail to at most 15
+  people) or answered, named by the From name on their own mail, so an address that never wrote
+  to the user stays out. People at a meeting of 2 to 15 guests with the user, from the
+  calendars. LinkedIn connections.
+- know_of: co-authors of the user's papers and authors of papers citing them (raw/mentions),
+  authors in their reading notes and their website's CV, and people named in their notes and
+  website pages.
 - to_read: authors on a reading list, or in a reading collection marked to read (status "to
   read", "not started", ...), and names on note lines that say to read them ("want to read",
   "read up on", "look into"), or in note tasks that start "Read".
@@ -17,7 +19,7 @@ Two steps. The first, in code with no model, indexes people into clones/network/
 Who is who. Each source's people are identities: a WhatsApp jid (a person's phone and lid jids
 are one, as raw/whatsapp/groups links them), a Slack user, an email address, a LinkedIn
 connection, or, for sources with nothing better, a name. Identities are one person when:
-- I said so in clones/network/aliases.json, which comes before everything else:
+- the user said so in clones/network/aliases.json, which comes before everything else:
   {"same": [[a, b], ...], "different": [[a, b], ...], "hide": [a, ...]}, each a name or an id
   (a ref or person id from people.json, a jid, an address, a Slack user id). The page writes it.
 - a source says so: a Slack profile's email is that address's person;
@@ -28,20 +30,20 @@ connection, or, for sources with nothing better, a name. Identities are one pers
   Tori for Victoria) that fits exactly one full-name person among those who share a group
   with it, or share someone in one (groups of at most 80).
 Two different full names are never made one otherwise. The strongest relation wins: met, then
-to_read, then know_of. The name shown is the fullest, the one most sources use. My own names
-(PROXENOS_NAME, PROXENOS_FULL_NAME, the names on my own messages) and ids are left out. So is any name
-with a digit or an @ in it, and contexts and topics are scrubbed of addresses and numbers, so
-no phone number or email lands in the index; a person's "ref" is a hash of an id. Twitter DMs
-and Instagram likes carry only ids and handles, so they add no one.
+to_read, then know_of. The name shown is the fullest, the one most sources use. The user's own
+names (PROXENOS_NAME, PROXENOS_FULL_NAME, the names on their own messages) and ids are left out.
+So is any name with a digit or an @ in it, and contexts and topics are scrubbed of addresses and
+numbers, so no phone number or email lands in the index; a person's "ref" is a hash of an id.
+Twitter DMs and Instagram likes carry only ids and handles, so they add no one.
 
 Connections come in the same pass, as people.json's "edges", "groups" and "clusters". A group
-is one context people share: a WhatsApp group I'm in or a Slack channel I'm in or wrote in
-(everyone in it, from raw/whatsapp/groups and raw/slack/<team>/channels; without those, those
-who wrote), an email thread or recipient list (at most 15 addresses, so a mailing list is no
-context), a meeting of 2 to 15 guests, the authors of one OpenAlex paper (my works and the
+is one context people share: a WhatsApp group the user is in or a Slack channel they're in or
+wrote in (everyone in it, from raw/whatsapp/groups and raw/slack/<team>/channels; without those,
+those who wrote), an email thread or recipient list (at most 15 addresses, so a mailing list is no
+context), a meeting of 2 to 15 guests, the authors of one OpenAlex paper (the user's works and the
 works citing them), or an organization (at most 40 people from the index share it, since a
-company of thousands says nothing about who knows whom). I'm in all of them, so I'm left out
-and don't count towards a group's size. Each group two people share adds 1/log2(size + 1) to
+company of thousands says nothing about who knows whom). The user is in all of them, so is left
+out and doesn't count towards a group's size. Each group two people share adds 1/log2(size + 1) to
 their tie, so a pair alone adds 0.63, a group of 33 0.2 and a channel of 3,000 0.09. Only the
 top 600 people (by messages and recency, as top_people picks them) are connected, listed in
 "core", and only the strongest 4,000 edges stay. Clusters are communities among them (Louvain
@@ -55,14 +57,15 @@ the index already has from elsewhere skips the lower-case test. Notes are raw/no
 read as properties) and raw/notes/tasks. Without them that part is skipped.
 
 The second step is one model call. It reads the self-model, the top 300 people (by messages
-and recency, with room kept for people I know of or want to read), my note titles (empty and
-unfinished pages are plans) and how I took earlier ideas, and writes clones/network/ideas.json:
-projects I could do with what I know, people to reach out to with a specific ask, and people
-to read. `--people-only` stops after the index and needs no model.
+and recency, with room kept for people the user knows of or wants to read), their note titles
+(empty and unfinished pages are plans) and how they took earlier ideas, and writes
+clones/network/ideas.json: projects they could do with what they know, people to reach out to
+with a specific ask, and people to read. `--people-only` stops after the index and needs no
+model.
 
-The page marks ideas useful, not me or done in clones/network/feedback.jsonl. What I marked
+The page marks ideas useful, not me or done in clones/network/feedback.jsonl. What the user marked
 not me never comes back: not that id, not the same text in other case or punctuation, and for
-outreach, not to the same person. What I marked done goes to the model as context and isn't
+outreach, not to the same person. What the user marked done goes to the model as context and isn't
 suggested again. clones/network/history.json keeps every idea given, so a verdict still counts
 after its idea has left ideas.json.
 """
@@ -89,13 +92,13 @@ _STRONGEST_FIRST = ("met", "to_read", "know_of")
 TOP_PEOPLE = 300
 QUOTAS = {"met": 150, "know_of": 100, "to_read": 50}  # places kept per relation; leftovers refill
 HALF_LIFE_DAYS = 365  # how fast an old conversation stops counting when ranking people
-MAX_RECIPIENTS = 15  # mail to more people than this doesn't make them my correspondents
+MAX_RECIPIENTS = 15  # mail to more people than this doesn't make them the user's correspondents
 MAX_AUTHORS = 15  # a citing paper with more authors keeps its first five and its last
 GRAPH_PEOPLE = 600  # people the graph connects
 GRAPH_EDGES = 4000  # connections kept, strongest first
 MAX_ORG = 40  # an organization with more people in the index than this connects no one
 EDGE_CONTEXTS = 5  # shared contexts named on an edge
-MIN_EVENT, MAX_EVENT = 2, 15  # guests, me included, at a meeting that makes a group
+MIN_EVENT, MAX_EVENT = 2, 15  # guests, the user included, at a meeting that makes a group
 CONTEXT_GROUP = 80  # a first name alone is placed only through groups this small
 LOUVAIN_LEVELS, LOUVAIN_PASSES = 20, 50
 MIN_CLUSTER = 3  # a community of two is a tie, not a cluster
@@ -166,7 +169,7 @@ _GROUP_KINDS = {
     "org": ("Org", "an organization"),
 }
 GROUP_KINDS = tuple(_GROUP_KINDS)
-# Groups whose members met me just by being in one small enough, and the source they count as.
+# Groups whose members met the user just by being in one small enough, and the source they count as.
 _GROUP_SOURCES = {"whatsapp_group": "whatsapp", "slack_channel": "slack"}
 _RECURRENCE = re.compile(r"/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")  # a moved instance's id
 # Common nicknames of first names: a first name alone ("Tori") can be someone whose full name
@@ -501,9 +504,9 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 
 
 def _read_vault(vault: Path, now: datetime | None = None) -> "_Book":
-    """Everyone in the vault I've met, know of or want to read, as identities, and the groups
-    they share. Messages come first and notes last, so names in notes can match people already
-    found; calendars come after mail, which says which addresses are mine."""
+    """Everyone in the vault the user has met, knows of or wants to read, as identities, and the
+    groups they share. Messages come first and notes last, so names in notes can match people
+    already found; calendars come after mail, which says which addresses are the user's."""
     book = _Book([env("NAME"), env("FULL_NAME")])
     for read in (_whatsapp, _slack, _email, _linkedin, _instagram, _mentions, _writing):
         read(vault, book)
@@ -568,10 +571,10 @@ class _Book:
         self.jids: dict[str, str] = {}  # a WhatsApp jid → the one it's filed under
         # (kind, key) → what a group is called and who's in it, as identity keys
         self.groups: dict[tuple[str, str], dict] = {}
-        self.wrote_in: set[tuple[str, str]] = set()  # groups with a message of mine
+        self.wrote_in: set[tuple[str, str]] = set()  # groups with a message of the user's
 
     def mine(self, name: str | None = None, key: str | None = None) -> None:
-        """A name or an identity of my own, never to be indexed as someone else."""
+        """A name or an identity of the user's own, never to be indexed as someone else."""
         if name and (norm := normalize(name)):
             self.me.add(norm)
         if key:
@@ -658,14 +661,14 @@ class _Book:
     def resolve(self, aliases: dict, previous: dict) -> tuple[list[dict], list[dict]]:
         """People and the groups they share, after deciding who is who:
 
-        1. My corrections in aliases.json: pairs kept apart, then pairs made one.
+        1. The user's corrections in aliases.json: pairs kept apart, then pairs made one.
         2. What the sources say: a Slack profile's email is that address.
         3. One full name, one person, whatever the source.
         4. A first name or nickname alone ("Tori") joins the one full-name person whose first
            name it is (or, failing that, whose first name it stands for: Alexandra) among those
            who share a group with it or someone in one; with two such, it stays apart.
-        Two different full names are never made one, except by a stable id or by me. Anyone
-        with one of my names or ids is me, and left out; so are those I hid."""
+        Two different full names are never made one, except by a stable id or by the user. Anyone
+        with one of the user's names or ids is the user, and left out; so are those they hid."""
         keys = set(self.ids)
         for group in self.groups.values():
             keys |= group["members"]
@@ -803,7 +806,7 @@ class _Book:
 
 
 class _Merger:
-    """Union-find over identity keys. Identities I said are different carry marks, and a
+    """Union-find over identity keys. Identities the user said are different carry marks, and a
     union that would put two different marks of one correction into one person is refused."""
 
     def __init__(self, keys: Iterable[str]):
@@ -881,8 +884,8 @@ class _Refs:
 
 
 def _aliases(path: Path) -> dict[str, list]:
-    """My corrections: {"same": [[a, b, ...]], "different": [[a, b, ...]], "hide": [a, ...]},
-    each a name or an id as _Refs reads them. Anything malformed is skipped."""
+    """The user's corrections: {"same": [[a, b, ...]], "different": [[a, b, ...]],
+    "hide": [a, ...]}, each a name or an id as _Refs reads them. Anything malformed is skipped."""
     data = _load_json(path)
 
     def texts(value: object) -> list[str]:
@@ -991,7 +994,7 @@ def _entry(person: dict) -> dict:
 
 
 def _chat(direct: bool, label: str, topic: str | None = None, key: str | None = None) -> dict:
-    """A conversation as (ts, sender) pairs, where sender is an identity key, None for me and
+    """A conversation as (ts, sender) pairs, where sender is an identity key, None for the user and
     "" for someone unnamed. The key says which conversation it is, for the group it makes."""
     return {
         "direct": direct,
@@ -1006,8 +1009,8 @@ def _chat(direct: bool, label: str, topic: str | None = None, key: str | None = 
 def _add_chats(
     book: _Book, source: str, chats: Iterable[dict], group_kind: str | None = None
 ) -> None:
-    """Direct chats I wrote in: the other person, with every message. Groups I wrote in: each
-    member who wrote on a day I did, with their messages from those days. With a group_kind,
+    """Direct chats the user wrote in: the other person, with every message. Groups they wrote in:
+    each member who wrote on a day they did, with their messages from those days. With a group_kind,
     everyone who wrote in such a group, on any day, is in it (a source's member list adds
     everyone else)."""
     for chat in chats:
@@ -1086,7 +1089,7 @@ def _whatsapp(vault: Path, book: _Book) -> None:
 
 def _slack(vault: Path, book: _Book) -> None:
     """Each workspace's messages by user id, and raw/slack/<team>/channels for everyone in a
-    channel I'm in or wrote in. A profile's email is that address's person."""
+    channel the user is in or wrote in. A profile's email is that address's person."""
     for folder in sorted(p for p in (vault / "raw" / "slack").glob("*") if p.is_dir()):
         team = folder.name
 
@@ -1143,7 +1146,7 @@ def _channel_label(team: str, kind: str | None, name: str | None) -> str:
 
 
 def _email(vault: Path, book: _Book) -> None:
-    """People by address. A correspondent is one I wrote to (to or cc, on mail to at most
+    """People by address. A correspondent is one the user wrote to (to or cc, on mail to at most
     MAX_RECIPIENTS) or answered, named by the From name on their own mail."""
     mine = {a.strip().lower() for a in env("EMAILS").split(",") if a.strip()}
     mail = []
@@ -1182,7 +1185,7 @@ def _email(vault: Path, book: _Book) -> None:
             names[m["from"]][name] += 1
     for address, known in names.items():
         book.name(f"email:{address}", _usual_name(known), "email")
-    wrote: dict[str, dict[str, dict]] = defaultdict(dict)  # address → my mail to it, by id
+    wrote: dict[str, dict[str, dict]] = defaultdict(dict)  # address → user's mail to it, by id
     for m in mail:
         if not m["mine"]:
             continue
@@ -1213,7 +1216,7 @@ def _email(vault: Path, book: _Book) -> None:
 
 def _email_threads(book: _Book, mail: list[dict], by_id: dict[str, dict], mine: set) -> None:
     """Each thread, or one message with no replies, is a group of every address on it besides
-    mine, unless there are more than MAX_RECIPIENTS of them. Bulk mail has no people to speak
+    the user's, unless there are more than MAX_RECIPIENTS of them. Bulk mail has no people to speak
     of. An address that never wrote under a name counts towards the size and is no one."""
     threads: dict[str, dict] = {}
     for m in mail:
@@ -1232,12 +1235,12 @@ def _email_threads(book: _Book, mail: list[dict], by_id: dict[str, dict], mine: 
 
 
 def _calendar(vault: Path, book: _Book, now: datetime) -> None:
-    """Meetings: each past event of MIN_EVENT to MAX_EVENT guests who didn't decline, with me
-    among them or organizing, is a group of the others, and each of them met me there. An
+    """Meetings: each past event of MIN_EVENT to MAX_EVENT guests who didn't decline, with the
+    user among them or organizing, is a group of the others, and each of them met the user there. An
     event in two calendars counts once, and a moved instance of a repeating one is the same
-    group as the series. A calendar is named after its owner's address (me@example.edu.ics
-    is calendar/me-example-edu), so that address is mine too, even if I never send mail
-    from it."""
+    group as the series. A calendar is named after its owner's address (user@example.edu.ics
+    is calendar/user-example-edu), so that address is the user's too, even if they never send
+    mail from it."""
     streams = sorted(p for p in (vault / "raw" / "calendar").glob("*") if p.is_dir())
     for stream in streams:
         for r in _records(stream):
@@ -1267,7 +1270,7 @@ def _calendar(vault: Path, book: _Book, now: datetime) -> None:
                 continue
             with_me = any(map(me, present)) or (r.get("organizer") or "").lower() in mine
             if mine and not with_me:
-                continue  # someone else's event on a calendar I can see
+                continue  # someone else's event on a calendar the user can see
             summary = r.get("summary")
             members = []
             for guest in present:
@@ -1297,7 +1300,7 @@ def _usual_name(known: Counter) -> str:
 
 def _thread_key(m: dict, by_id: dict[str, dict]) -> str:
     """A message's thread: Gmail's id when it has one, else the oldest message it replies to
-    that I have (or the one it replies to, when that's missing)."""
+    that the user has (or the one it replies to, when that's missing)."""
     if m["thread"]:
         return f"gmail/{m['thread']}"
     root, seen = m, {m["id"]}
@@ -1399,7 +1402,7 @@ def _mention(
 
 
 def _writing(vault: Path, book: _Book) -> None:
-    """Names in what I wrote: reading notes, other notes, note tasks and my website."""
+    """Names in what the user wrote: reading notes, other notes, note tasks and their website."""
     pages = [_page(r) for r in _records(vault / "raw" / "notes" / "pages")]
     tasks = list(_records(vault / "raw" / "notes" / "tasks"))
     site = list(_records(vault / "raw" / "website" / "pages"))
@@ -1546,7 +1549,7 @@ def _full_name(name: str) -> bool:
 
 
 def _corpus(texts: Iterable[str]) -> tuple[Counter, Counter]:
-    """How often each word appears in lower case, and capitalized, across all my writing."""
+    """How often each word appears in lower case, and capitalized, across all the user's writing."""
     lower, upper = Counter(), Counter()
     for text in texts:
         for word in _WORD.findall(_plain(text)):
@@ -1651,7 +1654,7 @@ def _name_word(word: str, corpus: tuple[Counter, Counter]) -> bool:
     if folded in _STOP:
         return False
     lower, upper = corpus
-    # A word my notes also write in lower case is a word, not a name: "Working Memory".
+    # A word the user's notes also write in lower case is a word, not a name: "Working Memory".
     return not (lower[folded] >= 2 and lower[folded] * 5 >= upper[folded])
 
 
@@ -1724,7 +1727,8 @@ def _plausible(key: str) -> bool:
 
 
 def _is_me(key: str, me: set[str]) -> bool:
-    """One of my names, or my first and last name around a middle one, or my initial."""
+    """One of the user's names, or their first and last name around a middle one, or their
+    initial."""
     if key in me:
         return True
     words = key.split()
@@ -2201,7 +2205,7 @@ def read_self(self_dir: Path) -> str:
 
 
 def _feedback(path: Path) -> dict[str, str]:
-    """My latest verdict on each idea from the page: {item_id: action}."""
+    """The user's latest verdict on each idea from the page: {item_id: action}."""
     if not path.exists():
         return {}
     latest: dict[str, tuple[datetime, str]] = {}

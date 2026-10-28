@@ -153,7 +153,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         metavar="NAME",
-        help="my name as messages show it (repeatable; default: from Profile.csv)",
+        help="your name as messages show it (repeatable; default: from Profile.csv)",
     )
 
 

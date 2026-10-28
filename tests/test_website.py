@@ -231,3 +231,14 @@ def test_a_directory_that_is_not_a_repo_is_refused(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
     with pytest.raises(SystemExit, match="not a git repository"):
         website.ingest(tmp_path / "vault", tmp_path)
+
+
+def test_without_a_repo_argument_the_setting_names_the_repo(repo, tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_WEBSITE_REPO", str(repo))
+    stats = website.run(tmp_path, argparse.Namespace(repo=None))
+    assert stats["added"] == 6 + 7
+
+
+def test_with_neither_an_argument_nor_the_setting_it_names_the_setting(tmp_path):
+    with pytest.raises(SystemExit, match="PROXENOS_WEBSITE_REPO"):
+        website.run(tmp_path, argparse.Namespace(repo=None))

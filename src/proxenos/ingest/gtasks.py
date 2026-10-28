@@ -5,8 +5,8 @@ Every export is a full snapshot, so each run re-reads one and merges by id. The 
 several exports is one record.
 
 A task has list (the title of the task list it's in), title, notes, status ("needsAction" or
-"completed"), due, completed and from_me, always true since I wrote them. due and completed are
-UTC times; due is the task's due date, else the first time Google scheduled it for. ts is when
+"completed"), due, completed and from_me, always true since the user wrote them. due and completed
+are UTC times; due is the task's due date, else the first time Google scheduled it for. ts is when
 the task was last updated, else its due time. The id is Google's id for the task.
 
 A task without an id, or without a time that parses, is counted as skipped, and so is a list

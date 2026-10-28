@@ -7,8 +7,8 @@ person comes with the earlier conversations, mail and notes about it.
 Triggers:
 
 - events: calendar events starting in the next 48 hours, repeating ones included (raw/calendar);
-- tasks: the open ones in clones/tasks/tasks.json, minus any I closed on the page since;
-- feed: the ten best items of the newest batch in tracker/items, minus ones I marked not me;
+- tasks: the open ones in clones/tasks/tasks.json, minus any the user closed on the page since;
+- feed: the ten best items of the newest batch in tracker/items, minus ones marked not me;
 - people: the 30 people in clones/network/people.json who count most, by interactions and
   recency, found by name among the people in a record.
 

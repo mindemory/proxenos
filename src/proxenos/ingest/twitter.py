@@ -28,7 +28,7 @@ the manifest's generationDate, else a YYYY-MM-DD date in the export folder's nam
 like.js was last modified. A like already in the vault keeps its ts, so a later archive
 doesn't move it. The ts says "liked by then", not when.
 
-from_me says who wrote the words. A retweet or a like is something I did, but the text is
+from_me says who wrote the words. A retweet or a like is something the user did, but the text is
 someone else's, so both are from_me false. A retweet's author is the handle after "RT @".
 """
 

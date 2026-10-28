@@ -1,11 +1,11 @@
 """The master: the only writer of the self-model, and the loop that keeps it current.
 
 A run pulls whatever sources can sync unattended, has the observers write notes on new or
-changed months, then folds every note (and my reactions to clone output) into vault/self/.
-Fast-moving files are rewritten directly. Slow ones (who I am, how I write) only change
-through proposals in self/proposals/ that I accept with `proxenos master accept`. The vault is
-its own local git repo tracking self/ and observations/, so every change to the model of
-me is a commit.
+changed months, then folds every note (and the user's reactions to clone output) into vault/self/.
+Fast-moving files are rewritten directly. Slow ones (who they are, how they write) only change
+through proposals in self/proposals/ that the user accepts with `proxenos master accept`. The
+vault is its own local git repo tracking self/ and observations/, so every change to the model
+of the user is a commit.
 """
 
 import argparse
@@ -43,15 +43,15 @@ SELF_FILES = {
 }
 SLOW = {"identity", "voice"}
 
-# Sources that sync without me, each with what tells us it's set up.
+# Sources that sync unattended, each with what tells us it's set up.
 _UNATTENDED = [
     (whatsapp, lambda: True),
-    (spotify, lambda: True),
+    (spotify, lambda: env("SPOTIFY_EXPORT")),
     (gmail, gmail.accounts),
     (strava, lambda: os.environ.get("STRAVA_CLIENT_ID")),
     (slack, slack.tokens),
     (slackdump, slackdump.archives),
-    (website, lambda: True),
+    (website, lambda: env("WEBSITE_REPO")),
     (mentions, lambda: env("FULL_NAME")),
     (bluesky, lambda: env("BLUESKY_HANDLE")),
 ]

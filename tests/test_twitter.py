@@ -143,7 +143,7 @@ def test_posts_are_typed_and_links_are_expanded(tmp_path):
         "friend_example",
     )
 
-    # A retweet is mine to have made, but the words are someone else's.
+    # A retweet is the user's to have made, but the words are someone else's.
     retweet = posts["1102"]
     assert (retweet["kind"], retweet["from_me"], retweet["author"]) == (
         "retweet",
@@ -217,7 +217,7 @@ def test_older_archives_name_the_file_tweet_js_split_it_and_skip_the_wrapper(tmp
 
     posts = {r["id"]: r for r in twitter.read_posts(tmp_path / "a")}
     assert sorted(posts) == ["1100", "1101", "1103"]
-    assert posts["1100"]["author"] is None  # no account.js to name me
+    assert posts["1100"]["author"] is None  # no account.js to name the user
 
 
 def test_missing_files_are_empty_and_malformed_entries_are_skipped(tmp_path):

@@ -1,11 +1,12 @@
-"""What is on my plate: tasks asked of me or promised by me in recent messages.
+"""What is on the user's plate: tasks asked of them or promised by them in recent messages.
 
 Each run reads the last two weeks of WhatsApp, Slack and email and has the model bring
 clones/tasks/tasks.json up to date: new tasks added, finished ones marked done, ones where
-I'm waiting on someone marked waiting. Tasks are mostly asked of me by other people, so this
-is the one clone that sends their side of a conversation to the model. It only sends
-conversations I'm part of: direct chats, groups and channels I wrote in during the window
-(on Slack, also ones where I was @-mentioned), and mail addressed to me or that I answered.
+the user is waiting on someone marked waiting. Tasks are mostly asked of the user by other
+people, so this is the one clone that sends the other side of a conversation to the model. It
+only sends conversations the user is part of: direct chats, groups and channels they wrote in
+during the window (on Slack, also ones where they were @-mentioned), and mail addressed to
+them or that they answered.
 Newsletters, notifications and promotions stay home.
 
 The page marks tasks done, not mine or dismissed in clones/tasks/feedback.jsonl. Those stay
@@ -32,14 +33,14 @@ MAX_CHARS = 400_000  # about 100k tokens of messages; past this the oldest are c
 MESSAGE_CHARS = 2000  # long mails and pasted documents are clipped to this
 DONE_KEEP = timedelta(days=30)  # how long a done task stays on the list
 CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at least
-ADDRESS_MONTHS = 6  # newest months searched for my own mail addresses and Slack ids
+ADDRESS_MONTHS = 6  # newest months searched for the user's own mail addresses and Slack ids
 
 SOURCES = ("whatsapp", "slack", "email")
 STATUSES = ("open", "waiting", "done")
 PRIORITIES = ("high", "medium", "low")
 _CLOSING = ("done", "not_mine", "dismiss")
 _MARKED = {"done": "done", "not_mine": "not theirs", "dismiss": "dismissed"}
-# Gmail's tabs and folders for mail that isn't to me as a person. Takeout writes
+# Gmail's tabs and folders for mail that isn't to the user as a person. Takeout writes
 # "Category Promotions" where the API says CATEGORY_PROMOTIONS; both normalize to the latter.
 _BULK_LABELS = {
     "CATEGORY_PROMOTIONS",
@@ -154,7 +155,7 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
     closed = _load_closed(out / "closed.json")
     verdicts = _feedback(out / "feedback.jsonl")
 
-    # What I closed on the page is closed for good, whatever the messages say.
+    # What the user closed on the page is closed for good, whatever the messages say.
     for key, (action, ts) in verdicts.items():
         if key in tasks:
             closed[key] = _closed_entry(tasks[key], action, ts)
@@ -202,8 +203,9 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 
 
 def conversations(vault: Path, since: str) -> list[dict]:
-    """Every conversation I'm part of with text since `since`, as {source, title, messages}.
-    Messages are oldest first, each {id, ts, sender, text}, and sender is "me" for mine."""
+    """Every conversation the user is part of with text since `since`, as {source, title,
+    messages}. Messages are oldest first, each {id, ts, sender, text}, and sender is "me" for the
+    user's own."""
     return [*_whatsapp(vault, since), *_slack(vault, since), *_email(vault, since)]
 
 
@@ -243,7 +245,8 @@ def merge(
     answer: list[dict], shown: dict[str, dict], refs: dict[str, dict], closed_keys: set
 ) -> tuple[dict[str, dict], int]:
     """The model's list applied to the tasks it was shown, and how many it added. Shown tasks
-    it left out stay as they were, and anything new that matches a task I closed is dropped."""
+    it left out stay as they were, and anything new that matches a task the user closed is
+    dropped."""
     tasks = dict(shown)
     new = 0
     for item in answer:
@@ -352,7 +355,7 @@ def _email(vault: Path, since: str) -> list[dict]:
         for r in records:
             threads[_thread(r, by_id)].append(r)
         for thread in threads.values():
-            # Kept when I answered it or someone wrote to me directly, minus the bulk mail.
+            # Kept when the user answered it or someone wrote to them directly, minus the bulk mail.
             mail = [r for r in thread if r["from_me"] or not _bulk(r)]
             direct = any(me & {*(r.get("to") or []), *(r.get("cc") or [])} for r in mail)
             if not any(r["from_me"] for r in mail) and not direct:
@@ -380,7 +383,7 @@ def _thread(record: dict, by_id: dict[str, dict]) -> str:
 
 
 def _bulk(record: dict) -> bool:
-    """Mail that isn't to me as a person: promotions, notifications, lists, spam. IMAP writes
+    """Mail that isn't to the user as a person: promotions, notifications, lists, spam. IMAP writes
     system labels with a backslash (\\Spam), Takeout and the API without."""
     labels = {
         label.upper().lstrip("\\").replace(" ", "_") for label in record.get("gmail_labels") or []
@@ -390,7 +393,8 @@ def _bulk(record: dict) -> bool:
 
 
 def _mine(directory: Path, field: str) -> set[str]:
-    """`field` of my own messages in the newest months of one stream: my addresses or ids."""
+    """`field` of the user's own messages in the newest months of one stream: their addresses or
+    ids."""
     found = set()
     for path in sorted(directory.glob("*.jsonl"))[-ADDRESS_MONTHS:]:
         with path.open(encoding="utf-8") as f:
@@ -412,8 +416,8 @@ def _convo(source: str, title: str, mine: bool) -> dict:
 
 
 def _kept(convos: Iterable[dict]) -> list[dict]:
-    """The conversations I'm part of. Groups count only when I wrote in them (or, on Slack,
-    was mentioned)."""
+    """The conversations the user is part of. Groups count only when they wrote in them (or, on
+    Slack, was mentioned)."""
     return [
         {"source": c["source"], "title": c["title"], "messages": c["messages"]}
         for c in convos
@@ -472,13 +476,13 @@ def _closed_entry(task: dict, action: str | None, closed_at: str) -> dict:
         "source": task["source"],
         "with": task.get("with"),
         "asked_at": task.get("asked_at"),
-        "action": action,  # None when the messages showed it done, not me
+        "action": action,  # None when the messages showed it done, not the user
         "closed_at": closed_at,
     }
 
 
 def _closed_keys(closed: dict[str, dict], mine: set[str]) -> set:
-    """What a new task can match a task I closed by: its id, its title in any case and
+    """What a new task can match a task the user closed by: its id, its title in any case and
     spacing, or the message it was asked in (source and time)."""
     keys: set = set(mine)
     for task_id_ in mine & closed.keys():
@@ -496,7 +500,7 @@ def _matches(keys: set, task_id_: str, title: str, source: str, asked_at: str | 
 def _settle(
     tasks: dict[str, dict], closed: dict[str, dict], verdicts: dict, now: datetime
 ) -> dict[str, dict]:
-    """My verdicts applied, done tasks dated in `closed`, and the long-done ones dropped."""
+    """The user's verdicts applied, done tasks dated in `closed`, and the long-done ones dropped."""
     settled = {}
     for key, task in tasks.items():
         action = verdicts.get(key, (None,))[0] or (closed.get(key) or {}).get("action")
@@ -542,7 +546,7 @@ def _load_closed(path: Path) -> dict[str, dict]:
 
 
 def _feedback(path: Path) -> dict[str, tuple[str, str]]:
-    """My latest verdict on each task from the page: {task_id: (action, ts)}."""
+    """The user's latest verdict on each task from the page: {task_id: (action, ts)}."""
     if not path.exists():
         return {}
     verdicts: dict[str, tuple[str, str]] = {}

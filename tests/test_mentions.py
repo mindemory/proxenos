@@ -72,8 +72,8 @@ RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 
 class FakeWeb:
-    """Stands in for the fetch: answers Google News and OpenAlex from the data above, with my
-    works two to a page. `fail` maps a base URL or an OpenAlex filter to an exception."""
+    """Stands in for the fetch: answers Google News and OpenAlex from the data above, with the
+    user's works two to a page. `fail` maps a base URL or an OpenAlex filter to an exception."""
 
     def __init__(self):
         self.urls = []

@@ -14,8 +14,8 @@ and reads everything. Records merge by id, so the overlap is harmless.
 
 Who is in each channel and group DM (conversations.members) goes to
 raw/slack/<team>/channels/snapshot.jsonl, refreshed every run: each member's user id, name and
-profile email (with users:read.email), and whether I'm in it. A token without the scope to list
-members skips this; the messages still say who wrote.
+profile email (with users:read.email), and whether the user is in it. A token without the scope
+to list members skips this; the messages still say who wrote.
 """
 
 import argparse

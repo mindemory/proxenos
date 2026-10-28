@@ -267,14 +267,14 @@ def test_first_run_proposes_sources_from_the_profile_and_only_my_shared_domains(
 
     proposal = model.calls[0]
     assert "- working memory" in proposal["system"] and "A synthetic person." in proposal["system"]
-    # Domains only, most shared first, counted once per message and only from my own links.
+    # Domains only, most shared first, counted once per message and only from the user's own links.
     assert proposal["prompt"].split("most shared first:\n")[1] == "example.org\nnews.example.com"
     for leak in ("friend", "typed", "secret", "remember", "/story"):
         assert leak not in proposal["prompt"]
     saved = vault / "tracker" / "sources.json"
     assert json.loads(saved.read_text()) == PROPOSED
 
-    # The file is mine from now on: edits stick and the model isn't asked again.
+    # The file is the user's from now on: edits stick and the model isn't asked again.
     saved.write_text(json.dumps({"feeds": ["https://blog.example.com/feed.xml"]}))
     model.calls.clear()
     fake_web = FakeWeb({})

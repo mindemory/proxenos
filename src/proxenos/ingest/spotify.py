@@ -4,6 +4,7 @@ Reads the export's Streaming_History_Audio_*.json and Streaming_History_Video_*.
 writes one record per play into the vault. Spotify only hands this history out as a bulk
 export of the account's whole life, so every run re-reads an export and merges by id: point
 --export at a newer one and the overlapping years are a no-op while the new months are added.
+Without --export, the folder named by PROXENOS_SPOTIFY_EXPORT is read.
 """
 
 import argparse
@@ -12,17 +13,26 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from proxenos.config import env
 from proxenos.store import merge_monthly
-
-DEFAULT_EXPORT = Path(
-    "~/Documents/Personal/spotifyExplorer/Spotify Extended Streaming History"
-).expanduser()
 
 _AUDIO = "Streaming_History_Audio_*.json"
 _VIDEO = "Streaming_History_Video_*.json"
 
 
-def read_plays(export: Path = DEFAULT_EXPORT) -> list[dict]:
+def default_export() -> Path:
+    """The export folder from PROXENOS_SPOTIFY_EXPORT; stops with a message when it isn't set."""
+    folder = env("SPOTIFY_EXPORT")
+    if not folder:
+        raise SystemExit(
+            "spotify: set PROXENOS_SPOTIFY_EXPORT in .env to your Extended Streaming History "
+            "folder, or pass --export DIR"
+        )
+    return Path(folder).expanduser()
+
+
+def read_plays(export: Path | None = None) -> list[dict]:
+    export = export or default_export()
     files = [(p, False) for p in sorted(export.glob(_AUDIO))]
     files += [(p, True) for p in sorted(export.glob(_VIDEO))]
     if not files:
@@ -34,12 +44,17 @@ def read_plays(export: Path = DEFAULT_EXPORT) -> list[dict]:
     return _with_ids(plays)
 
 
-def ingest(vault: Path, export: Path = DEFAULT_EXPORT) -> dict[str, int]:
+def ingest(vault: Path, export: Path | None = None) -> dict[str, int]:
     return merge_monthly(read_plays(export), vault / "raw" / "spotify" / "plays")
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--export", type=Path, default=DEFAULT_EXPORT, metavar="DIR")
+    parser.add_argument(
+        "--export",
+        type=Path,
+        metavar="DIR",
+        help="the Extended Streaming History folder (default: $PROXENOS_SPOTIFY_EXPORT)",
+    )
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
