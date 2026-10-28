@@ -201,3 +201,26 @@ def test_a_file_that_cannot_be_unpacked_is_skipped_not_fatal(tmp_path, monkeypat
     stats, calls = run(vault)
     assert [source for source, _ in calls] == ["twitter"]
     assert stats == {"twitter_imported": 1}
+
+
+def test_takeout_unpacks_everything_but_photo_and_video_files(tmp_path):
+    archive = make_zip(
+        tmp_path / "takeout-x-001.zip",
+        {
+            "Takeout/Mail/All mail.mbox": "x",
+            "Takeout/Drive/huge.mov": "x",
+            "Takeout/Drive/Thesis.docx": "x",
+            "Takeout/Google Photos/a.jpg": "x",
+            "Takeout/Google Photos/a.jpg.json": "{}",
+            "Takeout/YouTube and YouTube Music/history/watch-history.html": "x",
+        },
+    )
+    dest = tmp_path / "exports" / "takeout-x"
+    importer._unpack(archive, dest)
+    kept = sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file())
+    assert [k for k in kept if not k.startswith(".")] == [
+        "Takeout/Drive/Thesis.docx",
+        "Takeout/Google Photos/a.jpg.json",
+        "Takeout/Mail/All mail.mbox",
+        "Takeout/YouTube and YouTube Music/history/watch-history.html",
+    ]

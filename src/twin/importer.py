@@ -190,6 +190,8 @@ def _unpack(path: Path, dest: Path) -> None:
         # zipfile drops absolute paths and ".." parts, so nothing lands outside dest.
         with zipfile.ZipFile(path) as archive:
             for info in archive.infolist():
+                if not _wanted(info.filename):
+                    continue
                 try:
                     target = archive.extract(info, dest)
                 except OSError as e:
@@ -203,6 +205,37 @@ def _unpack(path: Path, dest: Path) -> None:
     else:
         return
     marker.touch()
+
+
+# Takeout parts can be tens of GB, nearly all of it photo and video files. Those stay in the zip
+# (kept under downloads/); everything else, including Photos' metadata and Drive's documents,
+# is unpacked.
+_MEDIA = (
+    ".jpg",
+    ".jpeg",
+    ".heic",
+    ".png",
+    ".gif",
+    ".webp",
+    ".dng",
+    ".raw",
+    ".tif",
+    ".tiff",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".avi",
+    ".3gp",
+    ".mkv",
+    ".mts",
+    ".wmv",
+    ".mpg",
+)
+
+
+def _wanted(name: str) -> bool:
+    """Everything outside Takeout; inside it, everything but the photo and video files."""
+    return "Takeout/" not in name or not name.lower().endswith(_MEDIA)
 
 
 def _ingest(vault: Path, source: str, argv: list[str]) -> dict[str, int]:
