@@ -133,6 +133,13 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
         try:
             stats = ingest(vault, http_call(token), full=args.full)
         except (SystemExit, SlackError, OSError) as e:  # one bad token must not stop the rest
+            if "missing_scope" in str(e):
+                # A token that can't read messages (e.g. an app configuration token): counted,
+                # not reported every run; slackdump archives cover those workspaces instead.
+                totals["workspaces_without_read_access"] = (
+                    totals.get("workspaces_without_read_access", 0) + 1
+                )
+                continue
             print(f"slack: {name} failed: {e}", file=sys.stderr)
             totals["workspaces_failed"] += 1
             continue
