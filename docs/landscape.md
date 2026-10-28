@@ -98,3 +98,14 @@ The v0 job is about intellectual taste, so reading, writing, and the interview c
 3. **Where does it run?** Local Mac or cloud.
 4. **Where is the privacy line?** What may be sent to an API model, and what stays local.
 5. **Stack.** Presumably Python 3.12 + conda, matching `plutus`.
+
+## Ideas to borrow from Engramme
+
+Notes from [Memory is not search](https://www.engramme.com/index/memory-is-not-search). Not a competitor plan; these are the parts that fit this twin.
+
+- **Proactive recall, not just search.** Memory should surface what's relevant from the current situation, with no query. For the twin, that means a recall clone. Given today's calendar, open tasks and the feed, it would pull the past conversations, notes and people that bear on them, e.g. "you discussed this with X last March".
+- **Associative cues.** Useful recall often shares no words with the present. It runs through people, places, times and events. Index raw records by person, place and time, not only by text.
+- **Lossy but specific.** Keep the idiosyncratic particulars, like the place or the exact phrase, rather than generic summaries. Observers should favor concrete specifics.
+- **Grounding and abstention.** Every recalled memory or claim links to its evidence ids, and recall may return nothing when nothing fits.
+- **Right to forget.** Add a `twin forget` that removes matching raw records and notes, then re-consolidates.
+- **How to judge recall:** timeliness, informativeness, abstention and non-redundancy. Score it with the same useful / not-me reactions the page already collects.
