@@ -67,6 +67,7 @@ ASKS = 3
 NOW_HOURS = 48  # a "right now" note counts this long
 NOW_CHARS = 1000
 SELF_FILES = ("identity", "voice", "interests")
+SHORT_SELF = (("identity", 4000), ("voice", 2500))  # short_self's files, and chars of each
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
 CHANNELS = (
     "email",
@@ -373,6 +374,22 @@ def _system(self_dir: Path, now: datetime | None = None) -> str:
             f"{note['text']}"
         )
     return system
+
+
+def short_self(vault: Path, now: datetime | None = None) -> str:
+    """Who the user is, in short, for a model that must read fast: the start of their identity
+    and voice, and their "right now" note."""
+    person = env("NAME", "the person")
+    parts = []
+    for name, chars in SHORT_SELF:
+        path = vault / "self" / f"{name}.md"
+        if path.exists() and (text := path.read_text(encoding="utf-8").strip()):
+            if len(text) > chars:  # up to the last whole line that fits
+                text = text[:chars].rsplit("\n", 1)[0]
+            parts.append(f"<{name}>\n{text}\n</{name}>")
+    if note := right_now(vault, now):
+        parts.append(f"How {person} is right now, in their words: {note['text']}")
+    return "\n\n".join(parts)
 
 
 def right_now(vault: Path, now: datetime | None = None) -> dict | None:

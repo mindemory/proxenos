@@ -39,7 +39,6 @@ MAX_IMAGES = 4
 IMAGE_TYPES = ("image/png", "image/jpeg", "image/webp")
 ASK_ID = re.compile(r"ask-\d{8}T\d{6}Z")
 QUICK_HITS = 6  # records a quick answer reads
-QUICK_SELF = (("identity", 4000), ("voice", 2500))  # what of the self-model it reads, in chars
 QUICK_TOKENS = 2000  # the most a quick answer writes
 
 _SEE = """\
@@ -191,16 +190,7 @@ def _quick_system(vault: Path, now: datetime) -> str:
     """The quick answer's instructions and a short self, the same from one ask to the next so a
     local model can keep it read between them."""
     person = env("NAME", "the person")
-    parts = [_QUICK_SYSTEM.format(person=person)]
-    for name, chars in QUICK_SELF:
-        path = vault / "self" / f"{name}.md"
-        if path.exists() and (text := path.read_text(encoding="utf-8").strip()):
-            if len(text) > chars:  # up to the last whole line that fits
-                text = text[:chars].rsplit("\n", 1)[0]
-            parts.append(f"<{name}>\n{text}\n</{name}>")
-    if note := work.right_now(vault, now):
-        parts.append(f"How {person} is right now, in their words: {note['text']}")
-    return "\n\n".join(parts)
+    return _QUICK_SYSTEM.format(person=person) + "\n\n" + work.short_self(vault, now)
 
 
 def _nearest(vault: Path, text: str) -> list[dict]:

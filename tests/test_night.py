@@ -3,7 +3,7 @@
 import pytest
 
 from proxenos import cli, llm, master
-from proxenos.clones import advisor, care, network, recall, tasks, tracker, work
+from proxenos.clones import advisor, care, network, projects, recall, tasks, tracker, work
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def steps(tmp_path, monkeypatch):
         return {"sources_synced": 2, "self_files_written": 1}
 
     monkeypatch.setattr(master, "run", fake_master)
-    for module in (tracker, tasks, care, advisor, network, recall, work):
+    for module in (tracker, tasks, care, advisor, network, recall, projects, work):
         name = module.__name__.rsplit(".", 1)[1]
 
         def fake_run(vault, args, name=name):
@@ -42,6 +42,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
         "advisor: 1 done",
         "network: 1 done",
         "recall: 1 done",
+        "projects: 1 done",
         "work: 1 done",
     ]
     assert [name for name, *_ in steps] == ["master", *cli.NIGHT_CLONES]
@@ -78,6 +79,15 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, ca
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
         "recall: 1 done",
+        "projects: 1 done",
         "work: 1 done",
     ]
-    assert [name for name, *_ in steps] == ["tracker", "tasks", "care", "network", "recall", "work"]
+    assert [name for name, *_ in steps] == [
+        "tracker",
+        "tasks",
+        "care",
+        "network",
+        "recall",
+        "projects",
+        "work",
+    ]

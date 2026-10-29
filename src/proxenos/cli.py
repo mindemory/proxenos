@@ -18,7 +18,7 @@ from proxenos.config import REPO_ROOT, vault_path
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
 # their health care stands, and advice that read the fresh self-model, the people index and ideas,
 # then what each of those brings to mind from memory, and last the drafts of them all.
-NIGHT_CLONES = ("tracker", "tasks", "care", "advisor", "network", "recall", "work")
+NIGHT_CLONES = ("tracker", "tasks", "care", "advisor", "network", "recall", "projects", "work")
 
 
 def _modules(package: ModuleType) -> dict[str, ModuleType]:
