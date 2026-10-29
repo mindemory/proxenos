@@ -38,11 +38,18 @@ _STATE = Path("state", "beeper.json")
 Fetch = Callable[[str], dict]
 
 
-def ingest(vault: Path, fetch: Fetch, now: datetime | None = None, full: bool = False) -> dict:
+def ingest(
+    vault: Path,
+    fetch: Fetch,
+    now: datetime | None = None,
+    full: bool = False,
+    days: int = FIRST_DAYS,
+    pages: int = PAGES,
+) -> dict:
     now = now or datetime.now(UTC)
     state_path = vault / _STATE
     state = json.loads(state_path.read_text()) if state_path.exists() and not full else {}
-    since = state.get("since") or _iso(now - timedelta(days=FIRST_DAYS))
+    since = state.get("since") or _iso(now - timedelta(days=days))
 
     stats: Counter = Counter()
     streams: dict[str, list[dict]] = defaultdict(list)
@@ -52,7 +59,7 @@ def ingest(vault: Path, fetch: Fetch, now: datetime | None = None, full: bool = 
             stats["chats_skipped"] += 1
             continue
         stats["chats_read"] += 1
-        for message in _messages(fetch, chat["id"], since):
+        for message in _messages(fetch, chat["id"], since, pages):
             if record := _record(source, chat, message):
                 streams[source].append(record)
     for source, records in streams.items():
@@ -78,11 +85,11 @@ def _chats(fetch: Fetch, since: str) -> Iterator[dict]:
         query = {"limit": 200, "cursor": page["oldestCursor"], "direction": "before"}
 
 
-def _messages(fetch: Fetch, chat_id: str, since: str) -> Iterator[dict]:
+def _messages(fetch: Fetch, chat_id: str, since: str, pages: int = PAGES) -> Iterator[dict]:
     """A chat's messages since `since`, newest page first, going back until they're older."""
     path = f"/v1/chats/{urllib.parse.quote(chat_id, safe='')}/messages"
     query: dict = {}
-    for _ in range(PAGES):
+    for _ in range(pages):
         page = fetch(f"{path}?{urllib.parse.urlencode(query)}" if query else path)
         items = page.get("items") or []
         yield from (m for m in items if _iso_of(m.get("timestamp")) >= since)
@@ -182,13 +189,15 @@ def _fetcher(token: str, base: str = BASE) -> Fetch:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--full", action="store_true", help="read back --days again")
     parser.add_argument(
-        "--full", action="store_true", help=f"read the last {FIRST_DAYS} days again"
+        "--days", type=int, default=FIRST_DAYS, help="how far back a full read goes"
     )
+    parser.add_argument("--pages", type=int, default=PAGES, help="pages of each chat read at most")
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict:
     token = os.environ.get("BEEPER_ACCESS_TOKEN")
     if not token:
         raise SystemExit("Set BEEPER_ACCESS_TOKEN in .env first (see `proxenos ingest beeper -h`).")
-    return ingest(vault, _fetcher(token), full=args.full)
+    return ingest(vault, _fetcher(token), full=args.full, days=args.days, pages=args.pages)
