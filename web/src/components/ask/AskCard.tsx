@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Brain, Check, Copy, TriangleAlert } from "lucide-react";
+import { ArrowRight, Brain, Check, Copy, Route, TriangleAlert } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { ChannelBadge } from "@/components/drafts/badges";
@@ -67,10 +67,12 @@ interface AskCardProps {
   onDrafts: () => void;
   /** Think this quick answer through; null while another ask is going. */
   onAgain: (() => void) | null;
+  /** Hand it to an errand, to carry out what the answer says to do. */
+  onErrand: () => void;
 }
 
 /** One question and what came of it, newest first on the page. */
-export function AskCard({ ask, now, flash, onDrafts, onAgain }: AskCardProps) {
+export function AskCard({ ask, now, flash, onDrafts, onAgain, onErrand }: AskCardProps) {
   const failed = ask.status === "failed";
   const working = ask.status === "working";
   return (
@@ -136,9 +138,10 @@ export function AskCard({ ask, now, flash, onDrafts, onAgain }: AskCardProps) {
         </div>
       )}
 
-      {!ask.deep && ask.status === "done" && (
-        <div>
-          <ActionButton icon={Brain} label="Think it through" tone="neutral" disabled={!onAgain} onClick={() => onAgain?.()} />
+      {ask.status === "done" && (
+        <div className="flex flex-wrap gap-2">
+          {!ask.deep && <ActionButton icon={Brain} label="Think it through" tone="neutral" disabled={!onAgain} onClick={() => onAgain?.()} />}
+          <ActionButton icon={Route} label="Do it for me" tone="neutral" onClick={onErrand} />
         </div>
       )}
     </article>

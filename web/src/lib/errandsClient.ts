@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
-import type { ErrandEdits, ErrandsResponse } from "./types";
+import { ERRAND_MAX_GOAL, type ErrandEdits, type ErrandsResponse } from "./types";
 
 const POLL_MS = 4000;
 
@@ -28,6 +28,15 @@ async function post(body: object): Promise<void> {
   if (res.status >= 200 && res.status < 300) return;
   const answer = (await res.json().catch(() => ({}))) as { error?: string };
   throw new Error(answer.error ?? `The server answered ${res.status}.`);
+}
+
+/**
+ * Hand an Ask over as an errand: the question, and as much of the answer as fits, so the errand
+ * knows who and what it's about. Resolves once the server has taken it; rejects with why not.
+ */
+export function errandFromAsk(question: string, answer: string): Promise<void> {
+  const goal = answer ? `${question}\n\nWhat your twin said: ${answer}` : question;
+  return post({ goal: goal.slice(0, ERRAND_MAX_GOAL) });
 }
 
 /** What the page started and is waiting to hear the end of: an errand, or a Send or Drop. */

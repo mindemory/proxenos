@@ -10,6 +10,7 @@ import type { View } from "@/components/layout/nav";
 import { Bone } from "@/components/Skeleton";
 import type { Attachment } from "@/lib/askImages";
 import { useAsk } from "@/lib/askClient";
+import { errandFromAsk } from "@/lib/errandsClient";
 
 // What was being written when the view was left, so coming back to it doesn't lose it; and what
 // was last sent, to give back if that ask ends without an answer (a model that fell over, or a
@@ -37,6 +38,15 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
     }
   }, []);
   const { data, error, clearError, pending, stopping, flashId, send, again, stop } = useAsk(ended);
+  const [handOffError, setHandOffError] = useState<string | null>(null);
+
+  /** Carry out what an answer says to do, as an errand, and go to Errands to follow it. */
+  const handOff = (question: string, answer: string) => {
+    errandFromAsk(question, answer).then(
+      () => onNavigate("errands"),
+      (e: unknown) => setHandOffError(e instanceof Error ? e.message : String(e)),
+    );
+  };
 
   useEffect(() => {
     kept = { text, shots };
@@ -73,6 +83,7 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
   return (
     <div className="space-y-6 p-4 pb-24 sm:p-6 md:pb-20">
       {error && <ErrorBanner message={error} onDismiss={data ? clearError : undefined} />}
+      {handOffError && <ErrorBanner message={handOffError} onDismiss={() => setHandOffError(null)} />}
 
       {thinking ? (
         <Thinking
@@ -124,6 +135,7 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
               flash={flashId === a.id}
               onDrafts={() => onNavigate("drafts")}
               onAgain={thinking ? null : () => void again(a)}
+              onErrand={() => handOff(a.question, a.answer)}
             />
           ))}
         </section>
