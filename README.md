@@ -97,6 +97,7 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | Bluesky | Public posts by handle |
 | Notion, Obsidian, PDFs | Exports or folders |
 | Letterboxd | Data export |
+| ChatGPT | Data export (Settings, Data controls, Export data); drop the zip in `data/` |
 | Personal website, papers and mentions | A local site repo; OpenAlex and news search |
 
 See [docs/data_sources.md](docs/data_sources.md) for each one's details.

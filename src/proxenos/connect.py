@@ -32,6 +32,7 @@ DOWNLOADS = (
     "email",
     "spotify",
     "letterboxd",
+    "chatgpt",
 )
 FOLDERS = ("notes", "website")
 

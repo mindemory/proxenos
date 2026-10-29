@@ -54,6 +54,7 @@ Request one export at [takeout.google.com](https://takeout.google.com) with the 
 |---|---|---|---|
 | **Strava** | Your training: routine and discipline | Create an app at [strava.com/settings/api](https://www.strava.com/settings/api), put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env`, then run `proxenos auth strava` and approve in the browser. The refresh token is saved to `.env`. | `proxenos ingest strava` (`--full`) |
 | **Spotify** | What you listen to, when: taste, mood and daily rhythm | Account, Privacy settings, then request your **Extended streaming history**. It can take up to 30 days. Unzip it and set `PROXENOS_SPOTIFY_EXPORT` to the folder holding `Streaming_History_Audio_*.json`. Request a newer export now and then: plays you already have are a no-op, and new ones are added. | `proxenos ingest spotify` (`--export DIR` for another folder) |
+| **ChatGPT** | What you ask and tell it, in your own words: interests, problems you were working through, how you think | Settings, Data controls, Export data; the email's zip goes in `data/` | `proxenos ingest chatgpt --export DIR` |
 | **Letterboxd** | Your diary, ratings, reviews and watchlist | Settings, Data, Export your data | `proxenos ingest letterboxd --export DIR` |
 
 ### Writing and reading

@@ -52,6 +52,17 @@ def render_slack(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def render_chatgpt(records: list[dict]) -> str:
+    """What they asked and told ChatGPT, under each conversation's title; never its answers."""
+    lines = []
+    for r in records:
+        if r["from_me"] and r["text"]:
+            lines.append(
+                f'{_stamp(r["ts"])} in "{r["conversation_title"] or "untitled"}": {r["text"]}'
+            )
+    return "\n".join(lines)
+
+
 def render_email(records: list[dict]) -> str:
     parts = []
     for r in records:
@@ -202,6 +213,7 @@ _SOURCES: dict[str, tuple[str, Callable[[list[dict]], str]]] = {
     "photos": ("a summary of the photos they took", render_photos),
     "youtube": ("their YouTube searches and a summary of what they watched", render_youtube),
     "drive": ("their own documents in Google Drive", render_drive),
+    "chatgpt": ("what they asked and told ChatGPT (their side only)", render_chatgpt),
 }
 # Sources whose accounts each get their own notes (email/<account>, slack/<team>); every
 # other source's streams are read together, one note per source and month.
