@@ -45,7 +45,7 @@ import os
 import re
 import sys
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import chats, links, llm, research
@@ -64,6 +64,8 @@ TITLE_CHARS = 120
 FOUND_CHARS = 600  # what a reply's research found, as the page shows it
 ASK_CHARS = 200
 ASKS = 3
+NOW_HOURS = 48  # a "right now" note counts this long
+NOW_CHARS = 1000
 SELF_FILES = ("identity", "voice", "interests")
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
 CHANNELS = (
@@ -189,7 +191,7 @@ def work(
     # Things with no draft yet go first, so what a capped run leaves is next in line, then
     # drafts written before, written again with what's changed since.
     queue = sorted(jobs.values(), key=lambda job: job["id"] in existing)
-    system = _system(vault / "self")
+    system = _system(vault / "self", now)
     person = env("NAME", "the person")
     written = failed = 0
     for job in queue[:limit]:
@@ -355,7 +357,7 @@ def _batch(item: dict) -> str:
 # What the model is told
 
 
-def _system(self_dir: Path) -> str:
+def _system(self_dir: Path, now: datetime | None = None) -> str:
     person = env("NAME", "the person")
     system = _SYSTEM.format(person=person)
     parts = []
@@ -365,7 +367,31 @@ def _system(self_dir: Path) -> str:
             parts.append(f"<{name}>\n{text}\n</{name}>")
     if parts:
         system += f"\n\nWho {person} is, from their self-model:\n" + "\n".join(parts)
+    if note := right_now(self_dir.parent, now):
+        system += (
+            f"\n\nHow {person} is right now, in their own words ({note['at'][:16]} UTC); let it "
+            f"shape tone and what they take on, never mention it unless it's asked about:\n"
+            f"{note['text']}"
+        )
     return system
+
+
+def right_now(vault: Path, now: datetime | None = None) -> dict | None:
+    """The user's newest "right now" note from the page (state/now.jsonl), unless it's older than
+    NOW_HOURS or was cleared: {text, at}."""
+    try:
+        lines = (vault / "state" / "now.jsonl").read_text(encoding="utf-8").splitlines()
+        note = json.loads(lines[-1])
+    except (OSError, ValueError, IndexError):
+        return None
+    text = _one_line(note.get("text")) if isinstance(note, dict) else ""
+    try:
+        at = datetime.fromisoformat(str(note.get("at")))
+    except ValueError:
+        return None
+    if not text or (now or datetime.now(UTC)) - at > timedelta(hours=NOW_HOURS):
+        return None
+    return {"text": text[:NOW_CHARS], "at": _iso(at)}
 
 
 def _channel(source: str) -> str:

@@ -30,6 +30,7 @@ import { NetworkThumb } from "@/components/network/NetworkThumb";
 import { Bone, HomeSkeleton } from "@/components/Skeleton";
 import { SourceBadge, SourceChip, SourceIcon, sourceMeta } from "@/components/SourceBadge";
 import { TaskRow } from "@/components/tasks/TaskRow";
+import { NowNote } from "@/components/home/NowNote";
 import { careDue, careStatus, firstSentence, mostUrgent, yourMoves } from "@/lib/careClient";
 import { sendFeedback, useJson, type useHome } from "@/lib/client";
 import {
@@ -217,6 +218,7 @@ function Greeting({ data, briefing, onNavigate }: { data: HomeResponse; briefing
           "Here is where things stand."
         )}
       </p>
+      <NowNote />
     </header>
   );
 }
