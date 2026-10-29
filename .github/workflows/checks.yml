@@ -1,9 +1,9 @@
-# The same checks as CONTRIBUTING.md, on every push to main and every pull request.
+# The same checks as CONTRIBUTING.md, on every push and every pull request. The README's badge
+# follows main only, so a branch trying something out can't turn it red.
 name: checks
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   python:
-    # Proxenos runs on macOS, so its tests do too.
-    runs-on: macos-latest
+    # Proxenos runs on macOS today and on Windows next (docs/apps.md), so its tests run on both.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,7 +25,16 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check src tests
       - run: ruff format --check src tests
-      - run: pytest -q
+      - run: pytest -q --junitxml=pytest.xml
+      # Name each failing test as an annotation, which anyone can read without signing in.
+      - if: failure()
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          for case in ET.parse("pytest.xml").iter("testcase"):
+              for bad in case.findall("failure") + case.findall("error"):
+                  first = (bad.get("message") or "").splitlines()[0][:300] if bad.get("message") else ""
+                  print(f"::error title={case.get('classname')}.{case.get('name')}::{first}")
 
   web:
     runs-on: ubuntu-latest

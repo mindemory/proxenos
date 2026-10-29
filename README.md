@@ -1,6 +1,6 @@
 # Proxenos
 
-[![checks](https://github.com/mindemory/proxenos/actions/workflows/checks.yml/badge.svg)](https://github.com/mindemory/proxenos/actions/workflows/checks.yml)
+[![checks](https://github.com/mindemory/proxenos/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/mindemory/proxenos/actions/workflows/checks.yml)
 ![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
