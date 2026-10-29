@@ -55,6 +55,7 @@ conda activate proxenos
 pip install -e ".[dev]"
 cp .env.example .env            # add your name, email addresses, and the model
 brew install ollama && brew services start ollama && ollama pull gemma4:26b   # the local model
+ollama pull qwen3-embedding:0.6b   # search memory by meaning (optional)
 ```
 
 Add data in any order. Each source works on its own:
