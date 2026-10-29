@@ -20,6 +20,7 @@ from proxenos.config import env
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 # Below this much rendered text a month says too little to be worth a model call.
 MIN_CHARS = 400
+LOCAL_MONTHS = 30  # months a run on a local model reads; the rest wait for the next night
 # About 30k tokens: plenty to characterize a month. Longer months are sampled evenly across
 # the month, and the note says so.
 MAX_CHARS = 120_000
@@ -277,12 +278,19 @@ def render(vault: Path, name: str, month: str) -> str:
 
 
 def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dict[str, int]:
+    """Notes for every month whose data changed, newest months first. On a local model, at most
+    LOCAL_MONTHS a run: a laptop reads a few months an hour, so a backlog is worked through over
+    several nights rather than holding the machine for days."""
     stats = Counter()
     person = env("NAME", "the person")
-    for name, month, note in pending(vault, since):
+    budget = LOCAL_MONTHS if llm.prompt_chars() is not None else None
+    for name, month, note in sorted(pending(vault, since), key=lambda t: t[1], reverse=True):
         text = render(vault, name, month)
         if len(text) < MIN_CHARS:
             stats["too_little"] += 1
+            continue
+        if budget is not None and stats["would_observe"] + stats["observed"] >= budget:
+            stats["left_for_later"] += 1
             continue
         stats["chars"] += len(text)
         if dry_run:
