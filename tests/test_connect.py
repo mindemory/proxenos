@@ -79,7 +79,7 @@ def test_gmail_sign_in_needs_a_google_client(tmp_path, monkeypatch):
     assert problem() is None
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+@pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="root, or Windows file rights")
 def test_whatsapp_is_connected_when_its_store_can_be_read(tmp_path):
     db = store(tmp_path)
     month(tmp_path / "raw" / "whatsapp" / "messages")

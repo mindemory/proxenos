@@ -185,6 +185,27 @@ def test_a_second_run_reads_nothing_new_and_a_newer_file_is_read(tmp_path, mail)
     assert "m3" in stored(vault)
 
 
+def test_a_store_that_stops_changing_while_mail_runs_is_reported(
+    tmp_path, mail, monkeypatch, capsys
+):
+    vault = tmp_path / "vault"
+    put(mail, UUID_A, "INBOX", "1", message("m1", "ann@example.org", ME), mtime=time.time() - DAY)
+    read(vault, mail)  # takes m1; the store then sits still for a day
+    capsys.readouterr()
+
+    monkeypatch.setattr(applemail, "_mail_running", lambda: False)
+    read(vault, mail)
+    assert "nothing new" not in capsys.readouterr().err  # Mail closed: nothing to fetch with
+
+    monkeypatch.setattr(applemail, "_mail_running", lambda: True)
+    read(vault, mail)
+    assert "nothing new in Mail's store (V10) for 24 hours" in capsys.readouterr().err
+
+    put(mail, UUID_A, "INBOX", "2", message("m2", "ann@example.org", ME))  # new mail arrives
+    assert read(vault, mail)["added"] == 1
+    assert "nothing new" not in capsys.readouterr().err
+
+
 def test_the_same_message_in_an_mbox_and_in_mail_is_one_record(tmp_path, mail):
     vault = tmp_path / "vault"
     mbox = tmp_path / "takeout.mbox"
@@ -236,7 +257,7 @@ def test_available_only_when_mails_folder_can_be_listed(tmp_path, mail):
         read(tmp_path / "vault", tmp_path / "nowhere")
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root can list any folder")
+@pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="root, or Windows folder rights")
 def test_a_folder_macos_blocks_says_to_give_full_disk_access(tmp_path, mail):
     put(mail, UUID_A, "INBOX", "1", message("m1", "ann@example.org", ME))
     mail.chmod(0)
