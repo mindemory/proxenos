@@ -101,14 +101,31 @@ def ingest(vault: Path, store: Path, me: Iterable[str], full: bool = False) -> d
         state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         state_path.write_text(json.dumps({"newest": newest, "accounts": addresses}))
     elif latest and (hours := (time.time() - latest) / 3600) >= STALE_HOURS and _mail_running():
+        index = _index_changed(store)
+        if index and index - latest > 3600:  # Mail is busy, but not where Proxenos reads
+            why = (
+                f"Mail's own index changed at {datetime.fromtimestamp(index):%Y-%m-%d %H:%M}, so "
+                "Mail is fetching but keeping new mail somewhere Proxenos doesn't read."
+            )
+        else:
+            why = "Check that Mail is online and fetching (quit and reopen it)."
         print(
             f"applemail: nothing new in Mail's store ({store.name}) for {hours:.0f} hours, since "
-            f"{datetime.fromtimestamp(latest):%Y-%m-%d %H:%M}, although Mail is running. Check "
-            "that Mail is online and fetching (quit and reopen it); if it is, Mail may be keeping "
-            "new mail somewhere Proxenos doesn't read.",
+            f"{datetime.fromtimestamp(latest):%Y-%m-%d %H:%M}, although Mail is running. {why}",
             file=sys.stderr,
         )
     return dict(stats)
+
+
+def _index_changed(store: Path) -> float:
+    """When Mail last wrote its index of every message (MailData/Envelope Index), 0 if unknown."""
+    times = []
+    for name in ("Envelope Index", "Envelope Index-wal"):
+        try:
+            times.append((store / "MailData" / name).stat().st_mtime)
+        except OSError:
+            continue
+    return max(times, default=0.0)
 
 
 def _mail_running() -> bool:
