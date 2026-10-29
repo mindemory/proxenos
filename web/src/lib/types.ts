@@ -761,6 +761,74 @@ export interface ConnectResponse extends ConnectJobsResponse {
   error: string | null;
 }
 
+// ── Setup and Settings ──────────────────────────────────────────────────────
+//
+// From `proxenos setup`: the settings, the model, and which secrets are set and where each comes
+// from. Never a secret's value.
+
+export const SETTING_KEYS = [
+  "name",
+  "vault",
+  "model",
+  "docs_dirs",
+  "website_repo",
+  "spotify_export",
+  "slackdump_dir",
+  "cv_dirs",
+] as const;
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/** Where a value comes from, first to last: the shell, the repo's .env, the settings file, the Keychain. */
+export type SettingOrigin = "environment" | ".env" | "settings" | "keychain";
+
+export interface SettingValue {
+  value: string | null;
+  from: SettingOrigin | null;
+}
+
+export interface SecretState {
+  name: string; // ANTHROPIC_API_KEY, GMAIL_<NAME>, ...
+  set: boolean;
+  from: SettingOrigin | null;
+}
+
+export interface SetupStatus {
+  /** A first run: no name and no vault set anywhere. */
+  needed: boolean;
+  /** Where a change is saved: the repo's .env (from source, with one), or the settings file and the Keychain. */
+  savesTo: ".env" | "settings";
+  settingsFile: string; // ~/Library/Application Support/Proxenos/settings.json
+  home: string; // the home folder, to tell which typed paths iCloud syncs
+  settings: Record<SettingKey, SettingValue>;
+  vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
+  /** A model on this Mac, Anthropic's with a key, or none yet. */
+  model: { kind: "local" | "api" | "none"; name: string };
+  ollama: { running: boolean; models: string[] };
+  keychain: boolean; // whether this Mac's Keychain can keep secrets
+  secrets: SecretState[];
+}
+
+export interface SetupResponse {
+  status: SetupStatus | null;
+  /** Why the settings couldn't be read, when they couldn't. */
+  error: string | null;
+}
+
+/** One change: settings ("" removes one), an Anthropic key to check and keep, a local model, a secret replaced or removed. */
+export type SetupChange =
+  | { settings: Partial<Record<SettingKey, string>> }
+  | { key: string }
+  | { ollama: string }
+  | { secret: string; value: string }
+  | { forget: string };
+
+export interface SetupResult {
+  ok: boolean;
+  message: string | null; // what was done, when it was
+  error: string | null; // why not, when it wasn't
+  status: SetupStatus | null;
+}
+
 // ── Ask ─────────────────────────────────────────────────────────────────────
 //
 // A question typed or pasted on the Ask page, with screenshots if there are any. The page sends

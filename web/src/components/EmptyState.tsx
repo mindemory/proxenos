@@ -133,9 +133,12 @@ export function LoadingRows() {
 /** The usual "no vault" explanation, shared by every view. */
 export function NoVault({ path }: { path: string }) {
   return (
-    <EmptyState icon={FolderX} title="No vault found" command="PROXENOS_VAULT=~/proxenos_vault">
-      Looked in <code className="num">{path}</code>. Set PROXENOS_VAULT in the repo&apos;s .env or the environment,
-      then reload.
+    <EmptyState icon={FolderX} title="No vault found">
+      Looked in <code className="num">{path}</code>. Pick where it lives in{" "}
+      <a href="/setup" className="text-accent hover:underline">
+        setup
+      </a>{" "}
+      or Settings (or set PROXENOS_VAULT in the repo&apos;s .env), then reload.
     </EmptyState>
   );
 }

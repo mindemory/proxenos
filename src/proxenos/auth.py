@@ -1,26 +1,30 @@
-"""One-time browser sign-ins that put a token straight into .env, with nothing shown on screen.
+"""One-time browser sign-ins that save a token where Proxenos keeps secrets, with nothing shown.
+
+Each token goes through `config.save_secret`: into .env when running from source with one, else
+into the macOS Keychain.
 
 `proxenos auth strava` opens Strava's approval page, catches the redirect on localhost, swaps the
-code for a refresh token and writes it to .env. The Strava ingester notices the new value
-and switches to it.
+code for a refresh token and saves it. The Strava ingester notices the new value and switches
+to it.
 
 `proxenos auth gmail NAME ADDRESS` does the same with Google for a Gmail account that can't make
 app passwords: it needs a Google Cloud "Desktop app" OAuth client (GOOGLE_CLIENT_ID and
-GOOGLE_CLIENT_SECRET in .env), asks for mail access (IMAP needs the full mail scope; Proxenos
-only ever reads, and selects mail read-only), and saves GMAIL_<NAME>=address:oauth:<refresh token>.
+GOOGLE_CLIENT_SECRET, in .env or the page's Settings), asks for mail access (IMAP needs the full
+mail scope; Proxenos only ever reads, and selects mail read-only), and saves
+GMAIL_<NAME>=address:oauth:<refresh token>.
 
 `proxenos auth slack` turns Slack app configuration tokens (SLACK_USER_TOKEN_<workspace>, from
 api.slack.com/apps) into reading tokens: it creates a read-only "Proxenos reader" app in each
 workspace from a manifest, opens the app's install page, and takes the user token the page
-shows through a hidden prompt, replacing the configuration token in .env.
+shows through a hidden prompt, replacing the configuration token.
 
 `proxenos auth beeper` saves a Beeper Desktop API token (created in Beeper: Settings,
 Integrations) as BEEPER_ACCESS_TOKEN, once Beeper has taken it. It reads the token from a hidden
 prompt, or from stdin when the page passes it on, never from the command line.
 
 `proxenos auth slackdump NAME` signs in to a Slack workspace through slackdump (which keeps the
-sign-in itself, not .env) and, the first time, saves its last 30 days into data/, without
-attachments. From then on every sync fetches its new messages.
+sign-in itself) and, the first time, saves its last 30 days into data/, without attachments.
+From then on every sync fetches its new messages.
 """
 
 import base64
@@ -42,7 +46,7 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from proxenos.config import REPO_ROOT
+from proxenos.config import REPO_ROOT, save_secret
 from proxenos.ingest import beeper as beeper_api
 from proxenos.ingest import slack as slack_api
 from proxenos.ingest import slackdump as slack_archives
@@ -54,7 +58,7 @@ _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
 _GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GMAIL_SCOPE = "https://mail.google.com/"
-# One address on one line. No ":" either: .env keeps it as address:oauth:<token>.
+# One address on one line. No ":" either: it's kept as address:oauth:<token>.
 _ADDRESS = re.compile(r"[^\s@:]+@[^\s@:]+\.[^\s@:]+")
 _SLACK_API = "https://slack.com/api/"
 SLACK_SCOPES = [
@@ -85,7 +89,6 @@ SlackCall = Callable[[str, str, dict], tuple[dict, set[str]]]
 
 
 def strava(
-    env_path: Path = REPO_ROOT / ".env",
     port: int = PORT,
     open_browser: Callable[[str], object] = webbrowser.open,
     post: Callable[[str, dict], dict] | None = None,
@@ -126,14 +129,13 @@ def strava(
             "grant_type": "authorization_code",
         },
     )
-    set_env(env_path, "STRAVA_REFRESH_TOKEN", token["refresh_token"])
-    return "saved a new STRAVA_REFRESH_TOKEN in .env; now run `proxenos ingest strava --full`"
+    where = save_secret("STRAVA_REFRESH_TOKEN", token["refresh_token"])
+    return f"saved a new STRAVA_REFRESH_TOKEN in {where}; now run `proxenos ingest strava --full`"
 
 
 def gmail(
     name: str,
     address: str,
-    env_path: Path = REPO_ROOT / ".env",
     port: int = PORT,
     open_browser: Callable[[str], object] = webbrowser.open,
     post: Callable[[str, dict], dict] | None = None,
@@ -186,8 +188,8 @@ def gmail(
     )
     if "refresh_token" not in token:
         raise SystemExit("Google gave no refresh token. Run again and approve on the consent page.")
-    set_env(env_path, f"GMAIL_{key}", f"{address}:oauth:{token['refresh_token']}")
-    return f"saved GMAIL_{key} in .env; `proxenos sync` now reads {address} every run"
+    where = save_secret(f"GMAIL_{key}", f"{address}:oauth:{token['refresh_token']}")
+    return f"saved GMAIL_{key} in {where}; `proxenos sync` now reads {address} every run"
 
 
 def slackdump(
@@ -223,7 +225,6 @@ def slackdump(
 
 
 def beeper(
-    env_path: Path = REPO_ROOT / ".env",
     token: str | None = None,
     fetch: Callable[[str], object] | None = None,
 ) -> str:
@@ -235,28 +236,11 @@ def beeper(
     accounts = (fetch or beeper_api._fetcher(token))("/v1/accounts")
     if not isinstance(accounts, list):
         raise SystemExit("Beeper answered oddly; is it Beeper Desktop on this Mac?")
-    set_env(env_path, "BEEPER_ACCESS_TOKEN", token)
+    save_secret("BEEPER_ACCESS_TOKEN", token)
     networks = sorted(
         {str(a.get("network") or "an account") for a in accounts if isinstance(a, dict)}
     )
     return f"saved; Beeper has {len(accounts)} accounts: {', '.join(networks) or 'none yet'}"
-
-
-def set_env(env_path: Path, name: str, value: str) -> None:
-    """Set one variable in .env, keeping every other line, and keep the file private."""
-    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    entry = f"{name}={value}"
-    for i, line in enumerate(lines):
-        if line.startswith(f"{name}="):
-            lines[i] = entry
-            break
-    else:
-        lines.append(entry)
-    tmp = env_path.with_name(env_path.name + ".tmp")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp.chmod(0o600)
-    os.replace(tmp, env_path)
-    os.environ[name] = value
 
 
 def _wait_for_redirect(port: int, timeout: float = 300) -> dict[str, str]:
@@ -292,7 +276,6 @@ def _post(url: str, form: dict) -> dict:
 
 
 def slack(
-    env_path: Path,
     state_path: Path,
     open_browser: Callable[[str], object] = webbrowser.open,
     ask: Callable[[str], str] = getpass.getpass,
@@ -343,7 +326,7 @@ def slack(
             print(f"{team}: that token can't read messages; nothing saved.")
             skipped += 1
             continue
-        set_env(env_path, name, pasted)
+        save_secret(name, pasted)
         saved += 1
     return f"slack: {saved} reading token(s) saved, {skipped} workspace(s) skipped"
 

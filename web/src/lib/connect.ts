@@ -41,7 +41,7 @@ const JOB_MS: Record<JobKind, number> = {
 };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;
-const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
+export const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
 
 // Shapes a secret could take in a command's output: a sign-in as .env keeps it, Slack,
 // Anthropic and Google tokens, a bearer header, and any long run of letters and digits.

@@ -120,7 +120,7 @@ export function Landing() {
       <footer className="relative z-10 bg-linear-to-t from-bg via-bg/85 to-transparent px-5 pb-7 pt-10 sm:px-8 sm:pb-9">
         {missing ? (
           <p className="text-center text-sm text-muted">
-            No vault at <code className="num">{data.vault.path}</code>. Set PROXENOS_VAULT in the repo&apos;s .env.
+            No vault at <code className="num">{data.vault.path}</code> yet. Enter to pick where it lives.
           </p>
         ) : (
           <>

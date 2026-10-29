@@ -12,6 +12,7 @@ import {
   Plug,
   Route,
   Rss,
+  SlidersHorizontal,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +31,7 @@ export type View =
   | "memory"
   | "profile"
   | "connect"
+  | "settings"
   | "status";
 
 export interface NavItem {
@@ -54,6 +56,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Brain, label: "Memory", id: "memory", group: "you" },
   { icon: UserRound, label: "Profile", id: "profile", group: "you" },
   { icon: Plug, label: "Connect", id: "connect", group: "you" },
+  { icon: SlidersHorizontal, label: "Settings", id: "settings", group: "you" },
   { icon: Activity, label: "Status", id: "status", group: "you" },
 ];
 

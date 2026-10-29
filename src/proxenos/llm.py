@@ -3,9 +3,9 @@
 PROXENOS_MODEL picks it. "ollama:<name>" runs an open model on this Mac through Ollama
 (ollama.com), so nothing leaves the computer and no account or key is needed: the prompt is
 everything the model knows, built in code from the vault each time. Any other name calls the
-Anthropic API with a personal key (ANTHROPIC_API_KEY in .env), kept apart from any work or
-university account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the Claude
-desktop app sets one) never reroutes the key. Everything goes through `ask`.
+Anthropic API with a personal key (ANTHROPIC_API_KEY, in the Keychain or .env), kept apart from
+any work or university account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the
+Claude desktop app sets one) never reroutes the key. Everything goes through `ask`.
 """
 
 import json
@@ -21,7 +21,7 @@ import anthropic
 
 from proxenos.config import env, vault_path
 
-# PROXENOS_MODEL overrides it; read on each call, so the value in .env counts too.
+# PROXENOS_MODEL overrides it; read on each call, so a value saved in Settings or .env counts too.
 DEFAULT_MODEL = "claude-opus-5-5"
 _API = "https://api.anthropic.com"
 # On a policy decline the API reruns the request on a fallback model inside the same call.
@@ -224,8 +224,8 @@ def _get_client() -> anthropic.Anthropic:
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise SystemExit(
-                "ANTHROPIC_API_KEY is not set. Put a personal key from "
-                "console.anthropic.com in .env"
+                "ANTHROPIC_API_KEY is not set. Add a personal key from console.anthropic.com "
+                "in the page's Settings, or in .env"
             )
         _client = anthropic.Anthropic(api_key=key, base_url=_API)
     return _client

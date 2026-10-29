@@ -3,8 +3,9 @@
 Tailscale Serve gives this Mac a private HTTPS address on the user's tailnet (the devices signed
 in to their Tailscale account, and no one else's) and passes requests to it on to the page at
 127.0.0.1:4747, saying which Tailscale login is asking. This turns that on and saves the address
-as PROXENOS_REMOTE_HOST and the user's login as PROXENOS_REMOTE_USER in .env; the page then lets
-in requests to that address from that login, and no others. Nothing is opened to the internet.
+as PROXENOS_REMOTE_HOST and the user's login as PROXENOS_REMOTE_USER, where settings are kept (.env
+from source, else the settings file); the page then lets in requests to that address from that
+login, and no others. Nothing is opened to the internet.
 """
 
 import json
@@ -12,19 +13,14 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable
-from pathlib import Path
 
 from proxenos import webapp
-from proxenos.auth import set_env
-from proxenos.config import REPO_ROOT
+from proxenos.config import save_setting
 
 SERVE_WAIT = 30  # seconds; Serve waits while HTTPS is off for the tailnet, so don't wait for it
 
 
-def setup(
-    env_path: Path = REPO_ROOT / ".env",
-    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-) -> str:
+def setup(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> str:
     if not shutil.which("tailscale"):
         raise SystemExit(
             "Install Tailscale on this Mac and on your phone (tailscale.com/download), sign in to "
@@ -57,8 +53,8 @@ def setup(
         raise SystemExit(f"Turn on HTTPS for your tailnet {where}, then run this again.") from None
     if served.returncode != 0:
         raise SystemExit(f"tailscale serve failed: {' '.join(served.stderr.split())[:300]}")
-    set_env(env_path, "PROXENOS_REMOTE_HOST", host)
-    set_env(env_path, "PROXENOS_REMOTE_USER", login)
+    save_setting("REMOTE_HOST", host)
+    save_setting("REMOTE_USER", login)
     return (
         f"On your phone, with Tailscale on and signed in as {login}, open https://{host} and "
         "add it to the home screen."

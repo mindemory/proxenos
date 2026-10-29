@@ -1,6 +1,6 @@
 # Proxenos for everyone
 
-Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. The first piece, the Connect page, is built (see [the end](#the-connect-page-today)).
+Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. The first two pieces are built: the Connect page, and setup with settings and the Keychain in place of `.env` (see [the end](#built-so-far)).
 
 ## One download: a menu-bar app
 
@@ -33,21 +33,21 @@ Why not the others: py2app and Briefcase solve only the Python half, and Tauri w
 
 ## Setup replaces `.env`
 
-The first launch shows one short setup page:
+*Built.* The first launch shows one short setup page:
 1. **Your name**, for the notes and the self-model.
-2. **Where the vault lives**: `~/proxenos_vault` unless you pick another folder. It warns about folders iCloud syncs (Desktop and Documents by default).
-3. **A model key**: paste an Anthropic API key once; one small call checks it. You can skip this: sources still sync and search works, but nothing is drafted.
+2. **Where the vault lives**: `~/proxenos_vault` unless you pick another folder. It warns about folders iCloud syncs (Desktop and Documents by default) and other cloud drives.
+3. **A model**: one on this Mac through Ollama (the page checks Ollama is running and lists the models it has pulled), or an Anthropic API key, pasted once and checked with one small call. You can skip this: sources still sync and search works, but nothing is drafted.
 4. **Connect a first source**, on the Connect page.
 
-Your email addresses come from the accounts you connect, not from typing them.
+Your email addresses will come from the accounts you connect, not from typing them. That part isn't built: `PROXENOS_EMAILS` is still read from the environment, `.env` or the settings file.
 
 | Today in `.env` | In the app |
 |---|---|
 | `PROXENOS_VAULT`, `PROXENOS_NAME`, `PROXENOS_EMAILS`, the folder settings | `settings.json` in `~/Library/Application Support/Proxenos/`, changed from a Settings page |
 | `ANTHROPIC_API_KEY`, `GMAIL_*`, `SLACK_USER_TOKEN*`, `STRAVA_REFRESH_TOKEN` | The macOS Keychain, one item per secret |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRAVA_CLIENT_*` | Shipped with the app: Proxenos's own sign-in clients, so nobody makes a cloud project |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `STRAVA_CLIENT_*` | Shipped with the app: Proxenos's own sign-in clients, so nobody makes a cloud project. Until then, pasted once in Settings and kept in the Keychain |
 
-In code, `config.env()` reads the environment, then `.env` (from source only), then the settings file, then the Keychain, so a developer's `.env` keeps working. `auth.set_env` becomes one `save_secret` that writes to the Keychain in the app and to `.env` from source.
+In code, `config.env()` reads the environment, then `.env` (from source only), then the settings file, then the Keychain, so a developer's `.env` keeps working. `auth.set_env` became one `config.save_secret` that writes to the Keychain in the app and to `.env` from source.
 
 Shipping our own Google client is allowed for a desktop app (its secret isn't treated as confidential, and the flow already uses PKCE), but Gmail's mail scope is restricted. An app other people use needs Google's verification, which can include a yearly security assessment. Until that's done, the app keeps today's bring-your-own-client path and app passwords.
 
@@ -84,13 +84,24 @@ One screen with three lists, drawn from what the code does:
 ## Order of work
 
 1. **The Connect page** (built): every source's status, Gmail sign-in, Read WhatsApp now.
-2. Settings and the Keychain behind `config.env()`, and the setup page.
+2. **Settings and the Keychain** behind `config.env()`, the setup page and Settings (built).
 3. The privacy screen, the call log and delete everything.
 4. More connect steps: downloads with drop zones, Slack and Strava sign-in, folders.
 5. The Electron shell, the bundled runtime, signing, notarization and updates.
 
-## The Connect page today
+## Built so far
+
+### The Connect page
 
 - `proxenos connect` prints every source as JSON: whether it's connected, when it was last read, and what's missing. It reports names, addresses and handles, never a token, password or key.
 - `GET /api/connect` runs it. `POST /api/connect/gmail` starts `proxenos auth gmail NAME ADDRESS` and `POST /api/connect/whatsapp` starts `proxenos ingest whatsapp`, each in the background and one at a time; the page follows them through `GET /api/connect/jobs`, and `POST /api/connect/cancel` stops one. A job reports only the command's last line, with anything that looks like a token blanked.
 - Every route answers only the page itself: a loopback host and the same origin.
+
+### Setup and Settings
+
+- **Where things are read from**, first to last: the process's environment; the repo's `.env`, only when running from source (a checkout has `pyproject.toml`); `~/Library/Application Support/Proxenos/settings.json`; the macOS Keychain. `config.load` puts what the last three hold into the environment once per process, never over a variable that's already set, so every reader sees the same order and code that reads `os.environ` directly keeps working.
+- **The settings file** holds `PROXENOS_<NAME>` settings by their lower-case name (`{"name": ..., "vault": ..., "model": ..., "docs_dirs": ...}`) and, under `"keychain"`, the names (never the values) of the secrets kept in the Keychain. It and its folder are private to you (0600, 0700).
+- **The Keychain** (`keychain.py`) keeps one generic password per secret: service `Proxenos`, account the variable's name. Everything goes through the `security` command. A value never goes on a command line: it's written through `security -i`, which reads its commands from stdin, as hex, and read back to check it was saved.
+- **Saving:** `config.save_secret(name, value)` writes to `.env` when running from source with one, else to the Keychain, and only accepts Proxenos's secrets (`ANTHROPIC_API_KEY`, `GMAIL_*`, `SLACK_USER_TOKEN*`, `STRAVA_*`, `GOOGLE_CLIENT_*`, `BEEPER_ACCESS_TOKEN`). `config.save_setting` does the same for settings, with the settings file in place of the Keychain. Every `proxenos auth` sign-in and `proxenos phone` use them.
+- **`proxenos setup`** prints where things stand as JSON: the settings and where each comes from, the vault (whether it exists, whether a cloud syncs it), the model, Ollama's pulled models, and whether each secret is set and where. `proxenos setup --apply` makes one change read as JSON from stdin: settings (the vault folder is made, private, and refused inside the repo), an Anthropic key (checked by asking for the model it will use, which costs no tokens), a local model (checked against Ollama), or a secret replaced or removed.
+- **The page:** `/app` sends a first run (no name and no vault set anywhere) to `/setup`, which goes through the four steps above. The Settings view (the "You" group) changes the name, the vault, the model, the folders read on every sync, and each secret, which it shows only as set or not and where it's kept, with Replace and Remove. `GET` and `POST /api/setup` run `proxenos setup`; a key or token goes to it on stdin and nowhere else, and no answer holds one. The route answers only the page itself, as the others do: a loopback host, the same origin, and a JSON body.

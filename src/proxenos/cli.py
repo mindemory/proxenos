@@ -12,8 +12,20 @@ from types import ModuleType
 
 import proxenos.clones
 import proxenos.ingest
-from proxenos import ask, auth, connect, importer, master, memory, observe, phone, vectors, webapp
-from proxenos.config import REPO_ROOT, vault_path
+from proxenos import (
+    ask,
+    auth,
+    connect,
+    importer,
+    master,
+    memory,
+    observe,
+    phone,
+    setup,
+    vectors,
+    webapp,
+)
+from proxenos.config import vault_path
 
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
 # their health care stands, and advice that read the fresh self-model, the people index and ideas,
@@ -87,7 +99,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     ask.add_arguments(asking)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
-    sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
+    settings = commands.add_parser("setup", help="your settings and which secrets are set, as JSON")
+    settings.add_argument(
+        "--apply", action="store_true", help="make one change, read as JSON from stdin"
+    )
+    sign_in = commands.add_parser(
+        "auth", help="sign in once in the browser; the token is saved, never shown"
+    )
     sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail", "beeper"])
     sign_in.add_argument(
         "account",
@@ -100,19 +118,29 @@ def main(argv: list[str] | None = None) -> None:
         webapp.serve()
         return
     if args.command == "ask":
-        ask.run(vault_path(), args)  # vault_path also loads .env
+        ask.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "phone":
-        vault_path()  # loads .env
+        vault_path()  # loads settings
         print(phone.setup())
         return
     if args.command == "connect":
-        print(json.dumps(connect.report(vault_path())))  # vault_path also loads .env
+        print(json.dumps(connect.report(vault_path())))  # vault_path also loads settings
+        return
+    if args.command == "setup":  # works before there's a vault, and with one in the wrong place
+        if not args.apply:
+            print(json.dumps(setup.status()))
+            return
+        try:
+            request = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            request = None
+        print(json.dumps(setup.apply(request)))
         return
     if args.command == "auth":
-        vault = vault_path()  # also loads .env
+        vault = vault_path()  # also loads settings and secrets
         if args.service == "slack":
-            print(auth.slack(REPO_ROOT / ".env", vault / "state" / "slack_apps.json"))
+            print(auth.slack(vault / "state" / "slack_apps.json"))
         elif args.service == "beeper":
             print(auth.beeper())
         elif args.service == "slackdump":
@@ -122,9 +150,9 @@ def main(argv: list[str] | None = None) -> None:
         elif args.service == "gmail":
             if len(args.account) != 2:
                 raise SystemExit("usage: proxenos auth gmail NAME ADDRESS")
-            print(auth.gmail(*args.account, REPO_ROOT / ".env"))
+            print(auth.gmail(*args.account))
         else:
-            print(auth.strava(REPO_ROOT / ".env"))
+            print(auth.strava())
         return
     vault = vault_path()
     vault.mkdir(mode=0o700, parents=True, exist_ok=True)

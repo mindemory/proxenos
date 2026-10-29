@@ -1,8 +1,10 @@
 // Server-side access to the private vault. Import only from route handlers.
 //
 // The vault path is PROXENOS_VAULT from the environment, else from the repo's root
-// .env (one level above web/), else ~/proxenos_vault. Every setting falls back to its
-// older TWIN_* name when the PROXENOS_* one isn't set, as the Python side does.
+// .env (one level above web/), else the settings file the setup page writes, else
+// ~/proxenos_vault. Every setting falls back to its older TWIN_* name when the PROXENOS_*
+// one isn't set, as the Python side does. Secrets are the Python side's alone: nothing
+// here reads the Keychain.
 //
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
@@ -105,9 +107,27 @@ function fromDotEnv(file: string, key: string): string | undefined {
   return value || undefined;
 }
 
+/** Where the setup page and Settings save settings, through `proxenos setup`. */
+export function settingsFile(): string {
+  return path.join(os.homedir(), "Library", "Application Support", "Proxenos", "settings.json");
+}
+
+/** One key of the settings file ("vault" for PROXENOS_VAULT), when it's a string. */
+function fromSettings(key: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(settingsFile(), "utf8"));
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const value = (parsed as Record<string, unknown>)[key];
+  return typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
 /**
  * One setting: PROXENOS_<name> from the environment or the repo's .env, else the older
- * TWIN_<name> from either. Empty values count as unset.
+ * TWIN_<name> from either, else the settings file. Empty values count as unset.
  */
 export function setting(name: string): string | undefined {
   const dotenv = path.join(REPO_ROOT, ".env");
@@ -115,14 +135,14 @@ export function setting(name: string): string | undefined {
     const value = process.env[key]?.trim() || fromDotEnv(dotenv, key);
     if (value) return value;
   }
-  return undefined;
+  return fromSettings(name.toLowerCase());
 }
 
 export function vaultPath(): string {
   return path.resolve(REPO_ROOT, expandHome(setting("VAULT") ?? "~/proxenos_vault"));
 }
 
-/** First name from PROXENOS_NAME (environment, then the repo's .env), or null. */
+/** First name from PROXENOS_NAME (environment, the repo's .env, then the settings file), or null. */
 export function ownerName(): string | null {
   const full = setting("NAME") ?? "";
   const first = full.trim().split(/\s+/)[0] ?? "";
@@ -1072,7 +1092,7 @@ export async function editPeople(
 const REBUILD_MS = 120_000;
 let rebuilding: Promise<unknown> = Promise.resolve();
 
-/** The `proxenos` command: PROXENOS_BIN (environment or .env), else the first `proxenos` on PATH. */
+/** The `proxenos` command: PROXENOS_BIN (environment, .env or settings), else the first `proxenos` on PATH. */
 export async function proxenosBin(): Promise<string | null> {
   const set = setting("BIN");
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);

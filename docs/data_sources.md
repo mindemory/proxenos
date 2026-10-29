@@ -6,9 +6,9 @@ Every source is optional and works on its own. Start with one or two and add mor
 
 - **Downloads.** Request an export from the service, put the zip (or the unzipped folder) in the repo's `data/` folder or in `<vault>/inbox/`, and run `proxenos import`. It recognizes each export, unpacks it, hands it to the right ingester and files the download away. Exports that arrive in several zips (Google Takeout, Meta) are imported together.
 - **Live sources.** WhatsApp (its local store), Gmail (IMAP), Apple Mail (its local store), Slack, Strava, Bluesky and public mentions are read directly, and `proxenos sync` refreshes them. `sync` also imports anything waiting in the inboxes, so one command keeps everything current. The page's Connect view shows every source and whether it's connected, with buttons to sign in to Gmail and to read WhatsApp now.
-- **Folders you name.** A Spotify export, a website repo and slackdump runs live wherever you keep them. Point Proxenos at them in `.env` (see [the settings below](#folder-settings)).
+- **Folders you name.** A Spotify export, a website repo and slackdump runs live wherever you keep them. Point Proxenos at them in the page's Settings or in `.env` (see [the settings below](#folder-settings)).
 
-The `ingest` commands in the tables are for reading one source by hand. Anything that arrives as a download can go through `proxenos import` instead. Credentials and settings live in `.env`; [.env.example](../.env.example) lists them all.
+The `ingest` commands in the tables are for reading one source by hand. Anything that arrives as a download can go through `proxenos import` instead. Settings live in the page's Settings (saved to `~/Library/Application Support/Proxenos/settings.json`) and keys and tokens in the macOS Keychain; running from source, `.env` works too and is read first. [.env.example](../.env.example) lists them all.
 
 ## Sources
 
@@ -52,7 +52,7 @@ Request one export at [takeout.google.com](https://takeout.google.com) with the 
 
 | Source | What it adds | How to get it | Command |
 |---|---|---|---|
-| **Strava** | Your training: routine and discipline | Create an app at [strava.com/settings/api](https://www.strava.com/settings/api), put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env`, then run `proxenos auth strava` and approve in the browser. The refresh token is saved to `.env`. | `proxenos ingest strava` (`--full`) |
+| **Strava** | Your training: routine and discipline | Create an app at [strava.com/settings/api](https://www.strava.com/settings/api), put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env`, then run `proxenos auth strava` and approve in the browser. The refresh token is saved with your other secrets: the Keychain, or `.env` from source. | `proxenos ingest strava` (`--full`) |
 | **Spotify** | What you listen to, when: taste, mood and daily rhythm | Account, Privacy settings, then request your **Extended streaming history**. It can take up to 30 days. Unzip it and set `PROXENOS_SPOTIFY_EXPORT` to the folder holding `Streaming_History_Audio_*.json`. Request a newer export now and then: plays you already have are a no-op, and new ones are added. | `proxenos ingest spotify` (`--export DIR` for another folder) |
 | **Claude** | The same as ChatGPT, from claude.ai | Settings, Privacy, Export data; the email's zip goes in `data/` | `proxenos ingest claude --export DIR` |
 | **Calendar, live** | Every event as it's added or changed, for any account in the Mac's Calendar app | Add the account in System Settings, Internet Accounts, with Calendars on, and give Proxenos's Python Full Disk Access (as for Mail). Repeating series come from an export, which has their rules. | `proxenos ingest maccalendar` |
@@ -73,7 +73,7 @@ Missing a source? [CONTRIBUTING.md](../CONTRIBUTING.md) shows how to add one.
 
 ## Folder settings
 
-Three sources live in folders Proxenos can't guess, so each has a setting in `.env`. A leading `~` is expanded.
+Three sources live in folders Proxenos can't guess, so each has a setting, in the page's Settings or in `.env`. A leading `~` is expanded.
 
 | Setting | Points at | When it's not set |
 |---|---|---|
@@ -98,8 +98,8 @@ Voice comes in registers (personal chat, work chat, email), and the self-model k
 
 ## Privacy
 
-1. **Raw data stays on your computer, outside this repo.** The repo is public code, so the vault lives elsewhere (`PROXENOS_VAULT`, default `~/proxenos_vault`) and Proxenos refuses a vault inside the repo. Keep it out of folders a cloud service syncs (iCloud syncs Desktop and Documents by default), and turn on FileVault.
+1. **Raw data stays on your computer, outside this repo.** The repo is public code, so the vault lives elsewhere (picked on the setup page, or `PROXENOS_VAULT`; default `~/proxenos_vault`) and Proxenos refuses a vault inside the repo. Keep it out of folders a cloud service syncs (iCloud syncs Desktop and Documents by default), and turn on FileVault.
 2. **Other people are in your data.** You can consent for yourself, not for everyone you've talked to. Proxenos models you: your side of conversations and how you relate to people. It doesn't build profiles of others, and their words are kept as context, not as subjects.
 3. **Work and school accounts are institutional.** Mail and chat from them may hold information about colleagues, students, patients or research participants that isn't yours to share. Check your institution's policy on sending it to an external model, and leave those sources out if in doubt.
 4. **Raw data never goes to the model wholesale.** Years of email is tens of millions of tokens, mostly newsletters and notifications. Observers read one month of one source at a time and only your own side (sent mail, your messages, your plays). Later steps read the distilled self-model. There are two exceptions. The tasks clone, to find what is asked of you, sends recent conversations you're part of, and leaves newsletters, notifications and promotions out. The care clone sends only records about getting health care (visits, tests, referrals, bills, insurance, records, symptoms), picked out in code by keyword from the last 120 days; people in chats become "contact 1", "contact 2", and phone, account and member numbers, email addresses and links are blanked before anything leaves.
-5. **Secrets stay in `.env`,** which git ignores: API keys, tokens and app passwords. Never put them, or any personal data, in an issue or a commit.
+5. **Secrets stay on your computer:** API keys, tokens and app passwords go to the macOS Keychain, one item each, or to `.env` (which git ignores) when you run from source with one. The page shows whether each is set, never what it is. Never put them, or any personal data, in an issue or a commit.

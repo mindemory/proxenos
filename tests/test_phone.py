@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from proxenos import phone
+from proxenos import config, phone
 
 STATUS = {
     "BackendState": "Running",
@@ -29,15 +29,27 @@ def tailscale(serve):
 
 def test_serves_the_page_and_lets_in_only_the_users_own_login(tmp_path, monkeypatch):
     monkeypatch.setattr(phone.shutil, "which", lambda name: "/usr/local/bin/tailscale")
+    monkeypatch.setattr(config, "ENV_FILE", tmp_path / ".env")
+    (tmp_path / ".env").write_text("PROXENOS_NAME=Ana\n")  # from source, with an .env
     run, calls = tailscale(lambda c, k: SimpleNamespace(returncode=0, stderr=""))
 
-    said = phone.setup(tmp_path / ".env", run)
+    said = phone.setup(run)
 
     assert calls[1] == ["tailscale", "serve", "--bg", "http://127.0.0.1:4747"]
     env = (tmp_path / ".env").read_text().splitlines()
     assert "PROXENOS_REMOTE_HOST=my-mac.tail1234.ts.net" in env
     assert "PROXENOS_REMOTE_USER=me@example.org" in env
     assert "https://my-mac.tail1234.ts.net" in said
+
+
+def test_without_an_env_the_address_goes_to_the_settings_file(monkeypatch):
+    monkeypatch.setattr(phone.shutil, "which", lambda name: "/usr/local/bin/tailscale")
+    run, _ = tailscale(lambda c, k: SimpleNamespace(returncode=0, stderr=""))
+
+    phone.setup(run)
+
+    settings = json.loads(config.SETTINGS_FILE.read_text())
+    assert settings == {"remote_host": "my-mac.tail1234.ts.net", "remote_user": "me@example.org"}
 
 
 def test_https_off_for_the_tailnet_says_where_to_turn_it_on(tmp_path, monkeypatch):
@@ -49,11 +61,11 @@ def test_https_off_for_the_tailnet_says_where_to_turn_it_on(tmp_path, monkeypatc
 
     run, _ = tailscale(waits)
     with pytest.raises(SystemExit, match=r"login\.tailscale\.com/f/serve\?node=n1"):
-        phone.setup(tmp_path / ".env", run)
-    assert not (tmp_path / ".env").exists()  # nothing is let in until Serve is on
+        phone.setup(run)
+    assert not config.SETTINGS_FILE.exists()  # nothing is let in until Serve is on
 
 
 def test_without_tailscale_it_says_how_to_get_it(tmp_path, monkeypatch):
     monkeypatch.setattr(phone.shutil, "which", lambda name: None)
     with pytest.raises(SystemExit, match="tailscale.com/download"):
-        phone.setup(tmp_path / ".env", run=None)
+        phone.setup(run=None)
