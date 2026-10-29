@@ -646,8 +646,25 @@ export async function getStatus(): Promise<StatusResponse> {
   };
 }
 
+// The walk below stats every month file of every stream (thousands of chats), which takes
+// seconds. Sync runs every 15 minutes, so an answer up to SYNCS_FRESH_MS old is as good: it's
+// served at once and refreshed behind it, and only the very first call waits.
+const SYNCS_FRESH_MS = 2 * 60 * 1000;
+const syncsCache = new Map<string, { at: number; value: Promise<SourceSync[]> }>();
+
 /** Newest sync per source kind, from modification times only (no line counts). */
 export async function sourceSyncs(vault: string): Promise<SourceSync[]> {
+  const cached = syncsCache.get(vault);
+  if (cached && Date.now() - cached.at < SYNCS_FRESH_MS) return cached.value;
+  const value = walkSourceSyncs(vault);
+  syncsCache.set(vault, { at: Date.now(), value });
+  value.catch(() => syncsCache.delete(vault));
+  if (!cached) return value;
+  // Stale: answer with the last result while this one is worked out.
+  return cached.value.catch(() => value);
+}
+
+async function walkSourceSyncs(vault: string): Promise<SourceSync[]> {
   const { dirs } = await sourceDirs(path.join(vault, "raw"));
   const byKind = new Map<string, number>();
   for (const d of dirs) {
@@ -1508,16 +1525,22 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
     .sort((a, b) => Number(a.explore) - Number(b.explore) || b.score - a.score)
     .slice(0, 3);
 
-  const tasks = await getTasks();
-  const advice = await getAdvice();
-  const network = await getNetwork();
+  // Independent reads, side by side: the page waits for the slowest, not for all of them in turn.
+  const [tasks, advice, network, drafts, info, self, sources] = await Promise.all([
+    getTasks(),
+    getAdvice(),
+    getNetwork(),
+    getDrafts(),
+    vaultInfo(vault),
+    selfSummary(vault),
+    sourceSyncs(vault),
+  ]);
   const unanswered = advice.suggestions.filter((s) => s.action === null);
-  const drafts = await getDrafts();
   const awaiting = drafts.drafts.filter((d) => isAwaiting(d.status));
 
   return {
     now: nowIso(),
-    vault: await vaultInfo(vault),
+    vault: info,
     name: ownerName(),
     since: sinceMs ? new Date(sinceMs).toISOString() : null,
     feed: { newCount: pool.length, top, latest: latestFeed.latest },
@@ -1542,7 +1565,7 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
       outreach: network.ideas.outreach.find((o) => o.action === null) ?? null,
     },
     drafts: { exists: drafts.exists, awaiting: awaiting.length, top: awaiting.slice(0, 3) },
-    self: await selfSummary(vault),
-    sources: await sourceSyncs(vault),
+    self,
+    sources,
   };
 }
