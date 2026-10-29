@@ -57,8 +57,9 @@ in the morning.
 Return:
 - status: where the project stands now, in markdown: what it is, its deadlines and dates, what's \
 done, what's open or waiting on whom, and any risk. Keep what still holds from last time; \
-change what the records show has changed. Facts, dates and names only from the records or the \
-last status; never invent any. Say plainly what isn't known.
+change what the records show has changed. No title: the file has one. Facts, dates and \
+names only from the records or the last status; never invent any, nor spell out an \
+abbreviation the records don't. Say plainly what isn't known.
 - changed: what's new since the last status, in a few sentences, or "" if nothing is.
 - next: the next steps, most useful first, three to six: each with who does it ({person}, or a \
 collaborator by name) and by when ("" when there's no date).
