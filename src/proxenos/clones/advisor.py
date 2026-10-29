@@ -24,6 +24,9 @@ from proxenos import llm
 from proxenos.config import env
 
 MONTHS = 3
+# Observer notes a local model reads (about 15k tokens): a laptop reads the whole window's in
+# longer than one request may take, so it gets the newest that fit.
+LOCAL_NOTES_CHARS = 60_000
 TOP_SHOWN = 15  # artists and shows listed
 LONGEST_SHOWN = 3  # longest sessions listed
 
@@ -85,6 +88,10 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
     profile = read_self(vault / "self")
 
     notes = observations(vault, since)
+    budget = LOCAL_NOTES_CHARS if llm.prompt_chars() is not None else None
+    kept = newest(notes, budget)
+    cut = len(kept) < len(notes)
+    notes = kept
     sources = [path for path, _ in notes]
     parts = [
         (
@@ -92,7 +99,9 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
             f"from {_local(since):%Y-%m-%d}."
         ),
         f"# Self-model\n\n{profile}",
-        "# Observer notes, oldest first\n\n"
+        "# Observer notes, oldest first"
+        + (" (only the newest that fit; older ones were left out)" if cut else "")
+        + "\n\n"
         + (
             "\n\n".join(f'<note path="{path}">\n{text}\n</note>' for path, text in notes)
             or "None for this window."
@@ -181,6 +190,20 @@ def observations(vault: Path, since: datetime) -> list[tuple[str, str]]:
     ]
     paths.sort(key=lambda p: (p.stem, p.as_posix()))
     return [(p.relative_to(vault).as_posix(), p.read_text(encoding="utf-8").strip()) for p in paths]
+
+
+def newest(notes: list[tuple[str, str]], budget: int | None) -> list[tuple[str, str]]:
+    """The newest notes whose text fits in `budget` characters, still oldest first; all of them
+    when there's no budget."""
+    if budget is None:
+        return notes
+    kept, used = [], 0
+    for note in reversed(notes):
+        used += len(note[1])
+        if used > budget and kept:
+            break
+        kept.append(note)
+    return kept[::-1]
 
 
 def strava_summary(vault: Path, since: datetime, now: datetime) -> str:

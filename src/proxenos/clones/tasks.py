@@ -30,6 +30,9 @@ from proxenos.config import env
 
 DAYS = 14
 MAX_CHARS = 400_000  # about 100k tokens of messages; past this the oldest are cut
+# Messages a local model reads (about 15k tokens): a laptop takes longer than one request may
+# over the full window, so the newest that fit are read and the rest are cut as above.
+LOCAL_CHARS = 60_000
 MESSAGE_CHARS = 2000  # long mails and pasted documents are clipped to this
 DONE_KEEP = timedelta(days=30)  # how long a done task stays on the list
 CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at least
@@ -164,7 +167,8 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
     mine = {k for k, entry in closed.items() if entry["action"]} | verdicts.keys()
 
     found = conversations(vault, _iso(now - timedelta(days=days)))
-    text, refs, cut = render(found, llm.fit(MAX_CHARS))
+    limit = MAX_CHARS if llm.prompt_chars() is None else LOCAL_CHARS
+    text, refs, cut = render(found, llm.fit(limit))
     new = 0
     if refs:
         shown = {k: task for k, task in tasks.items() if k not in mine}

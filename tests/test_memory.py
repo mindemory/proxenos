@@ -567,3 +567,17 @@ def test_the_index_command_builds_and_reports(vault, monkeypatch, capsys):
     assert "11 records total" in first
     assert second.startswith("index: 0 files indexed, 7 files unchanged")
     assert rebuilt.startswith("index: 7 files indexed")
+
+
+def test_records_are_the_raw_records_behind_index_ids_whole(vault):
+    memory.build(vault)
+    ids = ["email/me-example-org/<m1@x>", "slack/acme/messages/s1", "whatsapp/messages/nope"]
+
+    found = memory.records(ids, vault=vault)
+
+    assert sorted(found) == ids[:2]
+    assert found["email/me-example-org/<m1@x>"]["to"] == [
+        "me@example.org"
+    ]  # every field, as written
+    assert found["slack/acme/messages/s1"]["user_name"] == "Tobias Okafor"
+    assert memory.records([], vault=vault) == {}

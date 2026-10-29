@@ -352,3 +352,12 @@ def test_the_command_line_reads_months():
     advisor.add_arguments(parser)
     assert parser.parse_args([]).months == 3
     assert parser.parse_args(["--months", "6"]).months == 6
+
+
+def test_a_local_model_reads_the_newest_notes_that_fit():
+    notes = [("observations/a/2026-07.md", "x" * 50), ("observations/a/2026-08.md", "y" * 50)]
+    notes.append(("observations/a/2026-09.md", "z" * 50))
+
+    assert advisor.newest(notes, None) == notes
+    assert advisor.newest(notes, 120) == notes[1:]  # still oldest first
+    assert advisor.newest(notes, 10) == notes[2:]  # the newest, even when it alone is too long
