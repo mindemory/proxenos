@@ -1,39 +1,11 @@
-import { draftOpen, normName, openTarget, recipientAddress, recipientQueries } from "@/lib/actions";
-import { isLive } from "@/lib/drafts";
+import { draftsView } from "@/lib/draftsView";
 import { NO_STORE, rejectNonLocal } from "@/lib/guard";
-import { findPhones } from "@/lib/phones";
-import { findAddresses } from "@/lib/recipients";
-import type { DraftOpen, DraftsViewResponse } from "@/lib/types";
-import { getDraftCloseness, getDraftReviews, getDrafts, vaultPath } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/drafts: every file in clones/drafts, newest first, with what each draft that is still
- * the reader's can open (a Gmail compose link, a chat picker, a download) and how reviews have
- * gone so far. Nothing is sent: an action only opens an app with the text in it.
- */
+/** GET /api/drafts: the drafts with what each can open and how reviews have gone (lib/draftsView). Nothing is sent. */
 export async function GET(req: Request) {
   const denied = rejectNonLocal(req);
   if (denied) return denied;
-
-  const base = await getDrafts();
-  const live = base.drafts.filter((d) => isLive(d.status));
-
-  // Only an email needs the vault, to turn a name into an address.
-  const mail = live.filter((d) => openTarget(d) === "gmail");
-  const found = await findAddresses(vaultPath(), mail.flatMap((d) => recipientQueries(d.to))).catch(
-    () => new Map<string, string>(),
-  );
-  // A WhatsApp reply opens its own chat when the chat has a number.
-  const chats = live.filter((d) => openTarget(d) === "whatsapp" && d.to);
-  const phones = await findPhones(vaultPath(), chats.map((d) => d.to)).catch(() => new Map<string, string>());
-  const actions: Record<string, DraftOpen> = {};
-  for (const d of live) {
-    actions[d.id] = draftOpen(d, recipientAddress(d.to, found), phones.get(normName(d.to)) ?? "");
-  }
-
-  const [record, closeness] = await Promise.all([getDraftReviews(), getDraftCloseness()]);
-  const body: DraftsViewResponse = { ...base, actions, record, closeness };
-  return Response.json(body, { headers: NO_STORE });
+  return Response.json(await draftsView(), { headers: NO_STORE });
 }
