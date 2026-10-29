@@ -29,6 +29,20 @@ A channel that slips drops back a level automatically.
 - Every action in an audit log, and undoable where the service allows (unsend window, delete event, revert).
 - WhatsApp has no official personal API, so it stays draft-and-copy unless Beeper reaches it.
 
+**Phone calls on your behalf (level 3).** For the calls that are hardest on bad days: booking, rescheduling, checking on an order or a referral.
+- **What you approve is the call's brief:** who to call, what to ask for, what's acceptable, and when to hang up and leave it to you. The Care view's call scripts and the errands already write most of it. Nothing dials until you approve the brief.
+- **A voice that says what it is.** A neutral voice that introduces itself as calling on your behalf, never a clone of your voice: a cloned voice works like a credential (banks and family recognize it), and many places require everyone's consent to record a call.
+- **Narrow at first:**
+  - restaurants, bookings and status checks;
+  - with clinics, scheduling only: no symptoms and no decisions made on the call.
+  - Hard limits: no payments, no ID or account numbers, and never agreeing to a cost.
+- **You stay in it.** Listen in and take over at any point. A transcript and a summary go back into your records, and anything the call couldn't settle becomes a task.
+- **What it needs:**
+  - a phone number from a calling service;
+  - a live voice agent (speech to text, the model, text to speech);
+  - a way to stop a call the moment it goes off the brief.
+- **The trade-off, stated plainly:** this is the first part of Proxenos whose data can't stay on your computer. The call's audio goes through the calling and speech services.
+
 **Rules you write (level 4).**
 - A policy file you edit on the page, e.g.:
   - "answer scheduling requests with my real availability";
