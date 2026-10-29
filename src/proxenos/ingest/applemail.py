@@ -21,10 +21,12 @@ everything. It only reads: it never changes Mail's files.
 import argparse
 import json
 import re
+import subprocess
 import sys
 import time
 from collections import Counter
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 
 from proxenos.config import env
@@ -34,6 +36,9 @@ from proxenos.store import merge_monthly
 DEFAULT_ROOT = Path("~/Library/Mail").expanduser()
 FIRST_RUN_DAYS = 180
 SAMPLE = 500  # messages read to tell which address an account is
+# Nothing new in Mail's store for this long, while Mail runs, is worth a word in the sync log:
+# a store that stops changing reads the same as a quiet inbox, and sync otherwise says it's fine.
+STALE_HOURS = 12
 BATCH = 2000  # records per merge
 
 _VERSION = re.compile(r"V\d+")
@@ -60,9 +65,11 @@ def ingest(vault: Path, store: Path, me: Iterable[str], full: bool = False) -> d
     addresses = state.get("accounts", {})  # account folder → the address it is
     stats = Counter(read=0, added=0, updated=0, months_written=0, skipped=0, accounts_skipped=0)
     newest = 0.0
+    latest = 0.0  # the newest message file in the store, new to this run or not
 
     for account in sorted(p for p in store.iterdir() if _ACCOUNT.fullmatch(p.name) and p.is_dir()):
-        files = _changed(account, since)
+        files, seen = _changed(account, since)
+        latest = max(latest, seen)
         if not files:
             continue
         newest = max(newest, files[-1][0])
@@ -93,7 +100,27 @@ def ingest(vault: Path, store: Path, me: Iterable[str], full: bool = False) -> d
     if newest:
         state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         state_path.write_text(json.dumps({"newest": newest, "accounts": addresses}))
+    elif latest and (hours := (time.time() - latest) / 3600) >= STALE_HOURS and _mail_running():
+        print(
+            f"applemail: nothing new in Mail's store ({store.name}) for {hours:.0f} hours, since "
+            f"{datetime.fromtimestamp(latest):%Y-%m-%d %H:%M}, although Mail is running. Check "
+            "that Mail is online and fetching (quit and reopen it); if it is, Mail may be keeping "
+            "new mail somewhere Proxenos doesn't read.",
+            file=sys.stderr,
+        )
     return dict(stats)
+
+
+def _mail_running() -> bool:
+    try:
+        return (
+            subprocess.run(
+                ["pgrep", "-x", "Mail"], capture_output=True, timeout=5, check=False
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -132,10 +159,12 @@ def _store(root: Path) -> Path:
     return max(versions, key=lambda p: int(p.name[1:]))
 
 
-def _changed(account: Path, since: float) -> list[tuple[float, Path, str]]:
-    """(mtime, path, mailbox) of each message file changed after `since`, oldest first. The
-    mailbox is its path from the account, as "[Gmail]/Sent Mail". Junk and trash are left out."""
+def _changed(account: Path, since: float) -> tuple[list[tuple[float, Path, str]], float]:
+    """(mtime, path, mailbox) of each message file changed after `since`, oldest first, and the
+    newest mtime of any of them, new or not. The mailbox is its path from the account, as
+    "[Gmail]/Sent Mail". Junk and trash are left out."""
     found = []
+    latest = 0.0
     for path in account.rglob("*.emlx"):  # .partial.emlx ends the same way
         names = [
             part.removesuffix(".mbox")
@@ -148,9 +177,10 @@ def _changed(account: Path, since: float) -> list[tuple[float, Path, str]]:
             mtime = path.stat().st_mtime
         except OSError:  # Mail moved or deleted it since the listing
             continue
+        latest = max(latest, mtime)
         if mtime > since:
             found.append((mtime, path, "/".join(names)))
-    return sorted(found)
+    return sorted(found), latest
 
 
 def _address(files: list[tuple[float, Path, str]], mine: set[str]) -> str | None:
