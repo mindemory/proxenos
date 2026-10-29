@@ -199,7 +199,14 @@ def test_a_store_that_stops_changing_while_mail_runs_is_reported(
 
     monkeypatch.setattr(applemail, "_mail_running", lambda: True)
     read(vault, mail)
-    assert "nothing new in Mail's store (V10) for 24 hours" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "nothing new in Mail's store (V10) for 24 hours" in err and "quit and reopen" in err
+
+    index = mail / "V10" / "MailData" / "Envelope Index"  # Mail busy, but not where we read
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_bytes(b"")
+    read(vault, mail)
+    assert "somewhere Proxenos doesn't read" in capsys.readouterr().err
 
     put(mail, UUID_A, "INBOX", "2", message("m2", "ann@example.org", ME))  # new mail arrives
     assert read(vault, mail)["added"] == 1
