@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
-    sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail"])
+    sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail", "beeper"])
     sign_in.add_argument(
         "account",
         nargs="*",
@@ -90,6 +90,8 @@ def main(argv: list[str] | None = None) -> None:
         vault = vault_path()  # also loads .env
         if args.service == "slack":
             print(auth.slack(REPO_ROOT / ".env", vault / "state" / "slack_apps.json"))
+        elif args.service == "beeper":
+            print(auth.beeper())
         elif args.service == "slackdump":
             if len(args.account) != 1:
                 raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. acme")

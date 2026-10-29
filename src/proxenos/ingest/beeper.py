@@ -1,4 +1,4 @@
-"""Instagram, Messenger and LinkedIn chats through Beeper Desktop's local API, as they come in.
+"""Instagram, Messenger, X and LinkedIn chats through Beeper Desktop's local API, as they come in.
 
 Meta and LinkedIn give other apps no way to read personal messages, but Beeper Desktop
 (beeper.com, free for up to five accounts) signs in to them and keeps the chats on this Mac,
@@ -8,7 +8,8 @@ BEEPER_ACCESS_TOKEN. Beeper has to be running for a sync to read it.
 
 Each run reads the chats active since the last one and their new messages, and writes them where
 those sources' own exports go, in the same shape, so replies are drafted for them like any other
-chat: vault/raw/instagram/messages/, raw/facebook/messages/ and raw/linkedin/messages/. Chats and
+chat: vault/raw/instagram/messages/, raw/facebook/messages/, raw/twitter/dms/ and
+raw/linkedin/messages/. Chats and
 messages keep Beeper's ids, prefixed "beeper:", so they never collide with an export's. Networks
 Proxenos reads directly (WhatsApp, Slack, email) are left alone. The first run goes back
 FIRST_DAYS days, for enough of the user's own messages to show how they write in each chat.
@@ -55,7 +56,8 @@ def ingest(vault: Path, fetch: Fetch, now: datetime | None = None, full: bool = 
             if record := _record(source, chat, message):
                 streams[source].append(record)
     for source, records in streams.items():
-        stats.update(merge_monthly(records, vault / "raw" / source / "messages"))
+        stream = "dms" if source == "twitter" else "messages"  # as the X export names it
+        stats.update(merge_monthly(records, vault / "raw" / source / stream))
 
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"since": _iso(now - OVERLAP)}))
@@ -99,6 +101,8 @@ def _source(network: object) -> str | None:
         return "facebook"
     if "linkedin" in name:
         return "linkedin"
+    if name in ("x", "twitter", "x (twitter)") or "twitter" in name:
+        return "twitter"
     return None  # read directly, or not a source Proxenos knows
 
 
@@ -123,6 +127,14 @@ def _record(source: str, chat: dict, m: dict) -> dict | None:
             "conversation_title": chat.get("title") or None,
             "author": sender,
             "folder": "INBOX",
+        }
+    if source == "twitter":
+        return common | {
+            "conversation_id": chat_id,
+            "conversation_type": "direct" if chat.get("type") == "single" else "group",
+            "conversation_title": chat.get("title") or None,
+            "sender_id": m.get("senderID"),
+            "sender_name": sender,
         }
     links = m.get("links") or []
     return common | {

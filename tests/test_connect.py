@@ -26,6 +26,12 @@ def by_id(report):
     return {s["id"]: s for s in report["sources"]}
 
 
+@pytest.fixture(autouse=True)
+def no_slackdump(monkeypatch):
+    """The report asks slackdump which workspaces it's signed in to; tests never ask the real one."""
+    monkeypatch.setattr(connect.slackdump, "workspaces", dict)
+
+
 def test_every_source_is_listed_once_in_its_group(tmp_path):
     sources = connect.report(tmp_path, store(tmp_path))["sources"]
     assert [s["id"] for s in sources] == [*connect.LIVE, *connect.DOWNLOADS, *connect.FOLDERS]
@@ -43,6 +49,7 @@ def test_the_report_names_accounts_and_never_holds_a_secret(tmp_path, monkeypatc
         "STRAVA_CLIENT_ID": SECRET,
         "STRAVA_REFRESH_TOKEN": SECRET,
         "ANTHROPIC_API_KEY": f"sk-ant-{SECRET}",
+        "BEEPER_ACCESS_TOKEN": SECRET,
     }.items():
         monkeypatch.setenv(name, value)
     month(tmp_path / "raw" / "email" / "personal")
@@ -142,3 +149,24 @@ def test_the_page_passes_the_account_after_a_double_dash(tmp_path, monkeypatch, 
     cli.main(["auth", "gmail", "--", "personal", "-me@example.com"])
     assert seen == [("personal", "-me@example.com")]
     assert capsys.readouterr().out.strip() == "saved"
+
+
+def test_mail_beeper_slack_and_the_phone_say_what_they_need(tmp_path, monkeypatch):
+    monkeypatch.setattr(connect.slackdump, "workspaces", lambda: {"acme": "acme"})
+    report = connect.report(tmp_path, store(tmp_path))
+    sources = by_id(report)
+    assert sources["beeper"]["problem"] == "no_token" and not sources["beeper"]["connected"]
+    assert sources["applemail"]["detail"].endswith(("python", "python3", "python3.12"))
+    assert sources["slack"]["connected"] and sources["slack"]["workspaces"] == ["acme"]
+    assert report["phone"] == {"address": None, "login": None}
+
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "applemail.json").write_text("{}")
+    monkeypatch.setenv("BEEPER_ACCESS_TOKEN", SECRET)
+    monkeypatch.setenv("PROXENOS_REMOTE_HOST", "mac.tail1.ts.net")
+    monkeypatch.setenv("PROXENOS_REMOTE_USER", "me@example.org")
+    report = connect.report(tmp_path, store(tmp_path))
+    sources = by_id(report)
+    assert sources["applemail"]["connected"] and sources["applemail"]["last_read"]
+    assert sources["beeper"]["connected"] and sources["beeper"]["problem"] is None
+    assert report["phone"] == {"address": "https://mac.tail1.ts.net", "login": "me@example.org"}

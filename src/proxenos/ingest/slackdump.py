@@ -118,17 +118,28 @@ def read_all(db: Path) -> tuple[str | None, list[dict], list[dict]]:
     return team_slug, records, [r for r in rosters if r is not None]
 
 
+def workspaces(
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, str]:
+    """The workspaces slackdump is signed in to, as {slug: name}; none without slackdump."""
+    if not shutil.which("slackdump"):
+        return {}
+    try:
+        listed = run(
+            ["slackdump", "workspace", "list", "-b"], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    names = [line.lstrip("*").strip() for line in listed.stdout.splitlines()]
+    return {slack._slug(n): n for n in names if n and not n.startswith("Slackdump ")}
+
+
 def catch_up(
     dbs: list[Path], run: Callable[..., subprocess.CompletedProcess] = subprocess.run
 ) -> dict[str, int]:
     """Fetch what's new into the newest archive of each workspace slackdump is signed in to."""
-    if not shutil.which("slackdump"):
+    if not (signed_in := workspaces(run)):
         return {}
-    listed = run(
-        ["slackdump", "workspace", "list", "-b"], capture_output=True, text=True, timeout=60
-    )
-    names = [line.lstrip("*").strip() for line in listed.stdout.splitlines()]
-    signed_in = {slack._slug(n): n for n in names if n and not n.startswith("Slackdump ")}
     newest = {}
     for db in sorted(dbs, key=lambda p: p.parent.name):  # slackdump_<date>_<time>: newest last
         if (team := slack._slug(_team(db) or "")) in signed_in:

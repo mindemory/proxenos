@@ -14,6 +14,10 @@ api.slack.com/apps) into reading tokens: it creates a read-only "Proxenos reader
 workspace from a manifest, opens the app's install page, and takes the user token the page
 shows through a hidden prompt, replacing the configuration token in .env.
 
+`proxenos auth beeper` saves a Beeper Desktop API token (created in Beeper: Settings,
+Integrations) as BEEPER_ACCESS_TOKEN, once Beeper has taken it. It reads the token from a hidden
+prompt, or from stdin when the page passes it on, never from the command line.
+
 `proxenos auth slackdump NAME` signs in to a Slack workspace through slackdump (which keeps the
 sign-in itself, not .env) and, the first time, saves its last 30 days into data/, without
 attachments. From then on every sync fetches its new messages.
@@ -28,6 +32,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -38,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from proxenos.config import REPO_ROOT
+from proxenos.ingest import beeper as beeper_api
 from proxenos.ingest import slack as slack_api
 from proxenos.ingest import slackdump as slack_archives
 
@@ -214,6 +220,26 @@ def slackdump(
         f"signed in to {workspace} and saved its last {SLACK_FIRST_DAYS} days; "
         "`proxenos sync` reads it and fetches new messages every run"
     )
+
+
+def beeper(
+    env_path: Path = REPO_ROOT / ".env",
+    token: str | None = None,
+    fetch: Callable[[str], object] | None = None,
+) -> str:
+    if token is None:
+        token = getpass.getpass("Beeper token: ") if sys.stdin.isatty() else sys.stdin.readline()
+    token = token.strip()
+    if not token or len(token) > 4096 or any(c.isspace() for c in token):
+        raise SystemExit("That isn't a Beeper token: copy it again from Beeper's Integrations.")
+    accounts = (fetch or beeper_api._fetcher(token))("/v1/accounts")
+    if not isinstance(accounts, list):
+        raise SystemExit("Beeper answered oddly; is it Beeper Desktop on this Mac?")
+    set_env(env_path, "BEEPER_ACCESS_TOKEN", token)
+    networks = sorted(
+        {str(a.get("network") or "an account") for a in accounts if isinstance(a, dict)}
+    )
+    return f"saved; Beeper has {len(accounts)} accounts: {', '.join(networks) or 'none yet'}"
 
 
 def set_env(env_path: Path, name: str, value: str) -> None:

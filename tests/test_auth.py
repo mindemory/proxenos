@@ -221,3 +221,29 @@ def test_gmail_sign_in_refuses_what_isnt_one_address(tmp_path, monkeypatch, addr
     with pytest.raises(SystemExit, match="isn't an email address"):
         auth.gmail("personal", address, tmp_path / ".env", free_port(), opened.append, None)
     assert not opened and not (tmp_path / ".env").exists()
+
+
+def test_beeper_token_is_saved_only_once_beeper_takes_it(tmp_path):
+    asked = []
+
+    def fetch(path):
+        asked.append(path)
+        return [{"accountID": "a1", "network": "Instagram"}, {"accountID": "a2", "network": "X"}]
+
+    said = auth.beeper(tmp_path / ".env", " tok-123\n", fetch)
+
+    assert asked == ["/v1/accounts"]
+    assert (tmp_path / ".env").read_text() == "BEEPER_ACCESS_TOKEN=tok-123\n"
+    assert said == "saved; Beeper has 2 accounts: Instagram, X"
+
+
+def test_beeper_refuses_what_isnt_a_token_and_keeps_a_refused_one_out(tmp_path):
+    with pytest.raises(SystemExit, match="isn't a Beeper token"):
+        auth.beeper(tmp_path / ".env", "two words", lambda path: [])
+
+    def refused(path):
+        raise SystemExit("Beeper refused the token")
+
+    with pytest.raises(SystemExit, match="refused"):
+        auth.beeper(tmp_path / ".env", "tok-123", refused)
+    assert not (tmp_path / ".env").exists()

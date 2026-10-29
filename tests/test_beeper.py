@@ -127,3 +127,28 @@ def test_linkedin_comes_in_as_a_linkedin_conversation(tmp_path):
         "Dee",
         "INBOX",
     )
+
+
+def test_x_chats_go_with_the_x_exports_direct_messages_and_wait_like_any_chat(tmp_path):
+    from proxenos import chats
+
+    chat = {
+        "id": "x1",
+        "network": "X",
+        "title": "Eve",
+        "type": "single",
+        "lastActivity": "2026-03-09T09:00:00Z",
+    }
+    said = [
+        msg(7, "2026-03-05T09:00:00Z", "sure, send it over", mine=True),
+        msg(8, "2026-03-09T09:00:00Z", "did you see the draft?", senderID="@eve:x"),
+    ]
+    fetch, _ = fake_api([chat], {"x1": said})
+
+    beeper.ingest(tmp_path, fetch, NOW)
+
+    files = sorted((tmp_path / "raw" / "twitter" / "dms").glob("*.jsonl"))
+    rows = [json.loads(line) for f in files for line in f.read_text().splitlines()]
+    assert rows[1]["conversation_type"] == "direct" and rows[1]["sender_name"] == "Ana"
+    (waiting,) = chats.waiting(tmp_path, NOW)
+    assert (waiting["source"], waiting["name"]) == ("twitter", "Eve")

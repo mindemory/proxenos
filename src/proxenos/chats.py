@@ -1,6 +1,6 @@
 """Conversations waiting on the user: direct chats where someone else had the last word.
 
-Reads the message streams in raw/ (WhatsApp, Messenger and Instagram chats, LinkedIn
+Reads the message streams in raw/ (WhatsApp, Messenger, Instagram and X chats, LinkedIn
 conversations, Slack, and the last six months of email threads) and finds each direct chat whose
 newest message with text isn't the user's and came within the last `days`. A chat counts only
 when the user has written in it before (for an email, in the thread or to that sender at all),
@@ -50,11 +50,9 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     since = _iso(now - timedelta(days=days))
     start = _iso(now - timedelta(days=CONTEXT_DAYS))
     found = []
-    for source, read in _SOURCES.items():
+    for source, (stream, read) in _SOURCES.items():
         chats: dict[str, list[dict]] = defaultdict(list)
-        for message in _messages(
-            sorted((vault / "raw" / source / "messages").glob("*.jsonl")), read
-        ):
+        for message in _messages(sorted((vault / "raw" / source / stream).glob("*.jsonl")), read):
             chats[message["chat"]].append(message)
         for key, messages in chats.items():
             if chat := _waiting(messages, since, start):
@@ -219,11 +217,22 @@ def _email(r: dict, me: set[str]) -> dict | None:
     return message and {**message, "peers": peers}
 
 
-_SOURCES: dict[str, Callable[[dict], dict | None]] = {
-    "whatsapp": _whatsapp,
-    "linkedin": _linkedin,
-    "facebook": _meta,
-    "instagram": _meta,
+def _twitter(r: dict) -> dict | None:
+    if not r.get("conversation_id"):
+        return None
+    sender = r.get("sender_name") or r.get("sender_id")
+    name = r.get("conversation_title") or (None if r.get("from_me") else sender)
+    direct = r.get("conversation_type") != "group"
+    return _message(r, r["conversation_id"], name, direct, sender)
+
+
+# Each chat source: the stream under raw/<source>/ its messages are in, and how to read one.
+_SOURCES: dict[str, tuple[str, Callable[[dict], dict | None]]] = {
+    "whatsapp": ("messages", _whatsapp),
+    "linkedin": ("messages", _linkedin),
+    "facebook": ("messages", _meta),
+    "instagram": ("messages", _meta),
+    "twitter": ("dms", _twitter),
 }
 
 

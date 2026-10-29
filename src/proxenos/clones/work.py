@@ -70,10 +70,11 @@ CHANNELS = (
     "linkedin",
     "instagram",
     "messenger",
+    "x",
     "in_person",
     "other",
 )
-_CHANNEL_OF = {"facebook": "messenger"}  # a chat source by another name, as a channel
+_CHANNEL_OF = {"facebook": "messenger", "twitter": "x"}  # chat sources by their channel names
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
 _MINE = ("approved", "discarded", "sent")  # statuses the page sets; a draft with one is the user's
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the draft ids the page accepts
@@ -369,6 +370,7 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
         "linkedin": "LinkedIn, a direct chat",
         "facebook": "Messenger, a direct chat",
         "instagram": "Instagram, a direct chat",
+        "twitter": "X, a direct message",
         "slack": "Slack, a direct message or a channel thread (named with #) they're in",
         "email": "Email, a thread",
     }
