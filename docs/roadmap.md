@@ -9,9 +9,9 @@ Proxenos's job is to do your work while you're away, not to describe you. Everyt
 | 0. Observe | ingests every source and keeps a self-model current | done |
 | 1. Suggest | ranks the feed, lists tasks, advises, maps the network | done |
 | 2. Draft | writes replies, emails, plans, project drafts and reading notes in your voice | done, overnight |
-| 3. Act on approval | carries out a draft you approve: sends it, books it, files it | week 2 |
-| 4. Act within policy | handles low-risk actions alone, under rules you set, with a daily digest and undo | week 3 |
-| 5. Delegated projects | works on projects for days at a time: literature reviews, analyses, writing, with checkpoints | week 4 |
+| 3. Act on approval | carries out a draft you approve: sends it, books it, files it | started: an errand's message goes out when you press Send on it |
+| 4. Act within policy | handles low-risk actions alone, under rules you set, with a daily digest and undo | started: the outbox, switched on per app, off by default |
+| 5. Delegated projects | works on projects for days at a time: literature reviews, analyses, writing, with checkpoints | started: each project's status, log and next drafts, every night |
 
 ## The gate between levels
 
@@ -21,34 +21,24 @@ A channel (Gmail, Slack, calendar, Notion, GitHub, ...) moves up a level only wh
 
 A channel that slips drops back a level automatically.
 
-## 30 days
+## Next
 
-**Week 1: finish the ground.**
-- Observer notes for every source, and a self-model refresh.
-- Network corrections: real memberships, merged identities, aliases you can fix from the page.
-- An ANTHROPIC_API_KEY and `scripts/install-night.sh`, so `proxenos night` runs every night with no session.
-- An evaluation harness for the gate: draft approval and edit rates, and reaction predictions.
+**Act on approval, more widely (level 3).**
+- Send an approved draft from the Drafts page, not only from an errand.
+- Executors for Slack, calendar events, Notion tasks and GitHub issues, each run only on a draft you approved.
+- Every action in an audit log, and undoable where the service allows (unsend window, delete event, revert).
+- WhatsApp has no official personal API, so it stays draft-and-copy unless Beeper reaches it.
 
-**Week 2: act on approval (level 3).**
-- Executors that run only on drafts you approved: send email (Gmail API), post in Slack (user token with write scope), create or answer calendar events, update Notion tasks, open GitHub issues and PRs in your repos.
-- Every action goes in an audit log, and is undoable where the service allows (unsend window, delete event, revert).
-- WhatsApp has no official personal API, so it stays draft-and-copy.
-
-**Week 3: act within policy (level 4).**
+**Rules you write (level 4).**
 - A policy file you edit on the page, e.g.:
-  - "answer scheduling requests with your real availability";
+  - "answer scheduling requests with my real availability";
   - "decline invites that clash with protected blocks";
-  - "file papers you save into the reading list";
-  - "summarize and archive newsletters";
-  - "keep Notion tasks in sync with what's done".
+  - "summarize and archive newsletters".
 - Policy actions run on their own; anything else waits for approval.
-- A morning digest lists everything done, with one-tap undo.
-- A recall clone surfaces past conversations, notes and people relevant to today.
+- A morning digest of everything done, with one-tap undo.
 
-**Week 4: delegated projects (level 5).**
-- Project agents take the top ideas and work on them over several nights, in a sandbox repo per project: literature review, an analysis notebook, draft sections, outreach drafts.
-- Each night ends with a checkpoint to approve, redirect or stop.
-- Channels that passed the gate get widened.
+**Longer projects (level 5).**
+- Checkpoints you approve, redirect or stop, and a sandbox repo per project for analyses and drafts.
 
 ## What it will never do without you
 - Spend money.

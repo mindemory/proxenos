@@ -1,8 +1,8 @@
 # Interpreter only. Everything else is installed with pip into this env.
 #
-# Native arm64 on purpose: /opt/anaconda3 is an Intel install running under
-# Rosetta, which caps PyTorch at 2.2 and can't run MLX at all. CONDA_SUBDIR
-# makes the env itself arm64 no matter which conda creates it:
+# Native arm64 on purpose: an Intel conda running under Rosetta caps PyTorch
+# at 2.2 and can't run MLX at all. CONDA_SUBDIR makes the env itself arm64 no
+# matter which conda creates it:
 #   CONDA_SUBDIR=osx-arm64 conda env create -f environment.yml
 #   conda activate proxenos
 #   conda config --env --set subdir osx-arm64   # keep later conda installs arm64

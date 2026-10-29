@@ -8,6 +8,8 @@ Open an issue for anything that would make Proxenos more useful to you. Ideas fo
 
 **Please never paste personal data into an issue:** no messages, emails, names or exports. Describe the shape of the problem instead, e.g. the file layout or field names.
 
+Security problems go privately, not in an issue: see [SECURITY.md](SECURITY.md).
+
 ## Setup
 
 See the Quick start in the [README](README.md). The `dev` extra installs pytest and ruff.
@@ -30,6 +32,8 @@ See the Quick start in the [README](README.md). The `dev` extra installs pytest 
 Write `src/proxenos/clones/<name>.py` the same way. Clones read the vault's `self/` folder, never write to it, and put their output under `vault/clones/<name>/`.
 
 ## Checks
+
+These also run on GitHub for every push and pull request ([.github/workflows/checks.yml](.github/workflows/checks.yml)).
 
 ```bash
 pytest

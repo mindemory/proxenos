@@ -3,7 +3,25 @@
 # sources it sets `prog` (its name, for messages) and `repo` first.
 
 env_file="$repo/.env"
-conda_sh="${CONDA_SH:-/opt/anaconda3/etc/profile.d/conda.sh}"
+
+# conda's activation script: of the condas found (this shell's, then the usual installs), the
+# first with a proxenos env, else the first at all. Empty when there's none.
+find_conda_sh() {
+  local base first=""
+  for base in "${CONDA_EXE:+$(dirname "$(dirname "$CONDA_EXE")")}" "$HOME/miniforge3" \
+    "$HOME/miniconda3" "$HOME/anaconda3" /opt/homebrew/Caskroom/miniforge/base /opt/miniconda3 \
+    /opt/anaconda3; do
+    [ -n "$base" ] && [ -f "$base/etc/profile.d/conda.sh" ] || continue
+    if [ -d "$base/envs/proxenos" ]; then
+      echo "$base/etc/profile.d/conda.sh"
+      return 0
+    fi
+    first="${first:-$base/etc/profile.d/conda.sh}"
+  done
+  echo "$first"
+}
+
+conda_sh="${CONDA_SH:-$(find_conda_sh)}"
 domain="gui/$(id -u)"
 
 fail() {
@@ -25,17 +43,14 @@ xml() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
 }
 
-# The conda env with the proxenos command: "proxenos", or one set up before the rename.
+# The conda env with the proxenos command, "proxenos" as the README sets it up.
 find_conda_env() {
-  [ -f "$conda_sh" ] || fail "no conda at $conda_sh. Set CONDA_SH to conda's etc/profile.d/conda.sh."
-  for candidate in proxenos digital_twin; do
-    # shellcheck disable=SC2016 # $1 and $2 are expanded by the inner bash
-    if bash -c 'source "$1" && conda activate "$2" && command -v proxenos' _ "$conda_sh" "$candidate" >/dev/null 2>&1; then
-      conda_env="$candidate"
-      return
-    fi
-  done
-  fail "no conda env has the proxenos command. Set it up as the README says, then run this again."
+  [ -f "$conda_sh" ] || fail "no conda found. Set CONDA_SH to conda's etc/profile.d/conda.sh."
+  conda_env=proxenos
+  # shellcheck disable=SC2016 # $1 and $2 are expanded by the inner bash
+  bash -c 'source "$1" && conda activate "$2" && command -v proxenos' _ "$conda_sh" "$conda_env" \
+    >/dev/null 2>&1 ||
+    fail "the conda env $conda_env has no proxenos command. Set it up as the README says, then run this again."
 }
 
 # The vault's logs folder, made private.

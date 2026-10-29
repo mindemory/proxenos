@@ -1,6 +1,15 @@
 # Proxenos
 
+[![checks](https://github.com/mindemory/proxenos/actions/workflows/checks.yml/badge.svg)](https://github.com/mindemory/proxenos/actions/workflows/checks.yml)
+![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+[![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **An agent that holds your entire record and acts on your behalf.**
+
+> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
+>
+> Help of any kind is welcome: code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
 - a feed of new papers and news, ranked for you;
@@ -12,8 +21,6 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
 It drafts; by default it never sends, posts or buys anything by itself, and you approve what goes out. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
-
-> **Status: very early.** It's built and used by one person on macOS (Apple Silicon), and it's still primitive: expect rough edges and readers that assume a particular export format. Help of any kind is welcome, whether code, an issue, or an idea over a message or a call, especially about making it useful for people navigating hard systems like healthcare. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
@@ -44,6 +51,7 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites. The one way in from elsewhere is `proxenos phone`: your Mac's private address on your own Tailscale network, answered only for your own Tailscale login. Nothing is opened to the internet.
 - **Credentials** stay in `.env`, which git ignores.
+- **Found a security problem?** Please report it privately: see [SECURITY.md](SECURITY.md).
 
 ## Quick start
 
@@ -129,6 +137,8 @@ pytest                                   # tests use synthetic data only
 ruff check src tests
 npm --prefix web run lint && npm --prefix web run build
 ```
+
+The same checks run on GitHub for every push and pull request.
 
 ## License
 
