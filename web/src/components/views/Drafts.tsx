@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, PenLine, ShieldCheck } from "lucide-react";
 
 import { DraftCard } from "@/components/drafts/DraftCard";
@@ -15,11 +15,32 @@ import { cn } from "@/lib/utils";
 
 type Show = "awaiting" | "approved";
 
-/** Proxenos acting as you: replies, emails, plans and docs it wrote, waiting for you to approve. */
-export function Drafts({ onChange }: { onChange?: () => void }) {
+/**
+ * Proxenos acting as you: replies, emails, plans and docs it wrote, waiting for you to approve.
+ * `focus` is a draft opened from another view (the home page). The view takes it on mount and
+ * clears it, then shows that draft on its tab, whole, and scrolls to it once the list is there.
+ */
+export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
   const { data, error, flashId, approve, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
-  const [show, setShow] = useState<Show>("awaiting");
-  const [showSent, setShowSent] = useState(false);
+  // null until the reader picks a tab: then the focused draft's own tab, else "awaiting".
+  const [show, setShow] = useState<Show | null>(null);
+  const [showSent, setShowSent] = useState<boolean | null>(null);
+  const [focusId] = useState(focus ?? null);
+  const focusStatus = data?.drafts.find((d) => d.id === focusId)?.status ?? null;
+
+  useEffect(() => {
+    if (focus) onFocused?.();
+  }, [focus, onFocused]);
+
+  useEffect(() => {
+    if (!focusId || !focusStatus) return;
+    // After the tab it's on has rendered.
+    const timer = window.setTimeout(
+      () => document.getElementById(`draft-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [focusId, focusStatus]);
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load the drafts: ${error}`} /> : <DraftSkeleton />;
@@ -44,6 +65,7 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
       onOpen={open}
       onSent={markSent}
       onEdit={edit}
+      focused={d.id === focusId}
     />
   );
 
@@ -61,7 +83,9 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
     );
   }
 
-  const shown = show === "awaiting" ? awaiting : approved;
+  const tab: Show = show ?? (focusStatus === "approved" ? "approved" : "awaiting");
+  const sentOpen = showSent ?? focusStatus === "sent";
+  const shown = tab === "awaiting" ? awaiting : approved;
   const groups = groupDrafts(shown);
 
   return (
@@ -82,10 +106,10 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
             <button
               key={id}
               onClick={() => setShow(id)}
-              aria-pressed={show === id}
+              aria-pressed={tab === id}
               className={cn(
                 "rounded-full border px-3 py-1 text-[13px] transition-colors whitespace-nowrap",
-                show === id ? "border-accent/40 bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-ink",
+                tab === id ? "border-accent/40 bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-ink",
               )}
             >
               {label} <span className="num">{n}</span>
@@ -100,7 +124,7 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
 
       {groups.length === 0 ? (
         <p className="px-4 sm:px-6 py-8 text-sm text-muted">
-          {show === "awaiting" ? "Nothing is waiting for your approval." : "You haven't approved any drafts yet."}
+          {tab === "awaiting" ? "Nothing is waiting for your approval." : "You haven't approved any drafts yet."}
         </p>
       ) : (
         <div className="p-4 sm:p-6 space-y-8">
@@ -120,16 +144,16 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
         <section aria-labelledby="drafts-sent" className="px-4 sm:px-6 pb-6">
           <h2 id="drafts-sent" className="font-display text-2xl text-ink">
             <button
-              onClick={() => setShowSent((v) => !v)}
-              aria-expanded={showSent}
+              onClick={() => setShowSent(!sentOpen)}
+              aria-expanded={sentOpen}
               className="flex items-baseline gap-2 text-left hover:text-accent transition-colors"
             >
-              <ChevronRight size={18} className={cn("self-center transition-transform", showSent && "rotate-90")} />
+              <ChevronRight size={18} className={cn("self-center transition-transform", sentOpen && "rotate-90")} />
               Sent
               <span className="num text-sm text-muted">{sent.length}</span>
             </button>
           </h2>
-          {showSent && (
+          {sentOpen && (
             <div className="mt-3 grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">
               {[...sent].sort((a, b) => Date.parse(b.created ?? "") - Date.parse(a.created ?? "") || 0).map(card)}
             </div>

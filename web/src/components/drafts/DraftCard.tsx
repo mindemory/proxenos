@@ -31,13 +31,15 @@ interface DraftCardProps {
   onSent: (d: Draft) => void;
   /** Resolves true when the new body is saved. */
   onEdit: (d: Draft, body: string) => Promise<boolean>;
+  /** The draft someone opened from another view (the home page): shown whole and highlighted. */
+  focused?: boolean;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDiscard, onOpen, onSent, onEdit }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDiscard, onOpen, onSent, onEdit, focused }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(focused ?? false);
   const [asking, setAsking] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const approved = d.status === "approved";
@@ -65,10 +67,11 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDis
 
   return (
     <article
+      id={`draft-${d.id}`}
       className={cn(
-        "card card-hover flex min-w-0 flex-col gap-3 p-4 sm:p-5",
+        "card card-hover flex min-w-0 scroll-mt-20 flex-col gap-3 p-4 sm:p-5",
         approved && "border-ok-line/60",
-        flash && "row-flash",
+        (flash || focused) && "row-flash",
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">

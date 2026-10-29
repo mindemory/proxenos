@@ -69,6 +69,8 @@ interface HomeProps {
   onNavigate: (view: View) => void;
   /** Open the memory view, on one record's conversation when `id` is given. */
   onMemory: (query: string, id?: string) => void;
+  /** Open the drafts view on one draft, shown whole. */
+  onDraft: (id: string) => void;
 }
 
 // ── Layout pieces ───────────────────────────────────────────────────────────
@@ -369,7 +371,7 @@ function DraftRow({ draft, onOpen }: { draft: Draft; onOpen: () => void }) {
   );
 }
 
-function DraftsCard({ data, briefing, onNavigate }: { data: HomeResponse; briefing: Briefing; onNavigate: (v: View) => void }) {
+function DraftsCard({ data, briefing, onNavigate, onDraft }: { data: HomeResponse; briefing: Briefing } & Pick<HomeProps, "onNavigate" | "onDraft">) {
   const d = data.drafts;
   const reviews = briefing.data?.reviews;
   return (
@@ -400,7 +402,7 @@ function DraftsCard({ data, briefing, onNavigate }: { data: HomeResponse; briefi
       ) : (
         <ul className="space-y-2">
           {d.top.map((x) => (
-            <DraftRow key={x.id} draft={x} onOpen={() => onNavigate("drafts")} />
+            <DraftRow key={x.id} draft={x} onOpen={() => onDraft(x.id)} />
           ))}
         </ul>
       )}
@@ -901,7 +903,7 @@ function CareCard({ onNavigate }: { onNavigate: (v: View) => void }) {
 
 // ── The briefing ────────────────────────────────────────────────────────────
 
-export function Home({ home, onNavigate, onMemory }: HomeProps) {
+export function Home({ home, onNavigate, onMemory, onDraft }: HomeProps) {
   const { data, error, clearError } = home;
   const briefing = useJson<BriefingResponse>("/api/briefing");
 
@@ -918,7 +920,7 @@ export function Home({ home, onNavigate, onMemory }: HomeProps) {
 
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
-        <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} />
+        <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
         <CareCard onNavigate={onNavigate} />
       </Section>
 

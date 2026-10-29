@@ -73,6 +73,9 @@ export default function AppPage() {
   const [memoryIntent, setMemoryIntent] = useState<MemoryIntent | null>(null);
   const [memoryKey, setMemoryKey] = useState(0);
   const memoryConsumed = useCallback(() => setMemoryIntent(null), []);
+  // A draft the home page wants the drafts view to open, taken and cleared the same way.
+  const [draftIntent, setDraftIntent] = useState<string | null>(null);
+  const draftConsumed = useCallback(() => setDraftIntent(null), []);
   // Bumped by Refresh: remounting the view makes it fetch again.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,6 +118,11 @@ export default function AppPage() {
     navigate("memory");
   };
 
+  const openDraft = (id: string) => {
+    setDraftIntent(id);
+    navigate("drafts");
+  };
+
   const showNew = () => {
     feed.showPending();
     setView("feed");
@@ -138,7 +146,7 @@ export default function AppPage() {
   const renderView = () => {
     switch (view) {
       case "home":
-        return <Home home={home} onNavigate={navigate} onMemory={openMemory} />;
+        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} />;
       case "ask":
         return <Ask onNavigate={navigate} />;
       case "errands":
@@ -150,7 +158,7 @@ export default function AppPage() {
       case "care":
         return <Care onChange={home.reload} onMemory={openMemory} />;
       case "drafts":
-        return <Drafts onChange={home.reload} />;
+        return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} />;
       case "advice":
         return <Advice onChange={home.reload} />;
       case "network":
