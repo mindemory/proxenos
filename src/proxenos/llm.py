@@ -88,6 +88,21 @@ def configured() -> bool:
     return local or bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def prompt_chars() -> int | None:
+    """How much prompt, in characters, the model set up takes in one request, for steps that
+    trim what they send to fit; None when the limit is far past what any step sends."""
+    if env("MODEL", DEFAULT_MODEL).startswith(LOCAL):
+        return (LOCAL_CONTEXT - LOCAL_CONTEXT // 4) * 3  # as _ask_local counts it
+    return None
+
+
+def fit(limit: int, overhead: int = 30_000) -> int:
+    """`limit` characters of records, or fewer when the model can't take that many beside
+    `overhead` characters of instructions and the rest of the prompt."""
+    room = prompt_chars()
+    return limit if room is None else max(10_000, min(limit, room - overhead))
+
+
 def _ask_local(
     model: str, prompt: str, system: str | None, schema: dict | None, effort: str, max_tokens: int
 ) -> str | dict:

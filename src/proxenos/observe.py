@@ -275,8 +275,8 @@ def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dic
             stats["would_observe"] += 1
             continue
         cut = ""
-        if len(text) > MAX_CHARS:
-            text = _sample(text, MAX_CHARS)
+        if len(text) > (limit := llm.fit(MAX_CHARS)):
+            text = _sample(text, limit)
             cut = "\n\n(A long month: these lines are an even sample across it.)"
         answer = llm.ask(
             f"Month: {month}. Source: {_describe(name)}.\n\n{text}{cut}",

@@ -200,3 +200,22 @@ def test_sync_drafts_new_replies_only_with_a_key(tmp_path, monkeypatch):
     stats = master.sync(vault)
     assert stats["replies_failed"] == 1
     assert "records_indexed" in stats  # the rest of the sync still ran
+
+
+def test_a_local_model_consolidates_the_newest_months_that_fit(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    for month in ("2026-01", "2026-02", "2026-03"):
+        note = vault / "observations" / "whatsapp" / f"{month}.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(f"{month}: " + "x" * 40_000)
+    monkeypatch.setattr(llm, "prompt_chars", lambda: 150_000)
+    prompts = []
+    fake_llm(
+        monkeypatch,
+        lambda prompt, kwargs: prompts.append(prompt) or model_answer("x")(prompt, kwargs),
+    )
+
+    master.consolidate(vault)
+
+    assert "2026-03:" in prompts[0] and "2026-01:" not in prompts[0]
+    assert "oldest left out" in prompts[0]

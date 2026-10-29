@@ -164,7 +164,7 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
     mine = {k for k, entry in closed.items() if entry["action"]} | verdicts.keys()
 
     found = conversations(vault, _iso(now - timedelta(days=days)))
-    text, refs, cut = render(found)
+    text, refs, cut = render(found, llm.fit(MAX_CHARS))
     new = 0
     if refs:
         shown = {k: task for k, task in tasks.items() if k not in mine}

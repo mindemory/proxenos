@@ -111,3 +111,10 @@ def test_a_local_prompt_too_long_or_answer_cut_off_fails_rather_than_truncates(m
     assert not sent  # never sent
     with pytest.raises(llm.ModelError, match="cut off"):
         llm.ask("hi")
+
+
+def test_steps_trim_to_what_a_local_model_takes(monkeypatch):
+    assert llm.fit(400_000) == 400_000  # the API takes it all
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    assert llm.fit(400_000) == llm.prompt_chars() - 30_000 < 400_000
+    assert llm.fit(50_000) == 50_000

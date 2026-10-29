@@ -407,7 +407,7 @@ def care(
     now = now or datetime.now(UTC)
     out = vault / "clones" / "care"
     found = gather(vault, now - timedelta(days=days), now, now + timedelta(days=AHEAD_DAYS))
-    text, refs, cut = render(found, now)
+    text, refs, cut = render(found, now, llm.fit(MAX_CHARS))
     by_source = Counter(r["source"] for r in refs.values())
     if dry_run:
         return {**{s: by_source[s] for s in SOURCES}, "records": len(refs), "chars": len(text)}

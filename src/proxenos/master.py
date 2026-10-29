@@ -127,9 +127,16 @@ def consolidate(vault: Path) -> dict[str, int]:
     self_dir = vault / "self"
     current = {name: _read(self_dir / f"{name}.md") for name in SELF_FILES}
 
-    prompt = ["# Observations, oldest first\n"]
-    for note in notes:
-        prompt.append(note.read_text(encoding="utf-8"))
+    # The newest months that fit the model: the current self-model carries what the older ones said.
+    texts = [note.read_text(encoding="utf-8") for note in notes]
+    room = llm.fit(sum(map(len, texts)), overhead=60_000)
+    while len(texts) > 1 and sum(map(len, texts)) > room:
+        texts.pop(0)
+    left_out = len(notes) - len(texts)
+    heading = "# Observations, oldest first"
+    if left_out:
+        heading += f" (the {left_out} oldest left out, to fit)"
+    prompt = [heading + "\n", *texts]
     if any(current.values()):
         prompt.append("\n# The current self-model\n")
         prompt += [f"## {name}.md\n{text}" for name, text in current.items() if text]
