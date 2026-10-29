@@ -109,8 +109,8 @@ def test_without_env_a_secret_goes_to_the_keychain_and_only_its_name_to_settings
     assert fake_keychain.items == {"BEEPER_ACCESS_TOKEN": secret}
     settings = config.SETTINGS_FILE.read_text()
     assert json.loads(settings) == {"keychain": ["BEEPER_ACCESS_TOKEN"]}
-    assert stat.S_IMODE(config.SETTINGS_FILE.stat().st_mode) == 0o600
-    assert stat.S_IMODE(config.SETTINGS_FILE.parent.stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE(config.SETTINGS_FILE.stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(config.SETTINGS_FILE.parent.stat().st_mode) == 0o700
     assert os.environ["BEEPER_ACCESS_TOKEN"] == secret
     # Never on a command line: written through `security -i`'s stdin, as hex.
     for command in fake_keychain.commands:

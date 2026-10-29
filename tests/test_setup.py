@@ -22,6 +22,7 @@ def home(tmp_path, monkeypatch):
     folder = tmp_path / "home"
     folder.mkdir()
     monkeypatch.setenv("HOME", str(folder))
+    monkeypatch.setenv("USERPROFILE", str(folder))
     return folder
 
 
@@ -68,7 +69,7 @@ def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
     assert result["status"]["needed"] is False
     assert result["status"]["settings"]["name"] == {"value": "Ana Lee", "from": "settings"}
     assert result["status"]["vault"] == {"path": "~/Records", "exists": True, "cloud": None}
-    assert stat.S_IMODE((home / "Records").stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE((home / "Records").stat().st_mode) == 0o700
     assert json.loads(config.SETTINGS_FILE.read_text()) == {"name": "Ana Lee", "vault": "~/Records"}
 
 

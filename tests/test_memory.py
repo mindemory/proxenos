@@ -174,8 +174,8 @@ def test_the_index_is_private(vault):
     memory.build(vault)
 
     folder = vault / "memory"
-    assert stat.S_IMODE(folder.stat().st_mode) == 0o700
-    assert stat.S_IMODE((folder / "index.sqlite").stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(folder.stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE((folder / "index.sqlite").stat().st_mode) == 0o600
     assert not (folder / "index.sqlite.new").exists()
 
 

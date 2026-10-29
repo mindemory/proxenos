@@ -1,6 +1,7 @@
 """Strava ingester against a fake Strava API. No real data or credentials live in this repo."""
 
 import json
+import os
 import stat
 import urllib.error
 import urllib.parse
@@ -159,7 +160,7 @@ def test_rotated_refresh_tokens_are_saved_and_preferred(tmp_path, monkeypatch):
 
     strava.ingest(tmp_path, fetch=fake)
     assert json.loads(state.read_text())["refresh_token"] == "rotated-1"
-    assert stat.S_IMODE(state.stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(state.stat().st_mode) == 0o600
 
     strava.ingest(tmp_path, fetch=fake)
     monkeypatch.delenv("STRAVA_REFRESH_TOKEN")

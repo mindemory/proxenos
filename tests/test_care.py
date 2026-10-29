@@ -2,6 +2,7 @@
 person, clinic, number and message here is made up."""
 
 import json
+import os
 import re
 import stat
 from collections import defaultdict
@@ -626,8 +627,8 @@ def test_care_json_is_private(tmp_path, model):
     vault = make_vault(tmp_path)
     care.care(vault, now=NOW)
     folder = vault / "clones" / "care"
-    assert stat.S_IMODE(folder.stat().st_mode) == 0o700
-    assert stat.S_IMODE((folder / "care.json").stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(folder.stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE((folder / "care.json").stat().st_mode) == 0o600
     assert not list(folder.glob(".*.tmp"))
 
 

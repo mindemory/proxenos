@@ -488,7 +488,7 @@ def test_the_status_file_says_what_runs_and_what_comes_next(tmp_path):
     after = status(vault)
     assert after["pid"] is None and after["since"] is None and after["running"] is None
     if os.name != "nt":
-        assert (vault / schedule.STATUS).stat().st_mode & 0o777 == 0o600
+        assert os.name == "nt" or (vault / schedule.STATUS).stat().st_mode & 0o777 == 0o600
     assert after["sync"] == {
         "every_minutes": 15,
         "last": {
@@ -593,7 +593,7 @@ def test_a_job_is_python_m_proxenos_in_its_own_group_with_its_output_in_the_log(
         assert options["creationflags"] == subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         assert options["start_new_session"] is True
-        assert log.stat().st_mode & 0o777 == 0o600
+        assert os.name == "nt" or log.stat().st_mode & 0o777 == 0o600
     assert log.read_text() == "sync: run 1\nsync: run 2\n"  # appended, never over
     assert child.poll() is None
 

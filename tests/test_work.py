@@ -1,6 +1,7 @@
 """Work clone on a synthetic vault with the model faked out. No network, no real data."""
 
 import json
+import os
 import re
 import stat
 from datetime import UTC, datetime
@@ -357,9 +358,9 @@ def test_drafts_are_private_and_written_whole(tmp_path, model):
     work.work(vault, limit=2, now=NOW)
 
     out = vault / "clones" / "drafts"
-    assert stat.S_IMODE(out.stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE(out.stat().st_mode) == 0o700
     for path in drafts(vault).values():
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert os.name == "nt" or stat.S_IMODE(path.stat().st_mode) == 0o600
     assert not list(out.glob(".*"))  # no temporary file left behind
 
 

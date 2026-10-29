@@ -15,6 +15,7 @@ dependencies = [
     "numpy>=1.26",
     "pypdf>=6.0",
     "python-dotenv>=1.0",
+    "tzdata; sys_platform == 'win32'",  # zoneinfo has no time zones of its own on Windows
 ]
 
 [project.optional-dependencies]

@@ -29,6 +29,7 @@ def test_an_empty_new_value_still_counts_as_set(monkeypatch):
 
 def test_the_vault_defaults_to_proxenos_vault_and_reads_either_name(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     assert config.vault_path() == (tmp_path / "proxenos_vault").resolve()
     monkeypatch.setenv("TWIN_VAULT", str(tmp_path / "old"))
     assert config.vault_path() == (tmp_path / "old").resolve()

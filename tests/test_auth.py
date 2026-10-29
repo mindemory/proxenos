@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import socket
 import stat
 import threading
@@ -36,7 +37,7 @@ def test_a_secret_replaces_its_line_in_env_and_keeps_the_rest(dotenv, fake_keych
     assert config.save_secret("STRAVA_REFRESH_TOKEN", "new") == ".env"
     assert config.save_secret("BEEPER_ACCESS_TOKEN", "2") == ".env"
     assert dotenv.read_text() == "A=1\nSTRAVA_REFRESH_TOKEN=new\n# note\nBEEPER_ACCESS_TOKEN=2\n"
-    assert stat.S_IMODE(dotenv.stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(dotenv.stat().st_mode) == 0o600
     assert not fake_keychain.items
 
 

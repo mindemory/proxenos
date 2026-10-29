@@ -26,15 +26,19 @@ jobs:
       - run: ruff check src tests
       - run: ruff format --check src tests
       - run: pytest -q --junitxml=pytest.xml
-      # Name each failing test as an annotation, which anyone can read without signing in.
+      # Every failing test with the end of its error, in one annotation: anyone can read it without
+      # signing in, and GitHub shows only the first ten annotations of a step.
       - if: failure()
         shell: python
         run: |
           import xml.etree.ElementTree as ET
+          lines = []
           for case in ET.parse("pytest.xml").iter("testcase"):
               for bad in case.findall("failure") + case.findall("error"):
-                  first = (bad.get("message") or "").splitlines()[0][:300] if bad.get("message") else ""
-                  print(f"::error title={case.get('classname')}.{case.get('name')}::{first}")
+                  text = (bad.text or bad.get("message") or "").strip().splitlines()
+                  tail = " | ".join(line.strip() for line in text[-3:])[:300]
+                  lines.append(f"{case.get('name')}: {tail}")
+          print("::error title=failing tests::" + "%0A".join(lines).replace("::", ": :"))
 
   web:
     runs-on: ubuntu-latest

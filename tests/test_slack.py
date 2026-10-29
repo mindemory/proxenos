@@ -5,6 +5,7 @@ import copy
 import email.message
 import io
 import json
+import os
 import stat
 import urllib.error
 import urllib.request
@@ -202,7 +203,7 @@ def test_thread_replies_come_from_conversations_replies(tmp_path):
 def test_incremental_runs_start_from_the_watermark(tmp_path):
     slack.ingest(tmp_path, api := FakeSlack())
     state_path = tmp_path / "state" / "slack_acme-lab.json"
-    assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE(state_path.stat().st_mode) == 0o600
     # The newest ts seen in the channel, which is the thread's latest reply.
     assert json.loads(state_path.read_text())["channels"]["C0100"] == LAST_REPLY
 
