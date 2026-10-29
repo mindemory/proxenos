@@ -76,7 +76,7 @@ Until Google's verification is done, Gmail keeps today's paths: your own sign-in
 
 ## Decisions
 
-1. **Android first:** the companion (fast, private, needs a computer) or the phone-only app (slow, reaches people who only have a phone).
+1. **Android first:** decided on October 29, 2026: the companion first (fast, private, needs a computer), then the phone-only app.
 2. **First release:** the Mac app alone, or Mac and Windows together, at the cost of waiting for both.
 3. **Gmail verification:** pay for it now, or start with Microsoft 365, IMAP and your own sign-in client.
 
