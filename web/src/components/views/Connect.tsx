@@ -2,7 +2,16 @@
 
 import { Plug } from "lucide-react";
 
-import { AppleMailCard, BeeperCard, GmailCard, PhoneCard, SlackCard, WhatsAppCard } from "@/components/connect/cards";
+import {
+  AppleMailCard,
+  BeeperCard,
+  GmailCard,
+  GoogleCalendarCard,
+  MicrosoftCard,
+  PhoneCard,
+  SlackCard,
+  WhatsAppCard,
+} from "@/components/connect/cards";
 import { SourceRow } from "@/components/connect/parts";
 import { Command, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { StatusSkeleton } from "@/components/Skeleton";
@@ -10,7 +19,7 @@ import { useConnect } from "@/lib/connectClient";
 import type { ConnectHow, ConnectSource } from "@/lib/types";
 
 /** Sources with a card of their own here; the rest are rows that say how to connect them. */
-const WITH_BUTTONS = ["applemail", "gmail", "whatsapp", "slack", "beeper"];
+const WITH_BUTTONS = ["applemail", "gmail", "microsoft", "gcalendar", "whatsapp", "slack", "beeper"];
 
 function Group({ kicker, title, children, note }: { kicker: string; title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
@@ -37,7 +46,7 @@ function Rows({ sources, now }: { sources: ConnectSource[]; now: string }) {
 }
 
 export function Connect() {
-  const { data, error, clearError, job, signInGmail, readWhatsApp, saveBeeperToken, cancel } = useConnect();
+  const { data, error, clearError, job, signIn, readWhatsApp, saveBeeperToken, cancel } = useConnect();
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load sources: ${error}`} /> : <StatusSkeleton />;
@@ -47,6 +56,8 @@ export function Connect() {
   const of = (how: ConnectHow) => data.sources.filter((s) => s.how === how && !WITH_BUTTONS.includes(s.id));
   const applemail = data.sources.find((s) => s.id === "applemail");
   const gmail = data.sources.find((s) => s.id === "gmail");
+  const microsoft = data.sources.find((s) => s.id === "microsoft");
+  const gcalendar = data.sources.find((s) => s.id === "gcalendar");
   const whatsapp = data.sources.find((s) => s.id === "whatsapp");
   const slack = data.sources.find((s) => s.id === "slack");
   const beeper = data.sources.find((s) => s.id === "beeper");
@@ -75,7 +86,33 @@ export function Connect() {
 
       <Group kicker="Live" title="Sign in or read directly">
         {applemail && <AppleMailCard s={applemail} now={data.now} />}
-        {gmail && <GmailCard s={gmail} now={data.now} job={job("gmail")} onSignIn={signInGmail} onCancel={() => cancel("gmail")} />}
+        {gmail && (
+          <GmailCard
+            s={gmail}
+            now={data.now}
+            job={job("gmail")}
+            onSignIn={(n, a) => signIn("gmail", n, a)}
+            onCancel={() => cancel("gmail")}
+          />
+        )}
+        {microsoft && (
+          <MicrosoftCard
+            s={microsoft}
+            now={data.now}
+            job={job("microsoft")}
+            onSignIn={(n, a) => signIn("microsoft", n, a)}
+            onCancel={() => cancel("microsoft")}
+          />
+        )}
+        {gcalendar && (
+          <GoogleCalendarCard
+            s={gcalendar}
+            now={data.now}
+            job={job("gcalendar")}
+            onSignIn={(n, a) => signIn("gcalendar", n, a)}
+            onCancel={() => cancel("gcalendar")}
+          />
+        )}
         {whatsapp && (
           <WhatsAppCard s={whatsapp} now={data.now} job={job("whatsapp")} onRead={readWhatsApp} onCancel={() => cancel("whatsapp")} />
         )}

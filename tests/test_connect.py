@@ -170,3 +170,51 @@ def test_mail_beeper_slack_and_the_phone_say_what_they_need(tmp_path, monkeypatc
     assert sources["applemail"]["connected"] and sources["applemail"]["last_read"]
     assert sources["beeper"]["connected"] and sources["beeper"]["problem"] is None
     assert report["phone"] == {"address": "https://mac.tail1.ts.net", "login": "me@example.org"}
+
+
+def test_microsoft_and_google_calendar_sign_ins_show_their_accounts_and_never_a_token(
+    tmp_path, monkeypatch
+):
+    sources = by_id(connect.report(tmp_path, store(tmp_path)))
+    assert sources["microsoft"]["problem"] == "no_microsoft_client"
+    assert sources["gcalendar"]["problem"] == "no_google_client"
+    assert not sources["microsoft"]["connected"] and not sources["gcalendar"]["accounts"]
+
+    monkeypatch.setenv("MICROSOFT_CLIENT_ID", f"client-{SECRET}")
+    monkeypatch.setenv("MICROSOFT_WORK", f"joe@work.example:oauth:M.C5{SECRET}")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", SECRET)
+    monkeypatch.setenv("GCALENDAR_HOME", f"joe@home.example:oauth:1//{SECRET}")
+    month(tmp_path / "raw" / "calendar" / "work")
+    month(tmp_path / "raw" / "calendar" / "home")
+    month(tmp_path / "raw" / "email" / "work")
+
+    report = connect.report(tmp_path, store(tmp_path))
+    assert SECRET not in json.dumps(report)
+    sources = by_id(report)
+    work, home = sources["microsoft"], sources["gcalendar"]
+    assert work["connected"] and work["problem"] is None and work["last_read"]
+    assert [(a["name"], a["address"], a["sign_in"]) for a in work["accounts"]] == [
+        ("work", "joe@work.example", "microsoft")
+    ]
+    assert home["connected"] and home["problem"] is None
+    assert [(a["name"], a["address"], a["sign_in"]) for a in home["accounts"]] == [
+        ("home", "joe@home.example", "google")
+    ]
+    assert home["accounts"][0]["last_read"] == home["last_read"]
+    # What a sign-in reads isn't an export: not other email, nor the calendar download.
+    assert not sources["email"]["connected"] and not sources["calendar"]["connected"]
+    month(tmp_path / "raw" / "calendar" / "joe-home-example")
+    assert by_id(connect.report(tmp_path, store(tmp_path)))["calendar"]["connected"]
+
+
+@pytest.mark.parametrize("service", ["microsoft", "gcalendar"])
+def test_the_page_starts_the_new_sign_ins_the_same_way(tmp_path, monkeypatch, capsys, service):
+    monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path))
+    seen = []
+    monkeypatch.setattr(auth, service, lambda *args: seen.append(args) or "saved")
+    cli.main(["auth", service, "--", "work", "joe@work.example"])
+    assert seen == [("work", "joe@work.example")]
+    assert capsys.readouterr().out.strip() == "saved"
+    with pytest.raises(SystemExit, match=f"usage: proxenos auth {service} NAME ADDRESS"):
+        cli.main(["auth", service, "work"])

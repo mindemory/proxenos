@@ -260,10 +260,13 @@ export function secretLabel(name: string): string {
     STRAVA_CLIENT_SECRET: "Strava app secret",
     GOOGLE_CLIENT_ID: "Google sign-in client ID",
     GOOGLE_CLIENT_SECRET: "Google sign-in client secret",
+    MICROSOFT_CLIENT_ID: "Microsoft sign-in client ID",
     SLACK_USER_TOKEN: "Slack token",
   };
   if (fixed[name]) return fixed[name];
   if (name.startsWith("GMAIL_")) return `Gmail · ${name.slice(6).toLowerCase()}`;
+  if (name.startsWith("GCALENDAR_")) return `Google Calendar · ${name.slice(10).toLowerCase()}`;
+  if (name.startsWith("MICROSOFT_")) return `Microsoft · ${name.slice(10).toLowerCase()}`;
   if (name.startsWith("SLACK_USER_TOKEN_")) return `Slack · ${name.slice(17)}`;
   return name;
 }

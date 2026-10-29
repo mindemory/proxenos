@@ -38,7 +38,8 @@ SETTINGS = {
 }
 FOLDER_LISTS = ("docs_dirs", "cv_dirs")
 FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", *FOLDER_LISTS)
-# Shown whether they're set or not; Gmail accounts and Slack workspaces only once they are.
+# Shown whether they're set or not; mail and calendar sign-ins and Slack workspaces only once
+# they are.
 SECRETS = (
     "ANTHROPIC_API_KEY",
     "BEEPER_ACCESS_TOKEN",
@@ -47,6 +48,7 @@ SECRETS = (
     "STRAVA_CLIENT_SECRET",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
+    "MICROSOFT_CLIENT_ID",
 )
 _MODEL = re.compile(r"[\w.:/-]{1,100}")
 _KEY = re.compile(r"sk-ant-[\w-]{10,500}")

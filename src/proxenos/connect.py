@@ -12,10 +12,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from proxenos.config import env
-from proxenos.ingest import gmail, slack, slackdump, whatsapp
+from proxenos.ingest import gcalendar, gmail, microsoft, slack, slackdump, whatsapp
 
 # How each source gets in, in the order the page lists them.
-LIVE = ("applemail", "gmail", "whatsapp", "slack", "beeper", "strava", "bluesky", "mentions")
+LIVE = (
+    "applemail",
+    "gmail",
+    "microsoft",
+    "gcalendar",
+    "whatsapp",
+    "slack",
+    "beeper",
+    "strava",
+    "bluesky",
+    "mentions",
+)
 DOWNLOADS = (
     "linkedin",
     "twitter",
@@ -49,8 +60,34 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         }
         for name, (address, secret) in sorted(gmail.accounts().items())
     ]
-    # Mail folders no Gmail account reads came from an mbox download.
-    mbox = [d for d in _subdirs(raw / "email") if d.name not in {a["name"] for a in accounts}]
+    # A Microsoft sign-in reads mail and a calendar under its name; a Google Calendar one, a
+    # calendar. Neither account is ever shown with its token.
+    signed_in = {
+        "microsoft": [
+            {
+                "name": name,
+                "address": address,
+                "sign_in": "microsoft",
+                "last_read": _last_read(raw / "email" / name, raw / "calendar" / name),
+            }
+            for name, (address, _) in sorted(microsoft.accounts().items())
+        ],
+        "gcalendar": [
+            {
+                "name": name,
+                "address": address,
+                "sign_in": "google",
+                "last_read": _last_read(raw / "calendar" / name),
+            }
+            for name, (address, _) in sorted(gcalendar.accounts().items())
+        ],
+    }
+    # Mail folders no sign-in reads came from an mbox download, and calendars from an export
+    # (or the Mac's Calendar app).
+    live_mail = {a["name"] for a in [*accounts, *signed_in["microsoft"]]}
+    live_calendars = {a["name"] for a in [*signed_in["microsoft"], *signed_in["gcalendar"]]}
+    mbox = [d for d in _subdirs(raw / "email") if d.name not in live_mail]
+    exports = [d for d in _subdirs(raw / "calendar") if d.name not in live_calendars]
     store = whatsapp.store_problem(whatsapp_db)
     google_client = os.environ.get("GOOGLE_CLIENT_ID") and os.environ.get("GOOGLE_CLIENT_SECRET")
     strava_saved = vault / "state" / "strava_token.json"  # the Strava ingester's latest token
@@ -62,6 +99,8 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
     set_up = {
         "applemail": (vault / "state" / "applemail.json").exists(),  # a sync has read Mail
         "gmail": bool(accounts),
+        "microsoft": bool(signed_in["microsoft"]),
+        "gcalendar": bool(signed_in["gcalendar"]),
         "whatsapp": store is None,
         "slack": bool(workspaces or slack.tokens()),
         "beeper": beeper_token,
@@ -74,6 +113,8 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
     # What stops the page's button from working, if anything.
     problems = {
         "gmail": None if google_client else "no_google_client",
+        "microsoft": None if os.environ.get(microsoft.CLIENT) else "no_microsoft_client",
+        "gcalendar": None if google_client else "no_google_client",
         "whatsapp": store,
         "beeper": None if beeper_token else "no_token",
     }
@@ -87,7 +128,15 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         "bluesky": env("BLUESKY_HANDLE") or None,
         "applemail": str(Path(sys.executable).resolve()),
     }
-    folders = {"gmail": [raw / "email" / a["name"] for a in accounts], "email": mbox}
+    folders = {
+        "gmail": [raw / "email" / a["name"] for a in accounts],
+        "microsoft": [
+            raw / kind / a["name"] for a in signed_in["microsoft"] for kind in ("email", "calendar")
+        ],
+        "gcalendar": [raw / "calendar" / a["name"] for a in signed_in["gcalendar"]],
+        "email": mbox,
+        "calendar": exports,
+    }
 
     sources = []
     for how, ids in (("live", LIVE), ("download", DOWNLOADS), ("folder", FOLDERS)):
@@ -106,7 +155,7 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
                     "last_read": last_read,
                     "problem": problems.get(source),
                     "detail": details.get(source),
-                    "accounts": accounts if source == "gmail" else [],
+                    "accounts": accounts if source == "gmail" else signed_in.get(source, []),
                     "workspaces": workspaces if source == "slack" else [],
                 }
             )

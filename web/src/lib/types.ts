@@ -705,10 +705,11 @@ export interface CareResponse {
 /** How a source gets in: signed in or read directly, a download imported, or a folder named. */
 export type ConnectHow = "live" | "download" | "folder";
 
+/** A signed-in account: Gmail's, Microsoft's or Google Calendar's. */
 export interface MailAccount {
-  name: string; // GMAIL_<NAME>, lower case
+  name: string; // GMAIL_<NAME>, MICROSOFT_<NAME> or GCALENDAR_<NAME>, lower case
   address: string;
-  signIn: "google" | "app_password";
+  signIn: "google" | "microsoft" | "app_password";
   lastRead: string | null;
 }
 
@@ -717,17 +718,24 @@ export interface ConnectSource {
   how: ConnectHow;
   connected: boolean;
   lastRead: string | null; // newest change to its files under raw/
-  /** What stops its button from working: "no_google_client", Beeper's "no_token", or WhatsApp's "missing" or "blocked". */
+  /**
+   * What stops its button from working: "no_google_client", "no_microsoft_client", Beeper's "no_token", or WhatsApp's
+   * "missing" or "blocked".
+   */
   problem: string | null;
   /** A handle, where one helps. Apple Mail's is the Python that needs Full Disk Access. */
   detail: string | null;
-  accounts: MailAccount[]; // Gmail only
+  accounts: MailAccount[]; // the sign-ins: Gmail, Microsoft 365 and Google Calendar only
   workspaces: string[]; // Slack only: the workspaces slackdump is signed in to
 }
 
-/** What the page can start: a Gmail sign-in, a read of WhatsApp, or a Beeper token. One of each at a time. */
-export type ConnectJobKind = "gmail" | "whatsapp" | "beeper";
-export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp", "beeper"];
+/** The sign-ins the page starts, each an account's name and address. */
+export type SignInKind = "gmail" | "microsoft" | "gcalendar";
+export const SIGN_IN_KINDS: readonly SignInKind[] = ["gmail", "microsoft", "gcalendar"];
+
+/** What the page can start: a sign-in, a read of WhatsApp, or a Beeper token. One of each at a time. */
+export type ConnectJobKind = SignInKind | "whatsapp" | "beeper";
+export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "whatsapp", "beeper"];
 
 /** Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, and a Send. */
 export type JobKind = ConnectJobKind | "ask" | "errand" | "send";

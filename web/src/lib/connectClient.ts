@@ -9,13 +9,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
-import type { ConnectJob, ConnectJobKind, ConnectJobsResponse, ConnectResponse } from "./types";
+import type { ConnectJob, ConnectJobKind, ConnectJobsResponse, ConnectResponse, SignInKind } from "./types";
+import { SIGN_IN_KINDS } from "./types";
 
 const POLL_MS = 2000;
 
 /** The toast for a job that worked. Failures stay on their card instead. */
 function doneToast(job: ConnectJob): string {
-  if (job.kind === "gmail") return `Signed in as ${job.account ?? "that account"}`;
+  if ((SIGN_IN_KINDS as readonly string[]).includes(job.kind)) return `Signed in as ${job.account ?? "that account"}`;
   return job.kind === "beeper" ? "Beeper token saved" : "WhatsApp read";
 }
 
@@ -76,10 +77,10 @@ export function useConnect() {
     setData((d) => (d ? { ...d, jobs: [...d.jobs.filter((j) => j.kind !== job.kind), job] } : d));
   }, []);
 
-  /** Start a Google sign-in for this account. Resolves with why it couldn't start, or null. */
-  const signInGmail = useCallback(
-    (name: string, address: string): Promise<string | null> =>
-      post<{ job: ConnectJob }>("/api/connect/gmail", { name, address }).then(
+  /** Start a Gmail, Microsoft 365 or Google Calendar sign-in for this account. Resolves with why it couldn't start, or null. */
+  const signIn = useCallback(
+    (kind: SignInKind, name: string, address: string): Promise<string | null> =>
+      post<{ job: ConnectJob }>(`/api/connect/${kind}`, { name, address }).then(
         (r) => {
           started(r.job);
           return null;
@@ -118,5 +119,5 @@ export function useConnect() {
 
   const job = useCallback((kind: ConnectJobKind) => data?.jobs.find((j) => j.kind === kind) ?? null, [data]);
 
-  return { data, error, clearError: () => setError(null), job, signInGmail, readWhatsApp, saveBeeperToken, cancel };
+  return { data, error, clearError: () => setError(null), job, signIn, readWhatsApp, saveBeeperToken, cancel };
 }

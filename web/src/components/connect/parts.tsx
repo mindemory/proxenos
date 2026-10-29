@@ -27,6 +27,16 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
     how: "Email from every account in the Mail app on this Mac. Nothing to sign in to here.",
   },
   gmail: { label: "Gmail", kind: "email", how: "Your mail, read over IMAP and kept current. One sign-in per account." },
+  microsoft: {
+    label: "Microsoft 365 and Outlook",
+    kind: "email",
+    how: "Your mail and calendar, read through Microsoft's sign-in and kept current, on any computer. One sign-in per account.",
+  },
+  gcalendar: {
+    label: "Google Calendar",
+    kind: "calendar",
+    how: "Your calendar, a year back and two months ahead, read through a read-only Google sign-in. One per account.",
+  },
   whatsapp: { label: "WhatsApp", how: "Your messages and groups, from WhatsApp for Mac's own store on this computer." },
   slack: { label: "Slack", how: "Your messages in each workspace, read with slackdump signed in as you. Add each workspace once." },
   beeper: {
@@ -47,7 +57,7 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
     how: "Accounts Center, Your information and permissions, Download your information. JSON, all time, with messages.",
   },
   threads: { label: "Threads", how: "The same Download your information page, with Threads picked." },
-  calendar: { label: "Google Calendar", how: "Google Takeout, Calendar." },
+  calendar: { label: "Calendar export", how: "Google Takeout, Calendar, or any calendar's .ics export." },
   drive: { label: "Google Drive", how: "Google Takeout, Drive." },
   photos: { label: "Google Photos", how: "Google Takeout, Google Photos. Only dates, places and people are read." },
   keep: { label: "Google Keep", how: "Google Takeout, Keep." },

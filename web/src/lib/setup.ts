@@ -20,7 +20,7 @@ const MAX_VALUE = 4096;
 const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain"];
 /** The secrets `proxenos setup` keeps, as config.SECRET names them. */
 const SECRET_NAME =
-  /^(ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET))$/;
+  /^(ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)|GCALENDAR_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+)$/;
 const MODEL_NAME = /^[\w.:/-]{1,100}$/;
 
 /** A first run: no name and no vault, from the environment, the repo's .env or the settings file. */

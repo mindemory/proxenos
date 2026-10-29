@@ -128,6 +128,8 @@ Some sources read a folder on your computer: a folder of documents, your website
 | Slack | [slackdump](https://github.com/rusq/slackdump) (`proxenos auth slackdump WORKSPACE`, then kept current every sync), or a user token |
 | Gmail, Google Calendar, Drive, Photos metadata, Keep, Tasks, YouTube, Chrome | Google Takeout zips (`proxenos import`) |
 | Email (any) | mbox exports; Gmail over IMAP with an app password or a Google sign-in (`proxenos auth gmail`) |
+| Microsoft 365, Outlook.com | Mail and calendar through Microsoft Graph, with a read-only sign-in to your own app registration (`proxenos auth microsoft NAME ADDRESS`), then kept current every sync. No mail app needed, so it works on any computer |
+| Google Calendar, live | The Calendar API with a read-only Google sign-in, apart from Gmail's (`proxenos auth gcalendar NAME ADDRESS`), then kept current every sync |
 | Apple Mail | Every account in the Mac's Mail app (Gmail, Google Workspace, Microsoft 365, Outlook), with no sign-in of its own: add the accounts in System Settings, Internet Accounts, keep Mail open (or set to open at login) so it fetches, and give the Python that runs Proxenos Full Disk Access. `proxenos sync` then reads it every run. |
 | Strava | API (`proxenos auth strava`) |
 | Spotify | Extended Streaming History export |
@@ -152,7 +154,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
-| `proxenos auth strava` / `slack` / `slackdump WORKSPACE` / `gmail NAME ADDRESS` / `beeper` | One-time sign-ins: tokens go to the Keychain (to `.env` when running from source with one); slackdump keeps its own. Most can also be done from the app's Connect page |
+| `proxenos auth strava` / `slack` / `slackdump WORKSPACE` / `gmail NAME ADDRESS` / `gcalendar NAME ADDRESS` / `microsoft NAME ADDRESS` / `beeper` | One-time sign-ins: tokens go to the Keychain (to `.env` when running from source with one); slackdump keeps its own. Most can also be done from the app's Connect page |
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |

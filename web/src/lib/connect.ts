@@ -2,11 +2,11 @@
 //
 // Which sources are connected comes from `proxenos connect`, which reports names, addresses,
 // handles and dates, never a secret. Its answer is read field by field, so nothing else in it
-// reaches the page. A Gmail sign-in (`proxenos auth gmail`), a read of WhatsApp (`proxenos
-// ingest whatsapp`) and a Beeper token (`proxenos auth beeper`) run in the background, one of
-// each at a time, and the page follows them through connectJobs(). A job tells the page only its
-// command's last line, with anything that looks like a token blanked. The one secret the page
-// sends is Beeper's: it goes to the command on its stdin and nowhere else.
+// reaches the page. A sign-in (`proxenos auth gmail`, `microsoft` or `gcalendar`), a read of
+// WhatsApp (`proxenos ingest whatsapp`) and a Beeper token (`proxenos auth beeper`) run in the
+// background, one of each at a time, and the page follows them through connectJobs(). A job tells
+// the page only its command's last line, with anything that looks like a token blanked. The one
+// secret the page sends is Beeper's: it goes to the command on its stdin and nowhere else.
 //
 // The Ask page's `proxenos ask` runs through the same jobs, as the kind "ask": one at a time,
 // its question on stdin, its last line the id of the ask. connectJobs() leaves it out; askJobs()
@@ -14,6 +14,8 @@
 
 import { execFile, type ChildProcess } from "node:child_process";
 
+import { isAddress } from "./actions";
+import { NO_STORE, readLocalJson } from "./guard";
 import type {
   ConnectHow,
   ConnectJob,
@@ -22,6 +24,7 @@ import type {
   JobKind,
   MailAccount,
   PhoneInfo,
+  SignInKind,
 } from "./types";
 import { CONNECT_JOB_KINDS } from "./types";
 import { nowIso, proxenosBin, REPO_ROOT, vaultInfo, vaultPath } from "./vault";
@@ -33,6 +36,8 @@ const STATUS_MS = 30_000;
 export const ASK_MS = 15 * 60_000;
 const JOB_MS: Record<JobKind, number> = {
   gmail: 6 * 60_000,
+  microsoft: 6 * 60_000,
+  gcalendar: 6 * 60_000,
   whatsapp: 15 * 60_000,
   beeper: 60_000,
   ask: ASK_MS,
@@ -44,13 +49,18 @@ const MAX_MESSAGE = 300;
 export const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
 
 // Shapes a secret could take in a command's output: a sign-in as .env keeps it, Slack,
-// Anthropic and Google tokens, a bearer header, and any long run of letters and digits.
+// Anthropic, Google and Microsoft tokens (an access token is a JWT; a refresh token starts M.C
+// for a personal account and 0.A for a work one), a bearer header, and any long run of letters
+// and digits.
 const SECRET_SHAPES = [
   /oauth:\S*/gi,
   /\bxox[a-z]-[\w-]+/gi,
   /\bsk-ant-[\w-]+/gi,
   /\bya29\.[\w.-]+/g,
   /\b1\/\/[\w-]+/g,
+  /\beyJ[\w-]*\.[\w.-]+/g,
+  /\bM\.C\d+_[\w.!*$-]+/g,
+  /\b0\.A[\w.!*$-]{20,}/g,
   /\bbearer\s+\S+/gi,
   /\b(?=[\w-]*\d)(?=[\w-]*[a-z])[\w-]{32,}/gi,
 ];
@@ -76,7 +86,8 @@ function toAccount(raw: unknown): MailAccount | null {
   const name = str(r.name);
   const address = str(r.address);
   if (!name || !address) return null;
-  return { name, address, signIn: r.sign_in === "google" ? "google" : "app_password", lastRead: str(r.last_read) };
+  const signIn = r.sign_in === "google" || r.sign_in === "microsoft" ? r.sign_in : "app_password";
+  return { name, address, signIn, lastRead: str(r.last_read) };
 }
 
 function toSource(raw: unknown): ConnectSource | null {
@@ -242,4 +253,32 @@ export function stopJob(kind: JobKind): boolean {
   entry.stopping = true;
   entry.child?.kill("SIGTERM");
   return true;
+}
+
+// ── Sign-ins ────────────────────────────────────────────────────────────────
+
+/** <KIND>_<NAME>: a short name for the account. */
+const ACCOUNT_NAME = /^[A-Za-z0-9_]{1,32}$/;
+
+/**
+ * A sign-in route's whole answer: POST {name, address} starts `proxenos auth KIND NAME ADDRESS`,
+ * which opens the service's consent page in the browser and saves the token where Proxenos keeps
+ * secrets. The request must pass readLocalJson (a loopback host, the same origin, a JSON body, so
+ * no other site and no form post). Answers at once; the page follows the sign-in through
+ * /api/connect/jobs.
+ */
+export async function startSignIn(req: Request, kind: SignInKind): Promise<Response> {
+  const parsed = await readLocalJson(req);
+  if ("denied" in parsed) return parsed.denied;
+  const { name, address } = parsed.body;
+  if (typeof name !== "string" || !ACCOUNT_NAME.test(name) || (kind === "microsoft" && name.toLowerCase() === "client_id")) {
+    return Response.json({ error: "Name the account with letters, digits or _, e.g. personal." }, { status: 400 });
+  }
+  if (typeof address !== "string" || !isAddress(address)) {
+    return Response.json({ error: "That isn't an email address." }, { status: 400 });
+  }
+  // "--" so nothing in them is taken for an option.
+  const job = await startJob(kind, ["auth", kind, "--", name, address], address);
+  if (!job) return Response.json({ error: "A sign-in is already waiting in the browser." }, { status: 409 });
+  return Response.json({ job }, { status: 202, headers: NO_STORE });
 }

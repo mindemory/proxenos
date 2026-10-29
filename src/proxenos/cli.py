@@ -117,11 +117,15 @@ def main(argv: list[str] | None = None) -> None:
     sign_in = commands.add_parser(
         "auth", help="sign in once in the browser; the token is saved, never shown"
     )
-    sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail", "beeper"])
+    sign_in.add_argument(
+        "service",
+        choices=["strava", "slack", "slackdump", "gmail", "gcalendar", "microsoft", "beeper"],
+    )
     sign_in.add_argument(
         "account",
         nargs="*",
-        help="for gmail: NAME ADDRESS, e.g. personal me@x.com; for slackdump: the workspace",
+        help="for gmail, gcalendar and microsoft: NAME ADDRESS, e.g. personal me@x.com; for "
+        "slackdump: the workspace",
     )
     args = parser.parse_args(argv)
 
@@ -161,10 +165,10 @@ def main(argv: list[str] | None = None) -> None:
             if len(args.account) != 1:
                 raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. acme")
             print(auth.slackdump(args.account[0]))
-        elif args.service == "gmail":
+        elif args.service in ("gmail", "gcalendar", "microsoft"):
             if len(args.account) != 2:
-                raise SystemExit("usage: proxenos auth gmail NAME ADDRESS")
-            print(auth.gmail(*args.account))
+                raise SystemExit(f"usage: proxenos auth {args.service} NAME ADDRESS")
+            print(getattr(auth, args.service)(*args.account))
         else:
             print(auth.strava())
         return

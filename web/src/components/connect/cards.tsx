@@ -5,12 +5,13 @@ import { useState } from "react";
 
 import { Command } from "@/components/EmptyState";
 import { isAddress } from "@/lib/actions";
-import type { ConnectJob, ConnectSource, PhoneInfo } from "@/lib/types";
+import type { ConnectJob, ConnectSource, MailAccount, PhoneInfo } from "@/lib/types";
 
 import { QrCode } from "./QrCode";
 import { Chip, CopyBox, copyFor, JobLine, LastRead, PrimaryButton, Steps, StatePill } from "./parts";
 
-const GOOGLE_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#email";
+const MAIL_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#email";
+const CALENDAR_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#activity-and-habits";
 const FULL_DISK_ACCESS = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const ACCOUNT_NAME = /^[A-Za-z0-9_]{1,32}$/;
 /** A Slack workspace's name as it appears before .slack.com. */
@@ -62,24 +63,107 @@ function SyncLine({ s, now }: { s: ConnectSource; now: string }) {
   );
 }
 
-/** Gmail: the accounts signed in, and a Google sign-in for another (or the same one again). */
-export function GmailCard({
-  s,
-  now,
-  job,
-  onSignIn,
-  onCancel,
-}: {
+const SIGN_IN_LABELS: Record<MailAccount["signIn"], string> = {
+  google: "Google sign-in",
+  microsoft: "Microsoft sign-in",
+  app_password: "App password",
+};
+
+/** What a sign-in card says: its button, an example address, and what's asked for and read. */
+interface SignInCopy {
+  button: string;
+  placeholder: string;
+  /** The source's problem when its sign-in client isn't set up yet. */
+  noClientProblem: string;
+  noClient: React.ReactNode;
+  /** What the consent page asks to read, and what Proxenos reads after, for the running and done lines. */
+  asks: string;
+  reads: string;
+}
+
+function StepsLink({ href }: { href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline underline-offset-2">
+      The steps
+      <ExternalLink size={12} aria-hidden="true" />
+    </a>
+  );
+}
+
+const GMAIL_COPY: SignInCopy = {
+  button: "Sign in with Google",
+  placeholder: "you@gmail.com",
+  noClientProblem: "no_google_client",
+  noClient: (
+    <>
+      Sign-in needs a Google OAuth client first. In Google Cloud, make a <em>Desktop app</em> client with the Gmail API on, put
+      its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page. <StepsLink href={MAIL_STEPS} />
+    </>
+  ),
+  asks: "allow access to your mail. Proxenos only reads it.",
+  reads: "Proxenos reads it on every sync.",
+};
+
+const MICROSOFT_COPY: SignInCopy = {
+  button: "Sign in with Microsoft",
+  placeholder: "you@outlook.com",
+  noClientProblem: "no_microsoft_client",
+  noClient: (
+    <>
+      Sign-in needs your own Microsoft app registration first. In the Azure portal, Microsoft Entra ID, App registrations,
+      register an app for any organization&apos;s and personal Microsoft accounts, add http://localhost as a{" "}
+      <em>Mobile and desktop applications</em> redirect, put its Application (client) ID in .env as MICROSOFT_CLIENT_ID, then
+      reload this page. It needs no secret. <StepsLink href={MAIL_STEPS} />
+    </>
+  ),
+  asks: "accept read access to your mail and calendar. Proxenos only reads them.",
+  reads: "Proxenos reads its mail and calendar on every sync.",
+};
+
+const CALENDAR_COPY: SignInCopy = {
+  button: "Sign in with Google",
+  placeholder: "you@gmail.com",
+  noClientProblem: "no_google_client",
+  noClient: (
+    <>
+      Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Calendar
+      API turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this
+      page. <StepsLink href={CALENDAR_STEPS} />
+    </>
+  ),
+  asks: "allow read-only access to your calendar.",
+  reads: "Proxenos reads its calendar on every sync.",
+};
+
+interface SignInProps {
   s: ConnectSource;
   now: string;
   job: ConnectJob | null;
   onSignIn: (name: string, address: string) => Promise<string | null>;
   onCancel: () => void;
-}) {
+}
+
+/** Gmail: the accounts signed in, and a Google sign-in for another (or the same one again). */
+export function GmailCard(props: SignInProps) {
+  return <SignInCard {...props} copy={GMAIL_COPY} />;
+}
+
+/** Microsoft 365 and Outlook.com: mail and calendar through Microsoft's own sign-in, one account at a time. */
+export function MicrosoftCard(props: SignInProps) {
+  return <SignInCard {...props} copy={MICROSOFT_COPY} />;
+}
+
+/** Google Calendar, live: a read-only Google sign-in per account, apart from Gmail's. */
+export function GoogleCalendarCard(props: SignInProps) {
+  return <SignInCard {...props} copy={CALENDAR_COPY} />;
+}
+
+/** A source read through a sign-in: the accounts signed in, and a sign-in for another (or the same one again). */
+function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { copy: SignInCopy }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const noClient = s.problem === "no_google_client";
+  const noClient = s.problem === copy.noClientProblem;
   const busy = job?.state === "running";
 
   const signIn = (n: string, a: string) => {
@@ -104,7 +188,7 @@ export function GmailCard({
               <div className="min-w-0">
                 <div className="truncate text-ink">{a.address}</div>
                 <div className="text-xs text-muted">
-                  {a.signIn === "google" ? "Google sign-in" : "App password"} · <span className="num">{a.name}</span>
+                  {SIGN_IN_LABELS[a.signIn]} · <span className="num">{a.name}</span>
                   {a.lastRead ? (
                     <>
                       {" · "}
@@ -115,7 +199,7 @@ export function GmailCard({
                   )}
                 </div>
               </div>
-              {a.signIn === "google" && (
+              {a.signIn !== "app_password" && (
                 <button
                   onClick={() => signIn(a.name, a.address)}
                   disabled={busy || noClient}
@@ -151,7 +235,7 @@ export function GmailCard({
               type="email"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="you@gmail.com"
+              placeholder={copy.placeholder}
               autoComplete="email"
               spellCheck={false}
               className={inputClass}
@@ -159,7 +243,7 @@ export function GmailCard({
           </label>
           <PrimaryButton type="submit" disabled={busy || noClient}>
             <LogIn size={14} aria-hidden="true" />
-            Sign in with Google
+            {copy.button}
           </PrimaryButton>
         </div>
         {formError && (
@@ -171,12 +255,7 @@ export function GmailCard({
 
       {noClient && (
         <p className="rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
-          Sign-in needs a Google OAuth client first. In Google Cloud, make a <em>Desktop app</em> client with the Gmail API
-          on, put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page.{" "}
-          <a href={GOOGLE_STEPS} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline underline-offset-2">
-            The steps
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
+          {copy.noClient}
         </p>
       )}
 
@@ -185,11 +264,14 @@ export function GmailCard({
         onCancel={onCancel}
         running={
           <>
-            Waiting for you in the browser tab that just opened: sign in as {job?.account} and allow access to your mail.
-            Proxenos only reads it.
+            Waiting for you in the browser tab that just opened: sign in as {job?.account} and {copy.asks}
           </>
         }
-        done={<>Signed in as {job?.account}. Proxenos reads it on every sync.</>}
+        done={
+          <>
+            Signed in as {job?.account}. {copy.reads}
+          </>
+        }
       />
     </section>
   );

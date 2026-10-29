@@ -11,8 +11,10 @@ import pytest
 _SECRET_PREFIXES = (
     "ANTHROPIC_",
     "BEEPER_",
+    "GCALENDAR_",
     "GMAIL_",
     "GOOGLE_CLIENT_",
+    "MICROSOFT_",
     "SLACK_USER_TOKEN",
     "STRAVA_",
     "PROXENOS_",

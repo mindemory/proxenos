@@ -13,6 +13,17 @@ GOOGLE_CLIENT_SECRET, in .env or the page's Settings), asks for mail access (IMA
 mail scope; Proxenos only ever reads, and selects mail read-only), and saves
 GMAIL_<NAME>=address:oauth:<refresh token>.
 
+`proxenos auth gcalendar NAME ADDRESS` is the same with the same Google client, asking only for
+calendar.readonly, and saves GCALENDAR_<NAME>=address:oauth:<refresh token>. It's its own
+sign-in, not an extra scope on Gmail's, so a calendar can be connected without mail access.
+
+`proxenos auth microsoft NAME ADDRESS` does it with Microsoft's sign-in for a Microsoft 365 or
+Outlook.com account: the person's own app registration (MICROSOFT_CLIENT_ID, a public client with
+no secret, so PKCE is what keeps a stolen code useless), read-only mail and calendar scopes, the
+answer caught on localhost (the redirect Microsoft lets a desktop app register once for any
+port). It checks with Graph that the account that signed in is ADDRESS, then saves
+MICROSOFT_<NAME>=address:oauth:<refresh token>.
+
 `proxenos auth slack` turns Slack app configuration tokens (SLACK_USER_TOKEN_<workspace>, from
 api.slack.com/apps) into reading tokens: it creates a read-only "Proxenos reader" app in each
 workspace from a manifest, opens the app's install page, and takes the user token the page
@@ -38,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -48,6 +60,8 @@ from pathlib import Path
 
 from proxenos.config import REPO_ROOT, save_secret
 from proxenos.ingest import beeper as beeper_api
+from proxenos.ingest import gcalendar as gcalendar_api
+from proxenos.ingest import microsoft as microsoft_api
 from proxenos.ingest import slack as slack_api
 from proxenos.ingest import slackdump as slack_archives
 
@@ -58,6 +72,8 @@ _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
 _GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GMAIL_SCOPE = "https://mail.google.com/"
+GCALENDAR_SCOPE = gcalendar_api.SCOPE
+MICROSOFT_SCOPES = microsoft_api.SCOPES
 # One address on one line. No ":" either: it's kept as address:oauth:<token>.
 _ADDRESS = re.compile(r"[^\s@:]+@[^\s@:]+\.[^\s@:]+")
 _SLACK_API = "https://slack.com/api/"
@@ -140,47 +156,156 @@ def gmail(
     open_browser: Callable[[str], object] = webbrowser.open,
     post: Callable[[str, dict], dict] | None = None,
 ) -> str:
+    variable, where = _google(
+        "GMAIL", name, address, GMAIL_SCOPE, "the Gmail API", "your mail", port, open_browser, post
+    )
+    return f"saved {variable} in {where}; `proxenos sync` now reads {address} every run"
+
+
+def gcalendar(
+    name: str,
+    address: str,
+    port: int = PORT,
+    open_browser: Callable[[str], object] = webbrowser.open,
+    post: Callable[[str, dict], dict] | None = None,
+) -> str:
+    variable, where = _google(
+        "GCALENDAR",
+        name,
+        address,
+        GCALENDAR_SCOPE,
+        "the Google Calendar API",
+        "your calendar, read-only",
+        port,
+        open_browser,
+        post,
+    )
+    return f"saved {variable} in {where}; `proxenos sync` now reads {address}'s calendar every run"
+
+
+def microsoft(
+    name: str,
+    address: str,
+    port: int = PORT,
+    open_browser: Callable[[str], object] = webbrowser.open,
+    post: Callable[[str, dict], dict] | None = None,
+    profile: Callable[[str], dict] | None = None,
+) -> str:
+    client_id = os.environ.get(microsoft_api.CLIENT)
+    if not client_id:
+        raise SystemExit(
+            "Set MICROSOFT_CLIENT_ID first: the Application (client) ID of your own app "
+            "registration in Microsoft Entra, with http://localhost as a Mobile and desktop "
+            "redirect (see docs/data_sources.md)."
+        )
+    key = _account_key(name)
+    if f"MICROSOFT_{key}" == microsoft_api.CLIENT:
+        raise SystemExit("Name the account something other than client_id, e.g. work.")
+    _check_address(address)
+
+    redirect = f"http://localhost:{port}/"
+    print(
+        f"Opening Microsoft in your browser. Sign in as {address} and allow Proxenos to read "
+        "your mail and calendar."
+    )
+    code, verifier = _consent(
+        microsoft_api.AUTHORITY + "authorize",
+        {
+            "client_id": client_id,
+            "response_type": "code",
+            "response_mode": "query",
+            "scope": MICROSOFT_SCOPES,
+            "login_hint": address,
+        },
+        redirect,
+        port,
+        open_browser,
+        "Microsoft",
+    )
+    form = {
+        "client_id": client_id,
+        "grant_type": "authorization_code",
+        "code": code,
+        "code_verifier": verifier,
+        "redirect_uri": redirect,
+        "scope": MICROSOFT_SCOPES,
+    }
+    try:
+        token = (post or _post)(microsoft_api.AUTHORITY + "token", form)
+    except urllib.error.HTTPError as e:
+        why = microsoft_api.refused(e).why or f"HTTP {e.code}"
+        raise SystemExit(
+            f"Microsoft refused the sign-in: {why}. Check that the app registration has "
+            "http://localhost under Mobile and desktop applications."
+        ) from None
+    if not token.get("refresh_token") or not token.get("access_token"):
+        raise SystemExit("Microsoft gave no refresh token. Run again and accept on its page.")
+
+    try:
+        who = (profile or microsoft_api.profile)(token["access_token"])
+    except microsoft_api.Refused as e:
+        raise SystemExit(f"Microsoft Graph didn't say who signed in ({e}).") from None
+    signed_in = {str(who.get(k) or "").strip().lower() for k in ("mail", "userPrincipalName")}
+    if address.lower() not in signed_in:
+        shown = who.get("mail") or who.get("userPrincipalName") or "another account"
+        raise SystemExit(
+            f"Microsoft signed in {shown}, not {address}. Run again and sign in as {address}, "
+            f"or name {shown} instead. Nothing was saved."
+        )
+    variable = f"MICROSOFT_{key}"
+    where = save_secret(variable, f"{address}:oauth:{token['refresh_token']}")
+    return (
+        f"saved {variable} in {where}; `proxenos sync` now reads {address}'s mail and calendar "
+        "every run"
+    )
+
+
+def _google(
+    prefix: str,
+    name: str,
+    address: str,
+    scope: str,
+    api: str,
+    access: str,
+    port: int,
+    open_browser: Callable[[str], object],
+    post: Callable[[str, dict], dict] | None,
+) -> tuple[str, str]:
+    """A Google sign-in with the Desktop app client, saved as <prefix>_<NAME>. The variable and
+    where it went."""
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
     if not (client_id and client_secret):
         raise SystemExit(
             "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env first: a Google Cloud OAuth "
-            "client of type Desktop app, with the Gmail API on (see docs/data_sources.md)."
+            f"client of type Desktop app, with {api} on (see docs/data_sources.md)."
         )
-    key = "".join(c for c in name.upper() if c.isalnum() or c == "_")
-    if not key:
-        raise SystemExit("Name the account with letters, digits or _, e.g. personal.")
-    if not _ADDRESS.fullmatch(address) or len(address) > 254:
-        raise SystemExit(f"{address!r} isn't an email address.")
+    key = _account_key(name)
+    _check_address(address)
 
-    verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     redirect = f"http://127.0.0.1:{port}/"
-    query = urllib.parse.urlencode(
+    print(f"Opening Google in your browser. Sign in as {address} and allow access to {access}.")
+    code, verifier = _consent(
+        _GOOGLE_AUTHORIZE,
         {
             "client_id": client_id,
             "response_type": "code",
-            "redirect_uri": redirect,
-            "scope": GMAIL_SCOPE,
+            "scope": scope,
             "access_type": "offline",
             "prompt": "consent",
             "login_hint": address,
-            "code_challenge": challenge.decode().rstrip("="),
-            "code_challenge_method": "S256",
-        }
+        },
+        redirect,
+        port,
+        open_browser,
+        "Google",
     )
-    print(f"Opening Google in your browser. Sign in as {address} and allow access to your mail.")
-    open_browser(f"{_GOOGLE_AUTHORIZE}?{query}")
-    answer = _wait_for_redirect(port)
-    if "code" not in answer:
-        raise SystemExit(f"Google didn't approve: {answer.get('error', 'no answer')}")
-
     token = (post or _post)(
         _GOOGLE_TOKEN,
         {
             "client_id": client_id,
             "client_secret": client_secret,
-            "code": answer["code"],
+            "code": code,
             "code_verifier": verifier,
             "grant_type": "authorization_code",
             "redirect_uri": redirect,
@@ -188,8 +313,48 @@ def gmail(
     )
     if "refresh_token" not in token:
         raise SystemExit("Google gave no refresh token. Run again and approve on the consent page.")
-    where = save_secret(f"GMAIL_{key}", f"{address}:oauth:{token['refresh_token']}")
-    return f"saved GMAIL_{key} in {where}; `proxenos sync` now reads {address} every run"
+    variable = f"{prefix}_{key}"
+    return variable, save_secret(variable, f"{address}:oauth:{token['refresh_token']}")
+
+
+def _consent(
+    authorize: str,
+    params: dict,
+    redirect: str,
+    port: int,
+    open_browser: Callable[[str], object],
+    who: str,
+) -> tuple[str, str]:
+    """Open a consent page with a PKCE challenge and wait for its answer on this computer. The
+    code it sends back, and the verifier that alone can redeem it."""
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    query = urllib.parse.urlencode(
+        {
+            **params,
+            "redirect_uri": redirect,
+            "code_challenge": challenge.decode().rstrip("="),
+            "code_challenge_method": "S256",
+        }
+    )
+    open_browser(f"{authorize}?{query}")
+    answer = _wait_for_redirect(port)
+    if "code" not in answer:
+        raise SystemExit(f"{who} didn't approve: {answer.get('error', 'no answer')}")
+    return answer["code"], verifier
+
+
+def _account_key(name: str) -> str:
+    key = "".join(c for c in name.upper() if c.isalnum() or c == "_")
+    if not key:
+        raise SystemExit("Name the account with letters, digits or _, e.g. personal.")
+    return key
+
+
+def _check_address(address: str) -> None:
+    # It's kept as address:oauth:<token> on one line, so one address and nothing else.
+    if not _ADDRESS.fullmatch(address) or len(address) > 254:
+        raise SystemExit(f"{address!r} isn't an email address.")
 
 
 def slackdump(
