@@ -245,7 +245,7 @@ def render(draft: dict) -> str:
         if key in ("title", "to"):
             value = json.dumps(value, ensure_ascii=False)
         lines.append(f"{key}: {value}")
-    for key in ("found", "asks"):  # a reply's research, when there was any
+    for key in ("found", "asks", "thread"):  # a reply's research and chat, when it has them
         if draft.get(key):
             lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
     return "\n".join([*lines, "---", "", draft["body"].strip(), ""])
@@ -598,6 +598,8 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         "asks": [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)][
             :ASKS
         ],
+        # A reply's chat, so what was sent there after can be compared with the draft.
+        "thread": {"source": c["source"], "chat": c["chat"]} if (c := job.get("chat")) else None,
         "body": body,
     }
 

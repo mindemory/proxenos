@@ -55,17 +55,26 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     since = _iso(now - timedelta(days=days))
     start = _iso(now - timedelta(days=CONTEXT_DAYS))
     found = []
+    for source, key, messages, elsewhere, examples in conversations(vault):
+        if chat := _waiting(messages, since, start, elsewhere, examples):
+            found.append({"source": source, "chat": key, **chat})
+    return sorted(found, key=lambda c: c["since"], reverse=True)
+
+
+def conversations(vault: Path) -> Iterator[tuple]:
+    """Every conversation, as (source, chat key, messages, elsewhere, examples): the messages
+    as one shape (see below), and for _waiting where the user's own words come from when they
+    haven't written in it, and how many to keep."""
     for source, (stream, read) in _SOURCES.items():
         chats: dict[str, list[dict]] = defaultdict(list)
         for message in _messages(sorted((vault / "raw" / source / stream).glob("*.jsonl")), read):
             chats[message["chat"]].append(message)
         for key, messages in chats.items():
-            if chat := _waiting(messages, since, start):
-                found.append({"source": source, "chat": key, **chat})
+            yield source, key, messages, None, OWN_MESSAGES
 
     # Slack, one workspace at a time: who the user is differs between workspaces.
     for folder in sorted((vault / "raw" / "slack").glob("*/messages")):
-        found += _slack(folder.parent.name, sorted(folder.glob("*.jsonl")), since, start)
+        yield from _slack(folder.parent.name, sorted(folder.glob("*.jsonl")))
 
     # Email: a thread counts when the user wrote in it, or has written to its sender anywhere.
     months = sorted({p.name for p in (vault / "raw" / "email").glob("*/*.jsonl")})[-EMAIL_MONTHS:]
@@ -83,9 +92,7 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
         return [x["text"] for x in mail[-OWN_EMAILS:]]
 
     for key, messages in threads.items():
-        if chat := _waiting(messages, since, start, to_sender, OWN_EMAILS):
-            found.append({"source": "email", "chat": key, **chat})
-    return sorted(found, key=lambda c: c["since"], reverse=True)
+        yield "email", key, messages, to_sender, OWN_EMAILS
 
 
 def _waiting(
@@ -119,9 +126,11 @@ def _waiting(
     }
 
 
-def _slack(workspace: str, paths: list[Path], since: str, start: str) -> list[dict]:
-    """A workspace's chats waiting on the user, as waiting() finds them: each direct message,
-    and each channel thread where someone mentioned the user or that the user has written in."""
+def _slack(workspace: str, paths: list[Path]) -> Iterator[tuple]:
+    """A workspace's conversations, as conversations() gives them: each direct message, and each
+    channel thread, whose messages count as to the user where they mention the user or the user
+    has written in the thread. A thread that only mentions them is answered in their way of
+    writing in that workspace."""
     records = [r for r in _records(paths) if r.get("channel_id")]
     me = {r["user_id"] for r in records if r.get("from_me") and r.get("user_id")}
     names = {
@@ -153,14 +162,11 @@ def _slack(workspace: str, paths: list[Path], since: str, start: str) -> list[di
     mine = sorted(
         (m for ms in chats.values() for m in ms if m["mine"] and m["text"]), key=lambda m: m["ts"]
     )
-    found = []
     for key, messages in chats.items():
         if key in threads and any(m["mine"] for m in messages):
             messages = [{**m, "direct": True} for m in messages]
         examples = (lambda _: [m["text"] for m in mine]) if key in threads else None
-        if chat := _waiting(messages, since, start, examples):
-            found.append({"source": "slack", "chat": f"{workspace}/{key}", **chat})
-    return found
+        yield "slack", f"{workspace}/{key}", messages, examples, OWN_MESSAGES
 
 
 def _shown(message: dict) -> dict:
