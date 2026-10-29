@@ -38,6 +38,7 @@ DAYS = 365
 CHARS = 1500  # of a unit, embedded
 SNIPPET_CHARS = 400
 BATCH = 16
+LOCK_WAIT = 120  # seconds to wait for another run's write to finish
 _OLLAMA = "http://127.0.0.1:11434"
 CHATS = ("whatsapp", "slack", "linkedin", "facebook", "instagram", "twitter")
 SOURCES = (*CHATS, "email", "notes", "drive", "calendar", "keep", "gtasks")
@@ -87,7 +88,10 @@ def update(vault: Path, seconds: float | None = None, embed: Embed | None = None
                     for u, v in zip(batch, vectors, strict=True)
                 ],
             )
-            db.commit()
+            try:
+                db.commit()
+            except sqlite3.OperationalError:  # still locked after LOCK_WAIT: the next run goes on
+                break
             done += len(batch)
     return {"units_embedded": done, "units_waiting": len(todo) - done}
 
@@ -167,7 +171,7 @@ def _unit(key: str, rows: list[tuple]) -> dict:
 
 def _connect(file: Path) -> sqlite3.Connection:
     file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    db = sqlite3.connect(file)
+    db = sqlite3.connect(file, timeout=LOCK_WAIT)  # a sync and a backfill may write at once
     db.execute(
         "CREATE TABLE IF NOT EXISTS units (key TEXT PRIMARY KEY, hash TEXT, id TEXT, "
         "source TEXT, ts TEXT, who TEXT, where_ TEXT, snippet TEXT, vec BLOB)"
