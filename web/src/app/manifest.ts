@@ -11,6 +11,18 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#0e1013",
     theme_color: "#0e1013",
+    // On a phone, the installed app is in the share sheet: what's shared to it is asked about.
+    share_target: {
+      action: "/share",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+        files: [{ name: "images", accept: ["image/png", "image/jpeg", "image/webp"] }],
+      },
+    },
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

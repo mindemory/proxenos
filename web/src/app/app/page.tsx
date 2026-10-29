@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ArrowUp } from "lucide-react";
 
@@ -74,6 +74,16 @@ export default function AppPage() {
   const [refreshing, setRefreshing] = useState(false);
   const feed = useItems("/api/items?batches=3", true);
   const home = useHome();
+
+  // A link can open a view: /app?view=ask, which is where a share from the phone lands. Read
+  // after the first paint, so the server's render (home) and the browser's first one agree.
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get("view");
+    const known = NAV_ITEMS.find((item) => item.id === asked);
+    if (!known) return;
+    const frame = requestAnimationFrame(() => setView(known.id));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const navigate = (next: View) => {
     setView(next);
