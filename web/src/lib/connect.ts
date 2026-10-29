@@ -7,15 +7,19 @@
 // each at a time, and the page follows them through connectJobs(). A job tells the page only its
 // command's last line, with anything that looks like a token blanked. The one secret the page
 // sends is Beeper's: it goes to the command on its stdin and nowhere else.
+//
+// The Ask page's `proxenos ask` runs through the same jobs, as the kind "ask": one at a time,
+// its question on stdin, its last line the id of the ask. connectJobs() leaves it out; askJobs()
+// reports them.
 
 import { execFile, type ChildProcess } from "node:child_process";
 
 import type {
   ConnectHow,
   ConnectJob,
-  ConnectJobKind,
   ConnectResponse,
   ConnectSource,
+  JobKind,
   MailAccount,
   PhoneInfo,
 } from "./types";
@@ -24,8 +28,9 @@ import { nowIso, proxenosBin, REPO_ROOT, vaultInfo, vaultPath } from "./vault";
 
 const STATUS_MS = 30_000;
 // A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while;
-// checking a Beeper token is one request.
-const JOB_MS: Record<ConnectJobKind, number> = { gmail: 6 * 60_000, whatsapp: 15 * 60_000, beeper: 60_000 };
+// checking a Beeper token is one request; a question to a local model can take a quarter of an hour.
+export const ASK_MS = 15 * 60_000;
+const JOB_MS: Record<JobKind, number> = { gmail: 6 * 60_000, whatsapp: 15 * 60_000, beeper: 60_000, ask: ASK_MS };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;
 const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
@@ -135,36 +140,51 @@ export async function getConnect(): Promise<ConnectResponse> {
 
 // ── Jobs ────────────────────────────────────────────────────────────────────
 
+/** A job of any kind: a ConnectJob, or the Ask page's. */
+export type Job = Omit<ConnectJob, "kind"> & { kind: JobKind };
+
 interface Running {
-  job: ConnectJob;
+  job: Job;
   child: ChildProcess | null;
   stopping: boolean;
 }
 
 // On globalThis, so every route sees the same jobs and a reload of this module in development
 // doesn't lose track of a command that's still running.
-const shared = globalThis as typeof globalThis & { __proxenosConnectJobs?: Map<ConnectJobKind, Running> };
-const JOBS = (shared.__proxenosConnectJobs ??= new Map<ConnectJobKind, Running>());
+const shared = globalThis as typeof globalThis & {
+  __proxenosConnectJobs?: Map<JobKind, Running>;
+  __proxenosAskJobs?: Running[];
+};
+const JOBS = (shared.__proxenosConnectJobs ??= new Map<JobKind, Running>());
+/** The last few asks' jobs, newest first, so an ask that never wrote its end can still be told why. */
+const ASKS = (shared.__proxenosAskJobs ??= []);
+const ASKS_KEPT = 20;
 
-/** The latest job of each kind: running, or how it ended. */
+/** The latest job of each kind the Connect page starts: running, or how it ended. */
 export function connectJobs(): ConnectJob[] {
   return CONNECT_JOB_KINDS.flatMap((kind) => {
     const entry = JOBS.get(kind);
-    return entry ? [{ ...entry.job }] : [];
+    return entry ? [{ ...entry.job, kind }] : [];
   });
+}
+
+/** The latest asks' jobs, newest first: running, or how they ended. Empty before the first since the server started. */
+export function askJobs(): Job[] {
+  return ASKS.map((entry) => ({ ...entry.job }));
 }
 
 /**
  * Run `proxenos <args>` in the background as the job of this kind. Resolves with the job, or
  * null when one of this kind is already running. A secret for the command goes in `stdin`, never
  * in `args`, which any process on the machine can read; if the command repeats it, it's blanked.
+ * (An ask's question goes the same way, for the same reason; it is never echoed back either.)
  */
 export async function startJob(
-  kind: ConnectJobKind,
+  kind: JobKind,
   args: string[],
   account: string | null = null,
   stdin: string | null = null,
-): Promise<ConnectJob | null> {
+): Promise<Job | null> {
   if (JOBS.get(kind)?.job.state === "running") return null;
   const entry: Running = {
     job: { kind, state: "running", message: "", account, started: nowIso(), finished: null },
@@ -173,7 +193,8 @@ export async function startJob(
   };
   // Claimed before anything is awaited, so a second click can't start a second one.
   JOBS.set(kind, entry);
-  const finish = (state: ConnectJob["state"], message: string) => {
+  if (kind === "ask") ASKS.splice(0, ASKS.length, entry, ...ASKS.slice(0, ASKS_KEPT - 1));
+  const finish = (state: Job["state"], message: string) => {
     entry.job = { ...entry.job, state, message, finished: nowIso() };
     entry.child = null;
   };
@@ -201,7 +222,7 @@ export async function startJob(
 }
 
 /** Stop the running job of this kind. Whether there was one. */
-export function stopJob(kind: ConnectJobKind): boolean {
+export function stopJob(kind: JobKind): boolean {
   const entry = JOBS.get(kind);
   if (!entry || entry.job.state !== "running") return false;
   entry.stopping = true;

@@ -12,7 +12,7 @@ from types import ModuleType
 
 import proxenos.clones
 import proxenos.ingest
-from proxenos import auth, connect, importer, master, memory, observe, phone, vectors, webapp
+from proxenos import ask, auth, connect, importer, master, memory, observe, phone, vectors, webapp
 from proxenos.config import REPO_ROOT, vault_path
 
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
@@ -71,6 +71,10 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
     commands.add_parser("web", help="start the local page and open it")
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
+    asking = commands.add_parser(
+        "ask", help="a question or screenshots, answered as you'd think it"
+    )
+    ask.add_arguments(asking)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     sign_in = commands.add_parser("auth", help="sign in once in the browser, token goes to .env")
     sign_in.add_argument("service", choices=["strava", "slack", "slackdump", "gmail", "beeper"])
@@ -83,6 +87,9 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "web":
         webapp.serve()
+        return
+    if args.command == "ask":
+        ask.run(vault_path(), args)  # vault_path also loads .env
         return
     if args.command == "phone":
         vault_path()  # loads .env

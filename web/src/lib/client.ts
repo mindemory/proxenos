@@ -416,7 +416,7 @@ export const PEOPLE_TOAST: Record<PeopleEdit, string> = {
 };
 
 /** Put text on the clipboard. Falls back to a hidden textarea where the async API isn't allowed. */
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
     return true;

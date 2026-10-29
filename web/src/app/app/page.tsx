@@ -25,6 +25,9 @@ import { useHome, useItems } from "@/lib/client";
 
 // Home and the feed come with the page; every other view loads the first time it's opened,
 // with its own skeleton meanwhile, so the app's first paint carries only what it shows.
+const Ask = dynamic(() => import("@/components/views/Ask").then((m) => m.Ask), {
+  loading: () => <ProseSkeleton label="Loading ask" />,
+});
 const Saved = dynamic(() => import("@/components/views/Saved").then((m) => m.Saved), {
   loading: () => <FeedSkeleton label="Loading saved items" />,
 });
@@ -50,7 +53,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /** Views that read as a single column of text, so they sit in a centred column, not across the canvas. */
-const COLUMN_VIEWS: readonly View[] = ["feed", "saved", "tasks", "care", "advice", "profile", "connect", "status"];
+const COLUMN_VIEWS: readonly View[] = ["ask", "feed", "saved", "tasks", "care", "advice", "profile", "connect", "status"];
 
 export default function AppPage() {
   const [view, setView] = useState<View>("home");
@@ -122,6 +125,8 @@ export default function AppPage() {
     switch (view) {
       case "home":
         return <Home home={home} onNavigate={navigate} onMemory={openMemory} />;
+      case "ask":
+        return <Ask onNavigate={navigate} />;
       case "saved":
         return <Saved />;
       case "tasks":
@@ -159,7 +164,7 @@ export default function AppPage() {
 
   const navItem = NAV_ITEMS.find((n) => n.id === view);
   const title = navItem?.label;
-  const group = navItem?.group === "you" ? "You" : "Clones";
+  const group = navItem?.group === "you" ? "You" : navItem?.group === "home" ? "Your twin" : "Clones";
   const tabs =
     view === "feed" ? (
       <Segmented label="Feed" tabs={TABS} value={tab} onChange={setTab} />

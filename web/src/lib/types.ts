@@ -729,6 +729,9 @@ export interface ConnectSource {
 export type ConnectJobKind = "gmail" | "whatsapp" | "beeper";
 export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp", "beeper"];
 
+/** Every background command the server runs for the page, one of each kind at a time: those above, and an ask. */
+export type JobKind = ConnectJobKind | "ask";
+
 export interface ConnectJob {
   kind: ConnectJobKind;
   state: "running" | "done" | "failed" | "stopped";
@@ -756,4 +759,64 @@ export interface ConnectResponse extends ConnectJobsResponse {
   phone: PhoneInfo;
   /** Why the sources couldn't be read, when they couldn't. */
   error: string | null;
+}
+
+// ── Ask ─────────────────────────────────────────────────────────────────────
+//
+// A question typed or pasted on the Ask page, with screenshots if there are any. The page sends
+// it to `proxenos ask`, which writes clones/ask/<id>.json as it works and when it's done.
+
+export const ASK_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export type AskImageType = (typeof ASK_IMAGE_TYPES)[number];
+
+/** What a question may hold: characters of text, screenshots, and each screenshot's decoded size. */
+export const ASK_MAX_TEXT = 8000;
+export const ASK_MAX_IMAGES = 4;
+export const ASK_MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+
+/** One screenshot as it's sent: base64, without a "data:" prefix. */
+export interface AskImage {
+  type: AskImageType;
+  data: string;
+}
+
+export type AskStatus = "working" | "done" | "failed";
+
+/** A reply in the reader's voice, when the question was a message to them. */
+export interface AskDraft {
+  to: string;
+  channel: string; // lower case: "whatsapp", "email", ...
+  body: string;
+}
+
+export interface AskEntry {
+  id: string;
+  at: string;
+  status: AskStatus;
+  question: string;
+  images: number; // how many screenshots came with it
+  seen: string; // what the screenshots show, transcribed
+  answer: string; // markdown
+  draft: AskDraft | null;
+  found: string;
+  asks: string[];
+  error: string | null;
+}
+
+/** The server's one `proxenos ask` at a time. `id` is the ask it finished, once it has. */
+export interface AskJob {
+  state: "running" | "done" | "failed" | "stopped";
+  /** The command's last line, with anything that looks like a token blanked. */
+  message: string;
+  started: string;
+  finished: string | null;
+  id: string | null;
+}
+
+export interface AskResponse {
+  now: string;
+  vault: VaultInfo;
+  /** The newest asks, newest first. */
+  asks: AskEntry[];
+  job: AskJob | null;
 }

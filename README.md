@@ -105,6 +105,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 
 | Command | What it does |
 |---|---|
+| `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
 | `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |

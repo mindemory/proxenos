@@ -6,6 +6,7 @@ import {
   House,
   Lightbulb,
   ListTodo,
+  MessageSquare,
   Network,
   PenLine,
   Plug,
@@ -16,6 +17,7 @@ import {
 
 export type View =
   | "home"
+  | "ask"
   | "feed"
   | "saved"
   | "tasks"
@@ -32,12 +34,13 @@ export interface NavItem {
   icon: LucideIcon;
   label: string;
   id: View;
-  /** Where it sits in the rail: the home button, the clones' views, and the views about you. */
+  /** Where it sits in the rail: Home and Ask at the top, the clones' views, and the views about you. */
   group: "home" | "clones" | "you";
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { icon: House, label: "Home", id: "home", group: "home" },
+  { icon: MessageSquare, label: "Ask", id: "ask", group: "home" },
   { icon: Rss, label: "Feed", id: "feed", group: "clones" },
   { icon: Bookmark, label: "Saved", id: "saved", group: "clones" },
   { icon: ListTodo, label: "Tasks", id: "tasks", group: "clones" },

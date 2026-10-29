@@ -46,7 +46,10 @@ export const NO_STORE = { "Cache-Control": "no-store" };
  * preflight, which this server never answers. Returns the parsed body, or the
  * response to send instead.
  */
-export async function readLocalJson(req: Request): Promise<{ body: Record<string, unknown> } | { denied: Response }> {
+export async function readLocalJson(
+  req: Request,
+  maxBytes?: number,
+): Promise<{ body: Record<string, unknown> } | { denied: Response }> {
   const denied = rejectNonLocal(req);
   if (denied) return { denied };
   if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) {
@@ -54,7 +57,13 @@ export async function readLocalJson(req: Request): Promise<{ body: Record<string
   }
   let body: unknown;
   try {
-    body = await req.json();
+    if (maxBytes === undefined) body = await req.json();
+    else {
+      // A route that takes a big body (screenshots) names how big, and nothing past it is read.
+      const text = await readCapped(req, maxBytes);
+      if (text === null) return { denied: Response.json({ error: "that is too large" }, { status: 413 }) };
+      body = JSON.parse(text);
+    }
   } catch {
     return { denied: Response.json({ error: "invalid JSON" }, { status: 400 }) };
   }
@@ -62,6 +71,27 @@ export async function readLocalJson(req: Request): Promise<{ body: Record<string
     return { denied: Response.json({ error: "expected a JSON object" }, { status: 400 }) };
   }
   return { body: body as Record<string, unknown> };
+}
+
+/** The request's body as text, or null once it passes `maxBytes` (the rest is not read). */
+async function readCapped(req: Request, maxBytes: number): Promise<string | null> {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) return null;
+  const reader = req.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /** An id that is safe to write as one JSON line. */

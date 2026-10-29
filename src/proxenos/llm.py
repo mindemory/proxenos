@@ -45,6 +45,7 @@ def ask(
     schema: dict | None = None,
     effort: str = "medium",
     max_tokens: int = 32000,
+    images: list[dict] | None = None,
 ) -> str | dict:
     """One request, one answer: text, or a dict matching `schema` when one is given.
 
@@ -54,14 +55,16 @@ def ask(
     """
     model = env("MODEL", DEFAULT_MODEL)
     if model.startswith(LOCAL):
-        return _ask_local(model.removeprefix(LOCAL), prompt, system, schema, effort, max_tokens)
+        return _ask_local(
+            model.removeprefix(LOCAL), prompt, system, schema, effort, max_tokens, images
+        )
     output_config: dict = {"effort": effort}
     if schema is not None:
         output_config["format"] = {"type": "json_schema", "schema": schema}
     params: dict = {
         "model": model,
         "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": _content(prompt, images)}],
         "output_config": output_config,
         "betas": [_FALLBACK_BETA],
         "fallbacks": "default",
@@ -103,8 +106,25 @@ def fit(limit: int, overhead: int = 30_000) -> int:
     return limit if room is None else max(10_000, min(limit, room - overhead))
 
 
+def _content(prompt: str, images: list[dict] | None) -> str | list[dict]:
+    """The prompt, after any images ({type: "image/png", data: base64}) for the model to see."""
+    if not images:
+        return prompt
+    seen = [
+        {"type": "image", "source": {"type": "base64", "media_type": i["type"], "data": i["data"]}}
+        for i in images
+    ]
+    return [*seen, {"type": "text", "text": prompt}]
+
+
 def _ask_local(
-    model: str, prompt: str, system: str | None, schema: dict | None, effort: str, max_tokens: int
+    model: str,
+    prompt: str,
+    system: str | None,
+    schema: dict | None,
+    effort: str,
+    max_tokens: int,
+    images: list[dict] | None = None,
 ) -> str | dict:
     """`ask`, answered by a model on this Mac through Ollama's API. Ollama can't hold every
     model to a schema, so a schema goes in the system prompt and the answer is checked here,
@@ -117,7 +137,11 @@ def _ask_local(
     messages = [{"role": "system", "content": system}] if system else []
     body = {
         "model": model,
-        "messages": [*messages, {"role": "user", "content": prompt}],
+        "messages": [
+            *messages,
+            {"role": "user", "content": prompt}
+            | ({"images": [i["data"] for i in images]} if images else {}),
+        ],
         "stream": False,
         # Thinking first is for the hard jobs; a draft doesn't need it and is ten times faster.
         "think": effort in ("high", "xhigh", "max"),

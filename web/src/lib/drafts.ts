@@ -5,6 +5,7 @@ import type { Draft, DraftReviews } from "./types";
 
 /** The groups, in the order the Drafts view shows them. */
 export const DRAFT_GROUPS: readonly { id: string; label: string }[] = [
+  { id: "ask", label: "From Ask" },
   { id: "reply", label: "Replies" },
   { id: "task", label: "Tasks" },
   { id: "care", label: "Care" },

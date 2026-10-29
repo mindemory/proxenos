@@ -26,17 +26,20 @@ interface ActionButtonProps {
   tone: ActionTone;
   active?: boolean;
   fillWhenActive?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }
 
 /** One pill-shaped action. Its pressed state is the record of what you chose. */
-export function ActionButton({ icon: Icon, label, tone, active = false, fillWhenActive, onClick }: ActionButtonProps) {
+export function ActionButton({ icon: Icon, label, tone, active = false, fillWhenActive, disabled = false, onClick }: ActionButtonProps) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] leading-none transition-colors whitespace-nowrap",
+        "disabled:cursor-not-allowed disabled:opacity-50",
         active ? ACTIVE[tone] : cn("border-line-strong text-muted", HOVER[tone]),
       )}
     >
