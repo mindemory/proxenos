@@ -16,7 +16,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import importer, llm, memory, observe
+from proxenos import importer, llm, memory, observe, vectors
 from proxenos.clones import recall, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
@@ -44,6 +44,7 @@ SELF_FILES = {
     "routines": "daily and weekly rhythm: work hours, exercise, music, sleep and activity",
     "open_questions": "what the self-model is unsure about, phrased as questions to ask them",
 }
+VECTOR_SECONDS = 240  # of embedding in a sync; the rest waits for the next one
 SLOW = {"identity", "voice"}
 
 # Sources that sync unattended, each with what tells us it's set up.
@@ -101,6 +102,12 @@ def sync(vault: Path) -> dict[str, int]:
             stats["recall_triggers"] = recall.recall(vault)["triggers_with_memories"]
         except (Exception, SystemExit):  # noqa: BLE001
             stats["recall_failed"] = 1
+        # Then a few minutes of the vector index, newest first, when the embedding model runs.
+        try:
+            if vectors.available():
+                stats |= vectors.update(vault, seconds=VECTOR_SECONDS)
+        except (Exception, SystemExit):  # noqa: BLE001
+            stats["vectors_failed"] = 1
     # Chats newly waiting on the user get a reply drafted as they come in. Only with a key, and
     # only chats with no draft yet, so a sync with nothing new waiting costs nothing.
     if llm.configured():

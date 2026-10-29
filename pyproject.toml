@@ -9,6 +9,7 @@ description = "Proxenos: acts on your behalf, from a model of you that keeps lea
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=2.3",
+    "numpy>=1.26",
     "pypdf>=6.0",
     "python-dotenv>=1.0",
 ]

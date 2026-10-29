@@ -12,7 +12,7 @@ from types import ModuleType
 
 import proxenos.clones
 import proxenos.ingest
-from proxenos import auth, connect, importer, master, memory, observe, phone, webapp
+from proxenos import auth, connect, importer, master, memory, observe, phone, vectors, webapp
 from proxenos.config import REPO_ROOT, vault_path
 
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
@@ -63,6 +63,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     index = commands.add_parser("index", help="index the raw data for search; no model")
     index.add_argument("--rebuild", action="store_true", help="start the index over")
+    index.add_argument(
+        "--vectors",
+        action="store_true",
+        help="also embed the last year for search by meaning, with the local embedding model",
+    )
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
     commands.add_parser("web", help="start the local page and open it")
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
@@ -117,6 +122,8 @@ def main(argv: list[str] | None = None) -> None:
         stats = master.sync(vault)
     elif args.command == "index":
         stats = memory.build(vault, args.rebuild)
+        if args.vectors:
+            stats |= vectors.update(vault)
     elif args.command == "master":
         actions = {
             "run": lambda: master.run(vault, args.since),

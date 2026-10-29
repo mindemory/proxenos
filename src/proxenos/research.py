@@ -14,7 +14,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory
+from proxenos import llm, memory, vectors
 
 PERSON_ROWS = 30  # records naming the person, newest first
 SEARCHES = 4  # queries a round may run
@@ -97,18 +97,19 @@ def matter(
 
 
 def _search(vault: Path, query: str, who: str | None) -> list[dict]:
-    """The best records for a query: those with every word first, then, from the last year,
-    those with any of them (a word also matching its longer forms) among the person's own
-    records, then anywhere. A record rarely holds a question's words exactly ("MEG paper
-    deadline" against a journal letter's "the reviewers' comments ... revision is due by")."""
+    """The best records for a query: the nearest in meaning first (from the vector index, when
+    there is one), anywhere and among the person's own records, then those holding every word,
+    then those holding any of them among the person's records (a word also matching its longer
+    forms). A record rarely holds a question's words exactly ("MEG paper deadline" against a
+    journal letter's "the revision is due by 7th Oct"), so meaning finds what words miss."""
     loose = " ".join(w + "*" if len(w) >= 4 else w for w in re.findall(r"\w+", query))
     since = (datetime.now(UTC) - timedelta(days=RECENT_DAYS)).date().isoformat()
     ranked = [
+        *_by_meaning(vault, query, since, who),
         memory.search(query, limit=HITS, vault=vault),
         memory.search(loose, who=who, since=since, limit=HITS, match="any", vault=vault)
         if who
         else [],
-        memory.search(loose, since=since, limit=HITS, match="any", vault=vault),
     ]
     seen, hits = set(), []
     for found in ranked:  # each pass keeps its own share, so one can't crowd out the others
@@ -116,6 +117,16 @@ def _search(vault: Path, query: str, who: str | None) -> list[dict]:
         seen.update(h["id"] for h in fresh)
         hits += fresh
     return hits
+
+
+def _by_meaning(vault: Path, query: str, since: str, who: str | None) -> list[list[dict]]:
+    """The nearest records in meaning, anywhere and the person's; none without the index."""
+    try:
+        anywhere = vectors.search(vault, query, limit=HITS, since=since)
+        theirs = vectors.search(vault, query, limit=HITS, since=since, who=who) if who else []
+    except RuntimeError:  # the embedding model isn't running: words alone, then
+        return []
+    return [anywhere, theirs]
 
 
 def _network_note(vault: Path, name: str) -> dict | None:
