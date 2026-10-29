@@ -284,7 +284,7 @@ export function CommandBox({ onNavigate, onFind, onNetworkTab, onMemory, onRefre
       >
         <Search size={15} className="flex-shrink-0" />
         <span className="min-w-0 flex-1 truncate">
-          <span className="sm:hidden">Jump or search</span>
+          <span className="sm:hidden">Search</span>
           <span className="hidden sm:inline">Jump, find someone, or search memory</span>
         </span>
         <span className="hidden items-center gap-1 sm:flex">

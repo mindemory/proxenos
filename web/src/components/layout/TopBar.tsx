@@ -1,6 +1,6 @@
 import { Lightbulb, ListTodo, PenLine, RefreshCw, type LucideIcon } from "lucide-react";
 
-import { Logo } from "@/components/Logo";
+import { Logo, Wordmark } from "@/components/Logo";
 import type { useHome } from "@/lib/client";
 import { formatDateTime, freshness, freshnessLine, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -62,13 +62,21 @@ function Count({
   );
 }
 
-/** The top bar: the command box, the open counts, and when things last synced. */
+/**
+ * The top bar: the name wherever the rail doesn't show it (the mark too on a phone, which has no
+ * rail), the command box, the open counts, and when things last synced.
+ */
 export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onMemory, onRefresh }: TopBarProps) {
   const sync = syncState(home);
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-line bg-bg/85 px-3 backdrop-blur-md sm:px-5">
-      <button onClick={() => onNavigate("home")} className="flex-shrink-0 rounded-full p-1 md:hidden" aria-label="Proxenos, home">
-        <Logo size={26} className="text-accent" />
+      <button
+        onClick={() => onNavigate("home")}
+        className="flex flex-shrink-0 items-center gap-2 rounded-full p-1 xl:hidden"
+        aria-label="Proxenos, home"
+      >
+        <Logo size={26} className="text-accent md:hidden" />
+        <Wordmark className="text-[1.45rem]" />
       </button>
 
       <CommandBox onNavigate={onNavigate} onFind={onFind} onNetworkTab={onNetworkTab} onMemory={onMemory} onRefresh={onRefresh} />
