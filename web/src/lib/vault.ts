@@ -58,6 +58,7 @@ import type {
   ProfileResponse,
   ToRead,
   VaultInfo,
+  DraftCloseness,
 } from "./types";
 import { foldReviews, isAwaiting } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
@@ -1300,6 +1301,22 @@ const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", d
 /** How the reader has reviewed drafts so far, from clones/drafts/feedback.jsonl. */
 export async function getDraftReviews(vault: string = vaultPath()): Promise<DraftReviews> {
   return foldReviews(await readJsonl(path.join(draftsDir(vault), "feedback.jsonl")));
+}
+
+/** How close reply drafts came to what was sent, from the sync's measure; null before any. */
+export async function getDraftCloseness(vault: string = vaultPath()): Promise<DraftCloseness | null> {
+  const raw = (await readJsonFile(path.join(draftsDir(vault), "fidelity.json")).catch(() => null)) as {
+    drafts?: { closeness?: unknown }[];
+    by_source?: Record<string, { n?: unknown; mean?: unknown }>;
+  } | null;
+  const drafts = Array.isArray(raw?.drafts) ? raw.drafts : [];
+  if (drafts.length === 0) return null;
+  const bySource: DraftCloseness["bySource"] = {};
+  for (const [source, s] of Object.entries(raw?.by_source ?? {})) {
+    if (typeof s?.n === "number" && typeof s?.mean === "number") bySource[source] = { n: s.n, mean: s.mean };
+  }
+  const sentAsIs = drafts.filter((d) => typeof d.closeness === "number" && d.closeness >= 0.95).length;
+  return { measured: drafts.length, sentAsIs, bySource };
 }
 
 /**

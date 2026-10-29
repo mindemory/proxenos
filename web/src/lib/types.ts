@@ -367,6 +367,14 @@ export interface DraftOpen extends DraftOpenStep {
 export interface DraftsViewResponse extends DraftsResponse {
   actions: Record<string, DraftOpen>; // by draft id; drafts already sent or discarded have none
   record: DraftReviews;
+  closeness: DraftCloseness | null; // null until a sent reply has been measured
+}
+
+/** How close reply drafts came to what was then sent in their chat (clones/drafts/fidelity.json). */
+export interface DraftCloseness {
+  measured: number;
+  sentAsIs: number; // sent with next to no change (closeness 0.95 or more)
+  bySource: Record<string, { n: number; mean: number }>; // mean closeness, 0 to 1
 }
 
 export interface HomeResponse {

@@ -50,7 +50,7 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
     return (
       <div className="pb-24 md:pb-20">
         {error && <ErrorBanner message={error} onDismiss={clearError} />}
-        {data.record.reviewed > 0 && <TrackRecord record={data.record} />}
+        {data.record.reviewed > 0 && <TrackRecord record={data.record} closeness={data.closeness} />}
         <EmptyState icon={PenLine} title="No drafts yet" command="proxenos clone work">
           Drafts appear when Proxenos works through your tasks, outreach, projects and reading: replies, emails, plans
           and notes written as you, waiting here for your approval. Nothing is ever sent for you.
@@ -66,7 +66,7 @@ export function Drafts({ onChange }: { onChange?: () => void }) {
     <div className="pb-24 md:pb-20">
       {error && <ErrorBanner message={error} onDismiss={clearError} />}
 
-      <TrackRecord record={data.record} />
+      <TrackRecord record={data.record} closeness={data.closeness} />
 
       <div className="px-4 sm:px-6 py-3 border-b border-line flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex gap-2">

@@ -1,6 +1,6 @@
 import { APPROVAL_GATE } from "@/components/charts/ReviewBar";
 import { REVIEW_WINDOW_DAYS } from "@/lib/drafts";
-import type { DraftReviews } from "@/lib/types";
+import type { DraftCloseness, DraftReviews } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const pct = (n: number, of: number) => Math.round((n / of) * 100);
@@ -10,7 +10,7 @@ const pct = (n: number, of: number) => Math.round((n / of) * 100);
  * reviewed drafts approved with light edits. Each count is one draft's latest word; a sent draft
  * is also counted as approved.
  */
-export function TrackRecord({ record }: { record: DraftReviews }) {
+export function TrackRecord({ record, closeness }: { record: DraftReviews; closeness?: DraftCloseness | null }) {
   const stats = [
     ["Approved", record.approved],
     ["Edited", record.edited],
@@ -57,6 +57,26 @@ export function TrackRecord({ record }: { record: DraftReviews }) {
           </span>
         )}
       </p>
+      {closeness && (
+        <p
+          className="w-full text-sm text-muted"
+          title="For each reply drafted for a chat: how much of the draft was still there in what you then sent in that chat, from 0% (rewritten) to 100% (sent as written)."
+        >
+          Replies sent as drafted{" "}
+          <span className="num text-ink">
+            {closeness.sentAsIs} of {closeness.measured}
+          </span>
+          {Object.entries(closeness.bySource).map(([source, s]) => (
+            <span key={source}>
+              <span className="mx-1.5 text-faint" aria-hidden="true">
+                ·
+              </span>
+              {source} <span className="num text-ink">{Math.round(s.mean * 100)}%</span> close{" "}
+              <span className="text-faint">({s.n})</span>
+            </span>
+          ))}
+        </p>
+      )}
     </section>
   );
 }

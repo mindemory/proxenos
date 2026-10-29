@@ -4,7 +4,7 @@ import { NO_STORE, rejectNonLocal } from "@/lib/guard";
 import { findPhones } from "@/lib/phones";
 import { findAddresses } from "@/lib/recipients";
 import type { DraftOpen, DraftsViewResponse } from "@/lib/types";
-import { getDraftReviews, getDrafts, vaultPath } from "@/lib/vault";
+import { getDraftCloseness, getDraftReviews, getDrafts, vaultPath } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,7 @@ export async function GET(req: Request) {
     actions[d.id] = draftOpen(d, recipientAddress(d.to, found), phones.get(normName(d.to)) ?? "");
   }
 
-  const body: DraftsViewResponse = { ...base, actions, record: await getDraftReviews() };
+  const [record, closeness] = await Promise.all([getDraftReviews(), getDraftCloseness()]);
+  const body: DraftsViewResponse = { ...base, actions, record, closeness };
   return Response.json(body, { headers: NO_STORE });
 }
