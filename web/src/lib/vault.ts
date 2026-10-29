@@ -624,8 +624,13 @@ async function sourceDirs(raw: string): Promise<{ dirs: SourceDir[]; missing: st
   return { dirs, missing };
 }
 
-export async function getStatus(): Promise<StatusResponse> {
+/** Everything the Status page shows: each source's streams and counts, the feed, the clones. */
+export function getStatus(): Promise<StatusResponse> {
   const vault = vaultPath();
+  return remembered(`status:${vault}`, () => readStatus(vault));
+}
+
+async function readStatus(vault: string): Promise<StatusResponse> {
   const { dirs, missing } = await sourceDirs(path.join(vault, "raw"));
   const sources: SourceStatus[] = [];
   for (const d of dirs) sources.push(await sourceStatus(d.id, d.kind, d.dir));
@@ -655,22 +660,26 @@ export async function getStatus(): Promise<StatusResponse> {
   };
 }
 
-// The walk below stats every month file of every stream (thousands of chats), which takes
-// seconds. Sync runs every 15 minutes, so an answer up to SYNCS_FRESH_MS old is as good: it's
-// served at once and refreshed behind it, and only the very first call waits.
-const SYNCS_FRESH_MS = 2 * 60 * 1000;
-const syncsCache = new Map<string, { at: number; value: Promise<SourceSync[]> }>();
+// Reads that walk every month file of every stream (thousands of chats) take seconds, and sync
+// runs every 15 minutes, so an answer up to FRESH_MS old is as good: it's served at once and
+// refreshed behind it, and only the first call after the server starts waits (and the server makes
+// that call itself as it starts: src/instrumentation.ts).
+const FRESH_MS = 2 * 60 * 1000;
+const walks = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function remembered<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const cached = walks.get(key) as { at: number; value: Promise<T> } | undefined;
+  if (cached && Date.now() - cached.at < FRESH_MS) return cached.value;
+  const value = read();
+  walks.set(key, { at: Date.now(), value });
+  value.catch(() => walks.delete(key));
+  // Stale: answer with the last result while the new one is worked out.
+  return cached ? cached.value.catch(() => value) : value;
+}
 
 /** Newest sync per source kind, from modification times only (no line counts). */
-export async function sourceSyncs(vault: string): Promise<SourceSync[]> {
-  const cached = syncsCache.get(vault);
-  if (cached && Date.now() - cached.at < SYNCS_FRESH_MS) return cached.value;
-  const value = walkSourceSyncs(vault);
-  syncsCache.set(vault, { at: Date.now(), value });
-  value.catch(() => syncsCache.delete(vault));
-  if (!cached) return value;
-  // Stale: answer with the last result while this one is worked out.
-  return cached.value.catch(() => value);
+export function sourceSyncs(vault: string): Promise<SourceSync[]> {
+  return remembered(`syncs:${vault}`, () => walkSourceSyncs(vault));
 }
 
 async function walkSourceSyncs(vault: string): Promise<SourceSync[]> {

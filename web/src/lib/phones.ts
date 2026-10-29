@@ -21,7 +21,21 @@ const CACHE_MAX = 2000;
 const cache = new Map<string, { phone: string | null; at: number }>();
 
 /** The number for each chat name, matched whole and without regard to case. */
-export async function findPhones(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+// A look-up already under way, by vault and names: a second request for the same names (the page's
+// first Drafts read, made at startup, and a reader's click during it) joins it instead of scanning
+// the vault again alongside it.
+const inflight = new Map<string, Promise<Map<string, string>>>();
+
+export function findPhones(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+  const key = [vault, ...[...new Set(names)].sort()].join("\0");
+  const running = inflight.get(key);
+  if (running) return running;
+  const work = lookUpPhones(vault, names).finally(() => inflight.delete(key));
+  inflight.set(key, work);
+  return work;
+}
+
+async function lookUpPhones(vault: string, names: readonly string[]): Promise<Map<string, string>> {
   const found = new Map<string, string>();
   const todo = new Set<string>();
   const now = Date.now();

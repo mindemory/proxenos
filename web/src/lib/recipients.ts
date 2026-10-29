@@ -108,7 +108,21 @@ async function scan(file: string, queries: ReadonlySet<string>, prefilter: RegEx
  * that has it. Names (as `normName` writes them) with no match are left out of the answer.
  * Results are kept for a few minutes, so a page that polls doesn't read the mail again.
  */
-export async function findAddresses(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+// A look-up already under way, by vault and names: a second request for the same names (the page's
+// first Drafts read, made at startup, and a reader's click during it) joins it instead of scanning
+// the vault again alongside it.
+const inflight = new Map<string, Promise<Map<string, string>>>();
+
+export function findAddresses(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+  const key = [vault, ...[...new Set(names)].sort()].join("\0");
+  const running = inflight.get(key);
+  if (running) return running;
+  const work = lookUpAddresses(vault, names).finally(() => inflight.delete(key));
+  inflight.set(key, work);
+  return work;
+}
+
+async function lookUpAddresses(vault: string, names: readonly string[]): Promise<Map<string, string>> {
   const found = new Map<string, string>();
   const now = Date.now();
   const todo = new Set<string>();
