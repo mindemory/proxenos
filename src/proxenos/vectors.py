@@ -66,7 +66,10 @@ def update(vault: Path, seconds: float | None = None, embed: Embed | None = None
             if deadline and time.monotonic() > deadline:
                 break
             batch = todo[start : start + BATCH]
-            vectors = _normalized(embed([u["text"] for u in batch]))
+            try:
+                vectors = _normalized(embed([u["text"] for u in batch]))
+            except RuntimeError:  # the model is busy or gone: what's left waits for the next run
+                break
             db.executemany(
                 "INSERT OR REPLACE INTO units VALUES (?,?,?,?,?,?,?,?,?)",
                 [

@@ -82,3 +82,21 @@ def test_a_run_stops_at_its_time_and_the_next_one_goes_on(tmp_path):
 def test_without_an_index_or_a_model_search_finds_nothing(tmp_path):
     assert vectors.search(tmp_path, "anything") == []
     assert not vectors.available()  # tests never reach a real model
+
+
+def test_a_model_that_stops_answering_ends_the_run_and_keeps_what_was_done(tmp_path):
+    vault = vault_with(tmp_path)
+    calls = []
+
+    def flaky(texts):
+        calls.append(texts)
+        if len(calls) > 1:
+            raise RuntimeError("the embedding model isn't answering")
+        return fake_embed(texts)
+
+    vectors.BATCH, saved = 1, vectors.BATCH
+    try:
+        stats = vectors.update(vault, embed=flaky)
+    finally:
+        vectors.BATCH = saved
+    assert stats == {"units_embedded": 1, "units_waiting": 2}
