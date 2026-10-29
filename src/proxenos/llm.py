@@ -19,6 +19,7 @@ from pathlib import Path
 
 import anthropic
 
+from proxenos import lock
 from proxenos.config import env, vault_path
 
 # PROXENOS_MODEL overrides it; read on each call, so a value saved in Settings or .env counts too.
@@ -114,13 +115,7 @@ def waiting(vault: Path | None = None) -> bool:
         return False
     if pid == os.getpid() or age > FOREGROUND_MAX:
         return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:  # it ended without clearing its mark
-        return False
-    except PermissionError:
-        pass
-    return True
+    return lock.alive(pid)  # not when it ended without clearing its mark
 
 
 def configured() -> bool:

@@ -24,7 +24,7 @@ Three things have to ship together:
 - **The page:** `next build` with `output: "standalone"`, run by Electron's own Node (a `utilityProcess`) on a free loopback port picked at launch, not a fixed 4747. The window is an Electron window on that port; the route guard stays as it is.
 - **Python:** python-build-standalone with the `proxenos` wheel installed, under `Contents/Resources/python`. The shell sets `PROXENOS_BIN` to its `proxenos`, which the page already honours.
 - **The menu bar:** Open Proxenos, Sync now, Last synced …, Pause, Quit. No Dock icon.
-- **Nights:** the app opens at login and runs `proxenos night` itself at 01:30, replacing the launchd job from `scripts/install-night.sh`.
+- **Nights:** the app opens at login and runs `proxenos schedule` (built), which runs `proxenos night` at 01:30 and a sync every 15 minutes, replacing the launchd jobs from `scripts/install-night.sh` and `scripts/install-app.sh` ([apps.md](apps.md#keeping-it-running-from-source)).
 - **Signed once, trusted once:** Developer ID, hardened runtime, notarized and stapled, updated from signed GitHub releases. macOS grants Full Disk Access (which WhatsApp needs) to `Proxenos.app` itself, and the commands it starts inherit it. Keeping one signing identity keeps that grant across updates.
 
 Why not the others: py2app and Briefcase solve only the Python half, and Tauri would carry Node anyway. Once the API routes move to Python, the page becomes a static export served by the Python process, and a Tauri or Briefcase shell around one Python sidecar is the smaller app. Revisit then.

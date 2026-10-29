@@ -132,6 +132,13 @@ def origin(variable: str) -> str | None:
     return _origin.get(variable, "environment")
 
 
+def environment() -> dict[str, str]:
+    """The process's environment as it came, without what `load` and the savers put in from
+    .env, the settings file and the Keychain. For the children of a process that runs for days
+    (the scheduler): each reads those afresh, so a change saved since reaches it."""
+    return {name: value for name, value in os.environ.items() if name not in _origin}
+
+
 def read_settings() -> dict:
     """The settings file, or {} when there's none or it can't be read."""
     try:

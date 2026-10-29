@@ -6,6 +6,7 @@ import json
 import pkgutil
 import sys
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
@@ -18,10 +19,12 @@ from proxenos import (
     connect,
     demo,
     importer,
+    lock,
     master,
     memory,
     observe,
     phone,
+    schedule,
     setup,
     vectors,
     webapp,
@@ -93,6 +96,10 @@ def main(argv: list[str] | None = None) -> None:
         help="also embed the last year for search by meaning, with the local embedding model",
     )
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
+    timing = commands.add_parser(
+        "schedule", help="sync every 15 minutes and run the night at 01:30, until stopped"
+    )
+    schedule.add_arguments(timing)
     page = commands.add_parser("web", help="start the local page and open it")
     page.add_argument("--port", type=int, default=webapp.PORT, help=f"default {webapp.PORT}")
     trial = commands.add_parser("demo", help="write a made-up vault to try the page on")
@@ -163,6 +170,33 @@ def main(argv: list[str] | None = None) -> None:
         return
     vault = vault_path()
     vault.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if args.command == "schedule":
+        if code := schedule.run(vault, args):
+            raise SystemExit(code)
+        return
+    job = _exclusive(args)
+    try:
+        with lock.run(vault, job) if job else nullcontext():
+            _command(args, vault, groups)
+    except lock.Busy as busy:
+        print(f"{job}: not started; {busy}", file=sys.stderr)
+        raise SystemExit(lock.BUSY) from None
+
+
+def _exclusive(args: argparse.Namespace) -> str | None:
+    """The runs that refresh the whole vault, which never overlap, whoever starts them: the
+    scheduler, launchd, the page or a terminal. One that finds another going exits with
+    lock.BUSY, and the scheduler, or launchd's next slot, tries again later."""
+    if args.command in ("sync", "night"):
+        return args.command
+    if args.command == "master" and args.action == "run":
+        return "master"
+    return None
+
+
+def _command(
+    args: argparse.Namespace, vault: Path, groups: dict[str, tuple[str, dict[str, ModuleType]]]
+) -> None:
     if args.command == "night":
         if not night(vault, groups["clone"][1]):
             raise SystemExit(1)

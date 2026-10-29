@@ -1,6 +1,6 @@
 # Apps for Mac, Windows and Android
 
-The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Nothing here is built yet.
+The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Little here is built yet: so far, the scheduler that will replace launchd ([below](#keeping-it-running-from-source)).
 
 ## Where things stand
 
@@ -14,7 +14,7 @@ Proxenos runs today on one kind of machine: a Mac, set up from the code. Most of
 | `keychain.py` | keeps secrets in the macOS Keychain | one secrets module over the Keychain and Windows Credential Manager (the `keyring` library does both) |
 | `outbox.py` (mail) | sends through the Mail app | send through the same Gmail or Microsoft sign-in |
 | `phone.py` | serves the page to your phone over Tailscale | unchanged on Windows; on Android, see below |
-| `scripts/install-*.sh` | launchd jobs for the page and the nightly run | the app itself runs them, on every platform |
+| `scripts/install-*.sh` | launchd jobs for the page, the 15-minute sync and the nightly run | the app runs the page itself, and `proxenos schedule` (built) the sync and the night, on every platform |
 
 ## The plan, in order
 
@@ -24,7 +24,7 @@ Before any app ships, make the core platform-neutral, so the Mac and Windows app
 - A secrets module over the Keychain and Windows Credential Manager.
 - Mail and calendar through Google and Microsoft sign-in, beside Apple Mail.
 - Paths from the platform's app-data folder, not `~/proxenos_vault` assumptions.
-- The nightly run and the 15-minute sync run by the app instead of launchd.
+- The nightly run and the 15-minute sync run by the app instead of launchd. *Built:* `proxenos schedule`, below.
 - Tests on GitHub's Windows machines as well as macOS.
 
 ### 2. The Mac app (a few weeks after 1)
@@ -60,6 +60,57 @@ A phone-only Proxenos, care first, for people without a computer.
 - **The model:** a small one on the phone (Gemma 4 E2B through LiteRT-LM is about 2.6 GB, so newer phones only), or Claude with the person's own key.
 - **What it does first:** the care log, open items and bills, call scripts, the visit brief, and drafts. That's the core of what helped most.
 - **The cost:** most of Proxenos is Python, and Android apps aren't. This means rewriting the care, errands and drafting logic for the phone (Kotlin), or running Python inside an Android app (possible, but heavy).
+
+## Keeping it running from source
+
+`proxenos schedule` keeps a vault current on any computer: `proxenos sync` every 15 minutes and `proxenos night` at 01:30, local time. The coming Mac and Windows apps will start it themselves when they open at log-on, so nobody sets anything up; until then, people running from source keep it going as below. On a Mac, `scripts/install-app.sh` and `scripts/install-night.sh` stay as they are and do the same with launchd: use either.
+
+How it behaves:
+- **Each run is a process of its own** (`python -m proxenos sync`), so a crash in one never stops the schedule. Its output is appended to `<vault>/logs/sync.log` or `night.log`, as the launchd jobs' is, followed by one line from the scheduler: how it ended, when, and how long it took.
+- **Catching up:** after the computer sleeps through a slot, or is off, the job runs once when it's back, not once per slot it missed. When both are due, the night goes first, since it begins with a sync.
+- **Never two at once:** `sync`, `night` and `master` hold a lock in `<vault>/state/` while they run, whoever started them, so a scheduled run waits for one started by launchd or by hand, and a run of the very job that's due counts as its run. The lock is the operating system's own (`flock`, or `msvcrt.locking` on Windows), so a crash never leaves one behind. A run started by hand while another goes on says which and exits with status 75. A second `proxenos schedule` for the same vault doesn't start.
+- **Holding off:** nothing starts while the page is answering a question.
+- **Stopping:** Ctrl-C, SIGTERM or Ctrl-Break stops it: a running job is interrupted the way Ctrl-C would, given 20 seconds to finish what it's writing, then ended; a second Ctrl-C ends it at once. A stopped run counts as not having run, so it runs at the next start. Every step of a sync or a night is safe to run twice.
+- **Where it stands:** `<vault>/state/schedule.json` has the last run of each (when, and `ok`, `failed (exit 1)`, `stopped` or `started elsewhere`), the next, what's running, and why a job that's due is waiting. The times live there too, so a restart picks up where the last one stopped.
+- **Times:** `--sync-every MINUTES` (0 for none) and `--night-at HH:MM` (or `off`), else `PROXENOS_SYNC_EVERY` and `PROXENOS_NIGHT_AT` from `.env` or the settings file. `--once` runs what's due and exits, for trying it or for a scheduler that starts it every few minutes.
+
+**Windows,** with Task Scheduler at log-on. In PowerShell, with the proxenos environment active (`pythonw` runs it without a console window):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute (Get-Command pythonw).Source -Argument "-m proxenos schedule"
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName Proxenos -Action $action -Trigger $trigger -Settings $settings
+Start-ScheduledTask -TaskName Proxenos    # now, without logging out
+```
+
+`Stop-ScheduledTask -TaskName Proxenos` stops it and `Unregister-ScheduledTask -TaskName Proxenos` removes it. Stopping it this way ends it at once, with no time to tidy up: that's safe, as the lock goes with it and a stopped run runs again. To watch it instead, run `python -m proxenos schedule` in a terminal and press Ctrl-C to stop.
+
+**Linux,** with a systemd user unit, `~/.config/systemd/user/proxenos.service`. `ExecStart` is the proxenos environment's Python (`python -c "import sys; print(sys.executable)"` in it):
+
+```ini
+[Unit]
+Description=Proxenos: a sync every 15 minutes and the nightly run
+
+[Service]
+ExecStart=/home/you/miniforge3/envs/proxenos/bin/python -m proxenos schedule
+# SIGTERM to the scheduler alone, which stops a running job cleanly itself.
+KillMode=mixed
+TimeoutStopSec=60
+Restart=on-failure
+# Another scheduler already keeps the vault: starting again won't change that.
+RestartPreventExitStatus=75
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload && systemctl --user enable --now proxenos
+journalctl --user -u proxenos -f    # the scheduler's own lines; each run's output is in <vault>/logs/
+loginctl enable-linger "$USER"      # optional: keep it running while you're logged out
+```
 
 ## What only the owner can do
 
