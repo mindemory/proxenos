@@ -18,6 +18,9 @@ import type {
   ItemsResponse,
   NetworkAction,
   NetworkResponse,
+  OutboxResponse,
+  OutboxRuleEdit,
+  OutboxRules,
   PeopleEdit,
   PeopleEditResult,
   Reaction,
@@ -582,6 +585,102 @@ export function useDrafts(onChange?: () => void) {
     open,
     clearError: () => setError(null),
   };
+}
+
+// ── Outbox ──────────────────────────────────────────────────────────────────
+
+/** A reply can go out at any sync, so a page left open checks the queue this often. */
+const OUTBOX_POLL_MS = 60 * 1000;
+
+/** Resolves with the rules as saved. */
+export async function sendOutboxRules(edit: OutboxRuleEdit): Promise<OutboxRules> {
+  return (await postForJson<{ rules: OutboxRules }>("/api/outbox/rules", edit)).rules;
+}
+
+export async function sendOutboxCancel(draftId: string): Promise<void> {
+  await postForJson<unknown>("/api/outbox/cancel", { draft_id: draftId });
+}
+
+/**
+ * The outbox: its rules, what the last sync worked out, the queue and the log. A change is shown
+ * once the server has saved it, never before, since it decides what may go out on its own.
+ * `cancelledNow` holds the replies cancelled in this visit, which stay listed as cancelled.
+ */
+export function useOutbox() {
+  const { data, error, setData } = useJson<OutboxResponse>("/api/outbox");
+  const notify = useToast();
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [cancelledNow, setCancelledNow] = useState<ReadonlySet<string>>(() => new Set());
+  const cancelling = useRef(new Set<string>());
+  // Counts the writes made, so a read that began before one doesn't bring the old state back.
+  const writes = useRef(0);
+
+  const reload = useCallback(() => {
+    const at = writes.current;
+    return getJson<OutboxResponse>("/api/outbox").then(
+      (d) => {
+        if (writes.current === at) setData(d);
+      },
+      () => {
+        // The panel keeps what it has; the next check tries again.
+      },
+    );
+  }, [setData]);
+
+  useEffect(() => {
+    const check = () => document.visibilityState === "visible" && void reload();
+    const timer = window.setInterval(check, OUTBOX_POLL_MS);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [reload]);
+
+  /** Save one change to the rules and say `done` once it's saved. Resolves true if it was. */
+  const change = useCallback(
+    async (edit: OutboxRuleEdit, done: string): Promise<boolean> => {
+      setSaving(true);
+      setProblem(null);
+      try {
+        const rules = await sendOutboxRules(edit);
+        writes.current++;
+        setData((d) => (d ? { ...d, rules } : d));
+        notify(done, "ok");
+        return true;
+      } catch {
+        setProblem("Couldn't save that. Is the vault reachable? Nothing was changed.");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [setData, notify],
+  );
+
+  /** Stop a queued reply from going out. */
+  const cancel = useCallback(
+    async (draftId: string) => {
+      if (cancelling.current.has(draftId)) return;
+      cancelling.current.add(draftId);
+      setProblem(null);
+      try {
+        await sendOutboxCancel(draftId);
+      } catch {
+        setProblem("Couldn't cancel that, so it may still go out. Try again.");
+        return;
+      } finally {
+        cancelling.current.delete(draftId);
+      }
+      writes.current++;
+      setCancelledNow((prev) => new Set(prev).add(draftId));
+      notify("Cancelled. It won't go out", "ok");
+    },
+    [notify],
+  );
+
+  return { data, error, saving, problem, cancelledNow, change, cancel, report: setProblem };
 }
 
 // ── Last visit ──────────────────────────────────────────────────────────────

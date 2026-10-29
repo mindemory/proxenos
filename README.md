@@ -11,7 +11,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - a searchable memory that brings the right past messages and notes to mind;
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
-It drafts; it never sends, posts or buys anything by itself. You approve what goes out. The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
+It drafts; by default it never sends, posts or buys anything by itself, and you approve what goes out. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
 
 > **Status: very early.** It's built and used by one person on macOS (Apple Silicon), and it's still primitive: expect rough edges and readers that assume a particular export format. Help of any kind is welcome, whether code, an issue, or an idea over a message or a call, especially about making it useful for people navigating hard systems like healthcare. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

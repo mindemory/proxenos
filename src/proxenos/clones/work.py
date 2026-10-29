@@ -265,10 +265,9 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
     person = env("NAME", "the person")
     health = _clip(_one_line(doc.get("summary")), CARE_CHARS)
     for chat in chats.waiting(vault, now)[:REPLIES]:
-        key = hashlib.sha1("\0".join((chat["source"], chat["chat"], chat["id"])).encode())
         text, ask = _reply_text(chat, person, health)
         title = f"Reply to {chat['name']}"
-        job = _job(f"reply-{key.hexdigest()[:12]}", "reply", title, today, text)
+        job = _job(reply_key(chat), "reply", title, today, text)
         yield job | {
             "channel": _channel(chat["source"]),
             "to": _one_line(chat["name"]),
@@ -392,6 +391,13 @@ def right_now(vault: Path, now: datetime | None = None) -> dict | None:
     if not text or (now or datetime.now(UTC)) - at > timedelta(hours=NOW_HOURS):
         return None
     return {"text": text[:NOW_CHARS], "at": _iso(at)}
+
+
+def reply_key(chat: dict) -> str:
+    """A reply draft's id: one per chat and the newest message it answers, so a new message
+    makes a new draft."""
+    key = hashlib.sha1("\0".join((chat["source"], chat["chat"], chat["id"])).encode())
+    return f"reply-{key.hexdigest()[:12]}"
 
 
 def _channel(source: str) -> str:

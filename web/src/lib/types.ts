@@ -377,6 +377,78 @@ export interface DraftCloseness {
   bySource: Record<string, { n: number; mean: number }>; // mean closeness, 0 to 1
 }
 
+// ── Outbox: clones/outbox/ ──────────────────────────────────────────────────
+//
+// Replies that may go out on their own, within rules the page writes (rules.json) and a window to
+// cancel (cancelled.jsonl). Proxenos's sync reads both, sends, and writes back what it did
+// (state.json, log.jsonl).
+
+/** The chats a reply can be sent to, in the order the panel lists them. */
+export const OUTBOX_CHANNELS = ["email", "whatsapp", "slack", "instagram", "messenger", "x", "linkedin"] as const;
+export type OutboxChannel = (typeof OUTBOX_CHANNELS)[number];
+
+/** The rule for one channel: whether it's allowed, and what its record must show first. */
+export interface OutboxChannelRule {
+  on: boolean;
+  min_closeness: number; // 0.5 to 1: the mean of how close its drafts came to what was sent
+  min_measured: number; // 1 to 100: how many drafts that mean needs behind it
+}
+
+/** clones/outbox/rules.json, with anything missing filled in. */
+export interface OutboxRules {
+  enabled: boolean;
+  daily_limit: number; // 1 to 50
+  channels: Record<OutboxChannel, OutboxChannelRule>;
+}
+
+/** One edit to the rules, as POST /api/outbox/rules takes it. */
+export type OutboxRuleEdit =
+  | { enabled: boolean }
+  | { daily_limit: number }
+  | { channel: OutboxChannel; on?: boolean; min_closeness?: number; min_measured?: number };
+
+/** A reply waiting out its window: it goes at the first sync after `sends_at` unless cancelled. */
+export interface OutboxQueued {
+  draft_id: string;
+  channel: string;
+  to: string;
+  queued_at: string;
+  sends_at: string;
+}
+
+/** clones/outbox/state.json: what the last sync worked out. */
+export interface OutboxState {
+  generated: string | null;
+  /** How each channel can send ("apple_mail", "beeper"), or null for no way yet. */
+  routes: Record<string, string | null>;
+  /** Each channel's track record: replies measured, and how close they came on average (0 to 1). */
+  closeness: Record<string, { n: number; mean: number }>;
+  /** Whether a channel's record meets its rule's thresholds. */
+  earned: Record<string, boolean>;
+  queue: OutboxQueued[];
+  sent_today: number;
+}
+
+/** One line of log.jsonl: an attempt to send. */
+export interface OutboxLogEntry {
+  draft_id: string;
+  channel: string;
+  to: string;
+  at: string;
+  via: string | null;
+  ok: boolean;
+  error: string | null;
+}
+
+/** GET /api/outbox. `state` is null until the first sync has written one. */
+export interface OutboxResponse {
+  now: string;
+  rules: OutboxRules;
+  state: OutboxState | null;
+  cancelled: string[]; // draft ids
+  log: OutboxLogEntry[]; // newest first
+}
+
 export interface HomeResponse {
   now: string;
   vault: VaultInfo;

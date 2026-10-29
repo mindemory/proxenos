@@ -84,6 +84,13 @@ export function formatDateTime(iso: string | null | undefined): string {
   });
 }
 
+/** "3:42 PM" in the reader's time zone. */
+export function formatTime(iso: string | null | undefined): string {
+  const d = parse(iso);
+  if (!d) return "";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   arxiv: "arXiv",
   openalex: "OpenAlex",

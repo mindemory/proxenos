@@ -16,7 +16,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import fidelity, importer, llm, memory, observe, vectors
+from proxenos import fidelity, importer, llm, memory, observe, outbox, vectors
 from proxenos.clones import recall, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
@@ -113,6 +113,11 @@ def sync(vault: Path) -> dict[str, int]:
         stats |= fidelity.measure(vault)
     except (Exception, SystemExit):  # noqa: BLE001
         stats["fidelity_failed"] = 1
+    # Then the outbox, after the measure it goes by: off unless the user switched it on.
+    try:
+        stats |= outbox.run(vault)
+    except (Exception, SystemExit):  # noqa: BLE001
+        stats["outbox_failed"] = 1
     # Chats newly waiting on the user get a reply drafted as they come in. Only with a key, and
     # only chats with no draft yet, so a sync with nothing new waiting costs nothing.
     if llm.configured():

@@ -36,6 +36,9 @@ import type {
   NetworkAction,
   NetworkResponse,
   Outreach,
+  OutboxResponse,
+  OutboxRuleEdit,
+  OutboxRules,
   PeopleEdit,
   PeopleEditResult,
   Person,
@@ -62,6 +65,7 @@ import type {
 } from "./types";
 import { foldReviews, isAwaiting } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
+import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
 import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
 
 export const REPO_ROOT = path.resolve(process.cwd(), "..");
@@ -1342,6 +1346,61 @@ export async function applyDraftAction(draftId: string, action: DraftAction, bod
   const entry = { draft_id: draftId, action, ts: nowIso() };
   await appendJsonl(["clones", "drafts", "feedback.jsonl"], entry);
   return entry;
+}
+
+// ── Outbox ──────────────────────────────────────────────────────────────────
+//
+// clones/outbox/: rules.json (the page writes it, the sync reads it), state.json and log.jsonl
+// (the sync writes them, the page reads them) and cancelled.jsonl (the page appends to it). The
+// page never sends anything: it only says what may be sent, and what may not after all.
+
+function outboxDir(vault: string): string {
+  return path.join(vault, "clones", "outbox");
+}
+
+/** The rules, what the last sync worked out, which replies were cancelled, and the newest attempts. */
+export async function getOutbox(vault: string = vaultPath()): Promise<OutboxResponse> {
+  const dir = outboxDir(vault);
+  const [rules, state, cancelled, log] = await Promise.all([
+    readJsonFile(path.join(dir, "rules.json")),
+    readJsonFile(path.join(dir, "state.json")),
+    readJsonl(path.join(dir, "cancelled.jsonl")),
+    readJsonl(path.join(dir, "log.jsonl")),
+  ]);
+  return {
+    now: nowIso(),
+    rules: outboxRules(rules),
+    state: outboxState(state),
+    cancelled: cancelledIds(cancelled),
+    log: outboxLog(log),
+  };
+}
+
+let savingRules: Promise<unknown> = Promise.resolve();
+
+/**
+ * Apply one checked edit to rules.json, filling in what the file lacks, and give back the rules as
+ * saved. Edits are made one after another, so two at once can't undo each other.
+ */
+export function saveOutboxRules(edit: OutboxRuleEdit): Promise<OutboxRules> {
+  const run = async (): Promise<OutboxRules> => {
+    const vault = vaultPath();
+    if (!(await isDir(vault))) throw new VaultMissingError(displayPath(vault));
+    const dir = outboxDir(vault);
+    const file = path.join(dir, "rules.json");
+    const rules = applyOutboxEdit(outboxRules(await readJsonFile(file)), edit);
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await replaceFile(file, JSON.stringify(rules, null, 2) + "\n");
+    return rules;
+  };
+  const next = savingRules.then(run, run);
+  savingRules = next;
+  return next;
+}
+
+/** Say a queued reply is not to go: one line in clones/outbox/cancelled.jsonl, which the sync honours. */
+export async function appendOutboxCancel(draftId: string): Promise<void> {
+  await appendJsonl(["clones", "outbox", "cancelled.jsonl"], { draft_id: draftId, at: nowIso() });
 }
 
 // ── Home ────────────────────────────────────────────────────────────────────

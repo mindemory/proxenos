@@ -387,7 +387,7 @@ function DraftsCard({ data, briefing, onNavigate }: { data: HomeResponse; briefi
         <ReviewBar reviews={reviews} />
       ) : reviews ? (
         <Meta>
-          Written as you, never sent. Approve, edit or discard them in Drafts; each choice is logged, and once
+          Written as you; sent only if you switch on the Outbox. Approve, edit or discard them in Drafts; each choice is logged, and once
           eight in ten are approved a channel can move on to acting.
         </Meta>
       ) : null}
