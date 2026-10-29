@@ -163,3 +163,24 @@ def test_without_slackdump_or_when_offline_nothing_is_fetched(tmp_path, monkeypa
     monkeypatch.setattr(slackdump, "catch_up", lambda dbs: pytest.fail("fetched while offline"))
     args = SimpleNamespace(root=tmp_path, offline=True)
     assert slackdump.run(tmp_path / "vault", args)["archives"] == 1
+
+
+def test_quiet_channels_are_looked_at_on_the_days_first_catch_up_only(tmp_path, monkeypatch):
+    make_archive(tmp_path)
+    monkeypatch.setattr(slackdump.shutil, "which", lambda name: "/bin/slackdump")
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        listing = "Slackdump 4.5.2\n*acme-lab\n" if command[1] == "workspace" else ""
+        return SimpleNamespace(stdout=listing, returncode=0)
+
+    state = tmp_path / "state" / "slackdump.json"
+    for _ in range(2):
+        slackdump.catch_up(slackdump.archives(tmp_path), run, state, today="2026-03-10")
+    slackdump.catch_up(slackdump.archives(tmp_path), run, state, today="2026-03-11")
+
+    first, second, next_day = [c for c in calls if c[1] == "resume"]
+    assert "-skip-stale-channels" not in first  # the day's sweep
+    assert second[second.index("-skip-stale-channels") + 1] == slackdump.QUIET
+    assert "-skip-stale-channels" not in next_day

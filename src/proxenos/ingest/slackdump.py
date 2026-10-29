@@ -26,6 +26,7 @@ import sqlite3
 import subprocess
 from collections import Counter
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from proxenos.config import REPO_ROOT, env
@@ -33,6 +34,7 @@ from proxenos.ingest import slack
 from proxenos.store import merge_monthly, merge_snapshot
 
 CATCH_UP_SECONDS = 600  # the most one workspace may take before sync moves on
+QUIET = "p14d"  # channels with nothing newer are looked at once a day, not every sync
 # What's new since the archive's last run, looking back a few days for late replies, with
 # thread replies but not threads already complete or quiet for two weeks, no attachments, and
 # no duplicates.
@@ -135,24 +137,43 @@ def workspaces(
 
 
 def catch_up(
-    dbs: list[Path], run: Callable[..., subprocess.CompletedProcess] = subprocess.run
+    dbs: list[Path],
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    state: Path | None = None,
+    today: str | None = None,
 ) -> dict[str, int]:
-    """Fetch what's new into the newest archive of each workspace slackdump is signed in to."""
+    """Fetch what's new into the newest archive of each workspace slackdump is signed in to.
+    Channels quiet for two weeks are skipped, except on the first run of each day (kept in
+    `state`), which goes through them all, so one coming back to life is still caught."""
     if not (signed_in := workspaces(run)):
         return {}
+    today = today or datetime.now().date().isoformat()
+    swept = json.loads(state.read_text()).get("swept") if state and state.exists() else None
+    quiet = ["-skip-stale-channels", QUIET] if swept == today else []
     newest = {}
     for db in sorted(dbs, key=lambda p: p.parent.name):  # slackdump_<date>_<time>: newest last
         if (team := slack._slug(_team(db) or "")) in signed_in:
             newest[team] = db
     stats = Counter()
     for team, db in newest.items():
-        command = ["slackdump", "resume", "-workspace", signed_in[team], *_RESUME, str(db.parent)]
+        command = [
+            "slackdump",
+            "resume",
+            "-workspace",
+            signed_in[team],
+            *_RESUME,
+            *quiet,
+            str(db.parent),
+        ]
         try:
             done = run(command, capture_output=True, text=True, timeout=CATCH_UP_SECONDS)
             ok = done.returncode == 0
         except subprocess.TimeoutExpired:
             ok = False
         stats["workspaces_caught_up" if ok else "workspaces_not_caught_up"] += 1
+    if state and not quiet and not stats["workspaces_not_caught_up"]:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"swept": today}))
     return dict(stats)
 
 
@@ -198,5 +219,6 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
     root = args.root.expanduser() if args.root else None
-    fetched = {} if args.offline else catch_up(archives(root))
+    state = vault / "state" / "slackdump.json"
+    fetched = {} if args.offline else catch_up(archives(root), state=state)
     return fetched | ingest(vault, root)
