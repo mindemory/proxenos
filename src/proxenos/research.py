@@ -122,7 +122,9 @@ def _gate(brief: str, hits: list[dict], person_name: str, ask: Callable[..., obj
     when the model can't say."""
     if not hits:
         return []
-    numbered = "\n".join(f"{i}. {_line(h, person_name)}" for i, h in enumerate(hits, 1))
+    numbered = "\n".join(
+        f"{i}. {_line(h, person_name).removeprefix('- ')}" for i, h in enumerate(hits, 1)
+    )
     try:
         answer = ask(
             f"{brief}\n\nRecords found in their memory:\n{numbered}\n\n"
