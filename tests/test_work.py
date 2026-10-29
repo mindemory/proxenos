@@ -19,9 +19,14 @@ class FakeModel:
 
     def __init__(self):
         self.calls = []
+        self.plans = []  # a reply's research rounds: what to look up
+        self.searches = []  # what those rounds ask for, the first round's first
         self.fail_on = set()  # words that make a call fail
 
     def __call__(self, prompt, *, system=None, schema=None, effort="medium", max_tokens=32000):
+        if schema and "searches" in schema["properties"]:
+            self.plans.append(prompt)
+            return {"searches": self.searches if len(self.plans) == 1 else []}
         self.calls.append({"prompt": prompt, "system": system, "schema": schema, "effort": effort})
         if any(word in prompt for word in self.fail_on):
             raise llm.ModelError("model declined")
@@ -250,7 +255,15 @@ def test_the_model_writes_as_me_from_the_self_model(tmp_path, model):
 
     call = model.calls[0]
     assert call["effort"] == "medium"
-    assert set(call["schema"]["properties"]) == {"title", "kind", "channel", "to", "body"}
+    assert set(call["schema"]["properties"]) == {
+        "title",
+        "kind",
+        "channel",
+        "to",
+        "body",
+        "found",
+        "asks",
+    }
     for text in ("Tess studies spirals.", "Short, warm", "Spirals (high)."):
         assert text in call["system"]
     assert "Up early" not in call["system"]  # only identity, voice and interests
@@ -516,3 +529,69 @@ def test_the_command_line_drafts_only_new_replies_and_counts_them(
     cli.main(["clone", "work", "--replies"])
     assert capsys.readouterr().out.startswith("work: 1 drafts written")
     assert all(key.startswith("reply-") for key in drafts(vault))
+
+
+def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_path, model):
+    from proxenos import memory
+
+    vault = chat_vault(tmp_path)
+    write_jsonl(  # Asha on another channel, and the matter the model will ask about
+        vault / "raw" / "instagram" / "messages" / "2026-02.jsonl",
+        [
+            {
+                "id": "ig/1",
+                "ts": "2026-02-14T09:00:00Z",
+                "chat_id": "ig1",
+                "chat_name": "Asha",
+                "chat_type": "direct",
+                "from_me": False,
+                "author": "Asha",
+                "text": "happy valentines!",
+            },
+        ],
+    )
+    write_jsonl(
+        vault / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            {
+                "id": "e1",
+                "ts": "2026-03-05T09:00:00Z",
+                "subject": "Friday retreat",
+                "from_name": "Lab",
+                "body": "The retreat is Friday at noon in Hall B.",
+            }
+        ],
+    )
+    write_json(
+        vault / "clones" / "network" / "people.json",
+        {"people": [{"name": "Asha", "aka": [], "relation": "close friend", "context": "college"}]},
+    )
+    memory.build(vault)
+    model.searches = ["retreat friday"]
+
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+
+    assert len(model.plans) == 2  # a round that searched, then one that asked for nothing
+    prompt = model.calls[0]["prompt"]
+    assert "- relation: close friend" in prompt and "happy valentines!" in prompt
+    assert 'Search "retreat friday":' in prompt and "Hall B" in prompt
+    assert "okiees see you thurs" not in prompt.split("elsewhere")[1]  # this chat isn't repeated
+
+
+def test_what_a_reply_found_and_asks_go_in_its_file(tmp_path, model):
+    vault = chat_vault(tmp_path)
+    answer = model.__call__
+
+    def with_research(prompt, **kwargs):
+        result = answer(prompt, **kwargs)
+        if "searches" not in (kwargs.get("schema") or {}).get("properties", {}):
+            result |= {"found": "The retreat is Friday.", "asks": ["Going?", "  ", "Driving?"]}
+        return result
+
+    work.llm.ask = with_research
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    text = path.read_text(encoding="utf-8")
+    assert 'found: "The retreat is Friday."' in text
+    assert 'asks: ["Going?", "Driving?"]' in text

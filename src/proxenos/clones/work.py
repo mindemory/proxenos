@@ -48,7 +48,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-from proxenos import chats, links, llm
+from proxenos import chats, links, llm, research
 from proxenos.config import env
 
 MAX_DRAFTS = 20
@@ -61,6 +61,9 @@ PROJECTS = 3
 READING = 6
 CARE_SCRIPTS = ("email", "portal_message")  # the care scripts drafted; calls and forms aren't
 TITLE_CHARS = 120
+FOUND_CHARS = 600  # what a reply's research found, as the page shows it
+ASK_CHARS = 200
+ASKS = 3
 SELF_FILES = ("identity", "voice", "interests")
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
 CHANNELS = (
@@ -99,6 +102,12 @@ doc or plan.
 - body: the draft in markdown. A message is only the message, in {person}'s voice for that \
 kind of conversation: a subject line only for an email, nothing around it. A doc, plan or \
 checklist is short and specific.
+- found: for a reply, what their memory showed that the reply rests on, in one to three \
+plain sentences (a deadline and how far off it is, what was already done, what was promised). \
+"" when nothing beyond the chat mattered.
+- asks: for a reply, each thing only {person} can decide or knows that the draft depends on, \
+as a short question, at most three; leave a [placeholder] in the body for each. [] when there \
+is nothing to ask.
 
 Rules:
 - Write as {person} would, from their voice and interests below. Never say it was drafted \
@@ -116,6 +125,8 @@ _SCHEMA = {
         "channel": {"type": "string", "enum": list(CHANNELS)},
         "to": {"type": "string"},
         "body": {"type": "string"},
+        "found": {"type": "string"},
+        "asks": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["title", "kind", "channel", "to", "body"],
     "additionalProperties": False,
@@ -179,11 +190,14 @@ def work(
     # drafts written before, written again with what's changed since.
     queue = sorted(jobs.values(), key=lambda job: job["id"] in existing)
     system = _system(vault / "self")
+    person = env("NAME", "the person")
     written = failed = 0
     for job in queue[:limit]:
-        pages = _pages([read(url) for url in job.get("links", [])[:PAGES]])
-        prompt = job["prompt"] + pages + job.get("ask", "")
+        prompt = job["prompt"] + _pages([read(url) for url in job.get("links", [])[:PAGES]])
         try:
+            if chat := job.get("chat"):  # a reply: what the vault knows beyond this chat
+                prompt += _research(vault, chat, prompt, person)
+            prompt += job.get("ask", "")
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
             draft = _draft(job, answer, now)
         except Exception as e:  # noqa: BLE001 - one failed draft must not cost the others
@@ -229,6 +243,9 @@ def render(draft: dict) -> str:
         if key in ("title", "to"):
             value = json.dumps(value, ensure_ascii=False)
         lines.append(f"{key}: {value}")
+    for key in ("found", "asks"):  # a reply's research, when there was any
+        if draft.get(key):
+            lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
     return "\n".join([*lines, "---", "", draft["body"].strip(), ""])
 
 
@@ -255,6 +272,7 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
             "to": _one_line(chat["name"]),
             "links": links.find(" ".join(m["text"] for m in chat["waiting"])),
             "ask": ask,
+            "chat": chat,
         }
 
     tasks = _load_json(vault / "clones" / "tasks" / "tasks.json").get("tasks") or []
@@ -400,9 +418,22 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
         "chat: match their own messages above in length, case, punctuation, words and emoji, "
         "and if they send several short messages here, write it that way, one per line. Answer "
         "what was asked. For a linked page that could be read, reply as someone who has read "
-        "it, from what it says; never claim to have read one that couldn't be."
+        "it, from what it says; never claim to have read one that couldn't be. Use what their "
+        "memory showed above: get dates, deadlines and what's done right, answer as someone who "
+        "knows the history with this person, and match how close they are. Where the reply "
+        "needs a decision only they can make, ask it in asks rather than deciding for them."
     )
     return "\n\n".join(parts), ask
+
+
+def _research(vault: Path, chat: dict, brief: str, person: str) -> str:
+    """The person and the matter behind a chat, from the rest of the vault, for its prompt."""
+    who = research.person(vault, chat["name"], person, chat=(chat["source"], chat["name"]))
+    found, _ = research.matter(vault, brief, person, llm.ask)
+    parts = [
+        p for p in (who, found and f"What {person}'s memory shows on this chat:\n{found}") if p
+    ]
+    return "\n\n" + "\n\n".join(parts) if parts else ""
 
 
 def _pages(pages: list[dict]) -> str:
@@ -532,6 +563,10 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         "to": job.get("to") or _one_line(answer["to"]),
         "created": _iso(now),
         "status": "draft",
+        "found": _clip(_one_line(answer.get("found")), FOUND_CHARS),
+        "asks": [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)][
+            :ASKS
+        ],
         "body": body,
     }
 
