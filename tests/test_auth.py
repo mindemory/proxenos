@@ -104,10 +104,10 @@ CONFIG = {"identify", "app_configurations:read", "app_configurations:write"}
 
 
 def test_slack_config_tokens_become_reading_tokens(tmp_path, dotenv, monkeypatch):
-    monkeypatch.setenv("SLACK_USER_TOKEN_acme", "config-token")
-    monkeypatch.setenv("SLACK_USER_TOKEN_done", "reader-token")
+    monkeypatch.setenv("SLACK_USER_TOKEN_ACME", "config-token")
+    monkeypatch.setenv("SLACK_USER_TOKEN_DONE", "reader-token")
     state = tmp_path / "state" / "slack_apps.json"
-    dotenv.write_text("SLACK_USER_TOKEN_acme=config-token\nSLACK_USER_TOKEN_done=reader-token\n")
+    dotenv.write_text("SLACK_USER_TOKEN_ACME=config-token\nSLACK_USER_TOKEN_DONE=reader-token\n")
     fake = FakeSlack(
         {
             "config-token": CONFIG,
@@ -126,20 +126,20 @@ def test_slack_config_tokens_become_reading_tokens(tmp_path, dotenv, monkeypatch
     assert opened == ["https://api.slack.com/apps/A1/oauth"]
     assert (
         dotenv.read_text()
-        == "SLACK_USER_TOKEN_acme=new-reader\nSLACK_USER_TOKEN_done=reader-token\n"
+        == "SLACK_USER_TOKEN_ACME=new-reader\nSLACK_USER_TOKEN_DONE=reader-token\n"
     )
 
 
 def test_slack_reuses_the_app_and_refuses_tokens_that_cannot_read(tmp_path, dotenv, monkeypatch):
-    monkeypatch.setenv("SLACK_USER_TOKEN_acme", "config-token")
+    monkeypatch.setenv("SLACK_USER_TOKEN_ACME", "config-token")
     state = tmp_path / "state" / "slack_apps.json"
-    dotenv.write_text("SLACK_USER_TOKEN_acme=config-token\n")
+    dotenv.write_text("SLACK_USER_TOKEN_ACME=config-token\n")
     fake = FakeSlack({"config-token": CONFIG, "weak": {"identify"}})
 
     auth.slack(state, lambda url: None, lambda prompt: "", fake)  # skipped at the prompt
     auth.slack(state, lambda url: None, lambda prompt: "weak", fake)
     assert len(fake.created) == 1
-    assert dotenv.read_text() == "SLACK_USER_TOKEN_acme=config-token\n"
+    assert dotenv.read_text() == "SLACK_USER_TOKEN_ACME=config-token\n"
 
 
 def test_gmail_sign_in_saves_the_account_with_its_refresh_token(dotenv, monkeypatch):

@@ -5,6 +5,7 @@ import io
 import json
 import os
 import stat
+from pathlib import Path
 
 import anthropic
 import httpx2
@@ -57,7 +58,12 @@ def apply(request):
 def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
     status = setup.status()
     assert status["needed"] is True
-    assert status["vault"] == {"path": "~/proxenos_vault", "exists": False, "cloud": None}
+    # Shown with the platform's separator: ~/proxenos_vault, or ~\\proxenos_vault on Windows.
+    assert {**status["vault"], "path": Path(status["vault"]["path"])} == {
+        "path": Path("~/proxenos_vault"),
+        "exists": False,
+        "cloud": None,
+    }
     assert status["model"] == {"kind": "none", "name": "claude-opus-5-5"}
     assert status["saves_to"] == "settings"
     assert {s["name"] for s in status["secrets"]} == set(setup.SECRETS)
@@ -157,14 +163,14 @@ def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
 
 
 def test_secrets_are_replaced_and_removed_and_never_shown(home, fake_keychain, monkeypatch):
-    for name in ("GMAIL_PERSONAL", "SLACK_USER_TOKEN_acme", "STRAVA_CLIENT_SECRET"):
+    for name in ("GMAIL_PERSONAL", "SLACK_USER_TOKEN_ACME", "STRAVA_CLIENT_SECRET"):
         monkeypatch.setenv(name, f"x-{SECRET}")
 
     replaced = apply({"secret": "BEEPER_ACCESS_TOKEN", "value": SECRET})
     assert replaced["ok"] and replaced["message"] == "Saved BEEPER_ACCESS_TOKEN in the Keychain."
     shown = {s["name"]: (s["set"], s["from"]) for s in replaced["status"]["secrets"]}
     assert shown["BEEPER_ACCESS_TOKEN"] == (True, "keychain")
-    assert shown["GMAIL_PERSONAL"] == shown["SLACK_USER_TOKEN_acme"] == (True, "environment")
+    assert shown["GMAIL_PERSONAL"] == shown["SLACK_USER_TOKEN_ACME"] == (True, "environment")
     assert shown["STRAVA_REFRESH_TOKEN"] == (False, None)
 
     removed = apply({"forget": "BEEPER_ACCESS_TOKEN"})
@@ -182,7 +188,10 @@ def test_from_source_with_env_changes_go_there(home, tmp_path, monkeypatch, anth
 
     assert apply({"settings": {"vault": "~/v"}})["message"] == "Saved in .env."
     assert apply({"key": KEY})["ok"]
-    assert env.read_text() == f"PROXENOS_NAME=Ana\nPROXENOS_VAULT=~/v\nANTHROPIC_API_KEY={KEY}\n"
+    assert (
+        env.read_text()
+        == f"PROXENOS_NAME=Ana\nPROXENOS_VAULT=~{os.sep}v\nANTHROPIC_API_KEY={KEY}\n"
+    )
     assert setup.status()["saves_to"] == ".env"
 
 
