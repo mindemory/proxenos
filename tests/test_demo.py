@@ -56,10 +56,10 @@ def test_every_view_has_something_current_to_show(vault):
     assert fay["summary"] == errands.summary(fay)
 
     events = read(vault, "clones/recall/today.json")["events"]
-    assert "Physical therapy intake" in [e["title"] for e in events]
+    assert "Crown fitting" in [e["title"] for e in events]
     people = read(vault, "clones/network/people.json")["people"]
     assert {"Ben Ode", "Dee Fay", "Gus Hale"} <= {p["name"] for p in people}
-    assert "Tess Ray" not in {p["name"] for p in people}  # the owner is never one of her people
+    assert "Joe Bloggs" not in {p["name"] for p in people}  # the owner is never one of his people
     assert (vault / "self/identity.md").exists()
     assert (vault / "tracker/items/2026-10.jsonl").exists()
 

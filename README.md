@@ -26,7 +26,7 @@ It drafts; by default it never sends, posts or buys anything by itself, and you 
 
 ## What it looks like
 
-These come from `proxenos demo` (see [Quick start](#quick-start)): a made-up person, Tess Ray, and her made-up records. None of it is real.
+These come from `proxenos demo` (see [Quick start](#quick-start)): a made-up person, Joe Bloggs, and his made-up records. None of it is real.
 
 ![Home: today's agenda and open tasks, drafts waiting for review with their track record, and where health care stands](docs/images/home-desktop.png)
 

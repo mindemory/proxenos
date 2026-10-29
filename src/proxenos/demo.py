@@ -1,9 +1,9 @@
 """`proxenos demo [PATH]`: a vault of made-up records, to try the page without your own data.
 
-The vault is Tess Ray's, and she doesn't exist: a data scientist at Acme Labs who runs with a
-Sunday club and is partway through getting a sore knee seen to. What the ingesters would bring in
-is written to raw/ in their formats, dated around today: WhatsApp chats and groups, two mail
-accounts, two calendars, runs, listening, notes and LinkedIn connections. What the model would
+The vault is Joe Bloggs's, and he doesn't exist: a data scientist at Acme Labs who rows with a
+Sunday club and is partway through getting a cracked tooth seen to. What the ingesters would bring
+in is written to raw/ in their formats, dated around today: WhatsApp chats and groups, two mail
+accounts, two calendars, rows, listening, notes and LinkedIn connections. What the model would
 write from them is written the way each clone writes it: the self-model, a feed, tasks, care,
 advice, network ideas, drafts and errands. Then the steps that need no model run on it as they
 would on a real vault: the memory index, the people index, today's recall and the outbox's
@@ -32,9 +32,9 @@ from proxenos.clones import advisor, care, errands, network, recall, tasks, trac
 from proxenos.config import REPO_ROOT
 
 PORT = 4848  # the demo's page, so it can run beside your own on 4747
-NAME = "Tess Ray"
-HOME_MAIL = "tess.ray@example.com"
-WORK_MAIL = "tess.ray@acmelabs.example"
+NAME = "Joe Bloggs"
+HOME_MAIL = "joe.bloggs@example.com"
+WORK_MAIL = "joe.bloggs@acmelabs.example"
 # The settings a real vault's .env would hold, set while the demo is built.
 PERSON = {
     "PROXENOS_NAME": NAME,
@@ -42,7 +42,7 @@ PERSON = {
     "PROXENOS_EMAILS": f"{HOME_MAIL},{WORK_MAIL}",
 }
 
-# Who Tess knows: a mail address each, and a WhatsApp number for the ones she chats with.
+# Who Joe knows: a mail address each, and a WhatsApp number for the ones he chats with.
 ADDRESS = {
     "Ben Ode": "ben.ode@acmelabs.example",
     "Eli Park": "eli.park@acmelabs.example",
@@ -53,24 +53,23 @@ ADDRESS = {
     "Fay Moss": "fay.moss@betacorp.example",
     "Uma Rao": "uma.rao@deltaanalytics.example",
     "Dee Fay": "dee.fay@example.net",
-    "Mei Ray": "mei.ray@example.net",
-    "Leo Ray": "leo.ray@example.net",
+    "Mei Bloggs": "mei.bloggs@example.net",
+    "Leo Bloggs": "leo.bloggs@example.net",
 }
 JID = {
     name: f"1555555{n:04d}@s.whatsapp.net"
     for n, name in enumerate(
         ["Cy Doe", "Dee Fay", "Gus Hale", "Ivy Chen", "Jon Reyes", "Lia Ruiz", "Max Bell"]
-        + ["Mei Ray", "Leo Ray"],
+        + ["Mei Bloggs", "Leo Bloggs"],
         start=101,
     )
 }
-RUNNERS = ("120363000000000101@g.us", "Sunday Runners")
-FAMILY = ("120363000000000102@g.us", "Ray family")
-CLINIC = ("Northside Clinic", "portal@northside-clinic.example")
-IMAGING = ("Lakeview Imaging", "appointments@lakeview-imaging.example")
-BILLING = ("Lakeview Imaging Billing", "billing@lakeview-imaging.example")
-PLAN = ("Harbor Health Plan", "claims@harborhealth.example")
-PT = ("Riverside Physical Therapy", "frontdesk@riverside-pt.example")
+ROWERS = ("120363000000000101@g.us", "Sunday Rowers")
+FAMILY = ("120363000000000102@g.us", "Bloggs family")
+DENTIST = ("Northside Dental", "frontdesk@northside-dental.example")
+ENDO = ("Lakeview Endodontics", "appointments@lakeview-endo.example")
+BILLING = ("Lakeview Endodontics Billing", "billing@lakeview-endo.example")
+PLAN = ("Harbor Dental Plan", "claims@harbordental.example")
 
 
 def run(path: Path | None, now: datetime | None = None) -> str:
@@ -103,7 +102,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         encoding="utf-8",
     )
     c = _Clock(now or datetime.now(UTC))
-    with _as_tess():
+    with _as_joe():
         _raw(vault, c)
         _self(vault, c)
         _feed(vault, c)
@@ -125,7 +124,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
 
 
 @contextmanager
-def _as_tess() -> Iterator[None]:
+def _as_joe() -> Iterator[None]:
     """The demo's settings in place of any in the environment, for as long as it's built."""
     saved = {key: os.environ.get(key) for key in PERSON}
     os.environ.update(PERSON)
@@ -187,7 +186,7 @@ def _raw(vault: Path, c: _Clock) -> None:
     store.merge_monthly(_work_mail(c), raw / "email" / "work")
     store.merge_monthly(_home_calendar(c), raw / "calendar" / "personal")
     store.merge_monthly(_work_calendar(c), raw / "calendar" / "work")
-    store.merge_monthly(_runs(c), raw / "strava" / "activities")
+    store.merge_monthly(_rows(c), raw / "strava" / "activities")
     store.merge_monthly(_plays(c), raw / "spotify" / "plays")
     store.merge_monthly(_notes(c), raw / "notes" / "pages")
     store.merge_monthly(_connections(c), raw / "linkedin" / "connections")
@@ -200,17 +199,17 @@ def _whatsapp(c: _Clock) -> list[dict]:
         "cy": (JID["Cy Doe"], "Cy Doe", "direct"),
         "dee": (JID["Dee Fay"], "Dee Fay", "direct"),
         "gus": (JID["Gus Hale"], "Gus Hale", "direct"),
-        "run": (*RUNNERS, "group"),
+        "row": (*ROWERS, "group"),
         "fam": (*FAMILY, "group"),
     }
-    said = [  # (chat, when, who wrote it, or None for Tess, text)
+    said = [  # (chat, when, who wrote it, or None for Joe, text)
         (
             "cy",
             c.at(-9, 19, 12),
             "Cy Doe",
             "Are you still up for the lake trip the weekend after next?",
         ),
-        ("cy", c.at(-9, 19, 40), None, "Yes! As long as the knee behaves. I'll know more after PT"),
+        ("cy", c.at(-9, 19, 40), None, "Yes! I'll skip the Sunday row that week"),
         (
             "cy",
             c.at(-2, 20, 5),
@@ -221,7 +220,7 @@ def _whatsapp(c: _Clock) -> list[dict]:
             "cy",
             c.at(-2, 20, 6),
             "Cy Doe",
-            "Also Lia wants to know if you're doing the November 10k with us",
+            "Also Lia wants to know if you're doing the November head race with us",
         ),
         (
             "dee",
@@ -231,8 +230,13 @@ def _whatsapp(c: _Clock) -> list[dict]:
         ),
         ("dee", c.at(-6, 21, 2), None, "Saturday works. Book it, I'll bring the cake"),
         ("dee", c.at(-1, 12, 20), "Dee Fay", "Booked for 7! Can you pick up Leo on the way?"),
-        ("gus", c.at(-12, 8, 10), "Gus Hale", "How's the knee? Saw you skipped Sunday"),
-        ("gus", c.at(-12, 8, 30), None, "MRI today, then PT. Walking is fine, running isn't yet"),
+        ("gus", c.at(-12, 7, 50), "Gus Hale", "Good luck with the tooth today!"),
+        (
+            "gus",
+            c.at(-12, 11, 30),
+            None,
+            "All done, numb till lunch. See you at the boathouse Sunday",
+        ),
         (
             "gus",
             c.at(-3, 17, 45),
@@ -241,32 +245,42 @@ def _whatsapp(c: _Clock) -> list[dict]:
         ),
         ("gus", c.at(-3, 18, 2), None, "Sure, I'll call them this week"),
         (
-            "run",
+            "row",
             c.at(-14, 7, 2),
             "Gus Hale",
-            "Long run Sunday: 16 km from the boathouse, 7:30 sharp",
+            "Long row Sunday: 16 km from the boathouse, boats out at 7:30 sharp",
         ),
-        ("run", c.at(-14, 7, 15), "Ivy Chen", "In!"),
-        ("run", c.at(-14, 7, 20), "Jon Reyes", "In, slower group please"),
+        ("row", c.at(-14, 7, 15), "Ivy Chen", "In!"),
+        ("row", c.at(-14, 7, 20), "Jon Reyes", "In, steady crew please"),
         (
-            "run",
+            "row",
             c.at(-14, 8, 0),
             None,
-            "Sitting this one out, knee. I'll bring coffee to the finish",
+            "In! I'll bring coffee for after",
         ),
         (
-            "run",
+            "row",
             c.at(-7, 7, 5),
             "Gus Hale",
-            "Route for Sunday is up. Club social is next Friday, details soon",
+            "Crews for Sunday are up. Club social is next Friday, details soon",
         ),
-        ("run", c.at(-7, 7, 30), "Lia Ruiz", "Who's doing the November 10k? Signups close Friday"),
-        ("run", c.at(-7, 7, 41), "Max Bell", "Me"),
-        ("run", c.at(-7, 8, 3), "Cy Doe", "Me too"),
-        ("run", c.at(-1, 19, 0), "Ivy Chen", "Track session Wednesday moved to 6:30"),
-        ("fam", c.at(-10, 19, 0), "Mei Ray", "Did the knee doctor say anything?"),
-        ("fam", c.at(-10, 19, 20), None, "Waiting on the MRI, then physio. Don't worry!"),
-        ("fam", c.at(-4, 9, 0), "Leo Ray", "Photos from the weekend are in the shared album"),
+        (
+            "row",
+            c.at(-7, 7, 30),
+            "Lia Ruiz",
+            "Who's doing the November head race? Entries close Friday",
+        ),
+        ("row", c.at(-7, 7, 41), "Max Bell", "Me"),
+        ("row", c.at(-7, 8, 3), "Cy Doe", "Me too"),
+        ("row", c.at(-1, 19, 0), "Ivy Chen", "Erg session Wednesday moved to 6:30"),
+        ("fam", c.at(-10, 19, 0), "Mei Bloggs", "How's the tooth after the root canal?"),
+        (
+            "fam",
+            c.at(-10, 19, 20),
+            None,
+            "Much better! A crown next and then it's done. Don't worry!",
+        ),
+        ("fam", c.at(-4, 9, 0), "Leo Bloggs", "Photos from the weekend are in the shared album"),
         ("fam", c.at(-4, 9, 30), None, "Love the one by the lake"),
     ]
     records = []
@@ -294,8 +308,8 @@ def _whatsapp(c: _Clock) -> list[dict]:
 
 def _groups() -> list[dict]:
     members = {
-        RUNNERS: ["Gus Hale", "Ivy Chen", "Jon Reyes", "Lia Ruiz", "Max Bell", "Cy Doe"],
-        FAMILY: ["Dee Fay", "Mei Ray", "Leo Ray"],
+        ROWERS: ["Gus Hale", "Ivy Chen", "Jon Reyes", "Lia Ruiz", "Max Bell", "Cy Doe"],
+        FAMILY: ["Dee Fay", "Mei Bloggs", "Leo Bloggs"],
     }
     return [
         {
@@ -321,7 +335,7 @@ def _mail(
     to: list[str] | None = None,
     attachments: list[str] | None = None,
 ) -> dict:
-    """One message as the mail ingesters write it; `sender` None is Tess's own."""
+    """One message as the mail ingesters write it; `sender` None is Joe's own."""
     mine = HOME_MAIL if account == "personal" else WORK_MAIL
     return {
         "id": f"demo-{account}-{n}",
@@ -355,20 +369,22 @@ def _home_mail(c: _Clock) -> list[dict]:
     mail = [
         (
             c.at(-30, 13, 5),
-            CLINIC,
+            DENTIST,
             "Your visit summary is ready",
             (
-                f"Your visit summary from {c.said(-30)} is in the patient portal. Orders placed: MRI of "
-                "the right knee at Lakeview Imaging, and a referral to physical therapy."
+                f"Your visit summary from {c.said(-30)} is in the patient portal. Exam and X-ray: a "
+                "crack in your lower left molar that reaches the nerve. Referral placed: a root "
+                "canal at Lakeview Endodontics, then a crown here."
             ),
         ),
         (
             c.at(-29, 10, 40),
-            IMAGING,
-            "We received your MRI referral",
+            ENDO,
+            "We received your referral",
             (
-                "Your referral from Northside Clinic arrived. Your plan needs prior authorization for "
-                "this scan; we have asked Harbor Health Plan and will be in touch to schedule."
+                "Your referral from Northside Dental arrived. Your dental plan needs prior "
+                "authorization for a root canal; we have asked Harbor Dental Plan and will be in "
+                "touch to schedule."
             ),
         ),
         (
@@ -376,29 +392,36 @@ def _home_mail(c: _Clock) -> list[dict]:
             PLAN,
             "Prior authorization request received",
             (
-                "We received a prior authorization request from Lakeview Imaging for an MRI. Most "
-                "decisions take 3 to 5 business days."
+                "We received a prior authorization request from Lakeview Endodontics for a root "
+                "canal. Most decisions take 3 to 5 business days."
             ),
         ),
         (
             c.at(-19, 16, 0),
             PLAN,
             "Prior authorization approved",
-            "Approved: one MRI of the right knee at Lakeview Imaging, valid for 60 days.",
+            (
+                "Approved: one root canal on the lower left molar at Lakeview Endodontics, valid "
+                "for 60 days."
+            ),
         ),
         (
             c.at(-17, 11, 20),
-            IMAGING,
-            f"Appointment confirmed: MRI on {c.said(-12)} at 8:15",
-            "Please arrive 20 minutes early with your insurance card. Wear clothes with no metal.",
+            ENDO,
+            f"Appointment confirmed: root canal on {c.said(-12)} at 8:15",
+            (
+                "Please arrive 15 minutes early with your dental plan card. Eat beforehand; your "
+                "mouth may be numb for a few hours after."
+            ),
         ),
         (
             c.at(-9, 14, 30),
-            CLINIC,
-            "New result in your patient portal",
+            ENDO,
+            "Your treatment summary",
             (
-                "Your MRI report is ready to view in the patient portal. Your clinician asks you to "
-                "book a follow-up visit to go over it."
+                f"Your root canal on {c.said(-12)} is done, with a temporary filling. The tooth "
+                "needs a crown from your dentist within a month. Your final X-ray is in our "
+                "patient portal, and we'll call to book a short check in six weeks."
             ),
         ),
         (
@@ -406,8 +429,8 @@ def _home_mail(c: _Clock) -> list[dict]:
             BILLING,
             "Your statement is ready",
             (
-                f"Amount due: $1,240.00 for MRI on {c.said(-12)}. Payment due {c.said(23)}. Questions "
-                "about this bill? Call billing, Monday to Friday."
+                f"Amount due: $1,240.00 for a root canal on {c.said(-12)}. Payment due "
+                f"{c.said(23)}. Questions about this bill? Call billing, Monday to Friday."
             ),
         ),
         (
@@ -415,17 +438,19 @@ def _home_mail(c: _Clock) -> list[dict]:
             PLAN,
             "Your Explanation of Benefits",
             (
-                f"Claim processed for Lakeview Imaging, {c.said(-12)}. Billed $1,240.00. Plan discount "
-                "$810.00. Plan paid $245.00. Your responsibility: $185.00. This is not a bill."
+                f"Claim processed for Lakeview Endodontics, {c.said(-12)}. Billed $1,240.00. Plan "
+                "discount $810.00. Plan paid $245.00. Your responsibility: $185.00. This is not a "
+                "bill."
             ),
         ),
         (
             c.at(-3, 15, 10),
-            PT,
-            f"Your intake is booked: {c.said(1)} at 9:30",
+            DENTIST,
+            f"Your crown fitting is booked: {c.said(1)} at 9:30",
             (
-                "Please bring your insurance card and any imaging reports, or have them sent to us "
-                "ahead of the visit. New-patient forms are attached."
+                "Please bring your dental plan card, and have Lakeview Endodontics send the final "
+                "X-ray from your root canal ahead of the visit. We've sent Harbor Dental Plan a "
+                "pre-treatment estimate for the crown."
             ),
         ),
         (
@@ -433,7 +458,7 @@ def _home_mail(c: _Clock) -> list[dict]:
             _person("Fay Moss"),
             "Data science lead role at Beta Corp",
             (
-                "Hi Tess, I lead hiring for our forecasting team, and your talk on churn calibration "
+                "Hi Joe, I lead hiring for our forecasting team, and your talk on churn calibration "
                 "came up twice this week. Would you be open to a chat about the lead role?"
             ),
         ),
@@ -457,9 +482,9 @@ def _home_mail(c: _Clock) -> list[dict]:
             20,
             c.at(-3, 15, 40),
             None,
-            f"Re: Your intake is booked: {c.said(1)} at 9:30",
-            "Thanks, see you then. I'll have the MRI report sent over before.",
-            to=[PT[1]],
+            f"Re: Your crown fitting is booked: {c.said(1)} at 9:30",
+            "Thanks, see you then. I'll ask Lakeview to send the X-ray over before.",
+            to=[DENTIST[1]],
         ),
         _mail(
             "personal",
@@ -480,7 +505,7 @@ def _home_mail(c: _Clock) -> list[dict]:
             "Dear hiring team, I'd like to apply for the Senior Data Scientist role. I build "
             "churn and demand forecasts at Acme Labs. My CV is attached.",
             to=["jobs@deltaanalytics.example"],
-            attachments=["Tess_Ray_CV.pdf"],
+            attachments=["Joe_Bloggs_CV.pdf"],
         ),
     ]
     records += [
@@ -506,7 +531,7 @@ def _work_mail(c: _Clock) -> list[dict]:
             "Ben Ode",
             "Slides for Thursday",
             (
-                "Hi Tess, could you send the churn model slides with the cohort breakdown before the "
+                "Hi Joe, could you send the churn model slides with the cohort breakdown before the "
                 "review? Eli wants to see the November cohort on its own."
             ),
         ),
@@ -528,8 +553,8 @@ def _work_mail(c: _Clock) -> list[dict]:
         (
             c.at(-8, 13, 30),
             "Hana Ito",
-            "Forecasting reading group",
-            "We're picking the next paper. Want to suggest one?",
+            "Forecasting guild",
+            "We're picking the next talk or blog post to go through. Want to suggest one?",
         ),
         (
             c.at(-13, 11, 0),
@@ -569,8 +594,8 @@ def _work_mail(c: _Clock) -> list[dict]:
             21,
             c.at(-8, 14, 5),
             None,
-            "Re: Forecasting reading group",
-            "How about the survey on conformal prediction? It's long but readable.",
+            "Re: Forecasting guild",
+            "How about The Data Desk's post on conformal prediction? It's long but readable.",
             to=[ADDRESS["Hana Ito"], ADDRESS["Kai Lund"], ADDRESS["Nia Cole"]],
         ),
         _mail(
@@ -642,20 +667,20 @@ def _event(
 
 def _home_calendar(c: _Clock) -> list[dict]:
     events = [
-        _event("visit", c.at(-30, 10, 0), 30, "Primary care visit", CLINIC[0]),
-        _event("mri", c.at(-12, 8, 15), 45, "MRI, right knee", IMAGING[0]),
-        _event("pt", c.at(1, 9, 30), 60, "Physical therapy intake", PT[0]),
+        _event("visit", c.at(-30, 10, 0), 30, "Dental exam and X-ray", DENTIST[0]),
+        _event("rootcanal", c.at(-12, 8, 15), 90, "Root canal, lower left molar", ENDO[0]),
+        _event("crown", c.at(1, 9, 30), 60, "Crown fitting", DENTIST[0]),
         _event(
             "dinner",
             c.at(3, 19, 0),
             150,
             "Mum's birthday dinner",
             "Thai Garden",
-            ("Dee Fay", "Mei Ray", "Leo Ray"),
+            ("Dee Fay", "Mei Bloggs", "Leo Bloggs"),
         ),
     ]
     events += [
-        _event(f"run{-days}", c.at(days, 7, 30), 90, "Sunday Runners long run", "The boathouse")
+        _event(f"row{-days}", c.at(days, 7, 30), 90, "Sunday Rowers long row", "The boathouse")
         for days in (-28, -21, -14, -7)
     ]
     return events
@@ -669,7 +694,7 @@ def _work_calendar(c: _Clock) -> list[dict]:
             "coffee",
             c.soon(3),
             30,
-            "Coffee with Hana: next reading group paper",
+            "Coffee with Hana: next guild talk",
             "Kitchen",
             ("Hana Ito",),
         ),
@@ -682,34 +707,37 @@ def _work_calendar(c: _Clock) -> list[dict]:
             ("Eli Park", *team, "Nia Cole"),
         ),
         _event(
-            "reading",
+            "guild",
             c.at(-8, 16, 0),
             60,
-            "Forecasting reading group",
+            "Forecasting guild",
             None,
             ("Hana Ito", "Kai Lund", "Nia Cole", "Tom Wu"),
         ),
     ]
     events += [
-        _event(f"oneonone{-days}", c.at(days, 11, 0), 30, "1:1 Eli / Tess", None, ("Eli Park",))
+        _event(f"oneonone{-days}", c.at(days, 11, 0), 30, "1:1 Eli / Joe", None, ("Eli Park",))
         for days in (-19, -12, -5, 2)
     ]
     return events
 
 
-def _runs(c: _Clock) -> list[dict]:
-    done = [  # (days ago, sport, name, km, minutes): running until the knee, then walks and rides
-        (45, "Run", "Easy morning run", 7.2, 41),
-        (43, "Run", "Track intervals", 8.0, 44),
-        (41, "Run", "Tempo by the river", 10.1, 52),
-        (38, "Run", "Long run, boathouse loop", 18.2, 104),
-        (33, "Run", "Short shakeout (knee sore)", 3.1, 20),
-        (24, "Walk", "Evening walk", 4.5, 55),
-        (18, "Walk", "Walk to the market", 5.2, 62),
-        (13, "VirtualRide", "Easy spin", 15.0, 35),
-        (8, "VirtualRide", "Easy spin", 18.0, 40),
-        (6, "Walk", "Lake loop walk", 6.0, 72),
-        (2, "Walk", "Evening walk", 4.8, 58),
+def _rows(c: _Clock) -> list[dict]:
+    done = [  # (days ago, sport, name, km, minutes): Sunday long rows, ergs and paddles between
+        (44, "Rowing", "Erg, steady state", 10.0, 45),
+        (42, "Rowing", "Sunday long row", 14.2, 86),
+        (40, "Rowing", "Erg, 4 x 2 km", 8.0, 34),
+        (38, "Rowing", "Easy morning paddle", 8.2, 52),
+        (35, "Rowing", "Sunday long row", 15.0, 90),
+        (33, "Rowing", "Erg, 6 x 1 km", 6.0, 26),
+        (31, "Rowing", "Technique paddle", 7.5, 50),
+        (28, "Rowing", "Sunday long row", 15.2, 92),
+        (24, "Rowing", "Erg, steady state", 10.0, 45),
+        (21, "Rowing", "Sunday long row", 14.6, 88),
+        (17, "Rowing", "Easy morning paddle", 8.0, 52),
+        (14, "Rowing", "Sunday long row", 16.0, 95),
+        (7, "Rowing", "Sunday long row", 15.5, 90),
+        (3, "Rowing", "Erg, steady state", 10.0, 44),
     ]
     return [
         {
@@ -754,17 +782,19 @@ def _plays(c: _Clock) -> list[dict]:
 def _notes(c: _Clock) -> list[dict]:
     pages = [
         (
-            "knee",
+            "tooth",
             c.at(-1, 21, 0),
-            "Knee log",
+            "Tooth notes",
             "Health",
             (
-                f"{c.said(-38)}: right knee sore after the 18 km long run, outside edge.\n"
-                f"{c.said(-33)}: still sore on stairs. Stopped running.\n"
-                f"{c.said(-30)}: primary care at Northside. MRI and physio referral.\n"
-                f"{c.said(-12)}: MRI at Lakeview.\n"
+                f"{c.said(-38)}: bit an olive pit, cracked a lower left molar. Sharp when I bite.\n"
+                f"{c.said(-30)}: Northside Dental, exam and X-ray. The crack reaches the nerve: "
+                "root canal at Lakeview Endodontics, then a crown at Northside.\n"
+                f"{c.said(-19)}: the plan approved the root canal.\n"
+                f"{c.said(-12)}: root canal at Lakeview. Temporary filling; crown within a month.\n"
                 f"{c.said(-5)}: the plan says I owe $185; Lakeview's bill says $1,240.\n"
-                "Questions for PT: when can I run again? What to do on the bike?"
+                "Questions: Will the plan cover the crown? How long does the temporary filling "
+                "last? When can I chew on that side?"
             ),
         ),
         (
@@ -778,11 +808,14 @@ def _notes(c: _Clock) -> list[dict]:
             ),
         ),
         (
-            "half",
+            "head",
             c.at(-50, 20, 0),
-            "Spring half marathon plan",
-            "Running",
-            "Build to 18 km long runs by March. One track night, one tempo, one long run a week.",
+            "Head race plan",
+            "Rowing",
+            (
+                "Build to 16 km steady rows by November. Two ergs and a technique paddle in the "
+                "week, the club's long row on Sundays."
+            ),
         ),
     ]
     return [
@@ -798,9 +831,9 @@ def _notes(c: _Clock) -> list[dict]:
     ]
 
 
-# Slack user ids, and the channels Tess is in.
+# Slack user ids, and the channels Joe is in.
 SLACK = {
-    "Tess Ray": "U0DEMO00",
+    "Joe Bloggs": "U0DEMO00",
     "Hana Ito": "U0DEMO01",
     "Kai Lund": "U0DEMO02",
     "Tom Wu": "U0DEMO03",
@@ -816,13 +849,13 @@ def _slack(c: _Clock) -> list[dict]:
             FORECASTING,
             c.at(-9, 10, 4),
             "Hana Ito",
-            "Reading group: paper ideas welcome in the thread",
+            "Guild: ideas for the next talk or post welcome in the thread",
         ),
         (
             FORECASTING,
             c.at(-9, 10, 30),
-            "Tess Ray",
-            "Conformal prediction survey? Long but readable",
+            "Joe Bloggs",
+            "The Data Desk's conformal prediction post? Long but readable",
         ),
         (
             FORECASTING,
@@ -833,7 +866,7 @@ def _slack(c: _Clock) -> list[dict]:
         (
             FORECASTING,
             c.at(-6, 15, 40),
-            "Tess Ray",
+            "Joe Bloggs",
             "Thanks Kai! Rerunning the churn model on them today",
         ),
         (
@@ -851,7 +884,7 @@ def _slack(c: _Clock) -> list[dict]:
         (
             TOM,
             c.at(-4, 14, 31),
-            "Tess Ray",
+            "Joe Bloggs",
             "Not yet, IT said five working days. I'll ping them Friday",
         ),
     ]
@@ -879,7 +912,7 @@ def _slack(c: _Clock) -> list[dict]:
 
 
 def _channels() -> list[dict]:
-    rosters = {FORECASTING: list(SLACK), TOM: ["Tess Ray", "Tom Wu"]}
+    rosters = {FORECASTING: list(SLACK), TOM: ["Joe Bloggs", "Tom Wu"]}
     return [
         {
             "id": channel,
@@ -910,7 +943,7 @@ def _connections(c: _Clock) -> list[dict]:
         ("Vic Noor", "Gamma Health", "Product Lead", 4),
         ("Zoe Hart", "Gamma Health", "Analytics Engineer", 2),
         ("Pia Holt", "Northfield University", "Associate Professor", 6),
-        ("Ivy Chen", "Gamma Health", "Physiotherapist", 2),
+        ("Ivy Chen", "Gamma Health", "Product Designer", 2),
     ]
     return [
         {
@@ -932,10 +965,10 @@ def _self(vault: Path, c: _Clock) -> None:
     files = {
         "identity": """# Identity
 
-Tess Ray is a data scientist at Acme Labs, where she builds churn and demand forecasts and works
-most closely with Ben Ode, Kai Lund and Hana Ito, for Eli Park. She runs with the Sunday Runners
-and was training for a spring half marathon until a knee injury five weeks ago. Family is close:
-her sister Dee organizes most of it.
+Joe Bloggs is a data scientist at Acme Labs, where he builds churn and demand forecasts and works
+most closely with Ben Ode, Kai Lund and Hana Ito, for Eli Park. He rows with the Sunday Rowers
+and is training for the club's November head race. Family is close: his sister Dee organizes most
+of it.
 
 - Values: getting the numbers right before they're presented; showing up for friends.
 - Decides by writing things down first, then asking one trusted person.
@@ -944,13 +977,13 @@ her sister Dee organizes most of it.
         "interests": """# Interests
 
 - Forecasting and calibration (high, rising): churn cohorts, conformal prediction.
-- Running (high, fading for now): half marathon training on hold, cycling instead.
+- Rowing (high, rising): the club's Sunday long rows, the November head race.
 - Survival models (medium, stable).
-- Health admin (medium, rising): referrals, prior authorization, bills.
+- Health admin (medium, rising): a dental referral, prior authorization, bills.
 """,
         "taste": """# Taste
 
-Reads applied papers with code and a clear evaluation; skips benchmark-only work. Listens to
+Reads applied write-ups with code and a clear evaluation; skips benchmark-only work. Listens to
 slow, warm albums while working and podcasts on walks.
 """,
         "voice": """# Voice
@@ -963,13 +996,13 @@ slow, warm albums while working and podcasts on walks.
 """,
         "routines": """# Routines
 
-Work from 9 to 6, deep work in the mornings. Long run on Sundays at 7:30 (paused); an easy spin
-or a walk most evenings for now. Family dinner most Saturdays.
+Work from 9 to 6, deep work in the mornings. Long row with the club on Sundays at 7:30; an erg
+or an easy paddle before work on weekdays, when the week allows. Family dinner most Saturdays.
 """,
         "open_questions": """# Open questions
 
-- Is the Beta Corp role something she wants, or flattering timing?
-- How much running does she want back, and how soon?
+- Is the Beta Corp role something he wants, or flattering timing?
+- Is the November head race a goal to train for, or a day out with the club?
 """,
     }
     folder = vault / "self"
@@ -979,8 +1012,8 @@ or a walk most evenings for now. Family dinner most Saturdays.
         folder / "CHANGELOG.md",
         f"## {c.day(-21)}\n\nFirst self-model.\n\n"
         f"## {c.day(-1)}\n\n"
-        "- Running moved from high and stable to high and fading: no runs since the knee, "
-        "walks and rides instead.\n"
+        "- Rowing moved from high and stable to high and rising: a long row every Sunday, and "
+        "the club's November head race ahead.\n"
         "- Health admin added as an interest: a referral, a prior authorization and a bill in "
         "five weeks.\n"
         "- Identity notes the Beta Corp conversation.\n",
@@ -1019,8 +1052,8 @@ def _feed(vault: Path, c: _Clock) -> None:
             False,
             "Distribution-free intervals for time-to-event predictions, with code.",
             (
-                "You suggested conformal prediction for the reading group; this applies it to the "
-                "models you build."
+                "You suggested conformal prediction for the forecasting guild; this applies it to "
+                "the models you build."
             ),
         ),
         (
@@ -1038,14 +1071,14 @@ def _feed(vault: Path, c: _Clock) -> None:
         (
             latest,
             "news",
-            "Riverton opens a 12 km riverside loop for runners and riders",
+            "Riverton's boathouse gets a second dock and lights along the river",
             "Riverton Gazette",
             None,
             0.66,
-            "running",
+            "rowing",
             False,
-            "The new path links the boathouse to the lake, with mile markers and lights.",
-            "Your club's long runs start at the boathouse, and it's flat enough for the bike now.",
+            "The new dock halves the wait to launch, and the lights allow evening outings.",
+            "The Sunday Rowers launch from the boathouse, and the head race starts there.",
         ),
         (
             latest,
@@ -1187,8 +1220,8 @@ def _tasks(vault: Path, c: _Clock) -> None:
             [f"whatsapp/messages/{JID['Cy Doe']}/DEMO0003"],
         ),
         (
-            "Suggest a paper for the reading group",
-            "You suggested the conformal prediction survey; waiting on Hana to pick.",
+            "Suggest a talk or post for the forecasting guild",
+            "You suggested The Data Desk's conformal prediction post; waiting on Hana to pick.",
             "email",
             "Hana Ito",
             c.at(-8, 13, 30),
@@ -1244,58 +1277,58 @@ def _care(vault: Path, c: _Clock) -> None:
         (
             -38,
             "symptom",
-            "Right knee sore after a long run",
-            "Outside of the knee, worse on stairs; running stopped five days later.",
+            "Cracked a lower molar on an olive pit",
+            "Lower left side, sharp when biting.",
             "",
-            ["notes/pages/demo-knee"],
+            ["notes/pages/demo-tooth"],
         ),
         (
             -30,
             "visit",
-            "Primary care visit",
-            "MRI of the right knee and physical therapy ordered.",
-            "Northside Clinic (primary care)",
+            "Dental exam and X-ray",
+            "The crack reaches the nerve: a root canal, then a crown.",
+            "Northside Dental",
             ["calendar/personal/demo-visit", f"{mail}1"],
         ),
         (
             -29,
             "referral",
-            "MRI referral received",
-            "The imaging center asked the plan for prior authorization before scheduling.",
-            "Lakeview Imaging",
+            "Root canal referral received",
+            "The endodontist asked the dental plan for prior authorization before scheduling.",
+            "Lakeview Endodontics",
             [f"{mail}2"],
         ),
-        (-24, "claim", "Prior authorization requested", "", "Harbor Health Plan", [f"{mail}3"]),
+        (-24, "claim", "Prior authorization requested", "", "Harbor Dental Plan", [f"{mail}3"]),
         (
             -19,
             "claim",
             "Prior authorization approved",
-            "One MRI, valid for 60 days.",
-            "Harbor Health Plan",
+            "One root canal, valid for 60 days.",
+            "Harbor Dental Plan",
             [f"{mail}4"],
         ),
         (
             -12,
-            "test",
-            "MRI of the right knee",
+            "visit",
+            "Root canal on the lower left molar",
             "",
-            "Lakeview Imaging",
-            ["calendar/personal/demo-mri", f"{mail}5"],
+            "Lakeview Endodontics",
+            ["calendar/personal/demo-rootcanal", f"{mail}5"],
         ),
         (
             -9,
             "result",
-            "MRI report released to the portal",
-            "The clinic asked for a follow-up visit to go over it.",
-            "Northside Clinic",
+            "Treatment summary and final X-ray in the portal",
+            "A crown is needed within a month; Lakeview will call about a check in six weeks.",
+            "Lakeview Endodontics",
             [f"{mail}6"],
         ),
         (
             -7,
             "bill",
-            "Statement for the MRI: $1,240 due",
+            "Statement for the root canal: $1,240 due",
             "Sent before the plan had processed the claim.",
-            "Lakeview Imaging (billing)",
+            "Lakeview Endodontics (billing)",
             [f"{mail}7"],
         ),
         (
@@ -1303,15 +1336,15 @@ def _care(vault: Path, c: _Clock) -> None:
             "claim",
             "Claim processed: your share is $185",
             "Billed $1,240; plan discount $810; plan paid $245.",
-            "Harbor Health Plan",
+            "Harbor Dental Plan",
             [f"{mail}8"],
         ),
         (
             -3,
             "call",
-            "Physical therapy intake booked",
+            "Crown fitting booked",
             f"For {c.said(1)} at 9:30.",
-            "Riverside Physical Therapy",
+            "Northside Dental",
             [f"{mail}9", "email/personal/demo-personal-20"],
         ),
     ]
@@ -1329,12 +1362,12 @@ def _care(vault: Path, c: _Clock) -> None:
     ]
     open_items = [  # (title, kind, waiting on, next step, due, status, evidence)
         (
-            "Send the MRI report to Riverside PT before the intake",
+            "Send the root canal X-ray to Northside Dental before the crown fitting",
             "records",
             "me",
             (
-                "Ask Northside through the portal to send the report, or download it and email it to "
-                "the front desk."
+                "Ask Lakeview through their portal to send it, or download it and email it to "
+                "Northside's front desk."
             ),
             c.day(1),
             "open",
@@ -1353,24 +1386,35 @@ def _care(vault: Path, c: _Clock) -> None:
             [f"{mail}7", f"{mail}8"],
         ),
         (
-            "Book the follow-up visit to go over the MRI",
-            "appointment",
+            "Find out whether the plan covers the crown",
+            "question",
             "me",
-            "Book through the portal; ask for a slot after the first PT session.",
-            c.day(10),
+            (
+                "Northside sent Harbor a pre-treatment estimate; ask Harbor what your share of the "
+                "crown would be before the fitting."
+            ),
+            c.day(1),
             "open",
+            [f"{mail}9", f"{mail}1"],
+        ),
+        (
+            "Six-week check at Lakeview Endodontics",
+            "appointment",
+            "provider",
+            "Lakeview said they'd call to book it; if they haven't by mid-month, call them.",
+            None,
+            "waiting",
             [f"{mail}6"],
         ),
         (
-            "Check the plan has the PT referral on file",
-            "referral",
-            "provider",
-            "Northside sends the referral to Harbor; ask Riverside at the intake whether it shows.",
+            "Prior authorization for the root canal",
+            "claim",
+            "insurer",
+            "",
             None,
-            "waiting",
-            [f"{mail}1", f"{mail}9"],
+            "done",
+            [f"{mail}4"],
         ),
-        ("Prior authorization for the MRI", "claim", "insurer", "", None, "done", [f"{mail}4"]),
     ]
     items = []
     for title, kind, waiting, step, due, status, evidence in open_items:
@@ -1386,26 +1430,26 @@ def _care(vault: Path, c: _Clock) -> None:
                 "evidence": evidence,
             }
         )
-    report, bill, follow_up = (i["id"] for i in items[:3])
+    xray, bill, crown = (i["id"] for i in items[:3])
     scripts = [
         (
-            report,
+            xray,
             "portal_message",
-            "Portal message to Northside Clinic",
+            "Portal message to Lakeview Endodontics",
             (
-                f"Hello, could you send my MRI report from {c.said(-12)} to Riverside Physical Therapy "
-                f"before my intake there on {c.said(1)}? Their front desk takes records by email or "
-                "fax. Thank you, Tess Ray"
+                f"Hello, could you send the final X-ray from my root canal on {c.said(-12)} to "
+                f"Northside Dental before my crown fitting there on {c.said(1)}? Their front desk "
+                "takes records by email. Thank you, Joe Bloggs"
             ),
         ),
         (
             bill,
             "call",
-            "Call Lakeview Imaging billing",
+            "Call Lakeview Endodontics billing",
             (
-                "- I'm calling about a statement for an MRI on "
+                "- I'm calling about a statement for a root canal on "
                 f"{c.said(-12)}; the account number is on the statement.\n"
-                "- The statement asks for $1,240. Harbor Health Plan processed the claim on "
+                "- The statement asks for $1,240. Harbor Dental Plan processed the claim on "
                 f"{c.said(-5)} and says my share is $185.\n"
                 "- Could you apply the plan's adjustment and send a corrected statement?\n"
                 "- Until then, can the account be held so it doesn't go to collections?\n"
@@ -1413,33 +1457,35 @@ def _care(vault: Path, c: _Clock) -> None:
             ),
         ),
         (
-            follow_up,
-            "portal_message",
-            "Ask for a follow-up appointment",
+            crown,
+            "email",
+            "Email to Harbor Dental Plan",
             (
-                "Hello, I'd like to book a follow-up visit to go over my knee MRI. Mornings suit me "
-                "best, ideally after my first physical therapy session. Thank you, Tess Ray"
+                "Hello, Northside Dental sent you a pre-treatment estimate for a crown on my lower "
+                f"left molar, to be fitted on {c.said(1)}. Could you tell me whether it's covered, "
+                "and what my share would be? Thank you, Joe Bloggs"
             ),
         ),
     ]
-    brief = f"""# Visit brief: right knee
+    brief = f"""# Visit brief: crown fitting
 
-**Tess Ray** · follow-up after MRI · prepared {c.said(0)}
+**Joe Bloggs** · crown after a root canal · prepared {c.said(0)}
 
 ## What happened
-- {c.said(-38)}: right knee sore after an 18 km run, outside of the knee, worse on stairs.
-- {c.said(-30)}: primary care at Northside Clinic; MRI and physical therapy ordered.
-- {c.said(-12)}: MRI of the right knee at Lakeview Imaging. Report in the portal since
-  {c.said(-9)}.
-- {c.said(1)}: physical therapy intake at Riverside PT.
+- {c.said(-38)}: cracked a lower left molar biting an olive pit; sharp when biting.
+- {c.said(-30)}: exam and X-ray at Northside Dental; the crack reaches the nerve. Referred to
+  Lakeview Endodontics.
+- {c.said(-12)}: root canal at Lakeview Endodontics, with a temporary filling. Treatment summary
+  and final X-ray in their portal since {c.said(-9)}.
+- {c.said(1)}: crown fitting at Northside Dental.
 
 ## Since then
-- No running since {c.said(-33)}. Walking is fine; easy indoor cycling 2 to 3 times a week.
+- No pain since the root canal, a little tender to bite on. Chewing on the right side for now.
 
 ## Questions
-1. What does the MRI report mean for getting back to running?
-2. Is cycling fine in the meantime, and how hard?
-3. Does anything in the report change the physical therapy plan?
+1. Will the plan cover the crown, and what will be mine to pay?
+2. How long until I can chew on that side as usual?
+3. Does the temporary filling need anything before the crown goes on?
 """
     # Each record cited, by its memory id (its raw folder, then its own id), with when it's from.
     when = {
@@ -1461,12 +1507,13 @@ def _care(vault: Path, c: _Clock) -> None:
         {
             "generated": c.ago(7),
             "summary": (
-                f"Right-knee pain since a long run on {c.said(-38)} led to a primary care visit, "
-                "an MRI at Lakeview Imaging and a referral to physical therapy. The MRI report is "
-                "in the portal, and the clinic wants a follow-up visit to go over it. The "
-                f"physical therapy intake is {c.said(1)} at 9:30, and they'd like the report "
-                "first. Lakeview's bill asks for $1,240, while the plan's statement says $185 is "
-                "yours."
+                f"A lower left molar cracked on an olive pit on {c.said(-38)}. Northside Dental's "
+                "exam and X-ray led to a referral to Lakeview Endodontics, and after the dental "
+                f"plan's prior authorization the root canal was done on {c.said(-12)}. The tooth "
+                f"now needs a crown: the fitting is {c.said(1)} at 9:30 at Northside Dental, which "
+                "would like Lakeview's final X-ray first, and the plan hasn't said yet whether it "
+                "covers the crown. Lakeview's bill asks for $1,240, while the plan's statement "
+                "says $185 is yours."
             ),
             "timeline": events,
             "open_items": items,
@@ -1492,13 +1539,13 @@ def _advice(vault: Path, c: _Clock) -> None:
         (
             "routine",
             (
-                "Your runs were mornings; since the knee, your rides and walks have drifted to late "
-                "evenings, and on those days you message later at night."
+                "Your Sunday long rows haven't moved, but weekday ergs and paddles have thinned "
+                "from three a week to one, and the thin weeks are the ones with late review nights."
             ),
-            "Move two of the week's rides back to before work.",
-            "Mornings were when your training held up; evenings now push into sleep.",
+            "Put two weekday ergs in the calendar before work, like the Sunday row.",
+            "Sundays hold up because they're booked with the club; the weekday sessions slip.",
             "medium",
-            ["strava", "whatsapp"],
+            ["strava", "calendar"],
         ),
         (
             "work",
@@ -1571,17 +1618,17 @@ def _ideas(vault: Path, c: _Clock) -> None:
                     "id": key("project", "calibration"),
                     "title": "Open-source the cohort calibration notebook",
                     "pitch": "Turn the churn model's recalibration step into a small library.",
-                    "why_you": "You've done it once already, and the reading group wants it.",
+                    "why_you": "You've done it once already, and the forecasting guild wants it.",
                     "people": ["Kai Lund", "Hana Ito"],
                     "first_step": "Write the README with Kai's cohort definitions as the example.",
                 },
                 {
-                    "id": key("project", "pace"),
-                    "title": "A pace-group planner for the Sunday Runners",
-                    "pitch": "Suggest groups and routes from each runner's recent pace.",
+                    "id": key("project", "crews"),
+                    "title": "A crew planner for the Sunday Rowers",
+                    "pitch": "Suggest crews and boats from each rower's recent erg splits.",
                     "why_you": "You know the club and the data, and Gus plans it by hand.",
                     "people": ["Gus Hale", "Ivy Chen"],
-                    "first_step": "Ask Gus what makes the groups hard to plan.",
+                    "first_step": "Ask Gus what makes the crews hard to plan.",
                 },
             ],
             "outreach": [
@@ -1612,7 +1659,7 @@ def _drafts(vault: Path, c: _Clock) -> None:
     drafts = [
         {
             "id": "reply-cy-doe",
-            "title": "Reply to Cy about the stove and the 10k",
+            "title": "Reply to Cy about the stove and the head race",
             "kind": "reply",
             "for": "reply",
             "channel": "whatsapp",
@@ -1620,9 +1667,9 @@ def _drafts(vault: Path, c: _Clock) -> None:
             "created": c.ago(3),
             "status": "draft",
             "found": "",
-            "asks": ["Are you signing up for the November 10k?"],
+            "asks": ["Are you entering the November head race?"],
             "body": "Of course, it's yours for the trip! I'll drop it round on Thursday.\n\n"
-            "The 10k depends on what the physio says tomorrow. Tell Lia I'll know by Friday",
+            "The head race: probably! Tell Lia I'll enter by Friday",
         },
         {
             "id": "reply-ben-ode",
@@ -1636,7 +1683,7 @@ def _drafts(vault: Path, c: _Clock) -> None:
             "found": "",
             "asks": [],
             "body": "Hi Ben,\n\nYes, I'll add the calibration plot. The deck with the November "
-            "cohort on its own will be in the shared folder by Wednesday evening.\n\nTess",
+            "cohort on its own will be in the shared folder by Wednesday evening.\n\nJoe",
         },
         {
             "id": task_ids["Comment on Eli's Q4 planning doc"],
@@ -1653,22 +1700,22 @@ def _drafts(vault: Path, c: _Clock) -> None:
             "- **Forecasting.** One more person covers the weekly retrains the product teams "
             "keep asking for. Without them we keep saying no to about [N] requests a quarter.\n"
             "- **Cohorts.** Kai's new definitions should be in the plan's assumptions.\n"
-            "- **Timing.** Hiring in Q1 lines up with the offsite's roadmap.\n\nTess",
+            "- **Timing.** Hiring in Q1 lines up with the offsite's roadmap.\n\nJoe",
         },
         {
             "id": "care-portal-report",
-            "title": "Portal message: send the MRI report to Riverside PT",
+            "title": "Portal message: send the root canal X-ray to Northside Dental",
             "kind": "email",
             "for": "care",
             "channel": "other",
-            "to": "Northside Clinic",
+            "to": "Lakeview Endodontics",
             "created": c.ago(7),
             "status": "draft",
             "found": "",
             "asks": [],
-            "body": f"Hello, could you send my MRI report from {c.said(-12)} to Riverside "
-            f"Physical Therapy before my intake there on {c.said(1)}? Their front desk takes "
-            "records by email or fax.\n\nThank you,\nTess Ray",
+            "body": f"Hello, could you send the final X-ray from my root canal on {c.said(-12)} "
+            f"to Northside Dental before my crown fitting there on {c.said(1)}? Their front desk "
+            "takes records by email.\n\nThank you,\nJoe Bloggs",
         },
         {
             "id": task_ids["Book the back room at Fern Cafe for the club social"],
@@ -1697,7 +1744,7 @@ def _drafts(vault: Path, c: _Clock) -> None:
             "asks": [],
             "body": "Hi Wes, Fay mentioned the forecasting lead role on your team. Before we "
             "talk, I'd love to hear how you run forecasting today: what's in production, and "
-            "what you'd change first. Twenty minutes next week?\n\nTess",
+            "what you'd change first. Twenty minutes next week?\n\nJoe",
         },
         {
             "id": "reading-calibrated-churn",
@@ -1759,7 +1806,7 @@ def _drafts(vault: Path, c: _Clock) -> None:
         ("whatsapp", "Dee Fay", 0.97),
         ("email", "Ben Ode", 0.71),
         ("email", "Kai Lund", 0.84),
-        ("whatsapp", "Mei Ray", 0.79),
+        ("whatsapp", "Mei Bloggs", 0.79),
     ]
     by_source: dict[str, list[float]] = {}
     for source, _, closeness in measured:
@@ -1822,7 +1869,7 @@ def _errands(vault: Path, c: _Clock) -> None:
 
     fay = ADDRESS["Fay Moss"]
     cv = {
-        "name": "Tess_Ray_CV.pdf",
+        "name": "Joe_Bloggs_CV.pdf",
         "path": "",
         "made": c.at(-150, 12, 0),
         "where": "~/Documents",
@@ -1858,8 +1905,8 @@ def _errands(vault: Path, c: _Clock) -> None:
                 (
                     "Found your CV",
                     (
-                        f"Tess_Ray_CV.pdf, made {c.day(-150)}, from ~/Documents: the newest PDF named CV "
-                        "or resume with your name in it."
+                        f"Joe_Bloggs_CV.pdf, made {c.day(-150)}, from ~/Documents: the newest PDF "
+                        "named CV or resume with your name in it."
                     ),
                 ),
                 (
@@ -1892,7 +1939,7 @@ def _errands(vault: Path, c: _Clock) -> None:
                     "Hi Fay,\n\nThank you for your patience. I'd like to hear more about the "
                     "lead role on the forecasting team. My CV is attached; I lead the churn and "
                     "demand forecasting work at Acme Labs.\n\nWould a call next week suit you?"
-                    "\n\nBest,\nTess",
+                    "\n\nBest,\nJoe",
                     evidence=f"they wrote from it ({c.day(-16)}, “Data science lead role at "
                     "Beta Corp”)",
                     attach=True,
@@ -1943,7 +1990,7 @@ def _errands(vault: Path, c: _Clock) -> None:
                     "A talk for the forecasting meetup",
                     "Hi Omar,\n\nUma Rao mentioned you run the meetup's speaker list. I'd be glad "
                     "to give a talk on calibrating churn forecasts when cohorts shift: what broke "
-                    "for us at Acme Labs and the small fix that held up.\n\nTess",
+                    "for us at Acme Labs and the small fix that held up.\n\nJoe",
                 ),
                 message(
                     "intro",
@@ -1952,7 +1999,7 @@ def _errands(vault: Path, c: _Clock) -> None:
                     "An introduction to Omar?",
                     "Hi Uma,\n\nYou mentioned Omar runs the speaker list for the meetup. Would "
                     "you introduce us? I'd like to offer a talk on churn calibration.\n\n"
-                    "Thanks!\nTess",
+                    "Thanks!\nJoe",
                     evidence=f"they wrote from it ({c.day(-40)}, “Slides from the meetup”)",
                 ),
             ],
@@ -1990,7 +2037,7 @@ def _errands(vault: Path, c: _Clock) -> None:
                 ADDRESS["Kai Lund"],
                 "Cohort rerun notebook",
                 "Hi Kai,\n\nHere's the notebook for the rerun on your new cohort definitions. "
-                "The November numbers are in the last cell.\n\nThanks,\nTess",
+                "The November numbers are in the last cell.\n\nThanks,\nJoe",
                 state="sent",
                 sent_at=c.ago(51),
             )
