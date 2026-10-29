@@ -74,9 +74,17 @@ def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
     assert result["ok"], result
     assert result["status"]["needed"] is False
     assert result["status"]["settings"]["name"] == {"value": "Ana Lee", "from": "settings"}
-    assert result["status"]["vault"] == {"path": "~/Records", "exists": True, "cloud": None}
+    shown = result["status"]["vault"]
+    assert {**shown, "path": Path(shown["path"])} == {
+        "path": Path("~/Records"),
+        "exists": True,
+        "cloud": None,
+    }
     assert os.name == "nt" or stat.S_IMODE((home / "Records").stat().st_mode) == 0o700
-    assert json.loads(config.SETTINGS_FILE.read_text()) == {"name": "Ana Lee", "vault": "~/Records"}
+    saved = json.loads(config.SETTINGS_FILE.read_text())
+    assert (
+        saved["name"] == "Ana Lee" and Path(saved["vault"]) == Path("~/Records") and len(saved) == 2
+    )
 
 
 @pytest.mark.parametrize(
