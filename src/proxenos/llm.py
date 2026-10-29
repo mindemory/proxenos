@@ -29,6 +29,7 @@ _OLLAMA = "http://127.0.0.1:11434"
 # what a 32 GB Mac holds beside the model. A prompt past it fails rather than being cut.
 LOCAL_CONTEXT = 65536
 _LOCAL_TIMEOUT = 900  # seconds; a long answer on a laptop takes minutes, not hours
+_JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON schema:"
 
 _client: anthropic.Anthropic | None = None
 
@@ -90,21 +91,37 @@ def configured() -> bool:
 def _ask_local(
     model: str, prompt: str, system: str | None, schema: dict | None, effort: str, max_tokens: int
 ) -> str | dict:
-    """`ask`, answered by a model on this Mac through Ollama's API."""
+    """`ask`, answered by a model on this Mac through Ollama's API. Ollama can't hold every
+    model to a schema, so a schema goes in the system prompt and the answer is checked here,
+    with one more try when it isn't the JSON asked for."""
     answer_room = min(max_tokens, LOCAL_CONTEXT // 4)
+    if schema is not None:
+        system = f"{system or ''}\n\n{_JSON_ONLY}\n{json.dumps(schema)}".strip()
     if (len(prompt) + len(system or "")) // 3 > LOCAL_CONTEXT - answer_room:  # ~3 chars a token
         raise ModelError(f"prompt too long for the local model's {LOCAL_CONTEXT}-token context")
     messages = [{"role": "system", "content": system}] if system else []
-    body: dict = {
+    body = {
         "model": model,
         "messages": [*messages, {"role": "user", "content": prompt}],
         "stream": False,
+        # Thinking first is for the hard jobs; a draft doesn't need it and is ten times faster.
+        "think": effort in ("high", "xhigh", "max"),
         "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
     }
-    if effort in ("high", "xhigh", "max"):
-        body["think"] = True
-    if schema is not None:
-        body["format"] = schema
+    for _ in range(2):
+        text = _chat(model, body, answer_room)
+        if schema is None:
+            return text
+        try:
+            answer = json.loads(text[text.index("{") : text.rindex("}") + 1])
+        except ValueError:
+            continue
+        if isinstance(answer, dict) and set(schema.get("required", [])) <= set(answer):
+            return answer
+    raise ModelError(f"local model {model} didn't answer with the JSON asked for")
+
+
+def _chat(model: str, body: dict, answer_room: int) -> str:
     request = urllib.request.Request(
         f"{_OLLAMA}/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"}
     )
@@ -117,8 +134,7 @@ def _ask_local(
         raise ModelError(f"the local model isn't answering ({e}); is Ollama running?") from e
     if answer.get("done_reason") == "length":
         raise ModelError(f"answer cut off at {answer_room} tokens")
-    text = answer["message"]["content"]
-    return json.loads(text) if schema is not None else text
+    return answer["message"]["content"]
 
 
 def _get_client() -> anthropic.Anthropic:

@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -174,8 +175,9 @@ def work(
         try:
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
             draft = _draft(job, answer, now)
-        except Exception:  # noqa: BLE001 - one failed draft must not cost the others
+        except Exception as e:  # noqa: BLE001 - one failed draft must not cost the others
             failed += 1
+            print(f"work: {job['id']} failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
             continue
         found = existing.get(job["id"])
         _write(found[0] if found else out / f"{job['id']}.md", render(draft))

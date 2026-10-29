@@ -81,17 +81,27 @@ def local(monkeypatch, answer):
 
 
 def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
-    sent = local(monkeypatch, {"message": {"content": '{"x": 1}'}, "done_reason": "stop"})
+    fenced = '```json\n{"x": 1}\n```'
+    sent = local(monkeypatch, {"message": {"content": fenced}, "done_reason": "stop"})
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("called the API"))
+    schema = {"type": "object", "required": ["x"]}
 
-    assert llm.ask("hi", system="sys", schema={"type": "object"}, effort="high") == {"x": 1}
+    assert llm.ask("hi", system="sys", schema=schema, effort="high") == {"x": 1}
 
     url, body = sent[0]
     assert url == "http://127.0.0.1:11434/api/chat"
-    assert body["model"] == "gemma4:26b"
-    assert [m["role"] for m in body["messages"]] == ["system", "user"]
-    assert body["format"] == {"type": "object"} and body["think"] is True
+    assert body["model"] == "gemma4:26b" and body["think"] is True
+    system, user = body["messages"]
+    assert user == {"role": "user", "content": "hi"}
+    assert system["content"].startswith("sys") and '"required": ["x"]' in system["content"]
     assert llm.configured()  # a local model needs no key
+
+
+def test_a_local_answer_that_isnt_the_json_asked_for_is_tried_again_then_fails(monkeypatch):
+    sent = local(monkeypatch, {"message": {"content": '{"y": 1}'}, "done_reason": "stop"})
+    with pytest.raises(llm.ModelError, match="JSON asked for"):
+        llm.ask("hi", schema={"type": "object", "required": ["x"]})
+    assert len(sent) == 2 and sent[0][1]["think"] is False
 
 
 def test_a_local_prompt_too_long_or_answer_cut_off_fails_rather_than_truncates(monkeypatch):
