@@ -431,7 +431,12 @@ def _research(vault: Path, chat: dict, brief: str, person: str) -> str:
     who = research.person(vault, chat["name"], person, chat=(chat["source"], chat["name"]))
     found, _ = research.matter(vault, brief, person, llm.ask, who=chat["name"])
     parts = [
-        p for p in (who, found and f"What {person}'s memory shows on this chat:\n{found}") if p
+        p
+        for p in (
+            who,
+            found and f"What {person}'s memory holds that this chat depends on:\n{found}",
+        )
+        if p
     ]
     return "\n\n" + "\n\n".join(parts) if parts else ""
 

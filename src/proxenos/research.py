@@ -4,8 +4,10 @@ Two things. The person: the network clone's note on who they are to the user, an
 records that name them on any channel (a LinkedIn reply also sees the WhatsApp chat with the
 same person). The matter: the model reads the chat and asks for what to look up (a paper's
 deadline, what a collaborator already did, what was promised), and each search runs on the
-memory index, for up to ROUNDS rounds, each seeing what the last one found. Both come back as
-text for the drafting prompt. Nothing here writes anything; the index is read-only.
+memory indexes, by meaning and by words, for up to ROUNDS rounds, each seeing what the last one
+found. Then the model keeps, of everything found, only what the reply depends on, so near misses
+don't drown the record that matters. Both come back as text for the drafting prompt. Nothing
+here writes anything; the indexes are read-only.
 """
 
 import json
@@ -31,6 +33,19 @@ of a project, what was already done or promised, earlier decisions, the history 
 person. Each search is 1 to 4 keywords, the words that would appear in the record (a journal \
 name, a project name, a person's name, "deadline", "resubmission"), not a sentence. Ask for \
 nothing when the chat needs nothing beyond itself or what was already found."""
+
+_GATE_SYSTEM = """\
+You check what was found in {person}'s memory before their reply to a chat is drafted. Keep \
+the records the reply depends on: the facts, dates, deadlines, earlier decisions and history \
+it should get right. Leave out near misses: records that share words with the chat but are \
+about something else. Return the numbers of the records to keep, or none."""
+
+_GATE_SCHEMA = {
+    "type": "object",
+    "properties": {"keep": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["keep"],
+    "additionalProperties": False,
+}
 
 _PLAN_SCHEMA = {
     "type": "object",
@@ -69,9 +84,11 @@ def person(vault: Path, name: str, me: str, chat: tuple[str, str] | None = None)
 def matter(
     vault: Path, brief: str, person_name: str, ask: Callable[..., object], who: str | None = None
 ) -> tuple[str, list[str]]:
-    """What the model chose to look up for this chat, and what it found: (text, searches).
-    `who` is the person the chat is with, whose own records are searched too."""
+    """What the model chose to look up for this chat, and of what it found, what the reply
+    depends on: (text, searches). `who` is the person the chat is with, whose own records are
+    searched too."""
     found: list[str] = []
+    hits: dict[str, dict] = {}  # every record found, once, in the order found
     searched: list[str] = []
     for _ in range(ROUNDS):
         so_far = "\n\n".join(found) or "Nothing yet."
@@ -91,9 +108,33 @@ def matter(
             break
         for query in queries:
             searched.append(query)
-            lines = "\n".join(_line(h, person_name) for h in _search(vault, query, who))
+            results = _search(vault, query, who)
+            hits.update((h["id"], h) for h in results if h["id"] not in hits)
+            lines = "\n".join(_line(h, person_name) for h in results)
             found.append(f'Search "{query}":\n{lines or "nothing found."}')
-    return "\n\n".join(found), searched
+    kept = _gate(brief, list(hits.values()), person_name, ask)
+    return "\n".join(_line(h, person_name) for h in kept), searched
+
+
+def _gate(brief: str, hits: list[dict], person_name: str, ask: Callable[..., object]) -> list[dict]:
+    """Of the records found, the ones the reply depends on, as the model judges them against
+    the chat: near misses are left out, so they don't drown the one that matters. All of them
+    when the model can't say."""
+    if not hits:
+        return []
+    numbered = "\n".join(f"{i}. {_line(h, person_name)}" for i, h in enumerate(hits, 1))
+    try:
+        answer = ask(
+            f"{brief}\n\nRecords found in their memory:\n{numbered}\n\n"
+            "Which of these does the reply depend on?",
+            system=_GATE_SYSTEM.format(person=person_name),
+            schema=_GATE_SCHEMA,
+            effort="medium",
+        )
+    except llm.ModelError:
+        return hits
+    keep = {i for i in answer.get("keep", []) if isinstance(i, int) and 1 <= i <= len(hits)}
+    return [h for i, h in enumerate(hits, 1) if i in keep]
 
 
 def _search(vault: Path, query: str, who: str | None) -> list[dict]:

@@ -20,6 +20,7 @@ class FakeModel:
     def __init__(self):
         self.calls = []
         self.plans = []  # a reply's research rounds: what to look up
+        self.gated = []  # what research found, put to the model to keep or leave out
         self.searches = []  # what those rounds ask for, the first round's first
         self.fail_on = set()  # words that make a call fail
 
@@ -27,6 +28,9 @@ class FakeModel:
         if schema and "searches" in schema["properties"]:
             self.plans.append(prompt)
             return {"searches": self.searches if len(self.plans) == 1 else []}
+        if schema and "keep" in schema["properties"]:
+            self.gated.append(prompt)
+            return {"keep": list(range(1, 100))}
         self.calls.append({"prompt": prompt, "system": system, "schema": schema, "effort": effort})
         if any(word in prompt for word in self.fail_on):
             raise llm.ModelError("model declined")
@@ -574,7 +578,7 @@ def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_
     assert len(model.plans) == 2  # a round that searched, then one that asked for nothing
     prompt = model.calls[0]["prompt"]
     assert "- relation: close friend" in prompt and "happy valentines!" in prompt
-    assert 'Search "retreat friday":' in prompt and "Hall B" in prompt
+    assert "Hall B" in prompt and len(model.gated) == 1
     assert "okiees see you thurs" not in prompt.split("elsewhere")[1]  # this chat isn't repeated
 
 
