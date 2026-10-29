@@ -186,8 +186,10 @@ def _make_vault(typed: str) -> str:
     """The vault as it's saved, once its folder is there: under your home as ~/..., else whole."""
     if not typed:
         return ""
-    if not typed.startswith(("~", "/")):
-        raise ValueError("Give the vault's whole path, starting with ~/ or /.")
+    if not (typed.startswith(("~", "/")) or Path(typed).is_absolute()):
+        raise ValueError(
+            "Give the vault's whole path, starting with ~/ or / (or a drive, like C:\\)."
+        )
     vault = Path(typed).expanduser().resolve()
     if vault.is_relative_to(config.REPO_ROOT):
         raise ValueError("The vault can't be inside Proxenos's own folder, which is public.")

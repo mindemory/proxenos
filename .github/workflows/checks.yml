@@ -17,6 +17,8 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"  # how the app and the scheduler run Python, so files read as UTF-8 on Windows too
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

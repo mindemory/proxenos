@@ -198,4 +198,4 @@ def _record(meta: bytes, raw: bytes, name: str, me: set[str]) -> dict | None:
 
 def _save(path: Path, validity: int, last: int) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.write_text(json.dumps({"uidvalidity": validity, "last_uid": last}))
+    path.write_text(json.dumps({"uidvalidity": validity, "last_uid": last}), encoding="utf-8")

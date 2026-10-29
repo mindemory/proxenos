@@ -216,6 +216,7 @@ class Runner:
         variables = config.environment()
         variables["PROXENOS_VAULT"] = str(vault)
         variables["PYTHONUNBUFFERED"] = "1"  # the log in the order things happened
+        variables["PYTHONUTF8"] = "1"  # files read as UTF-8 even on Windows, as from 3.15 anyway
         if config.FROM_SOURCE:  # this checkout's code, even when the install points at another
             paths = (str(config.REPO_ROOT / "src"), variables.get("PYTHONPATH", ""))
             variables["PYTHONPATH"] = os.pathsep.join(p for p in paths if p)

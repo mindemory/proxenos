@@ -624,7 +624,11 @@ def _load_seen(path: Path, now: datetime) -> dict[str, str]:
     if not path.exists():
         return {}
     cutoff = _iso(now - SEEN_WINDOW)
-    return {k: batch for k, batch in json.loads(path.read_text()).items() if batch >= cutoff}
+    return {
+        k: batch
+        for k, batch in json.loads(path.read_text(encoding="utf-8")).items()
+        if batch >= cutoff
+    }
 
 
 def _save_seen(path: Path, seen: dict[str, str]) -> None:

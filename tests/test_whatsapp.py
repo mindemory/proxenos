@@ -187,7 +187,7 @@ def test_a_store_that_cant_be_read_says_what_to_do(tmp_path):
     args.db = make_db(tmp_path / "store.sqlite", BASE)
     args.db.chmod(0)
     try:
-        if os.geteuid() != 0:  # root reads any file
+        if os.name != "nt" and os.geteuid() != 0:  # root reads any file; Windows has no modes
             with pytest.raises(SystemExit, match="Full Disk Access"):
                 whatsapp.run(tmp_path / "vault", args)
     finally:

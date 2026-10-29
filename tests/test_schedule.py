@@ -598,6 +598,7 @@ def test_a_job_is_python_m_proxenos_in_its_own_group_with_its_output_in_the_log(
     assert child.poll() is None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups; Windows uses CTRL_BREAK")
 def test_a_stop_reaches_the_jobs_whole_group_as_ctrl_c(monkeypatch):
     sent = []
     monkeypatch.setattr(schedule.os, "killpg", lambda pid, sig: sent.append((pid, sig)))

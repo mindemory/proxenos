@@ -449,7 +449,7 @@ def slack(
     from proxenos.ingest.slack import tokens
 
     call = call or _slack_call
-    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     saved = skipped = 0
     for name, token in tokens().items():
         body, scopes = call("auth.test", token, {})
@@ -475,7 +475,7 @@ def slack(
                 continue
             state[name] = {"app_id": created["app_id"], "team": team}
             state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            state_path.write_text(json.dumps(state, indent=1))
+            state_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
 
         print(
             f"\n{team}: opening the reader app. Click 'Install to {team}', then Allow, "

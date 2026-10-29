@@ -120,7 +120,10 @@ def test_the_command_says_how_to_open_the_page_on_it(tmp_path, capsys):
     cli.main(["demo", str(tmp_path / "demo")])
 
     out = capsys.readouterr().out
-    assert f"PROXENOS_VAULT={tmp_path / 'demo'} " in out
+    if os.name == "nt":
+        assert f'$env:PROXENOS_VAULT="{tmp_path / "demo"}"' in out
+    else:
+        assert f"PROXENOS_VAULT={tmp_path / 'demo'} " in out
     assert f"proxenos web --port {demo.PORT}" in out
     assert demo.PORT != webapp.PORT
 

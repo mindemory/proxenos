@@ -237,7 +237,18 @@ def _commit(vault: Path, message: str) -> None:
         (vault / ".gitignore").write_text("/*\n!/.gitignore\n!/self/\n!/observations/\n")
     git("add", "-A")
     if git("diff", "--cached", "--quiet").returncode:
-        git("commit", "-q", "-m", message)
+        # Commit as you when git knows who you are, else as Proxenos: this history never leaves
+        # the vault, and a computer with no git identity set (most people's) would refuse.
+        known = git("config", "user.email").returncode == 0
+        identity = (
+            [] if known else ["-c", "user.name=Proxenos", "-c", "user.email=proxenos@localhost"]
+        )
+        subprocess.run(
+            ["git", "-C", str(vault), *identity, "commit", "-q", "-m", message],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
 
 _SCHEMA = {

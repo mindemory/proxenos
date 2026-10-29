@@ -85,6 +85,8 @@ def fake_keychain(monkeypatch):
     fake = FakeSecurity()
     monkeypatch.setattr("proxenos.keychain._security", fake)
     monkeypatch.setattr("proxenos.keychain.available", lambda: True)
+    # The Mac's store on every platform, unless a test pins another (tests/test_keychain.py).
+    monkeypatch.setattr("proxenos.keychain._platform", lambda: "darwin")
     return fake
 
 

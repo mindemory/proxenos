@@ -40,24 +40,29 @@ class KeychainError(RuntimeError):
     pass
 
 
+def _platform() -> str:
+    """The platform whose store is used: sys.platform, in one place so tests can pin it."""
+    return sys.platform
+
+
 def store() -> str:
     """This computer's secure store, as messages name it after "the"."""
-    if sys.platform == "darwin":
+    if _platform() == "darwin":
         return "Keychain"
-    return "Credential Manager" if sys.platform == "win32" else "Secret Service"
+    return "Credential Manager" if _platform() == "win32" else "Secret Service"
 
 
 def available() -> bool:
     """Whether secrets can be kept here: on a Mac, whether there's `security`; elsewhere, whether
     keyring is installed and its store answers."""
-    if sys.platform == "darwin":
+    if _platform() == "darwin":
         return shutil.which("security") is not None
     return _keyring() is not None
 
 
 def get(name: str) -> str | None:
     """The secret saved as `name`, or None when there's no such item."""
-    if sys.platform != "darwin":
+    if _platform() != "darwin":
         return _in_store("give", _checked(name), lambda kept: kept.get_password(SERVICE, name))
     found = _security(["find-generic-password", "-s", SERVICE, "-a", _checked(name), "-w"])
     if found.returncode == _NOT_FOUND:
@@ -71,7 +76,7 @@ def put(name: str, value: str) -> None:
     """Save `value` as `name`, replacing what was there."""
     if not value or "\0" in value:
         raise KeychainError(f"nothing to save as {name}")
-    if sys.platform != "darwin":
+    if _platform() != "darwin":
         _in_store(
             "save", _checked(name), lambda kept: kept.set_password(SERVICE, name, value), value
         )
@@ -91,7 +96,7 @@ def put(name: str, value: str) -> None:
 
 def delete(name: str) -> bool:
     """Remove the item for `name`. Whether there was one."""
-    if sys.platform != "darwin":
+    if _platform() != "darwin":
 
         def removed(kept) -> bool:
             # Each backend says "not there" with an error of its own, so look first.
@@ -132,7 +137,7 @@ def _security(args: list[str], stdin: str | None = None) -> subprocess.Completed
 def _keyring():
     """keyring's backend for this platform's store, or None when it can't be used here: keyring
     isn't installed, or the store doesn't answer (no Secret Service running, say)."""
-    module, backend = _BACKENDS.get(sys.platform, _SECRET_SERVICE)
+    module, backend = _BACKENDS.get(_platform(), _SECRET_SERVICE)
     try:
         found = getattr(importlib.import_module(module), backend)
         return found() if found.viable else None

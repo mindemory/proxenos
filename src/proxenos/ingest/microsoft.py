@@ -565,4 +565,4 @@ def _parse(value: object) -> datetime | None:
 
 def _save(path: Path, state: dict) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.write_text(json.dumps(state))
+    path.write_text(json.dumps(state), encoding="utf-8")

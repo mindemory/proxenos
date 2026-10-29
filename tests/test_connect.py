@@ -156,7 +156,9 @@ def test_mail_beeper_slack_and_the_phone_say_what_they_need(tmp_path, monkeypatc
     report = connect.report(tmp_path, store(tmp_path))
     sources = by_id(report)
     assert sources["beeper"]["problem"] == "no_token" and not sources["beeper"]["connected"]
-    assert sources["applemail"]["detail"].endswith(("python", "python3", "python3.12"))
+    assert sources["applemail"]["detail"].endswith(
+        ("python", "python3", "python3.12", "python.exe")
+    )
     assert sources["slack"]["connected"] and sources["slack"]["workspaces"] == ["acme"]
     assert report["phone"] == {"address": None, "login": None}
 

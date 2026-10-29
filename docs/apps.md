@@ -26,6 +26,7 @@ Before any app ships, make the core platform-neutral, so the Mac and Windows app
 - Paths from the platform's app-data folder, not `~/proxenos_vault` assumptions.
 - The nightly run and the 15-minute sync run by the app instead of launchd. *Built:* `proxenos schedule`, below.
 - Tests on GitHub's Windows machines as well as macOS.
+- Python in UTF-8 mode (`PYTHONUTF8=1`) on Windows, where its default encoding is still the old code page: the scheduler sets it for every job, and anyone running from source there should set it too. It becomes the default in Python 3.15.
 
 ### 2. The Mac app (a few weeks after 1)
 

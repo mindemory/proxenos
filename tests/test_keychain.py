@@ -23,6 +23,7 @@ def real_available(monkeypatch):
 
 def on(monkeypatch, platform):
     monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(keychain, "_platform", lambda: platform)
 
 
 def test_on_a_mac_only_security_is_used(monkeypatch, real_available, fake_keychain, fake_keyring):

@@ -73,7 +73,7 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 
 def _access_token(state_path: Path, fetch: Fetch) -> str:
     client_id, client_secret, env_token = (os.environ.get(name) or None for name in ENV_VARS)
-    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     # The saved token descends from one STRAVA_REFRESH_TOKEN, remembered by its hash. A new
     # env value means the user re-authorized (say, for a wider scope), so it wins.
     seed = _sha256(env_token) if env_token else state.get("env_token_sha256")

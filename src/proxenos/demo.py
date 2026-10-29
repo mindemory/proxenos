@@ -72,6 +72,19 @@ BILLING = ("Juniper Optical Billing", "billing@juniperoptical.example")
 PLAN = ("Brightline Vision Plan", "claims@brightlinevision.example")
 
 
+def _open_command(vault: Path) -> str:
+    """The command that opens the page on the demo, in PowerShell on Windows, else a POSIX shell."""
+    if os.name == "nt":
+        return (
+            f'$env:PROXENOS_VAULT="{vault}"; $env:PROXENOS_NAME="{NAME}"; '
+            f"proxenos web --port {PORT}"
+        )
+    return (
+        f"PROXENOS_VAULT={shlex.quote(str(vault))} PROXENOS_NAME={shlex.quote(NAME)} "
+        f"proxenos web --port {PORT}"
+    )
+
+
 def run(path: Path | None, now: datetime | None = None) -> str:
     """Build the demo at `path`, or in a new temporary folder, and say how to open it."""
     vault = Path(path).expanduser() if path else Path(tempfile.mkdtemp(prefix="proxenos-demo-"))
@@ -81,8 +94,7 @@ def run(path: Path | None, now: datetime | None = None) -> str:
         f"demo: a made-up vault for {NAME} is at {vault} ({stats['records']} records, "
         f"{stats['people']} people).\n"
         f"Open the page on it, on port {PORT} so it can run beside your own:\n\n"
-        f"  PROXENOS_VAULT={shlex.quote(str(vault))} PROXENOS_NAME={shlex.quote(NAME)} "
-        f"proxenos web --port {PORT}\n\n"
+        f"  {_open_command(vault)}\n\n"
         "Nothing is sent from it. Delete the folder when you're done."
     )
 

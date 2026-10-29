@@ -283,7 +283,7 @@ def test_takeout_unpacks_everything_but_photo_and_video_files(tmp_path):
     )
     dest = tmp_path / "exports" / "takeout-x"
     importer._unpack(archive, dest)
-    kept = sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file())
+    kept = sorted(p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file())
     assert [k for k in kept if not k.startswith(".")] == [
         "Takeout/Drive/Thesis.docx",
         "Takeout/Google Photos/a.jpg.json",
