@@ -97,6 +97,7 @@ MAX_AUTHORS = 15  # a citing paper with more authors keeps its first five and it
 GRAPH_PEOPLE = 600  # people the graph connects
 GRAPH_EDGES = 4000  # connections kept, strongest first
 MAX_ORG = 40  # an organization with more people in the index than this connects no one
+MAX_GROUP = 50  # nor does a chat, channel or other group of more people than this
 EDGE_CONTEXTS = 5  # shared contexts named on an edge
 MIN_EVENT, MAX_EVENT = 2, 15  # guests, the user included, at a meeting that makes a group
 CONTEXT_GROUP = 80  # a first name alone is placed only through groups this small
@@ -1836,9 +1837,13 @@ def connections(
 
 
 def _pairs(groups: list[dict]) -> tuple[dict[tuple[str, str], list[dict]], dict]:
-    """Every pair of members who share a group: the groups, and the tie they make."""
+    """Every pair of members who share a group: the groups, and the tie they make. A group of
+    more than MAX_GROUP people makes none: being in one community chat of hundreds says nothing
+    about who knows whom, and its thousands of pairs would outweigh every small circle."""
     shared: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for group in groups:
+        if (group.get("size") or len(group["members"])) > MAX_GROUP:
+            continue
         for pair in itertools.combinations(sorted(group["members"]), 2):
             shared[pair].append(group)
     weight = {pair: sum(closeness(g["size"]) for g in found) for pair, found in shared.items()}
@@ -1849,7 +1854,8 @@ def clusters(groups: list[dict], core: list[dict]) -> tuple[dict[str, int], list
     """Communities among the people in core: Louvain on every pair that shares a group,
     weighted as edges are (all of them, not only the edges kept). Each community of MIN_CLUSTER
     or more gets an id, biggest first, and a label: the name of the group most of its people are in,
-    named groups before unnamed ones, and no label twice. People with no tie are in none."""
+    named groups before unnamed ones and chats and channels before email subjects, none of more
+    than MAX_GROUP people, and no label twice. People with no tie are in none."""
     _, weight = _pairs(groups)
     community = _louvain(sorted({p["id"] for p in core}), weight)
     members: dict[str, list[str]] = defaultdict(list)
@@ -1869,10 +1875,13 @@ def clusters(groups: list[dict], core: list[dict]) -> tuple[dict[str, int], list
 def _cluster_label(people: set[str], groups: list[dict], used: set[str]) -> str | None:
     ranked = []
     for g in groups:
+        if (g.get("size") or len(g["members"])) > MAX_GROUP:
+            continue  # too big to say what a circle is
         inside = len(people.intersection(g["members"]))
         if inside >= 2:
             named = g["name"] != _GROUP_KINDS[g["kind"]][1]
-            ranked.append((named, inside, inside / len(g["members"]), -g["size"], g["name"]))
+            chat = g["kind"] in _GROUP_SOURCES  # a group's own name says more than a subject line
+            ranked.append((named, chat, inside, inside / len(g["members"]), -g["size"], g["name"]))
     ranked.sort(reverse=True)
     for *_, name in ranked:
         if name not in used:

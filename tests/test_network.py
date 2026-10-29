@@ -1454,3 +1454,23 @@ def test_louvain_finds_two_cliques_joined_by_one_tie():
     assert len({found[n] for n in a}) == len({found[n] for n in b}) == 1
     assert found["a1"] != found["b1"]
     assert found["loner"] == "loner"
+
+
+def test_a_group_of_hundreds_ties_no_one_and_names_no_cluster():
+    def group(name, members, size=None):
+        return {
+            "id": name,
+            "kind": "whatsapp_group",
+            "name": name,
+            "members": members,
+            "size": size or len(members),
+        }
+
+    lab, flat = [f"l{i}" for i in range(4)], [f"f{i}" for i in range(4)]
+    groups = [group("Lab", lab), group("Flat", flat), group("City badminton", lab + flat, size=700)]
+    core = [{"id": p} for p in lab + flat]
+
+    found, named = network.clusters(groups, core)
+
+    assert found["l0"] != found["f0"]  # the big group didn't make one circle of both
+    assert {c["label"] for c in named} == {"Lab", "Flat"}
