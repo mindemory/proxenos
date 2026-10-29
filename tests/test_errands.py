@@ -23,11 +23,11 @@ def mail(n, **fields):
     return {
         "id": f"m{n}",
         "ts": f"2026-09-{n:02d}T10:00:00Z",
-        "account": "tess",
-        "from_address": "tess@x.org",
-        "from_name": "Tess Ray",
+        "account": "joe",
+        "from_address": "joe@x.org",
+        "from_name": "Joe Bloggs",
         "from_me": False,
-        "to": ["tess@x.org"],
+        "to": ["joe@x.org"],
         "cc": None,
         "subject": "Hello",
         "in_reply_to": None,
@@ -38,12 +38,12 @@ def mail(n, **fields):
 
 @pytest.fixture
 def vault(tmp_path, monkeypatch):
-    monkeypatch.setenv("PROXENOS_NAME", "Tess Ray")
-    monkeypatch.setenv("PROXENOS_EMAILS", "tess@x.org")
+    monkeypatch.setenv("PROXENOS_NAME", "Joe Bloggs")
+    monkeypatch.setenv("PROXENOS_EMAILS", "joe@x.org")
     v = tmp_path / "vault"
     write_month(
         v,
-        "email/tess",
+        "email/joe",
         "2026-09",
         [
             mail(1, from_address="ana.lee@acme.org", from_name="Ana Lee", subject="The data"),
@@ -58,7 +58,7 @@ def vault(tmp_path, monkeypatch):
                 from_me=True,
                 to=["hiring@beta.com"],
                 subject="Interest in the Beta role",
-                attachments=["TessRayCV.pdf"],
+                attachments=["JoeBloggsCV.pdf"],
                 body_new="Dear team, I'm interested in the open role. My CV is attached.",
             ),
             mail(
@@ -66,7 +66,7 @@ def vault(tmp_path, monkeypatch):
                 from_me=True,
                 to=["office@school.edu"],
                 subject="Signed forms",
-                attachments=["forms.pdf", "Tess_Ray_CV.pdf"],
+                attachments=["forms.pdf", "Joe_Bloggs_CV.pdf"],
                 body_new="Here are the forms.",
             ),
         ],
@@ -121,14 +121,14 @@ def vault(tmp_path, monkeypatch):
         errands,
         "find_cv",
         lambda person, roots=None: {
-            "name": "TessRayCV.pdf",
-            "path": str(tmp_path / "TessRayCV.pdf"),
+            "name": "JoeBloggsCV.pdf",
+            "path": str(tmp_path / "JoeBloggsCV.pdf"),
             "made": "2026-09-01T00:00:00Z",
             "where": "~/Documents",
-            "text": "Tess Ray. Expected graduation May 2026.",
+            "text": "Joe Bloggs. Operations manager since 2022; CV updated 2026.",
         },
     )
-    (tmp_path / "TessRayCV.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "JoeBloggsCV.pdf").write_bytes(b"%PDF-1.4")
     return v
 
 
@@ -150,9 +150,9 @@ class Model:
         return {
             "who": "",
             "subject": '""' if self.intro_to else "The open role at Acme",
-            "body": f"Hi {self.person.split()[0]},\n\nI'm writing about the open role.\n\nTess",
+            "body": f"Hi {self.person.split()[0]},\n\nI'm writing about the open role.\n\nJoe",
             "cv_notes": [
-                {"says": "Expected graduation May 2026", "now": "Graduated May 2026"},
+                {"says": "Operations manager since 2022", "now": "Operations manager, 2022 to now"},
                 {"says": "Analyst, Acme", "now": "Analyst, Acme."},  # nothing changed: left out
                 {"says": "BA, May 2021", "now": "BA (completed May 2021)"},  # only added to
                 "not a pair",
@@ -189,8 +189,8 @@ def test_the_pattern_is_the_users_reach_outs_with_a_cv_not_any_mail_with_one(vau
 
 def test_a_cv_is_known_by_its_name_and_dated_by_what_it_says(tmp_path):
     names = [
-        "TessRayCV.pdf",
-        "Tess_Ray_CV.pdf",
+        "JoeBloggsCV.pdf",
+        "Joe_Bloggs_CV.pdf",
         "resume (1).pdf",
         "cv.pdf",
         "CVPR2024.pdf",
@@ -237,15 +237,15 @@ def test_an_errand_goes_as_far_as_it_can_and_stops_one_tap_short(vault):
         "Stopped one tap short",
     ]
     assert errand["summary"].startswith(
-        "Ready to send to Ana Lee at ana.lee@acme.org, with TessRayCV"
+        "Ready to send to Ana Lee at ana.lee@acme.org, with JoeBloggsCV"
     )
     assert errand["cv"]["notes"] == [
-        "It says “Expected graduation May 2026”; now: Graduated May 2026"
+        "It says “Operations manager since 2022”; now: Operations manager, 2022 to now"
     ]
     assert [c["effort"] for c in model.calls] == ["low", "medium"]
     prompt = model.calls[1]["prompt"]
     assert "ana.lee@acme.org" in prompt and "Interest in the Beta role" in prompt
-    assert "Expected graduation May 2026" in prompt
+    assert "Operations manager since 2022" in prompt
     saved = errands.load(vault, errand["id"])
     assert saved["status"] == "ready" and saved["summary"] == errand["summary"]
     assert not (vault / "state" / "asking").exists()  # the foreground mark is gone again
@@ -314,7 +314,7 @@ def test_send_sends_that_one_message_as_edited_and_only_once(vault):
         "cy@acme.org",
         "The role",
         "Hi Cy, the role.",
-        "TessRayCV.pdf",
+        "JoeBloggsCV.pdf",
     )
     assert after["status"] == "sent" and after["messages"][0]["sent_at"]
     assert after["steps"][-1]["title"] == "Sent"
@@ -332,7 +332,7 @@ def test_each_night_a_waiting_errand_looks_again_for_a_way_to_reach_them(vault):
     assert errands.night(vault, NOW) == {"errands_checked": 1, "errands_ready": 0}
 
     write_month(
-        vault, "email/tess", "2026-09", [mail(20, from_address="cy@acme.org", from_name="Cy Doe")]
+        vault, "email/joe", "2026-09", [mail(20, from_address="cy@acme.org", from_name="Cy Doe")]
     )
     memory.build(vault)
 
