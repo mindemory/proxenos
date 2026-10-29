@@ -16,6 +16,8 @@ Files in clones/outbox/: rules.json (the page writes it; read as strictly as the
 cancelled.jsonl (the page appends), state.json (written here each sync: routes, track record,
 what has earned sending, the queue) and log.jsonl (every attempt, sent or not). A reply that
 goes out is marked sent, as if the user had pressed Sent on the page.
+
+Nothing goes out from a made-up vault (`proxenos demo`, marked by its DEMO file): it has no routes.
 """
 
 import json
@@ -38,8 +40,14 @@ _SOURCE_CHANNEL = {"facebook": "messenger", "twitter": "x"}  # a chat source by 
 WAIT = timedelta(minutes=10)  # queued now, sent at the first sync after this
 _PLACEHOLDER = re.compile(r"\[[^\]\n]{1,80}\]")
 DEFAULT_RULE = {"on": False, "min_closeness": 0.9, "min_measured": 5}
+DEMO = "DEMO"  # the file that marks a vault `proxenos demo` made up
 
 Send = Callable[[dict, str], None]  # (the draft's chat, the text) → sent, or raises
+
+
+def is_demo(vault: Path) -> bool:
+    """Whether the vault is one `proxenos demo` made up, which nothing is ever sent from."""
+    return (vault / DEMO).is_file()
 
 
 def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | None = None) -> dict:
@@ -48,7 +56,7 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
     now = now or datetime.now(UTC)
     folder = vault / "clones" / "outbox"
     rules = read_rules(folder / "rules.json")
-    routes = _routes()
+    routes = {} if is_demo(vault) else _routes()
     closeness = _closeness(vault)
     earned = {
         ch: closeness.get(ch, {}).get("n", 0) >= rule["min_measured"]

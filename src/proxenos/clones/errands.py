@@ -320,6 +320,8 @@ def send(
     """Send one of an errand's messages, with the user's edits to it: its address, subject or
     body. The errand as saved."""
     now = now or datetime.now(UTC)
+    if outbox.is_demo(vault):
+        raise SystemExit("errands: this is the made-up demo vault, so nothing is sent from it")
     errand = load(vault, errand_id)
     messages = errand.get("messages") or []
     if not 0 <= index < len(messages):

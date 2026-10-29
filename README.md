@@ -24,6 +24,28 @@ It drafts; by default it never sends, posts or buys anything by itself, and you 
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
+## What it looks like
+
+These come from `proxenos demo` (see [Quick start](#quick-start)): a made-up person, Tess Ray, and her made-up records. None of it is real.
+
+![Home: today's agenda and open tasks, drafts waiting for review with their track record, and where health care stands](docs/images/home-desktop.png)
+
+| Care: where things stand, what's yours to do, what to say | Errands: carried as far as they go, one tap short of sending |
+|---|---|
+| ![Care: a summary of a knee injury's referrals, scan and bill, and the next steps, each with a due date](docs/images/care-desktop.png) | ![Errands: a message to a recruiter with the CV attached, ready to send, with how the address was found](docs/images/errands-desktop.png) |
+| **Drafts: replies and documents in your voice, for your approval** | **Tasks: what was asked of you, pulled from your conversations** |
+| ![Drafts: a WhatsApp reply and an email reply awaiting review, then drafts for open tasks](docs/images/drafts-desktop.png) | ![Tasks: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
+
+On a phone, over `proxenos phone`:
+
+<p>
+  <img src="docs/images/home-phone.png" width="19%" alt="Home on a phone">
+  <img src="docs/images/care-phone.png" width="19%" alt="Care on a phone">
+  <img src="docs/images/errands-phone.png" width="19%" alt="Errands on a phone">
+  <img src="docs/images/drafts-phone.png" width="19%" alt="Drafts on a phone">
+  <img src="docs/images/tasks-phone.png" width="19%" alt="Tasks on a phone">
+</p>
+
 ## How it works
 
 ```
@@ -70,6 +92,8 @@ proxenos web                    # http://127.0.0.1:4747; leave it open, and use 
 The first time, the page asks three things: your name, where the vault lives (`~/proxenos_vault` unless you pick another folder; it warns about folders iCloud syncs), and a model, either one on this Mac through Ollama or an Anthropic API key, checked with one small call. The model can wait: sources still sync and search still works, but nothing is drafted. Then it opens Connect for a first source. Settings go to `~/Library/Application Support/Proxenos/settings.json` and keys and tokens to the macOS Keychain, one item each; change them later in Settings.
 
 Prefer a file? `cp .env.example .env` and fill it in. Running from source, `.env` is read before the settings file and the Keychain, and with one there, changes from the page are written to it.
+
+**Try it without your data:** `proxenos demo` writes a vault of made-up records (the one in the pictures above) to a temporary folder, with no model and no `.env`, and prints the command that opens the page on it, on port 4848 so it can run beside your own. Nothing is ever sent from it.
 
 Add data in any order. Each source works on its own:
 
@@ -121,7 +145,8 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 |---|---|
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
-| `proxenos web` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
+| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
+| `proxenos demo [PATH]` | A vault of made-up records to try the page on, with no model, and the command that opens it. PATH must be new, empty or an earlier demo |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |

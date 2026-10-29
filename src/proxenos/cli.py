@@ -16,6 +16,7 @@ from proxenos import (
     ask,
     auth,
     connect,
+    demo,
     importer,
     master,
     memory,
@@ -92,7 +93,10 @@ def main(argv: list[str] | None = None) -> None:
         help="also embed the last year for search by meaning, with the local embedding model",
     )
     commands.add_parser("night", help="the master, then every clone in turn; for a schedule")
-    commands.add_parser("web", help="start the local page and open it")
+    page = commands.add_parser("web", help="start the local page and open it")
+    page.add_argument("--port", type=int, default=webapp.PORT, help=f"default {webapp.PORT}")
+    trial = commands.add_parser("demo", help="write a made-up vault to try the page on")
+    trial.add_argument("path", nargs="?", type=Path, help="where (default: a new temp folder)")
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
     asking = commands.add_parser(
         "ask", help="a question or screenshots, answered as you'd think it"
@@ -115,7 +119,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "web":
-        webapp.serve()
+        webapp.serve(args.port)
+        return
+    if args.command == "demo":
+        print(demo.run(args.path))
         return
     if args.command == "ask":
         ask.run(vault_path(), args)  # vault_path also loads settings
