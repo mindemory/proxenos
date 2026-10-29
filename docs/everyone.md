@@ -1,6 +1,6 @@
 # Proxenos for everyone
 
-Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. The first two pieces are built: the Connect page, and setup with settings and the Keychain in place of `.env` (see [the end](#built-so-far)).
+Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. The first two pieces are built: the Connect page, and setup with settings and the Keychain in place of `.env` (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
 
 ## One download: a menu-bar app
 
