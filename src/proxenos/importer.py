@@ -151,10 +151,13 @@ def jobs_for(dest: Path) -> list[tuple[str, list[str]]]:
         jobs.append(("facebook", ["--export", str(activity.parent)]))
     for posts in sorted(dest.glob("**/threads/threads_and_replies.json")):
         jobs.append(("threads", ["--export", str(posts.parent.parent)]))
-    # ChatGPT's export: conversations.json (or -000.json, -001.json, ...) beside chat.html.
+    # ChatGPT's export: conversations.json (or -000.json, -001.json, ...) beside chat.html;
+    # Claude's: conversations.json beside users.json.
     for folder in sorted({p.parent for p in dest.glob("**/conversations*.json")}):
         if (folder / "chat.html").is_file():
             jobs.append(("chatgpt", ["--export", str(folder)]))
+        elif (folder / "users.json").is_file() and (folder / "conversations.json").is_file():
+            jobs.append(("claude", ["--export", str(folder)]))
     for diary in sorted(dest.glob("**/diary.csv")):
         if (diary.parent / "watched.csv").is_file():
             jobs.append(("letterboxd", ["--export", str(diary.parent)]))

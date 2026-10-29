@@ -97,7 +97,8 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | Bluesky | Public posts by handle |
 | Notion, Obsidian, PDFs | Exports or folders |
 | Letterboxd | Data export |
-| ChatGPT | Data export (Settings, Data controls, Export data); drop the zip in `data/` |
+| ChatGPT, Claude | Each one's data export (ChatGPT: Settings, Data controls, Export data; Claude: Settings, Privacy, Export data); drop the zip in `data/` |
+| Calendar, live | Any account in the Mac's Calendar app (Google, Exchange, iCloud), read every sync once Proxenos's Python has Full Disk Access |
 | Personal website, papers and mentions | A local site repo; OpenAlex and news search |
 
 See [docs/data_sources.md](docs/data_sources.md) for each one's details.
