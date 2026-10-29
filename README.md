@@ -168,6 +168,8 @@ npm --prefix web run lint && npm --prefix web run build
 
 The same checks run on GitHub for every push and pull request.
 
+`scripts/screenshots.sh` retakes the pictures under [What it looks like](#what-it-looks-like), from the demo vault with headless Chrome (it needs Google Chrome and a Python with Pillow). Open each one before committing it.
+
 ## License
 
 [MIT](LICENSE)
