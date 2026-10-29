@@ -62,3 +62,42 @@ def test_missing_key_says_where_to_put_one(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):
         llm._get_client()
+
+
+def local(monkeypatch, answer):
+    """A fake Ollama: records each request body, answers with `answer`."""
+    import io
+    import json
+
+    sent = []
+
+    def urlopen(request, timeout):
+        sent.append((request.full_url, json.loads(request.data)))
+        return io.BytesIO(json.dumps(answer).encode())
+
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    monkeypatch.setattr(llm.urllib.request, "urlopen", urlopen)
+    return sent
+
+
+def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
+    sent = local(monkeypatch, {"message": {"content": '{"x": 1}'}, "done_reason": "stop"})
+    monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("called the API"))
+
+    assert llm.ask("hi", system="sys", schema={"type": "object"}, effort="high") == {"x": 1}
+
+    url, body = sent[0]
+    assert url == "http://127.0.0.1:11434/api/chat"
+    assert body["model"] == "gemma4:26b"
+    assert [m["role"] for m in body["messages"]] == ["system", "user"]
+    assert body["format"] == {"type": "object"} and body["think"] is True
+    assert llm.configured()  # a local model needs no key
+
+
+def test_a_local_prompt_too_long_or_answer_cut_off_fails_rather_than_truncates(monkeypatch):
+    sent = local(monkeypatch, {"message": {"content": "partial"}, "done_reason": "length"})
+    with pytest.raises(llm.ModelError, match="too long"):
+        llm.ask("x" * llm.LOCAL_CONTEXT * 3)
+    assert not sent  # never sent
+    with pytest.raises(llm.ModelError, match="cut off"):
+        llm.ask("hi")

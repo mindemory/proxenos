@@ -41,19 +41,20 @@ More detail: [architecture](docs/architecture.md), [data sources](docs/data_sour
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (`PROXENOS_VAULT`, default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
 - **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
-- **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites.
+- **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites. The one way in from elsewhere is `proxenos phone`: your Mac's private address on your own Tailscale network, answered only for your own Tailscale login. Nothing is opened to the internet.
 - **Credentials** stay in `.env`, which git ignores.
 
 ## Quick start
 
-Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and an Anthropic API key for the steps that use a model.
+Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and a model for the steps that use one: an open model on your Mac through [Ollama](https://ollama.com) (no key, nothing leaves the computer; `gemma4:26b` fits a 32 GB Mac), or an Anthropic API key.
 
 ```bash
 git clone https://github.com/mindemory/proxenos && cd proxenos
 CONDA_SUBDIR=osx-arm64 conda env create -f environment.yml
 conda activate proxenos
 pip install -e ".[dev]"
-cp .env.example .env            # add your name, email addresses and ANTHROPIC_API_KEY
+cp .env.example .env            # add your name, email addresses, and the model
+brew install ollama && brew services start ollama && ollama pull gemma4:26b   # the local model
 ```
 
 Add data in any order. Each source works on its own:
@@ -72,6 +73,8 @@ proxenos clone tracker          # also: tasks, care, advisor, network, recall, w
 proxenos web                    # http://127.0.0.1:4747
 ```
 
+To keep it running without a terminal, run `scripts/install-app.sh`: the page and a sync every 15 minutes then start at login. Open http://127.0.0.1:4747 and install it from the browser (Chrome: Install Proxenos; Safari: File, Add to Dock) to have it in the Dock in its own window. To reach it from your phone, put [Tailscale](https://tailscale.com/download) on both, signed in to the same account, and run `proxenos phone`: the page gets a private address only your own devices can open, and Chrome on the phone can add it to the home screen.
+
 `proxenos night` runs the whole loop. `scripts/install-night.sh` schedules it every night with launchd.
 
 `px` is a short alias for `proxenos`.
@@ -86,6 +89,7 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | Slack | [slackdump](https://github.com/rusq/slackdump) (`proxenos auth slackdump WORKSPACE`, then kept current every sync), or a user token |
 | Gmail, Google Calendar, Drive, Photos metadata, Keep, Tasks, YouTube, Chrome | Google Takeout zips (`proxenos import`) |
 | Email (any) | mbox exports; Gmail over IMAP with an app password or a Google sign-in (`proxenos auth gmail`) |
+| Apple Mail | Every account in the Mac's Mail app (Gmail, Google Workspace, Microsoft 365, Outlook), with no sign-in of its own: add the accounts in System Settings, Internet Accounts, keep Mail open (or set to open at login) so it fetches, and give the Python that runs Proxenos Full Disk Access. `proxenos sync` then reads it every run. |
 | Strava | API (`proxenos auth strava`) |
 | Spotify | Extended Streaming History export |
 | LinkedIn, X, Instagram, Facebook, Threads | Each service's data export |
@@ -100,6 +104,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 
 | Command | What it does |
 |---|---|
+| `proxenos phone` | Open the page to your own phone over Tailscale |
 | `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |

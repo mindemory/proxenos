@@ -24,6 +24,7 @@ export const metadata: Metadata = {
   title: "Proxenos",
   description: "Proxenos acts on your behalf: a local briefing, research feed, tasks, drafts, network and memory.",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Proxenos", statusBarStyle: "black-translucent" },
 };
 
 // Always dark, so the browser chrome matches the ground.

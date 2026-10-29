@@ -1,13 +1,28 @@
 // The app binds to 127.0.0.1, but a page on another site can still make the
 // browser send requests here. Only answer requests addressed to a loopback
 // host (blocks DNS rebinding), and refuse cross-origin callers.
+//
+// The one other way in is the user's phone through Tailscale Serve (`proxenos phone`):
+// their Mac's private address on their own tailnet, PROXENOS_REMOTE_HOST, which Serve
+// forwards here saying which Tailscale login is asking. That address answers only the
+// user's own login, PROXENOS_REMOTE_USER.
+
+import { setting } from "./vault";
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+function fromTheUser(req: Request, hostname: string): boolean {
+  if (LOOPBACK.has(hostname)) return true;
+  const remote = setting("REMOTE_HOST")?.toLowerCase();
+  const user = setting("REMOTE_USER")?.toLowerCase();
+  const login = req.headers.get("tailscale-user-login")?.toLowerCase();
+  return !!remote && !!user && hostname === remote && login === user;
+}
 
 export function rejectNonLocal(req: Request): Response | null {
   const host = req.headers.get("host") ?? "";
   const hostname = host.replace(/:\d+$/, "").toLowerCase();
-  if (!LOOPBACK.has(hostname)) {
+  if (!fromTheUser(req, hostname)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
   const origin = req.headers.get("origin");
