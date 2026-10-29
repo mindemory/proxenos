@@ -20,6 +20,7 @@ from proxenos import importer, llm, memory, observe
 from proxenos.clones import recall, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
+    applemail,
     bluesky,
     gmail,
     mentions,
@@ -49,6 +50,7 @@ _UNATTENDED = [
     (whatsapp, lambda: True),
     (spotify, lambda: env("SPOTIFY_EXPORT")),
     (gmail, gmail.accounts),
+    (applemail, applemail.available),
     (strava, lambda: os.environ.get("STRAVA_CLIENT_ID")),
     (slack, slack.tokens),
     (slackdump, slackdump.archives),
