@@ -51,7 +51,7 @@ A channel that slips drops back a level automatically.
 
 Today Proxenos is a tool for people who can code. This track makes it usable by anyone, starting with the people who most need help getting through hard systems.
 
-1. **One download.** A signed Mac app that bundles everything and runs quietly in the menu bar. No terminal, no Python or Node, no `.env`.
+1. **One download.** A signed Mac app that bundles everything and runs quietly in the menu bar. No terminal, no Python or Node, no `.env`. Then Windows and Android: see [apps.md](apps.md).
 2. **Connect, don't configure.**
    - "Sign in with Google" for Gmail, Calendar and Drive, and the same for Slack and Strava.
    - Drag-and-drop for exports, with a guided page per service.
