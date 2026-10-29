@@ -218,3 +218,51 @@ def test_instagram_chats_count_like_messenger(tmp_path):
     (chat,) = chats.waiting(tmp_path, NOW)
 
     assert (chat["source"], chat["name"], chat["own"]) == ("instagram", "Ana", ["haha yes"])
+
+
+def test_mail_without_a_thread_id_threads_by_subject_and_people_and_skips_the_unanswerable(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+
+    def apple(ts, sender, to, text, subject, mine=False, **extra):
+        return mail(None, ts, sender, to, text, mine) | {"subject": subject} | extra
+
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            apple(
+                "2026-03-01T09:00:00Z", "me@x.org", ["ana@x.org"], "Draft attached.", "Paper", True
+            ),
+            apple(
+                "2026-03-08T09:00:00Z",
+                "ana@x.org",
+                ["me@x.org"],
+                "Looks good, one question?",
+                "Re: Paper",
+            ),
+            apple(
+                "2026-03-09T09:00:00Z", "ana@x.org", ["me@x.org"], "Also, the figure?", "RE: paper"
+            ),
+            apple(
+                "2026-03-09T09:00:00Z", "no-reply@x.org", ["me@x.org"], "Your code is 123?", "Code"
+            ),
+            apple(
+                "2026-03-09T09:00:00Z",
+                "ana@x.org",
+                ["me@x.org"],
+                "Lab news this week!",
+                "News",
+                bulk=True,
+            ),
+        ],
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert chat["chat"] == "paper|ana@x.org"
+    assert [m["text"] for m in chat["waiting"]] == [
+        "Looks good, one question?",
+        "Also, the figure?",
+    ]
+    assert chat["own"] == ["Draft attached."]

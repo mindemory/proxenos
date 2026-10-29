@@ -38,6 +38,11 @@ MAX_RECIPIENTS = 6  # more than this on To and Cc is an announcement, not a ques
 _LINKEDIN_FOLDERS = ("INBOX", "ARCHIVE", None)  # not sponsored messages or InMail offers
 _ADDRESS = re.compile(r"[^\s<>\"',;]+@[^\s<>\"',;]+")
 _BULK_LABELS = {"category promotions", "category social", "category updates", "category forums"}
+# Senders no one answers: the part of the address before the @.
+_AUTOMATED = re.compile(
+    r"(no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounces?)"
+)
+_REPLY_PREFIX = re.compile(r"^\s*((re|fwd?|aw|wg)\s*(\[\d+\])?\s*:\s*)+", re.IGNORECASE)
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")  # Slack's <@U123> or <@U123|name>
 
 
@@ -192,7 +197,9 @@ def _linkedin(r: dict) -> dict | None:
 
 def _email(r: dict, me: set[str]) -> dict | None:
     """An email as a message. One from someone else is direct only when it's addressed to the
-    user by name among a few people, not to a list, and isn't in a bulk-mail category."""
+    user by name among a few people, not to a list, isn't bulk mail (by its headers or Gmail's
+    category) and isn't from an address no one answers. Its thread is Gmail's when the record has one; otherwise (Mail's
+    files carry none) the subject without Re: and Fwd:, with everyone on it but the user."""
     labels = {str(label).strip("\\").lower() for label in r.get("gmail_labels") or []}
     mine = bool(r.get("from_me"))
     to = [
@@ -206,11 +213,17 @@ def _email(r: dict, me: set[str]) -> dict | None:
     else:
         peers = [a.lower() for a in _ADDRESS.findall(str(r.get("from_address") or ""))]
     sender = r.get("from_name") or r.get("from_address")
+    automated = any(_AUTOMATED.search(a.split("@")[0]) for a in peers) and not mine
+    everyone = {*to, *(a.lower() for a in _ADDRESS.findall(str(r.get("from_address") or "")))}
+    subject = " ".join(_REPLY_PREFIX.sub("", str(r.get("subject") or "")).lower().split())
+    thread = r.get("gmail_thread") or (
+        f"{subject}|{','.join(sorted(everyone - me))}" if subject else r.get("id") or ""
+    )
     message = _message(
         {**r, "text": r.get("body_new") or r.get("body")},
-        r.get("gmail_thread") or r.get("in_reply_to") or r.get("id") or "",
+        thread,
         None if mine else sender,
-        direct and not labels & _BULK_LABELS,
+        direct and not automated and not r.get("bulk") and not labels & _BULK_LABELS,
         sender,
         EMAIL_CHARS,
     )

@@ -130,6 +130,12 @@ def _record(raw: bytes, account: str, me: set[str]) -> dict | None:
         "in_reply_to": _message_id(_raw(msg, "In-Reply-To")),
         "gmail_labels": _labels(_header(msg, "X-Gmail-Labels")),
         "gmail_thread": _header(msg, "X-GM-THRID"),
+        # Sent to a list or in bulk: newsletters and announcements carry one of these.
+        "bulk": bool(
+            _header(msg, "List-Id")
+            or _header(msg, "List-Unsubscribe")
+            or (_header(msg, "Precedence") or "").lower() in ("bulk", "list", "junk")
+        ),
         "attachments": [n for part in msg.walk() if (n := _text(part.get_filename()))] or None,
         "body": body,
         "body_new": _new_text(body) if body else None,
