@@ -33,9 +33,19 @@ from proxenos.ingest import slack
 from proxenos.store import merge_monthly, merge_snapshot
 
 CATCH_UP_SECONDS = 600  # the most one workspace may take before sync moves on
-# What's new since the archive's last run, looking back a few days for edits and late replies,
-# with thread replies but not threads quiet for two weeks, no attachments, and no duplicates.
-_RESUME = ("-files=false", "-threads", "-skip-stale-threads", "p14d", "-lookback", "p3d", "-dedupe")
+# What's new since the archive's last run, looking back a few days for late replies, with
+# thread replies but not threads already complete or quiet for two weeks, no attachments, and
+# no duplicates.
+_RESUME = (
+    "-files=false",
+    "-threads",
+    "-skip-complete-threads",
+    "-skip-stale-threads",
+    "p14d",
+    "-lookback",
+    "p3d",
+    "-dedupe",
+)
 
 
 def archives(root: Path | None = None) -> list[Path]:

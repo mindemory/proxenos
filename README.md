@@ -92,7 +92,7 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | Apple Mail | Every account in the Mac's Mail app (Gmail, Google Workspace, Microsoft 365, Outlook), with no sign-in of its own: add the accounts in System Settings, Internet Accounts, keep Mail open (or set to open at login) so it fetches, and give the Python that runs Proxenos Full Disk Access. `proxenos sync` then reads it every run. |
 | Strava | API (`proxenos auth strava`) |
 | Spotify | Extended Streaming History export |
-| LinkedIn, X, Instagram, Facebook, Threads | Each service's data export |
+| LinkedIn, X, Instagram, Facebook, Threads | Each service's data export; Instagram, Messenger and LinkedIn chats live through [Beeper Desktop](https://www.beeper.com) (free for up to five accounts) |
 | Bluesky | Public posts by handle |
 | Notion, Obsidian, PDFs | Exports or folders |
 | Letterboxd | Data export |

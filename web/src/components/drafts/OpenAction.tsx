@@ -11,6 +11,8 @@ const ICON: Record<OpenTarget, LucideIcon> = {
   whatsapp: MessageCircle,
   slack: Hash,
   linkedin: ExternalLink,
+  instagram: MessageCircle,
+  messenger: MessageCircle,
   file: Download,
 };
 

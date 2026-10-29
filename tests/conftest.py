@@ -5,7 +5,15 @@ import os
 
 import pytest
 
-_SECRET_PREFIXES = ("ANTHROPIC_", "GMAIL_", "SLACK_USER_TOKEN", "STRAVA_", "PROXENOS_", "TWIN_")
+_SECRET_PREFIXES = (
+    "ANTHROPIC_",
+    "BEEPER_",
+    "GMAIL_",
+    "SLACK_USER_TOKEN",
+    "STRAVA_",
+    "PROXENOS_",
+    "TWIN_",
+)
 
 
 @pytest.fixture(autouse=True)

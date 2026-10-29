@@ -14,6 +14,8 @@ export const MAX_URL_BODY = 6000;
 
 const GMAIL = "https://mail.google.com/mail/";
 const LINKEDIN_FEED = "https://www.linkedin.com/feed/";
+const INSTAGRAM_INBOX = "https://www.instagram.com/direct/inbox/";
+const MESSENGER = "https://www.messenger.com/";
 
 /** These are written for the reader, not for anyone to send. */
 const NOT_MESSAGES = new Set(["doc", "plan", "checklist", "blocked"]);
@@ -31,6 +33,10 @@ export function openTarget(d: Pick<Draft, "channel" | "kind">): OpenTarget {
       return "slack";
     case "linkedin":
       return "linkedin";
+    case "instagram":
+      return "instagram";
+    case "messenger":
+      return "messenger";
     case "":
       return d.kind === "email" ? "gmail" : "file";
     default:
@@ -277,6 +283,26 @@ export function draftOpen(d: Draft, address: string, phone = ""): DraftOpen {
         url: LINKEDIN_FEED,
         copy: true,
         note: "Copied, and LinkedIn is open: paste it in and press send",
+        alt: null,
+      };
+    case "instagram":
+      return {
+        target,
+        label: "Copy & open Instagram",
+        hint: "Copies the text and opens your Instagram messages. Paste it into the chat, then press send.",
+        url: INSTAGRAM_INBOX,
+        copy: true,
+        note: "Copied, and Instagram is open: paste it into the chat and press send",
+        alt: null,
+      };
+    case "messenger":
+      return {
+        target,
+        label: "Copy & open Messenger",
+        hint: "Copies the text and opens Messenger. Paste it into the chat, then press send.",
+        url: MESSENGER,
+        copy: true,
+        note: "Copied, and Messenger is open: paste it into the chat and press send",
         alt: null,
       };
     default:

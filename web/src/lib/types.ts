@@ -344,7 +344,7 @@ export interface DraftsResponse {
 }
 
 /** Where a draft's one-click action goes. "file" is a download. */
-export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "file";
+export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "instagram" | "messenger" | "file";
 
 /** One way to open a draft in its app. The reader still presses send there. */
 export interface DraftOpenStep {

@@ -63,7 +63,17 @@ CARE_SCRIPTS = ("email", "portal_message")  # the care scripts drafted; calls an
 TITLE_CHARS = 120
 SELF_FILES = ("identity", "voice", "interests")
 KINDS = ("reply", "email", "doc", "plan", "checklist", "blocked")
-CHANNELS = ("email", "whatsapp", "slack", "linkedin", "instagram", "in_person", "other")
+CHANNELS = (
+    "email",
+    "whatsapp",
+    "slack",
+    "linkedin",
+    "instagram",
+    "messenger",
+    "in_person",
+    "other",
+)
+_CHANNEL_OF = {"facebook": "messenger"}  # a chat source by another name, as a channel
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
 _MINE = ("approved", "discarded", "sent")  # statuses the page sets; a draft with one is the user's
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the draft ids the page accepts
@@ -240,7 +250,7 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
         title = f"Reply to {chat['name']}"
         job = _job(f"reply-{key.hexdigest()[:12]}", "reply", title, today, text)
         yield job | {
-            "channel": chat["source"] if chat["source"] in CHANNELS else "other",
+            "channel": _channel(chat["source"]),
             "to": _one_line(chat["name"]),
             "links": links.find(" ".join(m["text"] for m in chat["waiting"])),
             "ask": ask,
@@ -337,6 +347,11 @@ def _system(self_dir: Path) -> str:
     if parts:
         system += f"\n\nWho {person} is, from their self-model:\n" + "\n".join(parts)
     return system
+
+
+def _channel(source: str) -> str:
+    channel = _CHANNEL_OF.get(source, source)
+    return channel if channel in CHANNELS else "other"
 
 
 def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
