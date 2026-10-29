@@ -56,7 +56,7 @@ def test_every_view_has_something_current_to_show(vault):
     assert fay["summary"] == errands.summary(fay)
 
     events = read(vault, "clones/recall/today.json")["events"]
-    assert "Crown fitting" in [e["title"] for e in events]
+    assert "Glasses fitting" in [e["title"] for e in events]
     people = read(vault, "clones/network/people.json")["people"]
     assert {"Ben Ode", "Dee Fay", "Gus Hale"} <= {p["name"] for p in people}
     assert "Joe Bloggs" not in {p["name"] for p in people}  # the owner is never one of his people
