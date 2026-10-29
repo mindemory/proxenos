@@ -106,10 +106,10 @@ def event(key, ts, summary, *, location=None, description=None):
 
 
 RESEARCH_PAPER = (
-    "Abstract. We recorded EEG from participants at the Department of Radiology and the "
-    "Department of Neurology, University Hospital, while they performed a working memory task. "
+    "Abstract. We recorded skin conductance from participants at the Department of Radiology and "
+    "the Department of Dermatology, University Hospital, while they performed a reading task. "
     "Methods: the MRI scanner protocol, voxel analysis and regression models are described in "
-    "the supplementary figures. Patients with vestibular disorders were excluded. et al. 2025."
+    "the supplementary figures. Patients with skin disorders were excluded. et al. 2025."
 )
 
 
@@ -197,7 +197,7 @@ def make_vault(tmp_path):
     write_stream(
         raw / "calendar" / "personal",
         [
-            event("neuro", ahead(days=9), "Neurologist appointment", location="Example Clinic"),
+            event("derm", ahead(days=9), "Dermatologist appointment", location="Example Clinic"),
             event("pcp", ago(days=8), "PCP visit"),
             event("labmeeting", ago(days=2), "Lab meeting", description="Discuss the analysis"),
         ],
@@ -205,10 +205,16 @@ def make_vault(tmp_path):
     write_stream(
         raw / "whatsapp" / "messages",
         [
-            wa("n1", ago(days=20), "Sam Rivera", "dizzy again this morning, room spinning", **SELF),
+            wa(
+                "n1",
+                ago(days=20),
+                "Sam Rivera",
+                "the rash is back this morning, itchy all over",
+                **SELF,
+            ),
             wa("n2", ago(days=15), "Sam Rivera", "groceries: rice, lentils", **SELF),
             wa("n3", ago(days=10), "Sam Rivera", "ER visit tonight, they did a CT scan", **SELF),
-            wa("a1", ago(days=11, minutes=5), "Asha", "How did the MRI go? Any results yet?"),
+            wa("a1", ago(days=11, minutes=5), "Asha", "How did the scan go? Any test results yet?"),
             wa("a2", ago(days=11), "Asha", "Fine, they said a week", me=True),
             wa("a3", ago(days=11, minutes=-5), "Asha", "ok keep me posted"),
             wa("a4", ago(days=9), "Asha", "Dinner on Friday?"),
@@ -218,7 +224,7 @@ def make_vault(tmp_path):
     write_stream(
         raw / "slack" / "lab" / "messages",
         [
-            sl("1", ago(days=5), "D1", "Out sick today, have a neurologist appointment", me=True),
+            sl("1", ago(days=5), "D1", "Out sick today, have a dermatologist appointment", me=True),
             sl("2", ago(days=5, minutes=-3), "D1", "Feel better soon!"),
             sl("3", ago(days=4), "D1", "Can you review my poster?"),
             sl("4", ago(days=3), "C1", "Urgent care is next to the lab", kind="channel"),
@@ -245,8 +251,8 @@ def make_vault(tmp_path):
                 "id": "questions",
                 "ts": ago(days=3),
                 "from_me": True,
-                "title": "Questions for the neurologist",
-                "text": "Why the vertigo? Do I need a referral for vestibular therapy?",
+                "title": "Questions for the dermatologist",
+                "text": "Why the rash? Do I need a referral for allergy testing?",
                 "labels": [],
                 "trashed": False,
             },
@@ -254,8 +260,8 @@ def make_vault(tmp_path):
                 "id": "trash",
                 "ts": ago(days=3),
                 "from_me": True,
-                "title": "Old dizzy note",
-                "text": "dizzy",
+                "title": "Old rash note",
+                "text": "rash",
                 "labels": [],
                 "trashed": True,
             },
@@ -281,10 +287,10 @@ def make_vault(tmp_path):
         raw / "drive" / "docs",
         [
             {
-                "id": "papers/vestibular.pdf",
+                "id": "papers/dermatitis.pdf",
                 "ts": ago(days=30),
-                "path": "papers/vestibular.pdf",
-                "title": "vestibular",
+                "path": "papers/dermatitis.pdf",
+                "title": "dermatitis",
                 "ext": "pdf",
                 "size": 1,
                 "text": RESEARCH_PAPER,
@@ -297,7 +303,7 @@ def make_vault(tmp_path):
                 "title": "Symptom log",
                 "ext": "docx",
                 "size": 1,
-                "text": "Oct 1: lightheaded at work, fatigue all day. Oct 9: urgent care.",
+                "text": "Sep 2: rash on both arms, fatigue all day. Sep 5: urgent care.",
                 "words": 12,
             },
         ],
@@ -388,7 +394,7 @@ def test_the_filter_keeps_health_records_from_every_source_and_nothing_else(tmp_
         "email/personal/mychart@example",
         "email/personal/eob@example",
         "email/personal/records@example",
-        "calendar/personal/neuro",  # nine days ahead
+        "calendar/personal/derm",  # nine days ahead
         "calendar/personal/pcp",
         "whatsapp/messages/15559990000@s.whatsapp.net/n1",
         "whatsapp/messages/15559990000@s.whatsapp.net/n3",
@@ -414,7 +420,7 @@ def test_the_note_to_self_chat_is_the_users_own_log(tmp_path):
     found = care.gather(vault, NOW - timedelta(days=120), NOW, NOW + timedelta(days=60))
     log = [r for r in found if r["where"] == "WhatsApp, note to self"]
     assert {r["text"] for r in log} == {
-        "dizzy again this morning, room spinning",
+        "the rash is back this morning, itchy all over",
         "ER visit tonight, they did a CT scan",
     }
     assert all(r["own"] and r["sender"] == "me" for r in log)
@@ -426,8 +432,8 @@ def test_research_words_turn_ambiguous_terms_off_but_not_clear_ones():
     busy, terms = care.score("Missed lab meeting and the analysis review: I was at urgent care")
     assert busy >= care.THRESHOLD and "urgent care" in terms
     # Symptoms count in the user's own words, but someone else's mention needs more.
-    assert care.score("so dizzy today", own=True)[0] >= care.OWN_THRESHOLD
-    assert care.score("Dizziness is a common side effect in this trial cohort paper")[0] < 3
+    assert care.score("the rash is back today", own=True)[0] >= care.OWN_THRESHOLD
+    assert care.score("A rash is a common side effect in this trial cohort paper")[0] < 3
 
 
 def test_what_reaches_the_model_has_no_names_numbers_addresses_or_links(tmp_path, model):
@@ -498,17 +504,17 @@ def test_long_texts_are_cut_to_the_passages_around_their_terms():
 
 def full_answer(prompt):
     mychart = ref(prompt, "MyChart about your visit")
-    log = ref(prompt, "dizzy again this morning")
+    log = ref(prompt, "the rash is back this morning")
     er = ref(prompt, "ER visit tonight")
     records = ref(prompt, "request my medical records")
     return answer(
-        summary="Sam went to the ER on Oct 10. Call 603-555-0199 for the MRI. contact 1 helped.",
+        summary="Sam went to the ER on Sep 12. Call 415-555-0199 for the scan. contact 1 helped.",
         timeline=[
             {
                 "date": "2026-09-30",
                 "kind": "symptom",
-                "title": "Dizziness in the morning",
-                "detail": "Logged dizziness.",
+                "title": "Rash in the morning",
+                "detail": "Logged the rash.",
                 "with": "",
                 "evidence": [f"[{log}]"],
             },
@@ -551,7 +557,7 @@ def full_answer(prompt):
             {"item_id": "new-9", "kind": "call", "title": "Unknown item", "body": "Hi."},
             {"item_id": "new-2", "kind": "call", "title": "Call records", "body": "Hello."},
         ],
-        brief="## Presenting problem\nDizziness since late September. Fax 212-555-0100.",
+        brief="## Presenting problem\nA rash since late August. Fax 212-555-0100.",
     )
 
 
@@ -584,14 +590,14 @@ def test_the_answer_is_checked_scrubbed_and_given_stable_ids(tmp_path, model):
 
     doc = saved(vault)
     assert doc["generated"] == GENERATED
-    assert "603-555-0199" not in doc["summary"] and "[phone]" in doc["summary"]
+    assert "415-555-0199" not in doc["summary"] and "[phone]" in doc["summary"]
     assert "contact 1" not in doc["summary"] and "a contact helped" in doc["summary"]
     assert "212-555-0100" not in doc["visit_brief"]
     assert doc["visit_brief"].startswith("## Presenting problem")
 
     first, second = doc["timeline"]
     assert first["date"] == "2026-09-30" and first["kind"] == "symptom"
-    assert first["id"] == care.event_id("2026-09-30", "symptom", "Dizziness in the morning")
+    assert first["id"] == care.event_id("2026-09-30", "symptom", "Rash in the morning")
     assert first["evidence"] == ["whatsapp/messages/15559990000@s.whatsapp.net/n1"]
     assert second["date"] == "2026-10-10"  # no date given: the day of its evidence
 
@@ -673,8 +679,8 @@ def two_items(prompt):
     return answer(
         items=[
             entry("Pay the urgent care bill", id="new-1", kind="bill"),
-            entry("Book the neurology follow-up", id="new-2", kind="appointment"),
-            entry("Ask about the vestibular referral", id="new-3", kind="referral"),
+            entry("Book the dermatology follow-up", id="new-2", kind="appointment"),
+            entry("Ask about the allergy referral", id="new-3", kind="referral"),
         ]
     )
 
@@ -684,14 +690,14 @@ def test_done_and_not_relevant_stay_closed_and_waiting_holds(tmp_path, model):
     model.make = two_items
     care.care(vault, now=NOW)
     ids = {i["title"]: i["id"] for i in saved(vault)["open_items"]}
-    bill, neuro = ids["Pay the urgent care bill"], ids["Book the neurology follow-up"]
-    referral = ids["Ask about the vestibular referral"]
+    bill, derm = ids["Pay the urgent care bill"], ids["Book the dermatology follow-up"]
+    referral = ids["Ask about the allergy referral"]
 
     marked = (NOW + timedelta(hours=1)).isoformat()
     feedback(
         vault,
         {"item_id": bill, "action": "done", "ts": marked},
-        {"item_id": neuro, "action": "not_relevant", "ts": marked},
+        {"item_id": derm, "action": "not_relevant", "ts": marked},
         {"item_id": referral, "action": "waiting", "ts": marked},
         "not json",
         {"item_id": referral, "action": "explode", "ts": marked},
@@ -700,8 +706,8 @@ def test_done_and_not_relevant_stay_closed_and_waiting_holds(tmp_path, model):
     model.make = lambda prompt: answer(
         items=[
             entry("PAY THE URGENT CARE BILL", id="new-1", kind="bill"),
-            entry("Book the neurology follow-up", id="new-2", kind="appointment"),
-            entry("Ask about the vestibular referral", id=referral, kind="referral"),
+            entry("Book the dermatology follow-up", id="new-2", kind="appointment"),
+            entry("Ask about the allergy referral", id=referral, kind="referral"),
         ],
         scripts=[
             {"item_id": referral, "kind": "email", "title": "Nudge", "body": "Hello."},
@@ -711,9 +717,9 @@ def test_done_and_not_relevant_stay_closed_and_waiting_holds(tmp_path, model):
     care.care(vault, now=NOW + timedelta(days=1))
 
     prompt = model.calls[1]["prompt"]
-    assert bill not in prompt.split("## Closed")[0] and neuro not in prompt
+    assert bill not in prompt.split("## Closed")[0] and derm not in prompt
     assert "- Pay the urgent care bill (bill): done" in prompt
-    assert "- Book the neurology follow-up (appointment): not relevant" in prompt
+    assert "- Book the dermatology follow-up (appointment): not relevant" in prompt
     doc = saved(vault)
     items = {i["id"]: i for i in doc["open_items"]}
     assert set(items) == {bill, referral}
@@ -721,7 +727,7 @@ def test_done_and_not_relevant_stay_closed_and_waiting_holds(tmp_path, model):
     assert items[referral]["status"] == "waiting"  # nothing newer than the mark
     assert [s["item_id"] for s in doc["scripts"]] == [referral]
     closed = json.loads((vault / "clones" / "care" / "closed.json").read_text())
-    assert closed[bill]["action"] == "done" and closed[neuro]["action"] == "not_relevant"
+    assert closed[bill]["action"] == "done" and closed[derm]["action"] == "not_relevant"
 
 
 def test_waiting_ends_when_a_newer_record_is_cited(tmp_path, model):
@@ -736,7 +742,7 @@ def test_waiting_ends_when_a_newer_record_is_cited(tmp_path, model):
         return answer(
             items=[
                 entry(
-                    "Ask about the vestibular referral",
+                    "Ask about the allergy referral",
                     id=referral,
                     kind="referral",
                     evidence=[newer],

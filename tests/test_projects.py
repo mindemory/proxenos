@@ -21,10 +21,10 @@ class Model:
     def __call__(self, prompt, *, system=None, schema=None, effort="medium", **kw):
         self.calls.append({"prompt": prompt, "system": system, "effort": effort})
         return {
-            "status": "Revision due **May 1**; two reviewer comments open.",
-            "changed": "Ana sent the new figure.",
+            "status": "Second draft due **May 1**; two editor comments open.",
+            "changed": "Ana sent the new photos.",
             "next": [
-                {"step": "Rerun the source model", "who": "Tess", "by": "Mar 14"},
+                {"step": "Retest the bread recipe", "who": "Joe", "by": "Mar 14"},
                 {"step": " ", "who": "", "by": ""},
             ],
             "asks": ["Ask for an extension?"],
@@ -41,7 +41,7 @@ class Model:
                     "kind": "plan",
                     "channel": "other",
                     "to": "Ana Lee",
-                    "body": "1. Rerun.",
+                    "body": "1. Retest.",
                 },
                 {
                     "title": "Third",
@@ -62,11 +62,11 @@ def test_a_project_gets_its_status_log_and_drafts_and_keeps_moving(tmp_path):
     write_list(
         tmp_path,
         {
-            "id": "meg-paper",
-            "name": "The MEG paper",
-            "about": "the revision",
+            "id": "cookbook",
+            "name": "The cookbook",
+            "about": "the second draft for the editor",
             "people": ["Ana Lee"],
-            "terms": ["MEG"],
+            "terms": ["cookbook"],
         },
         {"id": "old", "name": "Old one", "paused": True},
         {"id": "../escape", "name": "Bad id"},
@@ -81,10 +81,11 @@ def test_a_project_gets_its_status_log_and_drafts_and_keeps_moving(tmp_path):
         "drafts_written": 2,
         "projects_paused": 1,
     }
-    folder = tmp_path / "clones" / "projects" / "meg-paper"
+    folder = tmp_path / "clones" / "projects" / "cookbook"
     status = (folder / "status.md").read_text()
     assert (
-        "Revision due **May 1**" in status and "- Rerun the source model (Tess, Mar 14)" in status
+        "Second draft due **May 1**" in status
+        and "- Retest the bread recipe (Joe, Mar 14)" in status
     )
     assert "- Ask for an extension?" in status
     assert "## 2026-03-10" in (folder / "log.md").read_text()
@@ -92,22 +93,22 @@ def test_a_project_gets_its_status_log_and_drafts_and_keeps_moving(tmp_path):
         "Nothing new found since 2026-01-09" in model.calls[0]["prompt"]
     )  # a first run looks back
     drafts = tmp_path / "clones" / "drafts"
-    email = (drafts / "project-meg-paper-20260310-1.md").read_text()
+    email = (drafts / "project-cookbook-20260310-1.md").read_text()
     assert "for: project" in email and '"Ana Lee"' in email and "Hi Ana, thanks." in email
-    plan = (drafts / "project-meg-paper-20260310-2.md").read_text()
+    plan = (drafts / "project-cookbook-20260310-2.md").read_text()
     assert 'to: ""' in plan  # a plan isn't a message to anyone
 
     # The next night: it reads its last status, looks only since its last run, and its untouched
     # drafts give way to new ones, while one the user approved stays.
-    approved = drafts / "project-meg-paper-20260310-2.md"
+    approved = drafts / "project-cookbook-20260310-2.md"
     approved.write_text(approved.read_text().replace("status: draft", "status: approved"))
     later = datetime(2026, 3, 12, 2, 0, tzinfo=UTC)
     projects.projects(tmp_path, now=later, model=model)
 
-    assert "Revision due **May 1**" in model.calls[1]["prompt"]
+    assert "Second draft due **May 1**" in model.calls[1]["prompt"]
     assert "since 2026-03-10" in model.calls[1]["prompt"]
-    assert not (drafts / "project-meg-paper-20260310-1.md").exists()
-    assert approved.exists() and (drafts / "project-meg-paper-20260312-1.md").exists()
+    assert not (drafts / "project-cookbook-20260310-1.md").exists()
+    assert approved.exists() and (drafts / "project-cookbook-20260312-1.md").exists()
     assert (folder / "log.md").read_text().count("## 2026-") == 2
 
 

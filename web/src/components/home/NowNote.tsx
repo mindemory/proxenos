@@ -61,7 +61,7 @@ export function NowNote() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
           }}
-          placeholder="e.g. dizzy today, keep things short; focused on the MEG paper this week"
+          placeholder="e.g. tired today, keep things short; focused on the cookbook this week"
           className="min-w-0 flex-1 resize-y rounded-xl border border-line-strong bg-bg p-2.5 text-sm text-ink leading-relaxed font-sans"
         />
         <ActionButton

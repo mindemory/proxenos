@@ -668,7 +668,7 @@ def _message(
 
 def _stale(notes: object) -> list[str]:
     """What the CV says that's no longer true, leaving out any the model listed where what's
-    true now only adds to what it says ("PhD, May 2026" against "PhD, completed May 2026")."""
+    true now only adds to what it says ("BA, May 2021" against "BA, completed May 2021")."""
     found = []
     for n in notes if isinstance(notes, list) else []:
         says, now = (_text(n.get(k)) for k in ("says", "now")) if isinstance(n, dict) else ("", "")

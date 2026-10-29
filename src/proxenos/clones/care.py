@@ -7,7 +7,7 @@ Google Tasks and Slack direct messages. A record is kept when its words, the fir
 characters of a long one, score high enough on a table of health-admin terms: visits, tests,
 referrals, insurance, bills, prescriptions, records, portals, forms and symptoms.
 
-- Terms just as common in research or daily life (MRI, lab, a Department of Neurology, patients,
+- Terms just as common in research or daily life (MRI, lab, a Department of Medicine, patients,
   a referral, a statement) count only when the record doesn't read as research: a paper's
   affiliations name hospitals, but most of its words are research.
 - Symptoms count in the user's own words (their messages, mail, log, Keep, tasks, calendar),
@@ -108,7 +108,7 @@ SELF_FILES = ("identity", "voice")
 # ── The filter ──────────────────────────────────────────────────────────────
 #
 # (pattern, weight, ambiguous). Each term counts once per record. An ambiguous term is as common
-# in research or everyday life as in care (an MRI session, a Department of Neurology, a lab, a
+# in research or everyday life as in care (an MRI session, a Department of Medicine, a lab, a
 # job referral, a credit card statement), so it counts only when the record doesn't read as
 # research. None marks a symptom: certain in the user's own words, ambiguous in anyone else's.
 # Patterns are matched without case unless they start with (?-i): abbreviations such as ER, ENT,
@@ -203,6 +203,8 @@ _TERMS: list[tuple[str, int, bool | None]] = [
     (r"health (issue|issues|problem|problems|scare|stuff|update)", 3, None),
     (r"medical (issue|issues|reasons|emergency|appointment|stuff)", 3, None),
     (r"\bmigraines?\b|\bheadaches?\b|\bnause(a|ous|ated)\b|\bvomit", 2, None),
+    (r"\bfevers?\b|short(ness)? of breath|\brash(es)?\b|\bitch(y|ing)\b|\bsprain(ed)?\b", 2, None),
+    (r"\bfractured?\b|\btoothache\b|(back|joint|stomach|tooth) pain", 2, None),
     (r"\bfatigue\b|\bfatigued\b|\bexhaust(ed|ion)\b|\bnumbness\b|\btingling\b", 2, None),
     (r"\bsymptoms?\b", 2, None),
     (r"(feel|feeling|felt) (sick|unwell|awful|terrible|weak|off|worse|better)", 2, None),
@@ -309,7 +311,7 @@ mean, never suggest a cause or a treatment. Report results in the records' own w
 - Mark anything uncertain in place: "(unclear from the records)", "(date not confirmed)".
 - No phone or fax numbers, no account, member, policy, claim or record numbers, and no street \
 addresses anywhere in the answer. Use [placeholders].
-- Other people appear only as roles or organizations ("the neurologist", "a family member", \
+- Other people appear only as roles or organizations ("the specialist", "a family member", \
 "the billing office"), never by name. People in chats are shown as "contact 1", "contact 2": \
 never repeat those labels either; say "a contact" or their role if the records make it clear.
 - Some records match by accident: research (scans, labs, participants), newsletters, ads, \

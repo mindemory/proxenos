@@ -153,8 +153,8 @@ class Model:
             "body": f"Hi {self.person.split()[0]},\n\nI'm writing about the open role.\n\nTess",
             "cv_notes": [
                 {"says": "Expected graduation May 2026", "now": "Graduated May 2026"},
-                {"says": "Postdoc, Acme", "now": "Postdoc, Acme."},  # nothing changed: left out
-                {"says": "PhD, May 2026", "now": "PhD (completed May 2026)"},  # only added to
+                {"says": "Analyst, Acme", "now": "Analyst, Acme."},  # nothing changed: left out
+                {"says": "BA, May 2021", "now": "BA (completed May 2021)"},  # only added to
                 "not a pair",
             ],
             "needs": ["Mention the thesis?"],
@@ -200,7 +200,7 @@ def test_a_cv_is_known_by_its_name_and_dated_by_what_it_says(tmp_path):
 
     pdf = tmp_path / "cv.pdf"
     pdf.write_bytes(b"%PDF")  # its file time is now: a download's
-    assert errands._made(pdf, None, "PhD, 2019 - 2024") == datetime(2024, 12, 31, tzinfo=UTC)
+    assert errands._made(pdf, None, "BA, 2019 - 2024") == datetime(2024, 12, 31, tzinfo=UTC)
     made = datetime(2025, 5, 1, tzinfo=UTC)
     assert errands._made(pdf, made, "2019 - 2024") == made
 

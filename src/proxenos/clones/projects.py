@@ -3,9 +3,9 @@ every night.
 
 The projects are the user's own list, clones/projects/projects.json, which only they write:
 
-    {"projects": [{"id": "meg-paper", "name": "The MEG paper",
-                   "about": "the revision for the journal: reviewers' comments, new analyses",
-                   "people": ["Ana Lee"], "terms": ["MEG", "revision"], "paused": false}]}
+    {"projects": [{"id": "cookbook", "name": "The cookbook",
+                   "about": "the second draft for the editor: her comments, retested recipes",
+                   "people": ["Ana Lee"], "terms": ["cookbook", "recipes"], "paused": false}]}
 
 For each project that isn't paused, a run:
 - gathers what the vault holds on it: what's new since the last run naming one of its terms or

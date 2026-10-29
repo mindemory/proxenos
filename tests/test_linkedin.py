@@ -22,13 +22,13 @@ PROFILE = [
 ]
 POSITIONS = [
     ["Company Name", "Title", "Description", "Location", "Started On", "Finished On"],
-    ["Example Lab", "Postdoc", "Memory models", "Sample City", "Sep 2024", ""],
+    ["Example Lab", "Designer", "Chair designs", "Sample City", "Sep 2024", ""],
     ["Sample University", "Graduate Student", "", "", "Aug 2019", "Aug 2024"],
     ["Undated Co", "Intern", "", "", "", ""],
 ]
 EDUCATION = [
     ["School Name", "Start Date", "End Date", "Notes", "Degree Name", "Activities"],
-    ["Sample University", "2019", "2024", "Thesis on memory", "PhD", "Running club"],
+    ["Sample University", "2019", "2024", "Thesis on chairs", "BA", "Chess club"],
     ["Example College", "", "2019", "", "BS", ""],
 ]
 SHARES = [
@@ -109,19 +109,19 @@ def test_profile_has_a_record_per_position_and_degree_and_a_snapshot(tmp_path):
         ("profile", None, "2025-03-01T00:00:00Z"),
     ]
 
-    postdoc = next(r for r in kept if r.get("title") == "Postdoc")
-    assert (postdoc["started"], postdoc["finished"], postdoc["location"]) == (
+    designer = next(r for r in kept if r.get("title") == "Designer")
+    assert (designer["started"], designer["finished"], designer["location"]) == (
         "2024-09",
         None,
         "Sample City",
     )
-    assert (postdoc["from_me"], postdoc["author"]) == (True, "Alex Example")
-    phd = next(r for r in kept if r.get("title") == "PhD")
-    assert (phd["started"], phd["finished"], phd["description"], phd["activities"]) == (
+    assert (designer["from_me"], designer["author"]) == (True, "Alex Example")
+    degree = next(r for r in kept if r.get("title") == "BA")
+    assert (degree["started"], degree["finished"], degree["description"], degree["activities"]) == (
         "2019",
         "2024",
-        "Thesis on memory",
-        "Running club",
+        "Thesis on chairs",
+        "Chess club",
     )
 
     snapshot = next(r for r in kept if r["kind"] == "profile")
@@ -197,7 +197,7 @@ def test_file_and_column_names_are_matched_loosely(tmp_path):
         ],
         "POSITIONS.CSV": [
             ["Company", "Job Title", "Start Date", "End Date"],
-            ["Example Lab", "Postdoc", "September 2024", ""],
+            ["Example Lab", "Designer", "September 2024", ""],
         ],
     }
     export = make_export(tmp_path / "e", files)
@@ -211,7 +211,7 @@ def test_file_and_column_names_are_matched_loosely(tmp_path):
     (job,) = by_id(linkedin.read_profile(export)).values()
     assert (job["organization"], job["title"], job["started"]) == (
         "Example Lab",
-        "Postdoc",
+        "Designer",
         "2024-09",
     )
     assert job["author"] is None  # no Profile.csv

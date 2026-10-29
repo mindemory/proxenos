@@ -143,8 +143,8 @@ def _search(vault: Path, query: str, who: str | None) -> list[dict]:
     """The best records for a query: the nearest in meaning first (from the vector index, when
     there is one), anywhere and among the person's own records, then those holding every word,
     then those holding any of them among the person's records (a word also matching its longer
-    forms). A record rarely holds a question's words exactly ("MEG paper deadline" against a
-    journal letter's "the revision is due by 7th Oct"), so meaning finds what words miss."""
+    forms). A record rarely holds a question's words exactly ("cookbook deadline" against an
+    editor's "the second draft is due by 7th Oct"), so meaning finds what words miss."""
     loose = " ".join(w + "*" if len(w) >= 4 else w for w in re.findall(r"\w+", query))
     since = (datetime.now(UTC) - timedelta(days=RECENT_DAYS)).date().isoformat()
     ranked = [

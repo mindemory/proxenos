@@ -1,6 +1,6 @@
 """Memory by meaning: the last year of chats, mail, notes and documents as vectors, so a search
-finds what a record is about and not only the words in it ("when is the MEG revision due"
-finds a journal letter that says "the revision is due by 7th Oct").
+finds what a record is about and not only the words in it ("when is the cookbook draft due"
+finds an editor's note that says "the second draft is due by 7th Oct").
 
 The units come from the full-text index (memory.py): a chat's messages of one day together
 (WhatsApp, Slack, LinkedIn, Messenger, Instagram, X), and each email, note, event and document on

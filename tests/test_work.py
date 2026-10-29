@@ -608,14 +608,14 @@ def test_a_right_now_note_shapes_drafts_for_two_days(tmp_path, model):
     notes.write_text(
         json.dumps({"at": "2026-03-01T09:00:00Z", "text": "old news"})
         + "\n"
-        + json.dumps({"at": "2026-03-10T08:00:00Z", "text": "dizzy today,  keep it short"})
+        + json.dumps({"at": "2026-03-10T08:00:00Z", "text": "tired today,  keep it short"})
         + "\n"
     )
 
     work.work(vault, limit=1, now=NOW, read=FakePages())
 
     assert "right now, in their own words" in model.calls[0]["system"]
-    assert "dizzy today, keep it short" in model.calls[0]["system"]
+    assert "tired today, keep it short" in model.calls[0]["system"]
     assert work.right_now(vault, now=datetime(2026, 3, 13, tzinfo=UTC)) is None  # stale
     notes.write_text(notes.read_text() + json.dumps({"at": "2026-03-10T09:00:00Z", "text": ""}))
     assert work.right_now(vault, now=NOW) is None  # cleared
