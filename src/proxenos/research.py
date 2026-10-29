@@ -9,15 +9,18 @@ text for the drafting prompt. Nothing here writes anything; the index is read-on
 """
 
 import json
+import re
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import memory
+from proxenos import llm, memory
 
 PERSON_ROWS = 30  # records naming the person, newest first
 SEARCHES = 4  # queries a round may run
-HITS = 6  # results kept per query
+HITS = 4  # results kept from each of a query's searches
 ROUNDS = 2
+RECENT_DAYS = 365  # how far back a loose search looks
 SNIPPET_CHARS = 400
 
 _PLAN_SYSTEM = """\
@@ -64,36 +67,55 @@ def person(vault: Path, name: str, me: str, chat: tuple[str, str] | None = None)
 
 
 def matter(
-    vault: Path, brief: str, person_name: str, ask: Callable[..., object]
+    vault: Path, brief: str, person_name: str, ask: Callable[..., object], who: str | None = None
 ) -> tuple[str, list[str]]:
-    """What the model chose to look up for this chat, and what it found: (text, searches)."""
+    """What the model chose to look up for this chat, and what it found: (text, searches).
+    `who` is the person the chat is with, whose own records are searched too."""
     found: list[str] = []
     searched: list[str] = []
     for _ in range(ROUNDS):
         so_far = "\n\n".join(found) or "Nothing yet."
-        answer = ask(
-            f"{brief}\n\nAlready searched: {json.dumps(searched)}\nFound so far:\n{so_far}\n\n"
-            "What should be looked up next, if anything?",
-            system=_PLAN_SYSTEM.format(person=person_name),
-            schema=_PLAN_SCHEMA,
-            effort="medium",
-        )
+        try:
+            answer = ask(
+                f"{brief}\n\nAlready searched: {json.dumps(searched)}\n"
+                f"Found so far:\n{so_far}\n\nWhat should be looked up next, if anything?",
+                system=_PLAN_SYSTEM.format(person=person_name),
+                schema=_PLAN_SCHEMA,
+                effort="medium",
+            )
+        except llm.ModelError:  # research helps a draft; a muddled plan mustn't sink it
+            break
         queries = [q.strip() for q in answer.get("searches", []) if isinstance(q, str)]
         queries = [q for q in queries if q and q not in searched][:SEARCHES]
         if not queries:
             break
         for query in queries:
             searched.append(query)
-            hits = memory.search(query, limit=HITS, vault=vault) or memory.search(
-                query, limit=HITS, match="any", vault=vault
-            )
-            if hits:
-                found.append(
-                    f'Search "{query}":\n' + "\n".join(_line(h, person_name) for h in hits)
-                )
-            else:
-                found.append(f'Search "{query}": nothing found.')
+            lines = "\n".join(_line(h, person_name) for h in _search(vault, query, who))
+            found.append(f'Search "{query}":\n{lines or "nothing found."}')
     return "\n\n".join(found), searched
+
+
+def _search(vault: Path, query: str, who: str | None) -> list[dict]:
+    """The best records for a query: those with every word first, then, from the last year,
+    those with any of them (a word also matching its longer forms) among the person's own
+    records, then anywhere. A record rarely holds a question's words exactly ("MEG paper
+    deadline" against a journal letter's "the reviewers' comments ... revision is due by")."""
+    loose = " ".join(w + "*" if len(w) >= 4 else w for w in re.findall(r"\w+", query))
+    since = (datetime.now(UTC) - timedelta(days=RECENT_DAYS)).date().isoformat()
+    ranked = [
+        memory.search(query, limit=HITS, vault=vault),
+        memory.search(loose, who=who, since=since, limit=HITS, match="any", vault=vault)
+        if who
+        else [],
+        memory.search(loose, since=since, limit=HITS, match="any", vault=vault),
+    ]
+    seen, hits = set(), []
+    for found in ranked:  # each pass keeps its own share, so one can't crowd out the others
+        fresh = [h for h in found if h["id"] not in seen][:HITS]
+        seen.update(h["id"] for h in fresh)
+        hits += fresh
+    return hits
 
 
 def _network_note(vault: Path, name: str) -> dict | None:

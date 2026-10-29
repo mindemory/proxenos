@@ -429,7 +429,7 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
 def _research(vault: Path, chat: dict, brief: str, person: str) -> str:
     """The person and the matter behind a chat, from the rest of the vault, for its prompt."""
     who = research.person(vault, chat["name"], person, chat=(chat["source"], chat["name"]))
-    found, _ = research.matter(vault, brief, person, llm.ask)
+    found, _ = research.matter(vault, brief, person, llm.ask, who=chat["name"])
     parts = [
         p for p in (who, found and f"What {person}'s memory shows on this chat:\n{found}") if p
     ]
