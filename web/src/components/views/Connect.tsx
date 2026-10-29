@@ -2,7 +2,7 @@
 
 import { Plug } from "lucide-react";
 
-import { GmailCard, WhatsAppCard } from "@/components/connect/cards";
+import { AppleMailCard, BeeperCard, GmailCard, PhoneCard, SlackCard, WhatsAppCard } from "@/components/connect/cards";
 import { SourceRow } from "@/components/connect/parts";
 import { Command, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { StatusSkeleton } from "@/components/Skeleton";
@@ -10,7 +10,7 @@ import { useConnect } from "@/lib/connectClient";
 import type { ConnectHow, ConnectSource } from "@/lib/types";
 
 /** Sources with a card of their own here; the rest are rows that say how to connect them. */
-const WITH_BUTTONS = ["gmail", "whatsapp"];
+const WITH_BUTTONS = ["applemail", "gmail", "whatsapp", "slack", "beeper"];
 
 function Group({ kicker, title, children, note }: { kicker: string; title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
@@ -37,7 +37,7 @@ function Rows({ sources, now }: { sources: ConnectSource[]; now: string }) {
 }
 
 export function Connect() {
-  const { data, error, clearError, job, signInGmail, readWhatsApp, cancel } = useConnect();
+  const { data, error, clearError, job, signInGmail, readWhatsApp, saveBeeperToken, cancel } = useConnect();
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load sources: ${error}`} /> : <StatusSkeleton />;
@@ -45,8 +45,11 @@ export function Connect() {
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   const of = (how: ConnectHow) => data.sources.filter((s) => s.how === how && !WITH_BUTTONS.includes(s.id));
+  const applemail = data.sources.find((s) => s.id === "applemail");
   const gmail = data.sources.find((s) => s.id === "gmail");
   const whatsapp = data.sources.find((s) => s.id === "whatsapp");
+  const slack = data.sources.find((s) => s.id === "slack");
+  const beeper = data.sources.find((s) => s.id === "beeper");
   const connected = data.sources.filter((s) => s.connected).length;
 
   return (
@@ -64,17 +67,27 @@ export function Connect() {
           </p>
           <p className="leading-relaxed text-muted">
             Connect a source once and Proxenos reads it on every sync. It only reads: nothing here sends, posts or changes
-            anything in your accounts. Tokens and passwords stay in .env on this computer, and this page never sees them.
+            anything in your accounts. Tokens and passwords stay on this computer, and this page never shows one back. The
+            Beeper token is the only one you paste here.
           </p>
         </div>
       </section>
 
       <Group kicker="Live" title="Sign in or read directly">
+        {applemail && <AppleMailCard s={applemail} now={data.now} />}
         {gmail && <GmailCard s={gmail} now={data.now} job={job("gmail")} onSignIn={signInGmail} onCancel={() => cancel("gmail")} />}
         {whatsapp && (
           <WhatsAppCard s={whatsapp} now={data.now} job={job("whatsapp")} onRead={readWhatsApp} onCancel={() => cancel("whatsapp")} />
         )}
+        {slack && <SlackCard s={slack} now={data.now} />}
+        {beeper && (
+          <BeeperCard s={beeper} now={data.now} job={job("beeper")} onSave={saveBeeperToken} onCancel={() => cancel("beeper")} />
+        )}
         <Rows sources={of("live")} now={data.now} />
+      </Group>
+
+      <Group kicker="Phone" title="Reach it from your phone">
+        <PhoneCard phone={data.phone} />
       </Group>
 
       <Group

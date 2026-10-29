@@ -154,6 +154,26 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDis
               {expanded ? "Show less" : "Show all"}
             </button>
           )}
+          {(d.found || d.asks.length > 0) && (
+            <div className="mt-3 space-y-2 border-l-2 border-line-strong pl-3 text-xs leading-relaxed text-muted">
+              {d.found && (
+                <p>
+                  <span className="font-medium text-ink">What it looked up: </span>
+                  {d.found}
+                </p>
+              )}
+              {d.asks.length > 0 && (
+                <div>
+                  <p className="font-medium text-ink">Needs from you</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {d.asks.map((ask) => (
+                      <li key={ask}>{ask}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

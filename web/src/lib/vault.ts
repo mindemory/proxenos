@@ -1183,7 +1183,19 @@ function toDraft(file: DraftFile): Draft {
     created,
     status: (f.status ?? "draft").trim().toLowerCase() || "draft",
     body: body.replace(/\r\n?/g, "\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, ""),
+    found: (f.found ?? "").trim(),
+    asks: stringList(f.asks),
   };
+}
+
+/** A front matter value written as a JSON list of strings; [] for anything else. */
+function stringList(raw: string | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "");
+    return Array.isArray(parsed) ? parsed.filter((a): a is string => typeof a === "string" && a.trim() !== "") : [];
+  } catch {
+    return [];
+  }
 }
 
 function draftsDir(vault: string): string {

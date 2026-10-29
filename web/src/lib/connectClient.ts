@@ -1,7 +1,7 @@
 "use client";
 
-// The Connect view's data and actions: every source's status, and the sign-ins and reads the
-// page starts. While one runs, its state is checked every couple of seconds; when it ends, the
+// The Connect view's data and actions: every source's status, and the sign-ins, reads and token
+// saves the page starts. While one runs, its state is checked every couple of seconds; when it ends, the
 // sources are read again so the card shows what changed.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,7 +15,8 @@ const POLL_MS = 2000;
 
 /** The toast for a job that worked. Failures stay on their card instead. */
 function doneToast(job: ConnectJob): string {
-  return job.kind === "gmail" ? `Signed in as ${job.account ?? "that account"}` : "WhatsApp read";
+  if (job.kind === "gmail") return `Signed in as ${job.account ?? "that account"}`;
+  return job.kind === "beeper" ? "Beeper token saved" : "WhatsApp read";
 }
 
 /** POST a JSON body. Resolves with the parsed answer, or throws the server's error text. */
@@ -88,6 +89,22 @@ export function useConnect() {
     [started],
   );
 
+  /**
+   * Hand Beeper's token to the server, which passes it to `proxenos auth beeper` on stdin. Resolves
+   * with why it couldn't start, or null. The token is in this request and nowhere else.
+   */
+  const saveBeeperToken = useCallback(
+    (token: string): Promise<string | null> =>
+      post<{ job: ConnectJob }>("/api/connect/beeper", { token }).then(
+        (r) => {
+          started(r.job);
+          return null;
+        },
+        (e: unknown) => (e instanceof Error ? e.message : String(e)),
+      ),
+    [started],
+  );
+
   const readWhatsApp = useCallback(() => {
     post<{ job: ConnectJob }>("/api/connect/whatsapp", {}).then(
       (r) => started(r.job),
@@ -101,5 +118,5 @@ export function useConnect() {
 
   const job = useCallback((kind: ConnectJobKind) => data?.jobs.find((j) => j.kind === kind) ?? null, [data]);
 
-  return { data, error, clearError: () => setError(null), job, signInGmail, readWhatsApp, cancel };
+  return { data, error, clearError: () => setError(null), job, signInGmail, readWhatsApp, saveBeeperToken, cancel };
 }

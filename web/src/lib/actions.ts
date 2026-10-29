@@ -16,6 +16,7 @@ const GMAIL = "https://mail.google.com/mail/";
 const LINKEDIN_FEED = "https://www.linkedin.com/feed/";
 const INSTAGRAM_INBOX = "https://www.instagram.com/direct/inbox/";
 const MESSENGER = "https://www.messenger.com/";
+const X_MESSAGES = "https://x.com/messages";
 
 /** These are written for the reader, not for anyone to send. */
 const NOT_MESSAGES = new Set(["doc", "plan", "checklist", "blocked"]);
@@ -37,6 +38,8 @@ export function openTarget(d: Pick<Draft, "channel" | "kind">): OpenTarget {
       return "instagram";
     case "messenger":
       return "messenger";
+    case "x":
+      return "x";
     case "":
       return d.kind === "email" ? "gmail" : "file";
     default:
@@ -293,6 +296,16 @@ export function draftOpen(d: Draft, address: string, phone = ""): DraftOpen {
         url: INSTAGRAM_INBOX,
         copy: true,
         note: "Copied, and Instagram is open: paste it into the chat and press send",
+        alt: null,
+      };
+    case "x":
+      return {
+        target,
+        label: "Copy & open X",
+        hint: "Copies the text and opens your X messages. Paste it into the chat, then press send.",
+        url: X_MESSAGES,
+        copy: true,
+        note: "Copied, and X is open: paste it into the chat and press send",
         alt: null,
       };
     case "messenger":

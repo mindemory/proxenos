@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, LoaderCircle, X } from "lucide-react";
+import { Check, Copy, LoaderCircle, X } from "lucide-react";
+import { useState } from "react";
 
 import { Command } from "@/components/EmptyState";
 import { SourceChip } from "@/components/SourceBadge";
+import { useToast } from "@/components/Toasts";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { ConnectJob, ConnectSource } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -19,12 +21,17 @@ interface SourceCopy {
 
 /** Every source the page lists: its name, and how to connect it for now. */
 export const SOURCE_COPY: Record<string, SourceCopy> = {
+  applemail: {
+    label: "Apple Mail",
+    kind: "email",
+    how: "Email from every account in the Mail app on this Mac. Nothing to sign in to here.",
+  },
   gmail: { label: "Gmail", kind: "email", how: "Your mail, read over IMAP and kept current. One sign-in per account." },
   whatsapp: { label: "WhatsApp", how: "Your messages and groups, from WhatsApp for Mac's own store on this computer." },
-  slack: {
-    label: "Slack",
-    how: "A read-only token per workspace. With an app configuration token in .env, this makes one:",
-    command: "proxenos auth slack",
+  slack: { label: "Slack", how: "Your messages in each workspace, read with slackdump signed in as you. Add each workspace once." },
+  beeper: {
+    label: "Beeper",
+    how: "Instagram, Messenger, X and LinkedIn chats, read through Beeper Desktop. It's free for up to 5 accounts, so connect only those networks there: WhatsApp, Slack and email are read directly.",
   },
   strava: { label: "Strava", how: "With a Strava app's ID and secret in .env, sign in once:", command: "proxenos auth strava" },
   bluesky: { label: "Bluesky", how: "Your public posts. Put your handle in .env as PROXENOS_BLUESKY_HANDLE." },
@@ -65,6 +72,46 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
 
 export function copyFor(id: string): SourceCopy {
   return SOURCE_COPY[id] ?? { label: id.charAt(0).toUpperCase() + id.slice(1), how: "" };
+}
+
+/** Text to copy, in a box with a copy button: a path or an address, as opposed to a shell command. */
+export function CopyBox({ text, what }: { text: string; what: string }) {
+  const notify = useToast();
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(true);
+        notify(`${what} copied`, "ok");
+        window.setTimeout(() => setCopied(false), 1600);
+      },
+      () => {
+        // No clipboard (an insecure context or a denied permission): the text is still there to select.
+      },
+    );
+  };
+  const Icon = copied ? Check : Copy;
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-line-strong bg-surface-2 py-2 pl-3.5 pr-2">
+      <code className="num min-w-0 flex-1 select-all break-all text-sm text-ink">{text}</code>
+      <button
+        type="button"
+        onClick={copy}
+        title="Copy"
+        className="-my-0.5 flex-shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:text-ink"
+      >
+        <Icon size={14} aria-hidden="true" />
+        <span className="sr-only">{copied ? "Copied" : `Copy the ${what.toLowerCase()}`}</span>
+      </button>
+    </div>
+  );
+}
+
+/** A numbered list of steps, in the page's plain words. */
+export function Steps({ children }: { children: React.ReactNode }) {
+  return (
+    <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-muted marker:text-faint marker:num">{children}</ol>
+  );
 }
 
 export function Chip({ id }: { id: string }) {

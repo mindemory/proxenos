@@ -13,6 +13,7 @@ const ICON: Record<OpenTarget, LucideIcon> = {
   linkedin: ExternalLink,
   instagram: MessageCircle,
   messenger: MessageCircle,
+  x: MessageCircle,
   file: Download,
 };
 

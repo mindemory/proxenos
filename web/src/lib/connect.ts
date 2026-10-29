@@ -2,20 +2,30 @@
 //
 // Which sources are connected comes from `proxenos connect`, which reports names, addresses,
 // handles and dates, never a secret. Its answer is read field by field, so nothing else in it
-// reaches the page. A Gmail sign-in (`proxenos auth gmail`) and a read of WhatsApp (`proxenos
-// ingest whatsapp`) run in the background, one of each at a time, and the page follows them
-// through connectJobs(). A job tells the page only its command's last line, with anything that
-// looks like a token blanked.
+// reaches the page. A Gmail sign-in (`proxenos auth gmail`), a read of WhatsApp (`proxenos
+// ingest whatsapp`) and a Beeper token (`proxenos auth beeper`) run in the background, one of
+// each at a time, and the page follows them through connectJobs(). A job tells the page only its
+// command's last line, with anything that looks like a token blanked. The one secret the page
+// sends is Beeper's: it goes to the command on its stdin and nowhere else.
 
 import { execFile, type ChildProcess } from "node:child_process";
 
-import type { ConnectHow, ConnectJob, ConnectJobKind, ConnectResponse, ConnectSource, MailAccount } from "./types";
+import type {
+  ConnectHow,
+  ConnectJob,
+  ConnectJobKind,
+  ConnectResponse,
+  ConnectSource,
+  MailAccount,
+  PhoneInfo,
+} from "./types";
 import { CONNECT_JOB_KINDS } from "./types";
 import { nowIso, proxenosBin, REPO_ROOT, vaultInfo, vaultPath } from "./vault";
 
 const STATUS_MS = 30_000;
-// A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while.
-const JOB_MS: Record<ConnectJobKind, number> = { gmail: 6 * 60_000, whatsapp: 15 * 60_000 };
+// A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while;
+// checking a Beeper token is one request.
+const JOB_MS: Record<ConnectJobKind, number> = { gmail: 6 * 60_000, whatsapp: 15 * 60_000, beeper: 60_000 };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;
 const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
@@ -70,13 +80,29 @@ function toSource(raw: unknown): ConnectSource | null {
     problem: str(r.problem),
     detail: str(r.detail),
     accounts: Array.isArray(r.accounts) ? r.accounts.map(toAccount).filter((a): a is MailAccount => a !== null) : [],
+    workspaces: Array.isArray(r.workspaces) ? r.workspaces.filter((w): w is string => typeof w === "string") : [],
   };
+}
+
+const NO_PHONE: PhoneInfo = { address: null, login: null };
+
+/** Where the phone reaches this page. The address is a link on the page, so only an https one passes. */
+function toPhone(raw: unknown): PhoneInfo {
+  if (!raw || typeof raw !== "object") return NO_PHONE;
+  const r = raw as Record<string, unknown>;
+  let address = str(r.address);
+  try {
+    if (address && new URL(address).protocol !== "https:") address = null;
+  } catch {
+    address = null;
+  }
+  return { address, login: str(r.login) };
 }
 
 /** Every source and whether it's connected, from `proxenos connect`, and the jobs as they stand. */
 export async function getConnect(): Promise<ConnectResponse> {
   const vault = vaultPath();
-  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs() };
+  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE };
   const bin = await proxenosBin();
   if (!bin) return { ...base, sources: [], error: NO_COMMAND };
   return new Promise((resolve) => {
@@ -87,8 +113,9 @@ export async function getConnect(): Promise<ConnectResponse> {
         return;
       }
       let sources: unknown;
+      let phone: unknown;
       try {
-        sources = (JSON.parse(stdout) as { sources?: unknown }).sources;
+        ({ sources, phone } = JSON.parse(stdout) as { sources?: unknown; phone?: unknown });
       } catch {
         sources = null;
       }
@@ -96,7 +123,12 @@ export async function getConnect(): Promise<ConnectResponse> {
         resolve({ ...base, sources: [], error: "proxenos connect gave an answer this page can't read." });
         return;
       }
-      resolve({ ...base, sources: sources.map(toSource).filter((s): s is ConnectSource => s !== null), error: null });
+      resolve({
+        ...base,
+        sources: sources.map(toSource).filter((s): s is ConnectSource => s !== null),
+        phone: toPhone(phone),
+        error: null,
+      });
     });
   });
 }
@@ -124,9 +156,15 @@ export function connectJobs(): ConnectJob[] {
 
 /**
  * Run `proxenos <args>` in the background as the job of this kind. Resolves with the job, or
- * null when one of this kind is already running.
+ * null when one of this kind is already running. A secret for the command goes in `stdin`, never
+ * in `args`, which any process on the machine can read; if the command repeats it, it's blanked.
  */
-export async function startJob(kind: ConnectJobKind, args: string[], account: string | null = null): Promise<ConnectJob | null> {
+export async function startJob(
+  kind: ConnectJobKind,
+  args: string[],
+  account: string | null = null,
+  stdin: string | null = null,
+): Promise<ConnectJob | null> {
   if (JOBS.get(kind)?.job.state === "running") return null;
   const entry: Running = {
     job: { kind, state: "running", message: "", account, started: nowIso(), finished: null },
@@ -140,16 +178,24 @@ export async function startJob(kind: ConnectJobKind, args: string[], account: st
     entry.child = null;
   };
 
+  const secret = stdin?.trim() ?? "";
+  const hide = (text: string) => (secret ? text.split(secret).join("[hidden]") : text);
+
   const bin = await proxenosBin();
   if (!bin) finish("failed", NO_COMMAND);
   else if (entry.stopping) finish("stopped", "Stopped.");
   else {
     entry.child = execFile(bin, args, { cwd: REPO_ROOT, timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (entry.stopping) finish("stopped", "Stopped.");
-      else if (!error) finish("done", lastLine(stdout));
+      else if (!error) finish("done", lastLine(hide(stdout)));
       else if (error.killed) finish("failed", "It took too long and was stopped.");
-      else finish("failed", lastLine(stderr) || lastLine(stdout) || "It failed.");
+      else finish("failed", lastLine(hide(stderr)) || lastLine(hide(stdout)) || "It failed.");
     });
+    if (stdin !== null) {
+      // The command may exit without reading it all; that's reported by how it ends, not here.
+      entry.child.stdin?.on("error", () => {});
+      entry.child.stdin?.end(stdin);
+    }
   }
   return { ...entry.job };
 }

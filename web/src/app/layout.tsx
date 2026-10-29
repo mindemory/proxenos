@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { EB_Garamond, Geist, Geist_Mono, Newsreader } from "next/font/google";
 
+import { ServiceWorker } from "@/components/ServiceWorker";
 import { ToastProvider } from "@/components/Toasts";
 
 import "./globals.css";
@@ -46,6 +47,7 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning className="antialiased bg-bg text-ink font-sans">
         <ToastProvider>{children}</ToastProvider>
+        <ServiceWorker />
       </body>
     </html>
   );

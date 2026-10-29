@@ -334,6 +334,8 @@ export interface Draft {
   created: string | null;
   status: string; // "draft", "approved", "discarded", "sent"
   body: string; // markdown
+  found: string; // for a reply: what the twin's look through memory showed, "" when nothing
+  asks: string[]; // for a reply: what only the reader can decide, as questions
 }
 
 export interface DraftsResponse {
@@ -344,7 +346,7 @@ export interface DraftsResponse {
 }
 
 /** Where a draft's one-click action goes. "file" is a download. */
-export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "instagram" | "messenger" | "file";
+export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "instagram" | "messenger" | "x" | "file";
 
 /** One way to open a draft in its app. The reader still presses send there. */
 export interface DraftOpenStep {
@@ -635,15 +637,17 @@ export interface ConnectSource {
   how: ConnectHow;
   connected: boolean;
   lastRead: string | null; // newest change to its files under raw/
-  /** What stops its button from working: "no_google_client", or WhatsApp's "missing" or "blocked". */
+  /** What stops its button from working: "no_google_client", Beeper's "no_token", or WhatsApp's "missing" or "blocked". */
   problem: string | null;
-  detail: string | null; // a handle, where one helps
+  /** A handle, where one helps. Apple Mail's is the Python that needs Full Disk Access. */
+  detail: string | null;
   accounts: MailAccount[]; // Gmail only
+  workspaces: string[]; // Slack only: the workspaces slackdump is signed in to
 }
 
-/** What the page can start: a Gmail sign-in, or a read of WhatsApp. One of each at a time. */
-export type ConnectJobKind = "gmail" | "whatsapp";
-export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp"];
+/** What the page can start: a Gmail sign-in, a read of WhatsApp, or a Beeper token. One of each at a time. */
+export type ConnectJobKind = "gmail" | "whatsapp" | "beeper";
+export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp", "beeper"];
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -660,9 +664,16 @@ export interface ConnectJobsResponse {
   jobs: ConnectJob[];
 }
 
+/** Where the owner's phone reaches this page: its Tailscale address and the login that may open it. */
+export interface PhoneInfo {
+  address: string | null; // an https URL, once `proxenos phone` has set it up
+  login: string | null;
+}
+
 export interface ConnectResponse extends ConnectJobsResponse {
   vault: VaultInfo;
   sources: ConnectSource[];
+  phone: PhoneInfo;
   /** Why the sources couldn't be read, when they couldn't. */
   error: string | null;
 }

@@ -92,7 +92,7 @@ Some sources read a folder on your computer. Set those folders in `.env`: `PROXE
 | Apple Mail | Every account in the Mac's Mail app (Gmail, Google Workspace, Microsoft 365, Outlook), with no sign-in of its own: add the accounts in System Settings, Internet Accounts, keep Mail open (or set to open at login) so it fetches, and give the Python that runs Proxenos Full Disk Access. `proxenos sync` then reads it every run. |
 | Strava | API (`proxenos auth strava`) |
 | Spotify | Extended Streaming History export |
-| LinkedIn, X, Instagram, Facebook, Threads | Each service's data export; Instagram, Messenger and LinkedIn chats live through [Beeper Desktop](https://www.beeper.com) (free for up to five accounts) |
+| LinkedIn, X, Instagram, Facebook, Threads | Each service's data export; Instagram, Messenger, X and LinkedIn chats live through [Beeper Desktop](https://www.beeper.com) (free for up to five accounts) |
 | Bluesky | Public posts by handle |
 | Notion, Obsidian, PDFs | Exports or folders |
 | Letterboxd | Data export |
@@ -109,7 +109,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
-| `proxenos auth strava` / `slack` / `slackdump WORKSPACE` / `gmail NAME ADDRESS` | One-time sign-ins: tokens go to `.env`; slackdump keeps its own |
+| `proxenos auth strava` / `slack` / `slackdump WORKSPACE` / `gmail NAME ADDRESS` / `beeper` | One-time sign-ins: tokens go to `.env`; slackdump keeps its own. Most can also be done from the app's Connect page |
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
