@@ -4,6 +4,8 @@ import json
 import os
 import sqlite3
 import stat
+import sys
+import types
 
 import pytest
 
@@ -333,6 +335,26 @@ def test_a_second_builder_does_nothing(vault):
         assert memory.build(vault) == {"already_running": 1}
 
     assert memory.build(vault)["files_indexed"] == 7  # the lock is let go
+
+
+def test_on_windows_the_lock_is_on_the_lock_files_first_byte(vault, monkeypatch):
+    taken = []
+
+    def locking(fd, mode, size):
+        if taken:
+            raise OSError("locked")  # msvcrt's answer while another run holds it
+        taken.append((mode, size))
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(
+        memory, "msvcrt", types.SimpleNamespace(LK_NBLCK=2, locking=locking), raising=False
+    )
+    (vault / "memory").mkdir(mode=0o700)
+
+    with memory._locked(vault / "memory") as free:
+        assert free and taken == [(2, 1)]
+        with memory._locked(vault / "memory") as again:
+            assert not again
 
 
 @pytest.mark.parametrize(

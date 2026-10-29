@@ -26,11 +26,11 @@ last word a prefix. Everything is quoted before it reaches FTS5, so no input is 
 query syntax. `context` returns the records around one, read from the month files.
 """
 
-import fcntl
 import json
 import os
 import re
 import sqlite3
+import sys
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from contextlib import closing, contextmanager
@@ -40,6 +40,12 @@ from urllib.parse import urlparse
 
 from proxenos.config import vault_path
 from proxenos.observe import _TEXT_FIELDS
+
+# Windows has no fcntl, and every command imports this module, `proxenos setup` too.
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 SCHEMA = 3  # bump when the table layout or what gets indexed changes: the index is rebuilt
 MAX_TEXT = 4000
@@ -200,13 +206,22 @@ def _locked(folder: Path) -> Iterator[bool]:
     fd = os.open(folder / ".lock", os.O_RDWR | os.O_CREAT, 0o600)
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock(fd)
         except OSError:
             yield False
             return
         yield True
     finally:
         os.close(fd)  # closing the descriptor releases the lock
+
+
+def _lock(fd: int) -> None:
+    """Take the lock on an open file without waiting, or raise OSError when another run has it.
+    On Windows, with no flock, it's a lock on the file's first byte."""
+    if sys.platform == "win32":
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def _remove(path: Path, keep: bool = False) -> None:

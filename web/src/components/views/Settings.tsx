@@ -88,8 +88,8 @@ export function Settings() {
               "Proxenos is running from source with an .env, so changes here are written there."
             ) : (
               <>
-                Settings in <code className="num break-all text-ink">{status.settingsFile}</code>, and keys and tokens in this Mac&apos;s
-                Keychain, one item each. This page never shows one back.
+                Settings in <code className="num break-all text-ink">{status.settingsFile}</code>, and keys and tokens in the{" "}
+                {status.secretStore}, one item each. This page never shows one back.
               </>
             )}{" "}
             <Link href="/setup" className="text-accent hover:underline">
@@ -120,7 +120,7 @@ export function Settings() {
       >
         <div className="card divide-y divide-line">
           {status.secrets.map((s) => (
-            <SecretRow key={s.name} s={s} apply={apply} />
+            <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
           ))}
         </div>
       </Group>
@@ -201,7 +201,7 @@ function VaultForm({ status, apply }: { status: SetupStatus; apply: Apply }) {
   );
 }
 
-function SecretRow({ s, apply }: { s: SecretState; apply: Apply }) {
+function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: Apply }) {
   const [mode, setMode] = useState<"idle" | "replace" | "remove">("idle");
   const [value, setValue] = useState("");
   const { busy, said, run } = useChange(apply);
@@ -225,7 +225,7 @@ function SecretRow({ s, apply }: { s: SecretState; apply: Apply }) {
           <div className="num text-xs text-faint">{s.name}</div>
         </div>
         <div className="flex items-center gap-3">
-          <StatePill on={s.set} label={s.set ? `Set ${originLabel(s.from)}` : "Not set"} />
+          <StatePill on={s.set} label={s.set ? `Set ${originLabel(s.from, store)}` : "Not set"} />
           {mode === "idle" && (
             <>
               <button
@@ -284,7 +284,7 @@ function SecretRow({ s, apply }: { s: SecretState; apply: Apply }) {
       {mode === "remove" && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-bad-line bg-bad-bg px-3.5 py-2.5 text-sm text-bad-ink">
           <span className="min-w-0 flex-1">
-            Remove it from {originLabel(s.from).replace(/^in /, "") || "where it's kept"}? Whatever reads it stops working.
+            Remove it from {originLabel(s.from, store).replace(/^in /, "") || "where it's kept"}? Whatever reads it stops working.
           </span>
           <button
             type="button"

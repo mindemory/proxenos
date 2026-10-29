@@ -4,6 +4,8 @@ file and the Keychain. The Keychain is conftest's fake; nothing here touches the
 import json
 import os
 import stat
+import sys
+from pathlib import Path
 
 import dotenv
 import pytest
@@ -193,3 +195,44 @@ def test_keychain_items_are_read_back_after_saving(fake_keychain, monkeypatch):
         keychain.put("ANTHROPIC_API_KEY", "sk-ant-x")
     with pytest.raises(keychain.KeychainError, match="isn't a variable's name"):
         keychain.get("-a evil")
+
+
+def test_on_a_mac_settings_are_in_application_support(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    expected = Path.home() / "Library" / "Application Support" / "Proxenos" / "settings.json"
+    assert config.settings_file() == expected
+
+
+def test_on_windows_settings_are_in_appdata(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", r"C:\Users\Ana Lee\AppData\Roaming")
+    expected = Path(r"C:\Users\Ana Lee\AppData\Roaming") / "Proxenos" / "settings.json"
+    assert config.settings_file() == expected
+    monkeypatch.delenv("APPDATA")
+    expected = Path.home() / "AppData" / "Roaming" / "Proxenos" / "settings.json"
+    assert config.settings_file() == expected
+
+
+def test_on_linux_settings_follow_xdg_config_home(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    assert config.settings_file() == tmp_path / "config" / "proxenos" / "settings.json"
+    default = Path.home() / ".config" / "proxenos" / "settings.json"
+    for unusable in ("", "relative/config"):  # the spec says to ignore both
+        monkeypatch.setenv("XDG_CONFIG_HOME", unusable)
+        assert config.settings_file() == default
+    monkeypatch.delenv("XDG_CONFIG_HOME")
+    assert config.settings_file() == default
+
+
+def test_on_windows_the_folder_keeps_files_private_and_nothing_is_chmodded(monkeypatch, env_file):
+    def chmod(*args, **kwargs):
+        raise AssertionError("a mode on Windows is only the read-only flag")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(Path, "chmod", chmod)
+    assert config.save_setting("NAME", "Ana Lee") == "settings"
+    assert json.loads(config.SETTINGS_FILE.read_text()) == {"name": "Ana Lee"}
+    env_file.write_text("A=1\n")
+    config.save_setting("NAME", "Ana")
+    assert env_file.read_text() == "A=1\nPROXENOS_NAME=Ana\n"

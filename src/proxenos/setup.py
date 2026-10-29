@@ -1,8 +1,9 @@
 """`proxenos setup`: the page's first-run setup and its Settings, as JSON in and out.
 
 `proxenos setup` prints where things stand: your name, the vault, the model, the folders read on
-every sync, whether Ollama is running and with which models, and which secrets are set and where
-each comes from. Never a secret's value: only whether it's set.
+every sync, whether Ollama is running and with which models, which secure store keeps secrets
+here, and which secrets are set and where each comes from. Never a secret's value: only whether
+it's set.
 
 `proxenos setup --apply` takes one change as JSON on stdin and prints {"ok", "message" or
 "error", "status"}:
@@ -83,6 +84,7 @@ def status() -> dict:
         "model": {"kind": kind, "name": name},
         "ollama": {"running": pulled is not None, "models": _chat_models(pulled or [])},
         "keychain": keychain.available(),
+        "secret_store": keychain.store(),
         "secrets": [
             {"name": n, "set": n in held, "from": config.origin(n) if n in held else None}
             for n in [*SECRETS, *(n for n in held if n not in SECRETS)]
@@ -275,8 +277,8 @@ def _place(where: str) -> str:
 
 
 def _shown(path: Path) -> str:
-    """A path as ~/... when it's under your home folder."""
+    """A path as ~/... (~\\... on Windows) when it's under your home folder."""
     for home in (Path.home(), Path.home().resolve()):
         if path != home and path.is_relative_to(home):
-            return "~/" + str(path.relative_to(home))
+            return str(Path("~", path.relative_to(home)))
     return str(path)

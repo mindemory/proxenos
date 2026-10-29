@@ -94,9 +94,9 @@ export function CloudWarning({ where }: { where: "icloud" | "drive" | null }) {
   );
 }
 
-/** Where a value is kept, in the page's words. */
-export function originLabel(from: SettingOrigin | null): string {
-  if (from === "keychain") return "in the Keychain";
+/** Where a value is kept, in the page's words. `store` names the secure store, as SetupStatus.secretStore does. */
+export function originLabel(from: SettingOrigin | null, store: string): string {
+  if (from === "keychain") return `in the ${store}`;
   if (from === ".env") return "in .env";
   if (from === "settings") return "in your settings";
   if (from === "environment") return "from the environment";
@@ -210,7 +210,7 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
   const [key, setKey] = useState("");
   const { busy, said, run } = useChange(apply);
   const saved = status.secrets.find((s) => s.name === "ANTHROPIC_API_KEY");
-  const where = status.savesTo === ".env" ? "the repo's .env" : status.keychain ? "this Mac's Keychain" : "your settings";
+  const where = status.savesTo === ".env" ? "the repo's .env" : status.keychain ? `the ${status.secretStore}` : "your settings";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,7 +232,7 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={saved?.set ? `Saved ${originLabel(saved.from)}` : "sk-ant-…"}
+            placeholder={saved?.set ? `Saved ${originLabel(saved.from, status.secretStore)}` : "sk-ant-…"}
             className={inputClass}
             {...NOT_A_LOGIN}
           />

@@ -7,14 +7,15 @@ of these that has it:
 
 1. the process's environment;
 2. the repo's .env, when running from source;
-3. the settings file, ~/Library/Application Support/Proxenos/settings.json, which the page's
+3. the settings file (`settings_file`, in the platform's usual folder for it), which the page's
    setup and Settings write: {"name": ..., "vault": ..., "model": ...} for PROXENOS_NAME and the
-   rest, and under "keychain" the names of the secrets kept in the Keychain;
-4. the macOS Keychain, one item per secret (keychain.py).
+   rest, and under "keychain" the names of the secrets kept in the secure store;
+4. the secure store, one item per secret: the macOS Keychain, Windows Credential Manager or the
+   Secret Service (keychain.py).
 
 `load` puts what 2 to 4 hold into the environment once per process, never over a variable that's
 already there, so every reader sees the same order. Changes go where they'd be read first: into
-.env when running from source with one, else into the settings file or the Keychain.
+.env when running from source with one, else into the settings file or the secure store.
 
 The vault must stay outside this repo, which is public.
 """
@@ -33,11 +34,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # A checkout (an editable install too) has the project file; an installed package doesn't.
 FROM_SOURCE = (REPO_ROOT / "pyproject.toml").is_file()
 ENV_FILE: Path | None = REPO_ROOT / ".env" if FROM_SOURCE else None
-SETTINGS_FILE = Path.home() / "Library" / "Application Support" / "Proxenos" / "settings.json"
 PREFIX = "PROXENOS_"
 OLD_PREFIX = "TWIN_"
 DEFAULT_VAULT = "~/proxenos_vault"
-KEYCHAIN = "keychain"  # the settings file's list of the secrets in the Keychain
+KEYCHAIN = "keychain"  # the settings file's list of the secrets in the secure store
 # The secrets: a model key, sign-ins' tokens, and the apps you sign in through.
 SECRET = re.compile(
     r"ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?"
@@ -45,8 +45,27 @@ SECRET = re.compile(
 )
 _MAX_VALUE = 4096
 
+
+def settings_file() -> Path:
+    """Where the settings file is: in the folder each platform keeps an app's settings in. On a
+    Mac ~/Library/Application Support/Proxenos, on Windows %APPDATA%\\Proxenos, elsewhere
+    $XDG_CONFIG_HOME/proxenos, else ~/.config/proxenos (a relative XDG_CONFIG_HOME doesn't count,
+    as its spec says). web/src/lib/vault.ts's settingsFile finds the same file the same way."""
+    if sys.platform == "darwin":
+        folder = Path.home() / "Library" / "Application Support" / "Proxenos"
+    elif sys.platform == "win32":
+        folder = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "Proxenos"
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME", "")
+        folder = (Path(xdg) if os.path.isabs(xdg) else Path.home() / ".config") / "proxenos"
+    return folder / "settings.json"
+
+
+SETTINGS_FILE = settings_file()
+
 _loaded = False
-# Where `load` and the savers found or put each variable: ".env", "settings" or "keychain".
+# Where `load` and the savers found or put each variable: ".env", "settings" or "keychain" (the
+# secure store, whichever it is here).
 # A variable that's set and isn't here came with the process's environment.
 _origin: dict[str, str] = {}
 
@@ -74,9 +93,9 @@ def vault_path() -> Path:
 
 
 def load() -> None:
-    """Fill the environment from .env (from source), then the settings file, then the Keychain,
-    never over a variable that's already set. Once per process; the savers below keep it current
-    after that."""
+    """Fill the environment from .env (from source), then the settings file, then the secure
+    store, never over a variable that's already set. Once per process; the savers below keep it
+    current after that."""
     global _loaded
     if _loaded:
         return
@@ -123,7 +142,8 @@ def read_settings() -> dict:
 
 
 def saves_to() -> str:
-    """Where a change is saved: ".env" from source with one, else "settings" (and the Keychain)."""
+    """Where a change is saved: ".env" from source with one, else "settings" (and the secure
+    store)."""
     return ".env" if ENV_FILE is not None and ENV_FILE.exists() else "settings"
 
 
@@ -152,8 +172,9 @@ def save_setting(name: str, value: str) -> str:
 
 
 def save_secret(name: str, value: str) -> str:
-    """Save a secret: in .env when running from source with one (or with no Keychain to use),
-    else in the Keychain, with its name added to the settings file's list. Says where."""
+    """Save a secret: in .env when running from source with one (or with no secure store to
+    use), else in the secure store, with its name added to the settings file's list. Says where:
+    ".env", or "the Keychain" (the store's own name on Windows and Linux)."""
     if not SECRET.fullmatch(name):
         raise ValueError(f"{name} isn't one of Proxenos's secrets")
     _check_value(name, value)
@@ -168,14 +189,16 @@ def save_secret(name: str, value: str) -> str:
         _write_settings(settings)
         where = "keychain"
     else:
-        raise SystemExit(f"There's no Keychain here to keep {name} in; put it in .env instead.")
+        raise SystemExit(
+            f"There's no {keychain.store()} here to keep {name} in; put it in .env instead."
+        )
     _set_variable(name, value, where)
-    return ".env" if where == ".env" else "the Keychain"
+    return ".env" if where == ".env" else f"the {keychain.store()}"
 
 
 def forget_secret(name: str) -> bool:
-    """Remove a secret from .env and the Keychain, wherever Proxenos keeps it. Whether it was in
-    either. One from the process's environment stays until that changes."""
+    """Remove a secret from .env and the secure store, wherever Proxenos keeps it. Whether it
+    was in either. One from the process's environment stays until that changes."""
     if not SECRET.fullmatch(name):
         raise ValueError(f"{name} isn't one of Proxenos's secrets")
     load()
@@ -261,9 +284,14 @@ def _write_settings(settings: dict) -> None:
 
 
 def _write_private(path: Path, text: str) -> None:
+    """Write a file only you can read, whole or not at all. On Windows a file's mode is only its
+    read-only flag, so there the folder is what keeps it private: the settings file's, in
+    %APPDATA%, is in your user folder, which only you and the computer's administrators can open.
+    A checkout's .env is as private as the folder it's in."""
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
-    tmp.chmod(0o600)
+    if sys.platform != "win32":
+        tmp.chmod(0o600)  # the mode above only applies when the file is new
     os.replace(tmp, path)

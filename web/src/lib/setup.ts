@@ -1,6 +1,6 @@
 // Server side of the setup page and Settings. Import only from route handlers and server components.
 //
-// Everything goes through `proxenos setup`, which owns the settings file and the Keychain: it
+// Everything goes through `proxenos setup`, which owns the settings file and the secure store: it
 // prints where things stand, and with --apply makes one change read from its stdin. A key or
 // token goes there and nowhere else (not its arguments, its environment, a log, or any answer
 // from here), and the command never prints one back. Its answer is read field by field, so
@@ -74,6 +74,8 @@ function toStatus(raw: unknown): SetupStatus | null {
       models: Array.isArray(ollama.models) ? ollama.models.filter((m): m is string => typeof m === "string") : [],
     },
     keychain: r.keychain === true,
+    // An older proxenos doesn't say: it only ran on a Mac.
+    secretStore: str(r.secret_store)?.slice(0, 40) || "Keychain",
     secrets: Array.isArray(r.secrets)
       ? r.secrets.flatMap((raw): SecretState[] => {
           const s = rec(raw);

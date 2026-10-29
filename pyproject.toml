@@ -9,6 +9,9 @@ description = "Proxenos: acts on your behalf, from a model of you that keeps lea
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=2.3",
+    # Windows Credential Manager, for secrets (keychain.py). Macs use `security`; on Linux the
+    # Secret Service is used when keyring is installed.
+    "keyring>=25; sys_platform == 'win32'",
     "numpy>=1.26",
     "pypdf>=6.0",
     "python-dotenv>=1.0",

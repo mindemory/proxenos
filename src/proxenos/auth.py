@@ -1,7 +1,7 @@
 """One-time browser sign-ins that save a token where Proxenos keeps secrets, with nothing shown.
 
 Each token goes through `config.save_secret`: into .env when running from source with one, else
-into the macOS Keychain.
+into the secure store (the macOS Keychain, or Windows Credential Manager or the Secret Service).
 
 `proxenos auth strava` opens Strava's approval page, catches the redirect on localhost, swaps the
 code for a refresh token and saves it. The Strava ingester notices the new value and switches

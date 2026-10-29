@@ -4,7 +4,7 @@
 // .env (one level above web/), else the settings file the setup page writes, else
 // ~/proxenos_vault. Every setting falls back to its older TWIN_* name when the PROXENOS_*
 // one isn't set, as the Python side does. Secrets are the Python side's alone: nothing
-// here reads the Keychain.
+// here reads the secure store (the Keychain, Windows Credential Manager, the Secret Service).
 //
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
@@ -107,9 +107,18 @@ function fromDotEnv(file: string, key: string): string | undefined {
   return value || undefined;
 }
 
-/** Where the setup page and Settings save settings, through `proxenos setup`. */
+/**
+ * Where the setup page and Settings save settings, through `proxenos setup`: the folder each platform keeps an app's settings in,
+ * found exactly as config.settings_file() finds it. On a Mac ~/Library/Application Support/Proxenos, on Windows %APPDATA%\Proxenos,
+ * elsewhere $XDG_CONFIG_HOME/proxenos, else ~/.config/proxenos (a relative XDG_CONFIG_HOME doesn't count, as its spec says).
+ */
 export function settingsFile(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "Proxenos", "settings.json");
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "Proxenos", "settings.json");
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "Proxenos", "settings.json");
+  }
+  const xdg = process.env.XDG_CONFIG_HOME ?? "";
+  return path.join(path.isAbsolute(xdg) ? xdg : path.join(os.homedir(), ".config"), "proxenos", "settings.json");
 }
 
 /** One key of the settings file ("vault" for PROXENOS_VAULT), when it's a string. */
@@ -1095,9 +1104,11 @@ let rebuilding: Promise<unknown> = Promise.resolve();
 /** The `proxenos` command: PROXENOS_BIN (environment, .env or settings), else the first `proxenos` on PATH. */
 export async function proxenosBin(): Promise<string | null> {
   const set = setting("BIN");
+  // On Windows, pip makes proxenos.exe, and a conda env keeps it in Scripts rather than bin.
+  const windows = process.platform === "win32";
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
-  if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, "bin"));
-  for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, "proxenos"))) {
+  if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, windows ? "Scripts" : "bin"));
+  for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, windows ? "proxenos.exe" : "proxenos"))) {
     try {
       await fs.access(candidate, fsConstants.X_OK);
       return candidate;

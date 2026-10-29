@@ -171,7 +171,8 @@ def _save_state(path: Path, state: dict) -> None:
     tmp = path.with_suffix(".json.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        os.fchmod(f.fileno(), 0o600)  # the mode above only applies when the file is new
+        # The mode above only applies when the file is new. (Not os.fchmod: Windows lacks it.)
+        tmp.chmod(0o600)
         json.dump(state, f)
     os.replace(tmp, path)
 

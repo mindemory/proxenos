@@ -778,7 +778,7 @@ export const SETTING_KEYS = [
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
-/** Where a value comes from, first to last: the shell, the repo's .env, the settings file, the Keychain. */
+/** Where a value comes from, first to last: the shell, the repo's .env, the settings file, the secure store ("keychain" everywhere). */
 export type SettingOrigin = "environment" | ".env" | "settings" | "keychain";
 
 export interface SettingValue {
@@ -795,16 +795,17 @@ export interface SecretState {
 export interface SetupStatus {
   /** A first run: no name and no vault set anywhere. */
   needed: boolean;
-  /** Where a change is saved: the repo's .env (from source, with one), or the settings file and the Keychain. */
+  /** Where a change is saved: the repo's .env (from source, with one), or the settings file and the secure store. */
   savesTo: ".env" | "settings";
-  settingsFile: string; // ~/Library/Application Support/Proxenos/settings.json
+  settingsFile: string; // in the platform's settings folder: ~/Library/Application Support/Proxenos/settings.json on a Mac
   home: string; // the home folder, to tell which typed paths iCloud syncs
   settings: Record<SettingKey, SettingValue>;
   vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
   /** A model on this Mac, Anthropic's with a key, or none yet. */
   model: { kind: "local" | "api" | "none"; name: string };
   ollama: { running: boolean; models: string[] };
-  keychain: boolean; // whether this Mac's Keychain can keep secrets
+  keychain: boolean; // whether this computer's secure store can keep secrets
+  secretStore: string; // that store's name, after "the": "Keychain", "Credential Manager" or "Secret Service"
   secrets: SecretState[];
 }
 

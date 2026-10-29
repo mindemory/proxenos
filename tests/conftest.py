@@ -1,6 +1,7 @@
 """Keep tests away from real credentials and real data: never load the repo's .env, the settings
-file or the Keychain, nor read the data/ folder, and clear any keys the shell already exported,
-so no test can reach a real account."""
+file or the secure store (the Keychain, Windows Credential Manager, the Secret Service), nor read
+the data/ folder, and clear any keys the shell already exported, so no test can reach a real
+account."""
 
 import os
 import subprocess
@@ -60,11 +61,35 @@ class FakeSecurity:
         return subprocess.CompletedProcess(args, 0, "", "")
 
 
+class FakeKeyring:
+    """keyring's backend over a dict of items by (service, account), standing in for Windows
+    Credential Manager and the Secret Service, so no test touches either."""
+
+    def __init__(self):
+        self.items: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service, username):
+        return self.items.get((service, username))
+
+    def set_password(self, service, username, password):
+        self.items[(service, username)] = password
+
+    def delete_password(self, service, username):
+        del self.items[(service, username)]  # keyring raises an error of its own when it isn't
+
+
 @pytest.fixture(autouse=True)
 def fake_keychain(monkeypatch):
     fake = FakeSecurity()
     monkeypatch.setattr("proxenos.keychain._security", fake)
     monkeypatch.setattr("proxenos.keychain.available", lambda: True)
+    return fake
+
+
+@pytest.fixture(autouse=True)
+def fake_keyring(monkeypatch):
+    fake = FakeKeyring()
+    monkeypatch.setattr("proxenos.keychain._keyring", lambda: fake)
     return fake
 
 
