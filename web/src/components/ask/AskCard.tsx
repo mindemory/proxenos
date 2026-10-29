@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Copy, TriangleAlert } from "lucide-react";
+import { ArrowRight, Brain, Check, Copy, TriangleAlert } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { ChannelBadge } from "@/components/drafts/badges";
@@ -65,10 +65,12 @@ interface AskCardProps {
   now: string;
   flash: boolean;
   onDrafts: () => void;
+  /** Think this quick answer through; null while another ask is going. */
+  onAgain: (() => void) | null;
 }
 
 /** One question and what came of it, newest first on the page. */
-export function AskCard({ ask, now, flash, onDrafts }: AskCardProps) {
+export function AskCard({ ask, now, flash, onDrafts, onAgain }: AskCardProps) {
   const failed = ask.status === "failed";
   const working = ask.status === "working";
   return (
@@ -85,6 +87,7 @@ export function AskCard({ ask, now, flash, onDrafts }: AskCardProps) {
             </span>
           )}
           <ShotCount n={ask.images} />
+          {!ask.deep && <span className="text-xs text-faint">Quick answer</span>}
         </div>
         {ask.question ? (
           <QuestionText text={ask.question} />
@@ -130,6 +133,12 @@ export function AskCard({ ask, now, flash, onDrafts }: AskCardProps) {
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {!ask.deep && ask.status === "done" && (
+        <div>
+          <ActionButton icon={Brain} label="Think it through" tone="neutral" disabled={!onAgain} onClick={() => onAgain?.()} />
         </div>
       )}
     </article>

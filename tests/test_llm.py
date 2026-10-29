@@ -1,11 +1,15 @@
 """The model wrapper, against a fake client. No network, no key."""
 
+import os
+import time
 from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 
 from proxenos import llm
+
+_real_waiting = llm.waiting  # conftest stands it in for every test; this one tests it
 
 
 class FakeMessages:
@@ -118,3 +122,21 @@ def test_steps_trim_to_what_a_local_model_takes(monkeypatch):
     monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
     assert llm.fit(400_000) == llm.prompt_chars() - 30_000 < 400_000
     assert llm.fit(50_000) == 50_000
+
+
+def test_a_question_being_answered_holds_other_processes_off(tmp_path):
+    from proxenos.llm import foreground
+
+    waiting = _real_waiting
+    assert not waiting(tmp_path)
+    with foreground(tmp_path):
+        assert (tmp_path / "state" / "asking").read_text() == str(os.getpid())
+        assert not waiting(tmp_path)  # not this process's own calls
+    assert not waiting(tmp_path)
+
+    mark = tmp_path / "state" / "asking"
+    mark.write_text(str(os.getppid()))  # another process, alive
+    assert waiting(tmp_path)
+    old = time.time() - 2000
+    os.utime(mark, (old, old))  # left behind long ago
+    assert not waiting(tmp_path)

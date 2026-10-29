@@ -39,12 +39,13 @@ def test_a_screenshot_is_read_researched_answered_and_its_reply_drafted(tmp_path
     monkeypatch.setenv("PROXENOS_NAME", "Tess")
     model = Model()
 
-    result = ask.ask(tmp_path, "how should I reply?", [PNG], NOW, model)
+    result = ask.ask(tmp_path, "how should I reply?", [PNG], NOW, model, deep=True)
 
     see, answer = model.calls[0], model.calls[-1]
     assert see["images"] == [PNG] and "how should I reply?" in see["prompt"]
     assert "chosen another candidate" in answer["prompt"] and answer["effort"] == "high"
     assert result["status"] == "done" and result["asks"] == ["Mention your health?"]
+    assert not (tmp_path / "clones" / "ask" / "images").exists()  # a deep ask keeps none
     assert result["draft"] == {
         "to": "Ana Lee",
         "channel": "email",
@@ -69,6 +70,51 @@ def test_a_question_without_a_message_has_no_draft_and_a_failure_is_kept(tmp_pat
 
 def test_the_pages_request_keeps_only_what_is_well_formed():
     line = json.dumps({"text": "hi", "images": [PNG, {"type": "image/gif", "data": "x"}, "junk"]})
-    assert ask.read_request(line) == ("hi", [PNG])
+    assert ask.read_request(line) == ("hi", [PNG], False)
+    assert ask.read_request(json.dumps({"text": "hi", "deep": True}))[2] is True
     with pytest.raises(SystemExit):
         ask.read_request(json.dumps({"text": "  ", "images": []}))
+
+
+def test_a_quick_answer_is_one_call_without_thinking_and_keeps_its_screenshots(tmp_path):
+    (tmp_path / "self").mkdir()
+    (tmp_path / "self" / "identity.md").write_text("A researcher.\n" + "x" * 9000)
+    (tmp_path / "self" / "interests.md").write_text("Not read for a quick answer.")
+    model = Model()
+
+    result = ask.ask(tmp_path, "how should I reply?", [PNG], NOW, model, deep=False)
+
+    [call] = model.calls
+    assert call["effort"] == "low" and call["images"] == [PNG]
+    assert set(call["schema"]["required"]) == {"answer", "draft_to", "draft_channel", "draft_body"}
+    assert result["status"] == "done" and result["deep"] is False and result["draft"]
+    assert result["found"].startswith("A quick answer")
+    kept = tmp_path / "clones" / "ask" / "images" / "ask-20260310T120000Z.json"
+    assert json.loads(kept.read_text()) == {"images": [PNG]}
+    assert not (tmp_path / "state" / "asking").exists()  # the mark is gone once it's answered
+
+
+def test_a_quick_ask_is_thought_through_again_with_its_screenshots(tmp_path, monkeypatch):
+    monkeypatch.setattr(ask, "datetime", _Clock([NOW, datetime(2026, 3, 10, 12, 5, tzinfo=UTC)]))
+    ask.ask(tmp_path, "how should I reply?", [PNG], model=Model())
+    model = Model()
+
+    result = ask.again(tmp_path, "ask-20260310T120000Z", model)
+
+    assert result["id"] == "ask-20260310T120500Z" and result["deep"] is True
+    assert model.calls[0]["images"] == [PNG] and model.calls[-1]["effort"] == "high"
+    with pytest.raises(SystemExit):
+        ask.again(tmp_path, "../../etc/passwd", model)
+
+
+class _Clock:
+    """datetime, with now() giving each of `times` in turn."""
+
+    def __init__(self, times):
+        self.times = list(times)
+
+    def now(self, tz=None):
+        return self.times.pop(0)
+
+    def __getattr__(self, name):
+        return getattr(datetime, name)

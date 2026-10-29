@@ -10,12 +10,16 @@ desktop app sets one) never reroutes the key. Everything goes through `ask`.
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 import anthropic
 
-from proxenos.config import env
+from proxenos.config import env, vault_path
 
 # PROXENOS_MODEL overrides it; read on each call, so the value in .env counts too.
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -30,6 +34,11 @@ _OLLAMA = "http://127.0.0.1:11434"
 LOCAL_CONTEXT = 65536
 _LOCAL_TIMEOUT = 900  # seconds; a long answer on a laptop takes minutes, not hours
 _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON schema:"
+# A local model answers one request at a time, so a question someone is waiting on (an Ask)
+# marks itself here, and other calls, a sync's drafts or the night's notes, wait until it's
+# answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
+_FOREGROUND = "state/asking"
+FOREGROUND_MAX = 900
 
 _client: anthropic.Anthropic | None = None
 
@@ -82,6 +91,36 @@ def ask(
         raise ModelError(f"answer cut off at max_tokens={max_tokens}")
     text = "".join(block.text for block in response.content if block.type == "text")
     return json.loads(text) if schema is not None else text
+
+
+@contextmanager
+def foreground(vault: Path) -> Iterator[None]:
+    """While this runs, other processes' local model calls hold off (see `waiting`)."""
+    mark = vault / _FOREGROUND
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    mark.write_text(str(os.getpid()))
+    try:
+        yield
+    finally:
+        mark.unlink(missing_ok=True)
+
+
+def waiting(vault: Path | None = None) -> bool:
+    """Whether another process is answering a question someone is waiting on."""
+    mark = (vault or vault_path()) / _FOREGROUND
+    try:
+        pid, age = int(mark.read_text()), time.time() - mark.stat().st_mtime
+    except (OSError, ValueError):
+        return False
+    if pid == os.getpid() or age > FOREGROUND_MAX:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:  # it ended without clearing its mark
+        return False
+    except PermissionError:
+        pass
+    return True
 
 
 def configured() -> bool:
@@ -147,6 +186,9 @@ def _ask_local(
         "think": effort in ("high", "xhigh", "max"),
         "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
     }
+    deadline = time.monotonic() + FOREGROUND_MAX
+    while waiting() and time.monotonic() < deadline:
+        time.sleep(2)
     for _ in range(2):
         text = _chat(model, body, answer_room)
         if schema is None:

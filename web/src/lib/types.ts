@@ -793,6 +793,8 @@ export interface AskEntry {
   id: string;
   at: string;
   status: AskStatus;
+  /** Researched over rounds and thought through, rather than a quick answer. */
+  deep: boolean;
   question: string;
   images: number; // how many screenshots came with it
   seen: string; // what the screenshots show, transcribed

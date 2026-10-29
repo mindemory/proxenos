@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/Toasts";
 
 import { getJson, useFlash } from "./client";
-import type { AskImage, AskResponse } from "./types";
+import type { AskEntry, AskImage, AskResponse } from "./types";
 
 const POLL_MS = 5000;
 
@@ -20,6 +20,7 @@ export interface Pending {
   since: number;
   question: string;
   images: number;
+  deep: boolean;
   /** The asks that were there before it, so its own can be told from them. */
   known: string[];
 }
@@ -68,6 +69,7 @@ export function useAsk(onEnd: (answered: boolean) => void) {
           since: Date.parse(d.job.started) || Date.now(),
           question: going?.question ?? "",
           images: going?.images ?? 0,
+          deep: going?.deep ?? false,
           known: d.asks.filter((a) => a.status !== "working").map((a) => a.id),
         };
         track(waiting);
@@ -125,11 +127,14 @@ export function useAsk(onEnd: (answered: boolean) => void) {
     };
   }, [polling, absorb]);
 
-  /** Send a question. Resolves true once the server has taken it. */
-  const send = useCallback(
-    async (text: string, images: AskImage[]): Promise<boolean> => {
+  /**
+   * Send a question, or {again: id} to think an earlier quick answer through. Resolves true once
+   * the server has taken it.
+   */
+  const post = useCallback(
+    async (body: object, waiting: Omit<Pending, "since" | "known">): Promise<boolean> => {
       try {
-        const { status, answer } = await postJson<object>("/api/ask", { text, images });
+        const { status, answer } = await postJson<object>("/api/ask", body);
         if (status === 409) {
           // Another is running (from another tab or device): follow that one.
           load();
@@ -137,12 +142,7 @@ export function useAsk(onEnd: (answered: boolean) => void) {
         }
         if (status < 200 || status >= 300) throw new Error(answer.error ?? `The server answered ${status}.`);
         setError(null);
-        track({
-          since: Date.now(),
-          question: text,
-          images: images.length,
-          known: (dataRef.current?.asks ?? []).map((a) => a.id),
-        });
+        track({ ...waiting, since: Date.now(), known: (dataRef.current?.asks ?? []).map((a) => a.id) });
         return true;
       } catch (e) {
         setError(e instanceof TypeError ? "Couldn't reach Proxenos. Is your Mac awake?" : e instanceof Error ? e.message : String(e));
@@ -150,6 +150,18 @@ export function useAsk(onEnd: (answered: boolean) => void) {
       }
     },
     [load, track],
+  );
+
+  const send = useCallback(
+    (text: string, images: AskImage[], deep: boolean) =>
+      post({ text, images, deep }, { question: text, images: images.length, deep }),
+    [post],
+  );
+
+  /** Think an earlier quick answer through, with its question and screenshots. */
+  const again = useCallback(
+    (ask: AskEntry) => post({ again: ask.id }, { question: ask.question, images: ask.images, deep: true }),
+    [post],
   );
 
   /** Stop the ask that's running. */
@@ -161,5 +173,5 @@ export function useAsk(onEnd: (answered: boolean) => void) {
     );
   }, [load]);
 
-  return { data, error, clearError: () => setError(null), pending, stopping, flashId, send, stop };
+  return { data, error, clearError: () => setError(null), pending, stopping, flashId, send, again, stop };
 }

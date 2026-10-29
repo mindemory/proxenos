@@ -16,6 +16,9 @@ interface ComposerProps {
   onShots: Dispatch<SetStateAction<Attachment[]>>;
   sending: boolean;
   onSend: () => void;
+  /** Research it and think it through, rather than answer quickly. */
+  deep: boolean;
+  onDeep: (deep: boolean) => void;
 }
 
 /** Show the count of characters from this many on, so the limit isn't a surprise. */
@@ -26,7 +29,7 @@ const COUNT_FROM = ASK_MAX_TEXT - 2000;
  * a file. Each screenshot is made small as it's added (see askImages.ts), so what shows here is
  * what will be sent.
  */
-export function Composer({ text, onText, shots, onShots, sending, onSend }: ComposerProps) {
+export function Composer({ text, onText, shots, onShots, sending, onSend, deep, onDeep }: ComposerProps) {
   const [processing, setProcessing] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -172,6 +175,13 @@ export function Composer({ text, onText, shots, onShots, sending, onSend }: Comp
           )}
         </p>
         <div className="ml-auto flex items-center gap-3">
+          <label
+            className="inline-flex cursor-pointer select-none items-center gap-2 text-xs text-muted"
+            title="Research your memory over several rounds and think before answering. Takes several minutes."
+          >
+            <input type="checkbox" checked={deep} onChange={(e) => onDeep(e.target.checked)} className="h-4 w-4 accent-accent" />
+            Think it through
+          </label>
           <span className="hidden text-xs text-muted sm:inline">⌘↵ asks</span>
           <ActionButton icon={ArrowUp} label={sending ? "Sending" : "Ask"} tone="accent" active={canSend} disabled={!canSend} onClick={send} />
         </div>

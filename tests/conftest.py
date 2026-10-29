@@ -27,6 +27,8 @@ def no_real_credentials(monkeypatch):
         raise RuntimeError("no embedding model in tests")
 
     monkeypatch.setattr("proxenos.vectors._ollama", no_model)
+    # Nor an Ask running on this computer, which a local model call would wait out.
+    monkeypatch.setattr("proxenos.llm.waiting", lambda vault=None: False)
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)

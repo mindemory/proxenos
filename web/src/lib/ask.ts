@@ -77,8 +77,16 @@ function toImage(raw: unknown): AskImage | string {
   return { type: kind, data };
 }
 
+/** A question as `proxenos ask` takes it. */
+export interface Question {
+  text: string;
+  images: AskImage[];
+  /** Research it and think it through, rather than answer quickly. */
+  deep: boolean;
+}
+
 /** The question in a request's body, or why it can't be asked. Anything else in the body is dropped. */
-export function parseAsk(body: Record<string, unknown>): { text: string; images: AskImage[] } | { error: string } {
+export function parseAsk(body: Record<string, unknown>): Question | { error: string } {
   const raw = body.text ?? "";
   if (typeof raw !== "string") return { error: "text must be a string." };
   if (raw.length > ASK_MAX_TEXT) return { error: `Keep the question to ${ASK_MAX_TEXT.toLocaleString("en-US")} characters.` };
@@ -93,15 +101,28 @@ export function parseAsk(body: Record<string, unknown>): { text: string; images:
   }
   const text = raw.trim();
   if (!text && images.length === 0) return { error: "Ask something, or add a screenshot." };
-  return { text, images };
+  return { text, images, deep: body.deep === true };
+}
+
+/** Whether a value is an ask's id, as `proxenos ask` makes them. */
+export function isAskId(value: unknown): value is string {
+  return typeof value === "string" && /^ask-\d{8}T\d{6}Z$/.test(value);
 }
 
 /**
  * Start `proxenos ask` on a question that passed parseAsk(), with the question on its stdin as one
  * line. Null when an ask is already running.
  */
-export function startAsk(question: { text: string; images: AskImage[] }): Promise<Job | null> {
+export function startAsk(question: Question): Promise<Job | null> {
   return startJob("ask", ["ask"], null, JSON.stringify(question) + "\n");
+}
+
+/**
+ * Think an earlier quick ask through: `proxenos ask` reads its question and kept screenshots from
+ * the vault. Null when an ask is already running.
+ */
+export function startAgain(id: string): Promise<Job | null> {
+  return startJob("ask", ["ask"], null, JSON.stringify({ again: id }) + "\n");
 }
 
 // ── The answers ─────────────────────────────────────────────────────────────
@@ -129,6 +150,8 @@ function toAsk(raw: unknown): AskEntry | null {
     id,
     at: str(r.at) ?? "",
     status,
+    // Asks from before quick answers say nothing of it, and were all thought through.
+    deep: r.deep !== false,
     question: str(r.question) ?? "",
     images: typeof n === "number" && Number.isInteger(n) && n > 0 ? n : 0,
     seen: str(r.seen) ?? "",

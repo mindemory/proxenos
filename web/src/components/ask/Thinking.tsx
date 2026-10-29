@@ -24,29 +24,33 @@ interface ThinkingProps {
   since: number | null;
   question: string;
   images: number;
+  deep: boolean;
   stopping: boolean;
   onStop: (() => void) | null;
 }
 
 /** What the page shows while an ask is being thought through: the model is slow, so say so. */
-export function Thinking({ since, question, images, stopping, onStop }: ThinkingProps) {
+export function Thinking({ since, question, images, deep, stopping, onStop }: ThinkingProps) {
+  const title = deep ? "Thinking it through" : "Answering";
   return (
-    <section className="card flex flex-col gap-4 p-4 sm:p-5" role="status" aria-live="polite" aria-label="Thinking it through">
+    <section className="card flex flex-col gap-4 p-4 sm:p-5" role="status" aria-live="polite" aria-label={title}>
       <div className="flex items-start gap-3">
         <div className="rounded-full bg-accent/10 p-2.5 text-accent">
           <LoaderCircle size={17} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="flex flex-wrap items-baseline gap-x-2.5">
-            <span className="title-2">Thinking it through</span>
+            <span className="title-2">{title}</span>
             {/* Ticking every second: kept out of the live region, or a screen reader would read it out each time. */}
             <span className="text-sm text-muted" aria-hidden="true">
               <Elapsed since={since} />
             </span>
           </p>
           <p className="leading-relaxed text-muted">
-            This can take a few minutes on your Mac&apos;s model. You can leave this page: the answer will be here when
-            you come back.
+            {deep
+              ? "Researching your memory and thinking it through takes several minutes on your Mac's model."
+              : "A quick answer takes a minute or two on your Mac's model, longer while it's busy with a sync."}{" "}
+            You can leave this page: the answer will be here when you come back.
           </p>
         </div>
       </div>

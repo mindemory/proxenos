@@ -26,6 +26,7 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [text, setText] = useState(kept.text);
   const [shots, setShots] = useState<Attachment[]>(kept.shots);
   const [sending, setSending] = useState(false);
+  const [deep, setDeep] = useState(false);
 
   const ended = useCallback((answered: boolean) => {
     if (answered) lastSent = { text: "", shots: [] };
@@ -35,7 +36,7 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
       setShots((s) => (s.length === 0 ? lastSent.shots : s));
     }
   }, []);
-  const { data, error, clearError, pending, stopping, flashId, send, stop } = useAsk(ended);
+  const { data, error, clearError, pending, stopping, flashId, send, again, stop } = useAsk(ended);
 
   useEffect(() => {
     kept = { text, shots };
@@ -51,12 +52,13 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
   const submit = async () => {
     setSending(true);
     const sent = { text: text.trim(), shots };
-    const ok = await send(sent.text, sent.shots.map((s) => s.image));
+    const ok = await send(sent.text, sent.shots.map((s) => s.image), deep);
     setSending(false);
     if (ok) {
       lastSent = sent;
       setText("");
       setShots([]);
+      setDeep(false);
     }
   };
 
@@ -77,11 +79,21 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
           since={since}
           question={pending?.question || working?.question || ""}
           images={pending?.images || working?.images || 0}
+          deep={pending?.deep ?? working?.deep ?? false}
           stopping={stopping}
           onStop={canStop ? stop : null}
         />
       ) : (
-        <Composer text={text} onText={setText} shots={shots} onShots={setShots} sending={sending} onSend={() => void submit()} />
+        <Composer
+          text={text}
+          onText={setText}
+          shots={shots}
+          onShots={setShots}
+          sending={sending}
+          onSend={() => void submit()}
+          deep={deep}
+          onDeep={setDeep}
+        />
       )}
 
       {data === null ? (
@@ -95,16 +107,24 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
       ) : earlier.length === 0 ? (
         !thinking && (
           <p className="max-w-2xl text-sm leading-relaxed text-muted">
-            Ask what you&apos;d ask yourself, or paste a message with a screenshot of the chat. It looks through your
-            memory and answers the way you&apos;d think it through. When it&apos;s a message to you, a draft reply in
-            your voice lands here and in Drafts. Nothing is ever sent for you.
+            Ask what you&apos;d ask yourself, or paste a message with a screenshot of the chat. It answers quickly, from
+            who you are and what&apos;s nearest in your memory; tick Think it through, or press it on an answer, for a
+            deeper look that takes several minutes. When it&apos;s a message to you, a draft reply in your voice lands
+            here and in Drafts. Nothing is ever sent for you.
           </p>
         )
       ) : (
         <section aria-label="Earlier questions" className="space-y-4">
           <p className="smallcaps">Recent</p>
           {earlier.map((a) => (
-            <AskCard key={a.id} ask={a} now={data.now} flash={flashId === a.id} onDrafts={() => onNavigate("drafts")} />
+            <AskCard
+              key={a.id}
+              ask={a}
+              now={data.now}
+              flash={flashId === a.id}
+              onDrafts={() => onNavigate("drafts")}
+              onAgain={thinking ? null : () => void again(a)}
+            />
           ))}
         </section>
       )}

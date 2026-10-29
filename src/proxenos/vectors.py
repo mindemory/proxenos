@@ -30,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
-from proxenos import memory
+from proxenos import llm, memory
 from proxenos.config import env
 
 EMBED_MODEL = "qwen3-embedding:0.6b"
@@ -64,8 +64,8 @@ def update(vault: Path, seconds: float | None = None, embed: Embed | None = None
         todo = [u for u in _units(vault) if have.get(u["key"]) != u["hash"]]
         done = 0
         for start in range(0, len(todo), BATCH):
-            if deadline and time.monotonic() > deadline:
-                break
+            if (deadline and time.monotonic() > deadline) or llm.waiting(vault):
+                break  # out of time, or someone's question needs the computer: the next run goes on
             batch = todo[start : start + BATCH]
             try:
                 vectors = _normalized(embed([u["text"] for u in batch]))
