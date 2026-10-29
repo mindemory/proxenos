@@ -74,7 +74,7 @@ proxenos clone tracker          # also: tasks, care, advisor, network, recall, w
 proxenos web                    # http://127.0.0.1:4747
 ```
 
-To keep it running without a terminal, run `scripts/install-app.sh`: the page and a sync every 15 minutes then start at login. Open http://127.0.0.1:4747 and install it from the browser (Chrome: Install Proxenos; Safari: File, Add to Dock) to have it in the Dock in its own window. To reach it from your phone, put [Tailscale](https://tailscale.com/download) on both, signed in to the same account, and run `proxenos phone`: the page gets a private address only your own devices can open, and Chrome on the phone can add it to the home screen.
+To keep it running without a terminal, run `scripts/install-app.sh`: the page and a sync every 15 minutes then start at login. `scripts/build-mac-app.sh` then builds Proxenos.app into ~/Applications: the page in a window of its own, with a Dock icon and menus, no browser. To reach it from your phone, put [Tailscale](https://tailscale.com/download) on both, signed in to the same account, and run `proxenos phone`: the page gets a private address only your own devices can open, and Chrome on the phone can add it to the home screen.
 
 `proxenos night` runs the whole loop. `scripts/install-night.sh` schedules it every night with launchd.
 
