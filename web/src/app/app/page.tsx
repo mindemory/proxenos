@@ -28,6 +28,9 @@ import { useHome, useItems } from "@/lib/client";
 const Ask = dynamic(() => import("@/components/views/Ask").then((m) => m.Ask), {
   loading: () => <ProseSkeleton label="Loading ask" />,
 });
+const Errands = dynamic(() => import("@/components/views/Errands").then((m) => m.Errands), {
+  loading: () => <ProseSkeleton label="Loading errands" />,
+});
 const Saved = dynamic(() => import("@/components/views/Saved").then((m) => m.Saved), {
   loading: () => <FeedSkeleton label="Loading saved items" />,
 });
@@ -53,7 +56,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /** Views that read as a single column of text, so they sit in a centred column, not across the canvas. */
-const COLUMN_VIEWS: readonly View[] = ["ask", "feed", "saved", "tasks", "care", "advice", "profile", "connect", "status"];
+const COLUMN_VIEWS: readonly View[] = ["ask", "errands", "feed", "saved", "tasks", "care", "advice", "profile", "connect", "status"];
 
 export default function AppPage() {
   const [view, setView] = useState<View>("home");
@@ -137,6 +140,8 @@ export default function AppPage() {
         return <Home home={home} onNavigate={navigate} onMemory={openMemory} />;
       case "ask":
         return <Ask onNavigate={navigate} />;
+      case "errands":
+        return <Errands />;
       case "saved":
         return <Saved />;
       case "tasks":

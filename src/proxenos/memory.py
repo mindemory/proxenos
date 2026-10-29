@@ -623,6 +623,31 @@ def stats(vault: Path | None = None) -> dict:
 
 # Context
 
+
+def records(ids: Iterable[str], *, vault: Path | None = None) -> dict[str, dict]:
+    """The raw records behind these index ids, whole, as their month files hold them, by id.
+    Ids not in the index are left out."""
+    vault = vault or vault_path()
+    path, wanted = index_path(vault), list(dict.fromkeys(ids))
+    if not wanted or not path.exists():
+        return {}
+    with closing(_connect(path)) as db:
+        rows = db.execute(
+            f"SELECT id, file FROM records WHERE id IN ({','.join('?' * len(wanted))})", wanted
+        ).fetchall()
+    by_file: dict[str, set[str]] = {}
+    for row in rows:
+        by_file.setdefault(row["file"], set()).add(row["id"])
+    found = {}
+    for rel, keep in by_file.items():
+        folder = rel.rsplit("/", 1)[0]
+        file = vault / "raw" / rel
+        for record in _load(file) if file.exists() else []:
+            if (key := f"{folder}/{record['id']}") in keep:
+                found[key] = record
+    return found
+
+
 _KEYS = ("id", "source", "stream", "ts", "who", "where_", "title", "text", "from_me")
 
 

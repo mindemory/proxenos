@@ -24,7 +24,8 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                               │                                             │
                               └──index──▶ memory (full-text search)         ▼
                                                         clones: feed, tasks, advice,
-                                                        network, recall, drafts
+                                                        network, recall, projects,
+                                                        errands, drafts
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -70,7 +71,7 @@ Then build the model and the clones, and open the page:
 
 ```bash
 proxenos master                 # notes per month, then the self-model
-proxenos clone tracker          # also: tasks, care, advisor, network, recall, work
+proxenos clone tracker          # also: tasks, care, advisor, network, recall, projects, work
 proxenos web                    # http://127.0.0.1:4747
 ```
 
@@ -109,7 +110,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 |---|---|
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
-| `proxenos web` | The local page: a landing, then the app (Home, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
+| `proxenos web` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Care, Drafts, Advice, Network, Memory, Profile, Status) |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
@@ -117,7 +118,8 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `recall` or `work` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `recall`, `projects` or `work` |
+| `proxenos clone errands "GOAL"` | An errand (from the page's Errands view): something to get done, such as reaching someone about a role with your CV, carried as far as it goes and stopped one tap short, with every step it took. Nothing goes out until you press Send on it |
 | `proxenos night` | Everything above, in order, for a schedule |
 
 ## Development

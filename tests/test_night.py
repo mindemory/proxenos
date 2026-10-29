@@ -3,7 +3,17 @@
 import pytest
 
 from proxenos import cli, llm, master
-from proxenos.clones import advisor, care, network, projects, recall, tasks, tracker, work
+from proxenos.clones import (
+    advisor,
+    care,
+    errands,
+    network,
+    projects,
+    recall,
+    tasks,
+    tracker,
+    work,
+)
 
 
 @pytest.fixture
@@ -18,7 +28,7 @@ def steps(tmp_path, monkeypatch):
         return {"sources_synced": 2, "self_files_written": 1}
 
     monkeypatch.setattr(master, "run", fake_master)
-    for module in (tracker, tasks, care, advisor, network, recall, projects, work):
+    for module in (tracker, tasks, care, advisor, network, recall, projects, errands, work):
         name = module.__name__.rsplit(".", 1)[1]
 
         def fake_run(vault, args, name=name):
@@ -43,6 +53,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
         "network: 1 done",
         "recall: 1 done",
         "projects: 1 done",
+        "errands: 1 done",
         "work: 1 done",
     ]
     assert [name for name, *_ in steps] == ["master", *cli.NIGHT_CLONES]
@@ -54,6 +65,7 @@ def test_night_runs_the_master_then_every_clone_in_order(steps, capsys):
     assert args["tasks"] == {"days": tasks.DAYS}
     assert args["care"] == {"days": care.DAYS, "dry_run": False}
     assert args["recall"] == {"people": recall.PEOPLE}
+    assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
 
 
 def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, capsys):
@@ -80,6 +92,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, ca
         "network: 1 done",
         "recall: 1 done",
         "projects: 1 done",
+        "errands: 1 done",
         "work: 1 done",
     ]
     assert [name for name, *_ in steps] == [
@@ -89,5 +102,6 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(steps, monkeypatch, ca
         "network",
         "recall",
         "projects",
+        "errands",
         "work",
     ]

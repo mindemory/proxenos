@@ -10,6 +10,7 @@ import {
   Network,
   PenLine,
   Plug,
+  Route,
   Rss,
   UserRound,
   type LucideIcon,
@@ -18,6 +19,7 @@ import {
 export type View =
   | "home"
   | "ask"
+  | "errands"
   | "feed"
   | "saved"
   | "tasks"
@@ -34,13 +36,14 @@ export interface NavItem {
   icon: LucideIcon;
   label: string;
   id: View;
-  /** Where it sits in the rail: Home and Ask at the top, the clones' views, and the views about you. */
+  /** Where it sits in the rail: Home, Ask and Errands at the top, the clones' views, and the views about you. */
   group: "home" | "clones" | "you";
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { icon: House, label: "Home", id: "home", group: "home" },
   { icon: MessageSquare, label: "Ask", id: "ask", group: "home" },
+  { icon: Route, label: "Errands", id: "errands", group: "home" },
   { icon: Rss, label: "Feed", id: "feed", group: "clones" },
   { icon: Bookmark, label: "Saved", id: "saved", group: "clones" },
   { icon: ListTodo, label: "Tasks", id: "tasks", group: "clones" },

@@ -729,8 +729,8 @@ export interface ConnectSource {
 export type ConnectJobKind = "gmail" | "whatsapp" | "beeper";
 export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = ["gmail", "whatsapp", "beeper"];
 
-/** Every background command the server runs for the page, one of each kind at a time: those above, and an ask. */
-export type JobKind = ConnectJobKind | "ask";
+/** Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, and a Send. */
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -821,4 +821,88 @@ export interface AskResponse {
   /** The newest asks, newest first. */
   asks: AskEntry[];
   job: AskJob | null;
+}
+
+// ── Errands ─────────────────────────────────────────────────────────────────
+//
+// From clones/errands/<id>.json, which `proxenos clone errands` writes: something to get done,
+// carried as far as it goes without the user, each step on its thread, and the messages it wrote,
+// each waiting on the user's Send.
+
+export const ERRAND_MAX_GOAL = 2000;
+export const ERRAND_MAX_MESSAGE = 20_000;
+
+export type ErrandStatus = "working" | "ready" | "waiting" | "sent" | "failed" | "dropped";
+
+export interface ErrandStep {
+  at: string;
+  title: string;
+  detail: string;
+}
+
+export interface ErrandMessage {
+  /** The message the errand is for, or a note asking someone for an introduction. */
+  role: "main" | "intro";
+  to: string;
+  channel: string;
+  /** An email address the records show, or one the user typed in. */
+  address: string;
+  /** How Send sends it: Mail, Beeper, or nothing yet. */
+  via: "apple_mail" | "beeper" | "";
+  /** How the address or chat is known. */
+  evidence: string;
+  subject: string;
+  body: string;
+  /** The CV goes with it. */
+  attach: boolean;
+  state: "ready" | "waiting" | "sent";
+  sentAt: string;
+}
+
+export interface ErrandCv {
+  name: string;
+  made: string;
+  where: string;
+  /** What in it is no longer true. */
+  notes: string[];
+}
+
+export interface Errand {
+  id: string;
+  goal: string;
+  created: string;
+  updated: string;
+  status: ErrandStatus;
+  summary: string;
+  who: string;
+  why: string;
+  needs: string[];
+  cv: ErrandCv | null;
+  steps: ErrandStep[];
+  messages: ErrandMessage[];
+  error: string | null;
+}
+
+export interface ErrandJob {
+  state: "running" | "done" | "failed" | "stopped";
+  message: string;
+  started: string;
+  finished: string | null;
+}
+
+export interface ErrandsResponse {
+  now: string;
+  vault: VaultInfo;
+  errands: Errand[];
+  /** The errand being carried out now, or how the last one ended. */
+  job: ErrandJob | null;
+  /** The last Send or Drop. */
+  sending: ErrandJob | null;
+}
+
+/** What a Send changes in the message first: an address typed in, or the subject or body edited. */
+export interface ErrandEdits {
+  address?: string;
+  subject?: string;
+  body?: string;
 }

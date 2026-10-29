@@ -228,6 +228,45 @@ end run"""
         raise RuntimeError(f"Mail: {done.stderr.strip()[:200]}")
 
 
+def send_mail(address: str, subject: str, body: str, attachment: Path | None = None) -> None:
+    """A new email with the Mail app, from its default account or PROXENOS_MAIL_FROM, with one
+    file attached. Only an errand's Send calls it, for the one message the user pressed it on."""
+    script = """on run argv
+    set attached to missing value
+    if (item 4 of argv) is not "" then set attached to (POSIX file (item 4 of argv)) as alias
+    tell application "Mail"
+        set m to make new outgoing message with properties {subject:(item 2 of argv), content:(item 3 of argv), visible:false}
+        tell m
+            make new to recipient at end of to recipients with properties {address:(item 1 of argv)}
+            if (item 5 of argv) is not "" then set sender to (item 5 of argv)
+            if attached is not missing value then
+                make new attachment with properties {file name:attached} at after the last paragraph
+            end if
+        end tell
+        delay 3
+        send m
+    end tell
+end run"""
+    done = subprocess.run(
+        [
+            "osascript",
+            "-e",
+            script,
+            address,
+            subject,
+            body + "\n",
+            str(attachment or ""),
+            os.environ.get("PROXENOS_MAIL_FROM", ""),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if done.returncode != 0:
+        raise RuntimeError(f"Mail: {done.stderr.strip()[:200]}")
+
+
 def _send_beeper(thread: dict, text: str) -> None:
     """Send in the chat through Beeper: a chat read through Beeper by its id, a WhatsApp chat by
     the phone number in its id."""
