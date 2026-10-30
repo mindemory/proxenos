@@ -536,6 +536,51 @@ def test_the_command_line_drafts_only_new_replies_and_counts_them(
     assert all(key.startswith("reply-") for key in drafts(vault))
 
 
+def test_a_first_email_from_someone_new_is_answered_like_my_emails_to_others(
+    tmp_path, model, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_EMAILS", "tess@x.org")
+    vault = make_vault(tmp_path)
+    note = "hey Bo, I think the poster is kind of done, so let's print it monday if that works. "
+    write_jsonl(
+        vault / "raw" / "email" / "tess" / "2026-03.jsonl",
+        [
+            {
+                "id": "e1",
+                "ts": "2026-03-05T09:00:00Z",
+                "from_me": True,
+                "to": ["bo@y.org"],
+                "subject": "Poster",
+                "body_new": note * 3,
+            },
+            {
+                "id": "e2",
+                "ts": "2026-03-09T09:00:00Z",
+                "from_address": "kai@startup.example",
+                "from_name": "Kai Founder",
+                "to": ["tess@x.org"],
+                "subject": "Spiral tools",
+                "body_new": "Hi Tess, I build tools for spiral labs. Do you have 20 minutes?",
+            },
+        ],
+    )
+
+    stats = work.replies(vault, now=NOW, read=FakePages())  # as a sync drafts them
+
+    assert stats["drafts_written"] == 1
+    prompt = model.calls[0]["prompt"]
+    assert "- First contact: Tess hasn't written to them before" in prompt
+    assert "a first reply to someone new, written the way they write email" in prompt
+    assert '<example kind="email"' in prompt and "hey Bo, I think the poster" in prompt
+    assert "In this conversation:" not in prompt  # there's none with Kai to show
+    (path,) = drafts(vault).values()
+    assert (front(path)["for"], front(path)["channel"], front(path)["to"]) == (
+        "reply",
+        "email",
+        "Kai Founder",
+    )
+
+
 def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_path, model):
     from proxenos import memory
 

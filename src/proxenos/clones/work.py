@@ -464,6 +464,7 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
             ("Chat", chat["name"]),
             ("Where", where.get(chat["source"], chat["source"])),
             ("Waiting since", _day(chat["since"])),
+            ("First contact", chat.get("first") and f"{person} hasn't written to them before"),
             ("Their own health care, only for a chat that asks about it", health),
         ],
         "",
@@ -475,10 +476,16 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
             + "\n".join(lines(chat["recent"]))
         )
     parts.append("The messages waiting for a reply:\n" + "\n".join(lines(chat["waiting"])))
+    how = (
+        "a first reply to someone new, written the way they write email: match their own "
+        "emails above in length, case, punctuation and words"
+        if chat.get("first")
+        else "written the way they write in this chat: match their own messages above in length, "
+        "case, punctuation, words and emoji, and if they send several short messages here, "
+        "write it that way, one per line"
+    )
     ask = (
-        f"\n\nDraft {person}'s reply to the messages waiting, written the way they write in this "
-        "chat: match their own messages above in length, case, punctuation, words and emoji, "
-        "and if they send several short messages here, write it that way, one per line. Answer "
+        f"\n\nDraft {person}'s reply to the messages waiting, {how}. Answer "
         "what was asked. For a linked page that could be read, reply as someone who has read "
         "it, from what it says; never claim to have read one that couldn't be. Use what their "
         "memory showed above: get dates, deadlines and what's done right, answer as someone who "
