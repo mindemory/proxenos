@@ -37,8 +37,12 @@ the rules in proxenos.voice and examples of the user's own writing picked there:
 in a chat, their own messages in that chat, then on that channel; for anything longer, the
 emails they sent and their posts, with addresses, links and numbers blanked for a care message,
 as care blanks its records. Other people's messages are sent only for a reply: the recent
-conversation in that one chat. The drafts are text for the user to copy: this clone only writes
-files.
+conversation in that one chat. A draft to someone that isn't a reply, such as a task's message
+or an outreach ask, gets what the vault holds with that person instead (their newest records
+anywhere, see proxenos.research), so it picks up where they left off rather than starting from
+scratch. And every draft knows what the user has put out lately, from their sent drafts with no
+one person on them (a post, an essay), so a message builds on it rather than explains it again.
+The drafts are text for the user to copy: this clone only writes files.
 """
 
 import argparse
@@ -68,6 +72,9 @@ TITLE_CHARS = 120
 FOUND_CHARS = 600  # what a reply's research found, as the page shows it
 ASK_CHARS = 200
 ASKS = 3
+SHARED_DAYS = 14  # how far back what the user put out counts as recent
+SHARED = 5
+SHARED_CHARS = 400
 NOW_HOURS = 48  # a "right now" note counts this long
 NOW_CHARS = 1000
 SELF_FILES = ("identity", "voice", "interests")
@@ -196,7 +203,7 @@ def work(
     # Things with no draft yet go first, so what a capped run leaves is next in line, then
     # drafts written before, written again with what's changed since.
     queue = sorted(jobs.values(), key=lambda job: job["id"] in existing)
-    system = _system(vault / "self", now)
+    system = _system(vault / "self", now) + _shared(out, now)
     person = env("NAME", "the person")
     own = voice.Writing(vault)  # read once, when the first draft needs it
     written = failed = 0
@@ -206,6 +213,8 @@ def work(
             prompt = job["prompt"] + _examples(own, job) + pages
             if chat := job.get("chat"):  # a reply: what the vault knows beyond this chat
                 prompt += _research(vault, chat, job["prompt"] + pages, person)
+            elif name := _one_line(job["voice"].get("name")):  # someone they've dealt with before
+                prompt += f"\n\n{who}" if (who := research.person(vault, name, person)) else ""
             prompt += job.get("ask", "")
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
             draft = _draft(job, answer, now)
@@ -391,6 +400,35 @@ def _system(self_dir: Path, now: datetime | None = None) -> str:
             f"{note['text']}"
         )
     return system
+
+
+def _shared(directory: Path, now: datetime) -> str:
+    """What the user has put out lately, for the system prompt: their sent drafts from the last
+    SHARED_DAYS with no one person on them, newest first."""
+    since = _iso(now - timedelta(days=SHARED_DAYS))
+    found = []
+    for path in directory.glob("*.md"):
+        try:
+            text = path.read_text(encoding="utf-8").removeprefix("\ufeff")
+        except (OSError, UnicodeDecodeError):
+            continue
+        fields, front = _front(text) or {}, _FRONT.match(text)
+        if not front or (fields.get("status") or "").strip().lower() != "sent":
+            continue
+        when = fields.get("created") or ""
+        if _one_line(fields.get("to")) or when < since:
+            continue
+        body = _clip(_one_line(text[front.end() :]), SHARED_CHARS)
+        found.append((when, f"- {_day(when)}, {_one_line(fields.get('title'))}: {body}"))
+    if not found:
+        return ""
+    person = env("NAME", "the person")
+    lines = [line for _, line in sorted(found, reverse=True)[:SHARED]]
+    return (
+        f"\n\nWhat {person} has put out lately, as they sent it. Whoever they write to may have "
+        "seen it: build on it rather than explain it again, and bring it up only where it fits.\n"
+        + "\n".join(lines)
+    )
 
 
 def short_self(vault: Path, now: datetime | None = None) -> str:
