@@ -30,6 +30,27 @@ export function isAwaiting(status: string): boolean {
   return status !== "discarded" && status !== "sent";
 }
 
+const NOTE_KINDS = new Set(["doc", "checklist", "plan", "note"]);
+
+/** Kept for the reader, not sent to anyone: a doc, plan, checklist or note addressed to no one. */
+export function isNote(d: Pick<Draft, "kind" | "to">): boolean {
+  return NOTE_KINDS.has(d.kind) && !d.to.trim();
+}
+
+/** Days a draft can sit unchanged before it's folded away as older. */
+export const STALE_DAYS = 3;
+
+/** Not changed for STALE_DAYS: not drafted again, edited or acted on since. */
+export function isStale(d: Draft, now: number): boolean {
+  const changed = Math.max(d.created ? Date.parse(d.created) || 0 : 0, d.updated ? Date.parse(d.updated) || 0 : 0);
+  return now - changed > STALE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** A message or post still to go out, and recent: what asks for the reader on the home page and the top bar. */
+export function isToSend(d: Draft, now: number): boolean {
+  return isAwaiting(d.status) && !isNote(d) && !isStale(d, now);
+}
+
 /** Still the reader's to act on: neither sent nor discarded. */
 export function isLive(status: string): boolean {
   return status !== "discarded" && status !== "sent";

@@ -65,7 +65,7 @@ import type {
   VaultInfo,
   DraftCloseness,
 } from "./types";
-import { foldReviews, isAwaiting } from "./drafts";
+import { foldReviews, isToSend } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
 import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
@@ -1199,6 +1199,8 @@ interface DraftFile {
   fields: Record<string, string>;
   /** The front matter's lines, and the offset where the body starts. */
   head: { lines: string[]; end: number } | null;
+  /** When the file last changed, for a file read from the drafts folder. */
+  mtime?: number;
 }
 
 /** A front matter value: bare text, or a quoted string as a writer might have emitted it. */
@@ -1243,6 +1245,7 @@ function toDraft(file: DraftFile): Draft {
     channel: (f.channel ?? "").trim().toLowerCase(),
     to: (f.to ?? "").trim(),
     created,
+    updated: file.mtime ? new Date(file.mtime).toISOString() : null,
     status: (f.status ?? "draft").trim().toLowerCase() || "draft",
     body: body.replace(/\r\n?/g, "\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, ""),
     found: (f.found ?? "").trim(),
@@ -1288,12 +1291,12 @@ async function readDraftFiles(vault: string): Promise<DraftFile[]> {
   }
   found.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name));
   const out: DraftFile[] = [];
-  for (const { name } of found.slice(0, MAX_DRAFTS)) {
+  for (const { name, mtime } of found.slice(0, MAX_DRAFTS)) {
     try {
       // O_NOFOLLOW: a file swapped for a symlink since the lstat above isn't followed either.
       const fh = await fs.open(path.join(dir, name), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
       try {
-        out.push(readDraftFile(name, await fh.readFile("utf8")));
+        out.push({ ...readDraftFile(name, await fh.readFile("utf8")), mtime });
       } finally {
         await fh.close();
       }
@@ -1556,7 +1559,7 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
     sourceSyncs(vault),
   ]);
   const unanswered = advice.suggestions.filter((s) => s.action === null);
-  const awaiting = drafts.drafts.filter((d) => isAwaiting(d.status));
+  const awaiting = drafts.drafts.filter((d) => isToSend(d, Date.now()));
 
   return {
     now: nowIso(),

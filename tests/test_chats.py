@@ -144,6 +144,55 @@ def test_an_email_waits_when_addressed_to_the_user_by_someone_they_write_to(tmp_
     assert chat["own"] == ["Hi Ana, sure."]  # what they wrote Ana in another thread
 
 
+def test_a_first_email_from_someone_new_waits_when_it_is_personal_and_asks(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+    monkeypatch.setenv("PROXENOS_NAME", "Tess Example")
+
+    def new(thread, sender, text, ts="2026-03-09T09:00:00Z", **extra):
+        return mail(thread, ts, sender, ["me@x.org"], text) | extra
+
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            mail("t0", "2026-03-01T09:00:00Z", "me@x.org", ["bo@y.org"], "Hi Bo, see you.", True),
+            new("f1", "kai@startup.example", "Hi Tess, I'm building a tool for labs."),
+            new(
+                "f1",
+                "kai@startup.example",
+                "Also, would you have 20 minutes next week?",
+                ts="2026-03-09T10:00:00Z",
+                in_reply_to="<f1.2026-03-09T09:00:00Z@x>",  # their own first email
+            ),
+            new("f2", "lin@lab.example", "Dear Dr. Example, let me know if a call works."),
+            new("r1", "hello@startup.example", "Hi Tess, want a demo?"),  # a role address
+            new("r2", "lee@shop.example", "Hi Tess, want a demo? Unsubscribe here."),
+            new("r3", "max@y.org", "Hi Tess, see our launch: https://y.org/new?ref=tess"),  # no ask
+            new("r4", "rae@y.org", "Hello, could you review my paper?"),  # not by name
+            new("r5", "zed@y.org", "Hi Tess, can you come?", gmail_labels=["Spam"]),
+            new("r6", "sam@y.org", "Hi Tess, any news?", in_reply_to="<gone@x>"),  # mail not here
+            new("r7", "pat@y.org", "Hi Tess, can we talk?"),  # writing again and again
+            new("r8", "pat@y.org", "Hi Tess, still keen to talk?"),
+            new("r9", "joy@y.org", "Hi Tess, can we talk?", ts="2026-02-20T09:00:00Z"),
+            new(
+                "r9",
+                "joy@y.org",
+                "Hi Tess, bumping this?",  # a follow-up to one they let sit
+                in_reply_to="<r9.2026-02-20T09:00:00Z@x>",
+            ),
+        ],
+    )
+
+    found = {c["chat"]: c for c in chats.waiting(tmp_path, NOW)}
+
+    assert set(found) == {"f1", "f2"}
+    first = found["f1"]
+    assert (first["name"], first["first"], first["own"], first["recent"]) == ("Kai", True, [], [])
+    assert [m["text"] for m in first["waiting"]] == [
+        "Hi Tess, I'm building a tool for labs.",
+        "Also, would you have 20 minutes next week?",
+    ]
+
+
 def slack(channel, ts, text, user="U2", name="Ana", kind="channel", thread=None, mine=False):
     return {
         "id": f"{channel}/{ts}",

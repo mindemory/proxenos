@@ -332,6 +332,7 @@ export interface Draft {
   channel: string;
   to: string; // "" when the draft is not addressed to anyone
   created: string | null;
+  updated: string | null; // when its file last changed: written again, edited, or its status set
   status: string; // "draft", "approved", "discarded", "sent"
   body: string; // markdown
   found: string; // for a reply: what the twin's look through memory showed, "" when nothing

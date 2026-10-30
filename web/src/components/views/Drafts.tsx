@@ -9,7 +9,7 @@ import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
-import { groupDrafts } from "@/lib/drafts";
+import { groupDrafts, isNote, isStale, STALE_DAYS } from "@/lib/drafts";
 import type { Draft } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,8 +21,11 @@ import { cn } from "@/lib/utils";
 export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
   const { data, error, flashId, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
+  const [showNotes, setShowNotes] = useState<boolean | null>(null);
+  const [showOlder, setShowOlder] = useState<boolean | null>(null);
   const [focusId] = useState(focus ?? null);
-  const focusStatus = data?.drafts.find((d) => d.id === focusId)?.status ?? null;
+  const focusDraft = data?.drafts.find((d) => d.id === focusId) ?? null;
+  const focusStatus = focusDraft?.status ?? null;
 
   useEffect(() => {
     if (focus) onFocused?.();
@@ -44,8 +47,14 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   const kept = data.drafts.filter((d) => d.status !== "discarded");
-  // Not sent yet, approved or not: the reader copies or opens one, then says it went.
-  const toSend = kept.filter((d) => d.status !== "sent");
+  // Not sent yet, approved or not: the reader copies or opens one, then says it went. Docs, plans
+  // and notes addressed to no one are kept apart, folded away: they don't wait on the reader. Nor
+  // does a message left unchanged for STALE_DAYS: it's folded away as older.
+  const nowMs = Date.parse(data.now);
+  const unsent = kept.filter((d) => d.status !== "sent");
+  const toSend = unsent.filter((d) => !isNote(d) && !isStale(d, nowMs));
+  const older = unsent.filter((d) => !isNote(d) && isStale(d, nowMs));
+  const notes = unsent.filter((d) => isNote(d));
   const sent = kept.filter((d) => d.status === "sent");
 
   const card = (d: Draft) => (
@@ -79,6 +88,21 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   }
 
   const sentOpen = showSent ?? focusStatus === "sent";
+  const notesOpen = showNotes ?? notes.some((d) => d.id === focusId);
+  const olderOpen = showOlder ?? older.some((d) => d.id === focusId);
+  const grouped = (list: Draft[]) => (
+    <div className="mt-3 space-y-8">
+      {groupDrafts(list).map((g) => (
+        <section key={g.id} aria-label={g.label}>
+          <h3 className="mb-3 flex items-baseline gap-2 text-lg text-ink">
+            {g.label}
+            <span className="num text-sm text-muted">{g.drafts.length}</span>
+          </h3>
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">{g.drafts.map(card)}</div>
+        </section>
+      ))}
+    </div>
+  );
   const groups = groupDrafts(toSend);
 
   return (
@@ -116,6 +140,32 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
         </div>
       )}
 
+      {older.length > 0 && (
+        <Folded
+          id="drafts-older"
+          title="Older"
+          count={older.length}
+          hint={`Not changed for ${STALE_DAYS} days or more, so likely handled some other way. Discard what you don't need.`}
+          open={olderOpen}
+          onToggle={() => setShowOlder(!olderOpen)}
+        >
+          {grouped(older)}
+        </Folded>
+      )}
+
+      {notes.length > 0 && (
+        <Folded
+          id="drafts-notes"
+          title="Notes and plans"
+          count={notes.length}
+          hint="Reading notes, project plans and checklists for you to keep. Nothing to send."
+          open={notesOpen}
+          onToggle={() => setShowNotes(!notesOpen)}
+        >
+          {grouped(notes)}
+        </Folded>
+      )}
+
       {sent.length > 0 && (
         <section aria-labelledby="drafts-sent" className="px-4 sm:px-6 pb-6">
           <h2 id="drafts-sent" className="font-display text-2xl text-ink">
@@ -137,5 +187,37 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
         </section>
       )}
     </div>
+  );
+}
+
+/** A section folded away under its heading, with a line saying what's in it while it's closed. */
+function Folded({
+  id,
+  title,
+  count,
+  hint,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  hint: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="px-4 sm:px-6 pb-6">
+      <h2 id={id} className="font-display text-2xl text-ink">
+        <button onClick={onToggle} aria-expanded={open} className="flex items-baseline gap-2 text-left hover:text-accent transition-colors">
+          <ChevronRight size={18} className={cn("self-center transition-transform", open && "rotate-90")} />
+          {title}
+          <span className="num text-sm text-muted">{count}</span>
+        </button>
+      </h2>
+      {open ? children : <p className="mt-1 text-sm text-muted">{hint}</p>}
+    </section>
   );
 }
