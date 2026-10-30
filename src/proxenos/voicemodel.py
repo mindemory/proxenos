@@ -18,8 +18,9 @@ VALID goes to data/valid.jsonl, for the loss mlx-lm reports while it trains.
 
 `train` LoRA fine-tunes the base model with mlx-lm (Apple silicon only) into vault/voice/adapter.
 `serve` runs mlx-lm's server with it on 127.0.0.1, which drafts reach as PROXENOS_VOICE_MODEL=mlx.
-`eval` drafts the held-out answers with the base model, the fine-tuned one and the drafting model
-set up now (with the prompt, own examples included, that reply drafts use), and scores each by
+`eval` drafts the newest held-out answer in each held-out chat with the base model, the fine-tuned
+one and the drafting model set up now, given the prompt reply drafts get, with the examples of
+the user's writing proxenos.voice picks from what they wrote before it, and scores each by
 how much of it survived into what the user sent (fidelity's closeness). Everything stays here:
 the base model's weights come from Hugging Face once, and nothing else leaves the computer.
 """
@@ -493,13 +494,16 @@ def table(result: dict) -> str:
 
 
 def _sample(points: list[dict], n: int) -> list[dict]:
-    """Up to `n` answers, one per conversation, taking each source in turn so all have a share."""
+    """Up to `n` answers, the newest in each conversation as a draft would be, taking each
+    source in turn so all have a share."""
     rng = random.Random(0)
     by_source: dict[str, list[dict]] = defaultdict(list)
-    for conversation in sorted({p["conversation"] for p in points}):
-        mine = [p for p in points if p["conversation"] == conversation and p["own"]]
-        if mine:
-            by_source[mine[0]["source"]].append(rng.choice(mine))
+    newest: dict[str, dict] = {}
+    for p in points:
+        if p["own"] and p["ts"] > newest.get(p["conversation"], {}).get("ts", ""):
+            newest[p["conversation"]] = p
+    for conversation in sorted(newest):
+        by_source[newest[conversation]["source"]].append(newest[conversation])
     for found in by_source.values():
         rng.shuffle(found)
     picked: list[dict] = []
@@ -556,16 +560,27 @@ def _drafters(vault: Path, person: str) -> dict[str, Callable[[list[dict]], list
         return draft
 
     def current(points: list[dict]) -> list[str]:
+        from proxenos import voice
         from proxenos.clones import work  # it reads this module
 
         if not llm.configured():
             raise SystemExit("No drafting model set up to compare with.")
         drafting = work._system(vault / "self")
+        written = voice.Writing(vault)
         texts = []
         for point in points:
+            # The prompt a reply draft gets, with the user's own writing from before the
+            # answer only, as drafting it then would have seen it: never the answer itself.
+            before = voice.Writing(vault)
+            before.__dict__["messages"] = [m for m in written.messages if m["ts"] < point["ts"]]
+            before.__dict__["long"] = [t for t in written.long if t["ts"] < point["ts"]]
+            source, key = point["source"], point["conversation"].split("/", 1)[1]
+            job = {"for": "reply", "voice": {"channel": source, "chat": (source, key)}}
+            job["voice"]["here"] = point["own"]
             text, ask = work._reply_text(point, person, "")
+            prompt = text + work._examples(before, job) + ask
             try:
-                answer = llm.ask(text + ask, system=drafting, schema=work._SCHEMA, effort="medium")
+                answer = llm.ask(prompt, system=drafting, schema=work._SCHEMA, effort="medium")
                 texts.append(str(answer.get("body") or ""))
             except llm.ModelError as e:
                 print(f"voice eval: a draft failed ({e})", file=sys.stderr)

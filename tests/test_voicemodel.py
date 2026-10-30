@@ -254,3 +254,26 @@ def test_the_command_builds_the_set(tmp_path, monkeypatch, capsys):
     cli.main(["voice", "build"])
 
     assert capsys.readouterr().out.startswith("voice: 3 conversations, 3 answers, 1 emails")
+
+
+def test_the_drafting_model_gets_a_reply_prompt_with_only_earlier_writing(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    voicemodel.build(vault, now=NOW)
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, effort="medium"):
+        asked.append((prompt, system))
+        return {"body": "it went well"}
+
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:some-model")
+    monkeypatch.setattr(voicemodel.llm, "ask", ask)
+
+    result = voicemodel.evaluate(vault, models=("current",))
+
+    ((prompt, system),) = asked
+    assert "Dana: how was the talk?" in prompt and "Draft Tess's reply" in prompt
+    assert "- hey dana" in prompt  # their own earlier message in that chat
+    assert "- sending now" in prompt  # and to others on WhatsApp, from before
+    assert "went well!" not in prompt  # never the answer
+    assert "You are Tess" not in system and "Tess" in system
+    assert result["summary"]["current"]["mean"] > 0.5
