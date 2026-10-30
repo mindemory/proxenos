@@ -6,7 +6,9 @@ export is a full snapshot, so each run re-reads one and merges by id.
 
 The files and columns below follow LinkedIn's export as documented. They have only been checked
 against synthetic CSVs, since no real export has been read yet. File names match in any case,
-and column names ignoring case, spaces and punctuation, with the alternatives in _COLUMNS:
+with or without the numeric suffix newer exports add to some (Shares_<id>.csv), and with several
+copies the most recently modified wins. Column names match ignoring case, spaces and punctuation,
+with the alternatives in _COLUMNS:
 - Profile.csv: First Name, Last Name, Headline, Summary, Industry, Geo Location. The full name
   marks from_me in messages.
 - Positions.csv: Company Name, Title, Description, Location, Started On, Finished On.
@@ -290,9 +292,10 @@ def _name(row: Row) -> str | None:
 
 
 def _find(export: Path, name: str) -> Path | None:
-    """<name>.csv in the export folder, in any case."""
-    filename = f"{name}.csv".lower()
-    return next((p for p in export.iterdir() if p.name.lower() == filename and p.is_file()), None)
+    """<name>.csv or <name>_<digits>.csv in the export folder, in any case. The newest of several."""
+    filename = re.compile(rf"{re.escape(name)}(_\d+)?\.csv", re.IGNORECASE)
+    found = [p for p in export.iterdir() if filename.fullmatch(p.name) and p.is_file()]
+    return max(found, key=lambda p: (p.stat().st_mtime, p.name), default=None)
 
 
 def _rows(export: Path, name: str, marker: str) -> list[Row | None]:

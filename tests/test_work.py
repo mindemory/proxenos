@@ -755,3 +755,54 @@ def test_every_draft_gets_the_rules_and_my_own_writing_for_where_it_goes(
     care = prompts["Get the referral"]  # blanked, as care's own records are
     assert "hey Ana, I think the poster" in care and "[phone]" in care
     assert "[address at x.org]" in care and "603-555-0142" not in care
+
+
+def test_a_task_message_picks_up_from_what_was_said_with_that_person(tmp_path, model):
+    from proxenos import memory
+
+    vault = make_vault(tmp_path)
+    write_jsonl(
+        vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            {
+                "id": "wa/1",
+                "ts": "2026-03-09T09:00:00Z",
+                "chat_id": "asha",
+                "chat_name": "Asha",
+                "chat_type": "direct",
+                "from_me": True,
+                "text": "told you about the knee already, all good now",
+            }
+        ],
+    )
+    memory.build(vault)
+
+    work.work(vault, limit=1, now=NOW)
+
+    (call,) = model.calls
+    assert "Send Asha the slides" in call["prompt"]
+    assert "Their newest records with Asha elsewhere" in call["prompt"]
+    assert "told you about the knee already" in call["prompt"].split("elsewhere")[1]
+
+
+def test_every_draft_knows_what_i_put_out_lately_and_not_what_i_sent_one_person(tmp_path, model):
+    vault = make_vault(tmp_path)
+    folder = vault / "clones" / "drafts"
+
+    def sent(name, title, to, created, body):
+        write(
+            folder / f"{name}.md",
+            f"---\nid: {name}\ntitle: {json.dumps(title)}\nkind: doc\nfor: project\n"
+            f"channel: other\nto: {json.dumps(to)}\ncreated: {created}\nstatus: sent\n---\n\n{body}\n",
+        )
+
+    sent("post", "Launch post", "", "2026-03-08T10:00:00Z", "The toolbox is out today.")
+    sent("old", "Old post", "", "2026-02-01T10:00:00Z", "Something from February.")
+    sent("dm", "To Asha", "Asha", "2026-03-09T10:00:00Z", "Just for Asha.")
+
+    work.work(vault, limit=2, now=NOW)
+
+    system = model.calls[0]["system"]
+    assert "Launch post: The toolbox is out today." in system
+    assert "February" not in system and "Just for Asha" not in system
+    assert all(c["system"] == system for c in model.calls)
