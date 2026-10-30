@@ -30,6 +30,18 @@ export function isAwaiting(status: string): boolean {
   return status !== "discarded" && status !== "sent";
 }
 
+const NOTE_KINDS = new Set(["doc", "checklist", "plan", "note"]);
+
+/** Kept for the reader, not sent to anyone: a doc, plan, checklist or note addressed to no one. */
+export function isNote(d: Pick<Draft, "kind" | "to">): boolean {
+  return NOTE_KINDS.has(d.kind) && !d.to.trim();
+}
+
+/** A message or post still to go out: what asks for the reader on the home page and the top bar. */
+export function isToSend(d: Draft): boolean {
+  return isAwaiting(d.status) && !isNote(d);
+}
+
 /** Still the reader's to act on: neither sent nor discarded. */
 export function isLive(status: string): boolean {
   return status !== "discarded" && status !== "sent";

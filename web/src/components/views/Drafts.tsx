@@ -9,7 +9,7 @@ import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
-import { groupDrafts } from "@/lib/drafts";
+import { groupDrafts, isNote } from "@/lib/drafts";
 import type { Draft } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,8 +21,10 @@ import { cn } from "@/lib/utils";
 export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
   const { data, error, flashId, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
+  const [showNotes, setShowNotes] = useState<boolean | null>(null);
   const [focusId] = useState(focus ?? null);
-  const focusStatus = data?.drafts.find((d) => d.id === focusId)?.status ?? null;
+  const focusDraft = data?.drafts.find((d) => d.id === focusId) ?? null;
+  const focusStatus = focusDraft?.status ?? null;
 
   useEffect(() => {
     if (focus) onFocused?.();
@@ -44,8 +46,10 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   const kept = data.drafts.filter((d) => d.status !== "discarded");
-  // Not sent yet, approved or not: the reader copies or opens one, then says it went.
-  const toSend = kept.filter((d) => d.status !== "sent");
+  // Not sent yet, approved or not: the reader copies or opens one, then says it went. Docs, plans
+  // and notes addressed to no one are kept apart, folded away: they don't wait on the reader.
+  const toSend = kept.filter((d) => d.status !== "sent" && !isNote(d));
+  const notes = kept.filter((d) => d.status !== "sent" && isNote(d));
   const sent = kept.filter((d) => d.status === "sent");
 
   const card = (d: Draft) => (
@@ -79,6 +83,7 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   }
 
   const sentOpen = showSent ?? focusStatus === "sent";
+  const notesOpen = showNotes ?? (focusDraft !== null && focusStatus !== "sent" && isNote(focusDraft));
   const groups = groupDrafts(toSend);
 
   return (
@@ -114,6 +119,36 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
             </section>
           ))}
         </div>
+      )}
+
+      {notes.length > 0 && (
+        <section aria-labelledby="drafts-notes" className="px-4 sm:px-6 pb-6">
+          <h2 id="drafts-notes" className="font-display text-2xl text-ink">
+            <button
+              onClick={() => setShowNotes(!notesOpen)}
+              aria-expanded={notesOpen}
+              className="flex items-baseline gap-2 text-left hover:text-accent transition-colors"
+            >
+              <ChevronRight size={18} className={cn("self-center transition-transform", notesOpen && "rotate-90")} />
+              Notes and plans
+              <span className="num text-sm text-muted">{notes.length}</span>
+            </button>
+          </h2>
+          {!notesOpen && <p className="mt-1 text-sm text-muted">Reading notes, project plans and checklists for you to keep. Nothing to send.</p>}
+          {notesOpen && (
+            <div className="mt-3 space-y-8">
+              {groupDrafts(notes).map((g) => (
+                <section key={g.id} aria-label={g.label}>
+                  <h3 className="mb-3 flex items-baseline gap-2 text-lg text-ink">
+                    {g.label}
+                    <span className="num text-sm text-muted">{g.drafts.length}</span>
+                  </h3>
+                  <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">{g.drafts.map(card)}</div>
+                </section>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {sent.length > 0 && (

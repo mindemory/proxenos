@@ -65,7 +65,7 @@ import type {
   VaultInfo,
   DraftCloseness,
 } from "./types";
-import { foldReviews, isAwaiting } from "./drafts";
+import { foldReviews, isToSend } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
 import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
@@ -1556,7 +1556,7 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
     sourceSyncs(vault),
   ]);
   const unanswered = advice.suggestions.filter((s) => s.action === null);
-  const awaiting = drafts.drafts.filter((d) => isAwaiting(d.status));
+  const awaiting = drafts.drafts.filter(isToSend);
 
   return {
     now: nowIso(),

@@ -6,7 +6,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { layoutConstellation, type Constellation } from "./constellation";
-import { isAwaiting } from "./drafts";
+import { isToSend } from "./drafts";
 import { memoryCount } from "./memory";
 import type { SummaryResponse } from "./types";
 import { getDrafts, getGraphThumb, nowIso, sourceSyncs, vaultInfo, vaultPath } from "./vault";
@@ -67,7 +67,7 @@ export async function getSummary(): Promise<SummaryResponse> {
     vault: info,
     memories,
     people: net.people,
-    drafts: drafts.exists ? drafts.drafts.filter((d) => isAwaiting(d.status)).length : null,
+    drafts: drafts.exists ? drafts.drafts.filter(isToSend).length : null,
     sources: synced.length,
     lastSync,
     constellation: net.constellation,
