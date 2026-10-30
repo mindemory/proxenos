@@ -55,7 +55,7 @@ from proxenos import chats, links, llm, research, voice
 from proxenos.clones import care
 from proxenos.config import env
 
-MAX_DRAFTS = 20
+MAX_DRAFTS = 10  # a night's drafts: few enough to read the next morning
 REPLIES = 10
 SYNC_REPLIES = 5  # the most replies one `proxenos sync` drafts
 PAGES = 3  # links read per reply

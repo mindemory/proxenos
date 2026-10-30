@@ -67,7 +67,7 @@ export async function getSummary(): Promise<SummaryResponse> {
     vault: info,
     memories,
     people: net.people,
-    drafts: drafts.exists ? drafts.drafts.filter(isToSend).length : null,
+    drafts: drafts.exists ? drafts.drafts.filter((d) => isToSend(d, Date.now())).length : null,
     sources: synced.length,
     lastSync,
     constellation: net.constellation,
