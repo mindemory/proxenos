@@ -61,10 +61,11 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     return sorted(found, key=lambda c: c["since"], reverse=True)
 
 
-def conversations(vault: Path) -> Iterator[tuple]:
+def conversations(vault: Path, email_months: int = EMAIL_MONTHS) -> Iterator[tuple]:
     """Every conversation, as (source, chat key, messages, elsewhere, examples): the messages
     as one shape (see below), and for _waiting where the user's own words come from when they
-    haven't written in it, and how many to keep."""
+    haven't written in it, and how many to keep. Email is its last `email_months`, or all of
+    it with 0."""
     for source, (stream, read) in _SOURCES.items():
         chats: dict[str, list[dict]] = defaultdict(list)
         for message in _messages(sorted((vault / "raw" / source / stream).glob("*.jsonl")), read):
@@ -77,7 +78,7 @@ def conversations(vault: Path) -> Iterator[tuple]:
         yield from _slack(folder.parent.name, sorted(folder.glob("*.jsonl")))
 
     # Email: a thread counts when the user wrote in it, or has written to its sender anywhere.
-    months = sorted({p.name for p in (vault / "raw" / "email").glob("*/*.jsonl")})[-EMAIL_MONTHS:]
+    months = sorted({p.name for p in (vault / "raw" / "email").glob("*/*.jsonl")})[-email_months:]
     files = [p for p in (vault / "raw" / "email").glob("*/*.jsonl") if p.name in months]
     threads: dict[str, list[dict]] = defaultdict(list)
     sent: dict[str, list[dict]] = defaultdict(list)  # address → the user's emails to it

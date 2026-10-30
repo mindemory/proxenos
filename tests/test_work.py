@@ -468,6 +468,38 @@ def test_a_chat_waiting_on_a_reply_is_drafted_first_in_its_own_voice(tmp_path, m
     assert fields["title"] == 'Draft: "Asha"'
 
 
+def test_with_a_voice_model_it_writes_the_reply_and_the_model_the_rest(
+    tmp_path, model, monkeypatch
+):
+    vault = chat_vault(tmp_path)
+    asked = []
+
+    def voice(prompt, system):
+        asked.append((prompt, system))
+        if "fail" in system:
+            raise llm.ModelError("the voice model isn't answering")
+        return "Tess: yaa coming!\nsee you fri"
+
+    monkeypatch.setattr(llm, "ask_voice", voice)
+    monkeypatch.setenv("PROXENOS_VOICE_MODEL", "mlx")
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+
+    ((prompt, system),) = asked
+    assert system.startswith("You are Tess.")
+    assert (
+        prompt.startswith("WhatsApp, with Asha:\n")
+        and "Asha: also are you coming friday?" in prompt
+    )
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    assert path.read_text().endswith("\n\nyaa coming!\nsee you fri\n")
+    assert front(path)["title"] == 'Draft: "Asha"'  # still the drafting model's
+
+    monkeypatch.setenv("PROXENOS_NAME", "fail")
+    path.unlink()
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+    assert "Hi! About Asha." in path.read_text()  # the drafting model's reply stands
+
+
 def test_a_page_that_cannot_be_read_is_said_so(tmp_path, model):
     vault = chat_vault(tmp_path)
 

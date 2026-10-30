@@ -8,7 +8,8 @@ it's set.
 `proxenos setup --apply` takes one change as JSON on stdin and prints {"ok", "message" or
 "error", "status"}:
 - {"settings": {"name": ..., "vault": ..., "docs_dirs": ...}} saves those settings; "" removes
-  one. The vault folder is made if it isn't there, and has to be outside this repo.
+  one. The vault folder is made if it isn't there, and has to be outside this repo. A voice model
+  (for reply drafts, see proxenos.voice) is "mlx", "mlx:<port>" or "ollama:<name>".
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
   it would use) and saves it, and the model is then Anthropic's.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
@@ -30,6 +31,7 @@ SETTINGS = {
     "name": "NAME",
     "vault": "VAULT",
     "model": "MODEL",
+    "voice_model": "VOICE_MODEL",
     "docs_dirs": "DOCS_DIRS",
     "website_repo": "WEBSITE_REPO",
     "spotify_export": "SPOTIFY_EXPORT",
@@ -51,6 +53,7 @@ SECRETS = (
     "MICROSOFT_CLIENT_ID",
 )
 _MODEL = re.compile(r"[\w.:/-]{1,100}")
+_VOICE = re.compile(r"mlx(:\d{1,5})?|ollama:[\w.:/-]{1,100}")
 _KEY = re.compile(r"sk-ant-[\w-]{10,500}")
 _MAX_NAME = 100
 _KEY_CHECK_SECONDS = 20
@@ -166,6 +169,10 @@ def _save_settings(changes: dict) -> str:
         raise ValueError(f"Keep the name under {_MAX_NAME} characters.")
     if values.get("model") and not _MODEL.fullmatch(values["model"]):
         raise ValueError("That isn't a model's name.")
+    if values.get("voice_model") and not _VOICE.fullmatch(values["voice_model"]):
+        raise ValueError(
+            "A voice model is mlx (as `proxenos voice serve` runs it) or ollama:<name>."
+        )
     if "vault" in values:
         values["vault"] = _make_vault(values["vault"])
 

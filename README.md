@@ -64,7 +64,7 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
 - **The master** merges the notes into a single self-model: identity, interests, taste, voice, routines and open questions. Slow-changing parts change only through proposals you accept.
 - **Clones** read the self-model and each do one job. The page shows their output and records your reactions, which feed back into the next run.
 
-More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [data sources](docs/data_sources.md), [the feed and the page](docs/tracker.md), [related work](docs/landscape.md).
+More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [data sources](docs/data_sources.md), [the feed and the page](docs/tracker.md), [a voice model trained on your own writing](docs/voice.md), [related work](docs/landscape.md).
 
 ## Privacy
 

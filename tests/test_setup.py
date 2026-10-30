@@ -123,6 +123,15 @@ def test_folder_settings_are_saved_and_missing_ones_said(home):
     assert "one line" in apply({"settings": {"name": "Ana\nPROXENOS_VAULT=/"}})["error"]
 
 
+def test_a_voice_model_is_served_here_or_in_ollama(home):
+    assert apply({"settings": {"voice_model": "mlx"}})["ok"]
+    assert config.env("VOICE_MODEL") == "mlx"
+    assert apply({"settings": {"voice_model": "ollama:tess-voice"}})["ok"]
+    assert "A voice model is" in apply({"settings": {"voice_model": "gpt-9"}})["error"]
+    assert apply({"settings": {"voice_model": ""}})["ok"]
+    assert config.env("VOICE_MODEL") == ""
+
+
 def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
     home, anthropic_says, fake_keychain
 ):

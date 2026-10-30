@@ -27,6 +27,7 @@ from proxenos import (
     schedule,
     setup,
     vectors,
+    voice,
     webapp,
 )
 from proxenos.config import vault_path
@@ -109,6 +110,10 @@ def main(argv: list[str] | None = None) -> None:
         "ask", help="a question or screenshots, answered as you'd think it"
     )
     ask.add_arguments(asking)
+    tune = commands.add_parser(
+        "voice", help="a small model trained here on your own writing, for reply drafts"
+    )
+    voice.add_arguments(tune)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     settings = commands.add_parser("setup", help="your settings and which secrets are set, as JSON")
     settings.add_argument(
@@ -137,6 +142,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "ask":
         ask.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "voice":
+        voice.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "phone":
         vault_path()  # loads settings

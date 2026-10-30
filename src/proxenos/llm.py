@@ -6,6 +6,10 @@ everything the model knows, built in code from the vault each time. Any other na
 Anthropic API with a personal key (ANTHROPIC_API_KEY, in the Keychain or .env), kept apart from
 any work or university account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the
 Claude desktop app sets one) never reroutes the key. Everything goes through `ask`.
+
+PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voice): "mlx"
+for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
+for one imported into Ollama. It goes through `ask_voice`.
 """
 
 import json
@@ -40,6 +44,10 @@ _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON s
 # answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
 _FOREGROUND = "state/asking"
 FOREGROUND_MAX = 900
+VOICE_PORT = 8899
+VOICE_TEMPERATURE = 0.7
+VOICE_TOKENS = 600
+_VOICE_TIMEOUT = 120
 
 _client: anthropic.Anthropic | None = None
 
@@ -211,6 +219,46 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     if answer.get("done_reason") == "length":
         raise ModelError(f"answer cut off at {answer_room} tokens")
     return answer["message"]["content"]
+
+
+def voice_on() -> bool:
+    """Whether reply drafts go to a voice model."""
+    return bool(env("VOICE_MODEL").strip())
+
+
+def ask_voice(prompt: str, system: str, max_tokens: int = VOICE_TOKENS) -> str:
+    """One answer from the voice model, as plain text: no schema, which a small model trained
+    only to write as the user wouldn't keep to."""
+    model = env("VOICE_MODEL").strip()
+    if model.startswith(LOCAL):
+        return _ask_local(model.removeprefix(LOCAL), prompt, system, None, "low", max_tokens)
+    kind, _, port = model.partition(":")
+    if kind != "mlx" or not (port or str(VOICE_PORT)).isdigit():
+        raise ModelError(f"{model} isn't a voice model: give mlx, mlx:<port> or ollama:<name>")
+    body = {
+        "model": "default_model",  # the one `proxenos voice serve` started with, adapter and all
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": VOICE_TEMPERATURE,
+    }
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port or VOICE_PORT}/v1/chat/completions",
+        json.dumps(body).encode(),
+        {"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_VOICE_TIMEOUT) as response:
+            answer = json.load(response)
+        return answer["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as e:
+        raise ModelError(f"voice model: {e.read().decode(errors='replace')[:300]}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise ModelError(f"the voice model isn't answering ({e}); is it being served?") from e
+    except (ValueError, KeyError, IndexError, TypeError) as e:
+        raise ModelError(f"the voice model's answer wasn't one ({e})") from e
 
 
 def _get_client() -> anthropic.Anthropic:
