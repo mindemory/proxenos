@@ -21,13 +21,17 @@ VALID goes to data/valid.jsonl, for the loss mlx-lm reports while it trains.
 `eval` drafts the newest held-out answer in each held-out chat with the base model, the fine-tuned
 one and the drafting model set up now, given the prompt reply drafts get, with the examples of
 the user's writing proxenos.voice picks from what they wrote before it, and scores each by
-how much of it survived into what the user sent (fidelity's closeness). Everything stays here:
+how much of it survived into what the user sent (fidelity's closeness). `score` reads texts (a
+post, an essay, a web page) paragraph by paragraph and says how much more likely the fine-tuned
+model finds each than the base model does: how much it reads like the user, next to the same
+measure on their own held-out emails and posts. Everything stays here:
 the base model's weights come from Hugging Face once, and nothing else leaves the computer.
 """
 
 import argparse
 import bisect
 import hashlib
+import html
 import importlib.util
 import json
 import os
@@ -66,6 +70,11 @@ LEARNING_RATE = 1e-4
 MAX_SEQ = 2048
 EVAL_N = 60
 MODELS = ("base", "tuned", "current")
+SCORE_WORDS = 8  # a paragraph shorter than this says too little to score
+REFERENCE = 30  # of the user's own held-out emails and posts, scored the same way
+REFERENCE_WORDS = 30
+# What a text to score is asked as, by its kind, as the training set asked for one.
+KINDS = {"post": "A LinkedIn post.", "email": "A new email to someone.", "message": "A message."}
 _WHERE = {
     "whatsapp": "WhatsApp",
     "linkedin": "LinkedIn",
@@ -604,11 +613,137 @@ def _read_jsonl(path: Path) -> list[dict]:
         return []
 
 
+# ── How much a text reads like the user ──────────────────────────────────────
+
+Scorer = Callable[[list[tuple[str, str]]], list[tuple[float, int]]]
+
+
+def score(
+    vault: Path,
+    texts: dict[str, str],
+    kind: str = "post",
+    scorers: dict[str, Scorer] | None = None,
+) -> dict:
+    """Each paragraph of each text, with how much more likely the voice model finds it than
+    the base model, in nats a token: above 0 it reads more like the user than the base model
+    expects, below 0 less. `reference` is the same for the user's own held-out emails and posts,
+    what their writing scores; `texts` maps a name to its text (HTML or plain)."""
+    person = env("NAME", "the person")
+    ask = KINDS[kind]
+    pieces = [(name, para) for name, text in texts.items() for para in paragraphs(text)]
+    own = [
+        example["messages"]
+        for example in _read_jsonl(vault / "voice" / "data" / "test.jsonl")
+        if not example["messages"][1]["content"].startswith(tuple(_WHERE.values()))
+        and len(example["messages"][2]["content"].split()) >= REFERENCE_WORDS
+    ][:REFERENCE]
+    asks = [(ask, para) for _, para in pieces] + [(m[1]["content"], m[2]["content"]) for m in own]
+    scorers = scorers or _scorers(vault, person)
+    base, tuned = scorers["base"](asks), scorers["tuned"](asks)
+    gains = [(t - b) / max(n, 1) for (b, n), (t, _) in zip(base, tuned, strict=True)]
+    found = [
+        {"text": name, "paragraph": para, "score": round(gain, 3)}
+        for (name, para), gain in zip(pieces, gains, strict=False)
+    ]
+    reference = gains[len(pieces) :]
+    by_text = {
+        name: round(mean(f["score"] for f in found if f["text"] == name), 3)
+        for name in texts
+        if any(f["text"] == name for f in found)
+    }
+    return {
+        "texts": by_text,
+        "paragraphs": found,
+        "reference": round(mean(reference), 3) if reference else None,
+        "reference_n": len(reference),
+    }
+
+
+def paragraphs(text: str) -> list[str]:
+    """A text's paragraphs, as plain text: a web page's without its markup, scripts and
+    navigation, and none shorter than SCORE_WORDS words."""
+    if re.search(r"<(p|div|html|body|li)\b", text, re.IGNORECASE):
+        text = re.sub(r"(?is)<(script|style|nav|header|footer|head)\b.*?</\1>", " ", text)
+        text = re.sub(r"(?is)<!--.*?-->", " ", text)
+        text = re.sub(
+            r"(?i)</?(p|div|li|h\d|br|ul|ol|section|article|blockquote)\b[^>]*>", "\n\n", text
+        )
+        text = html.unescape(re.sub(r"<[^>]+>", " ", text))
+    found = []
+    for block in re.split(r"\n\s*\n", text):
+        block = " ".join(
+            re.sub(r"^\s*(#+|[-*>]|\d+\.)\s+", "", line) for line in block.splitlines()
+        )
+        block = " ".join(block.split())
+        if len(block.split()) >= SCORE_WORDS:
+            found.append(block)
+    return found
+
+
+def score_table(result: dict, shown: int = 6) -> str:
+    """The scores, each text's, then its paragraphs that read least like the user."""
+    lines = [
+        f"Your own held-out emails and posts score {result['reference']:+.2f} "
+        f"({result['reference_n']} of them); 0 is no more like you than the base model expects."
+        if result["reference"] is not None
+        else "No held-out emails or posts to compare with: run `proxenos voice build`.",
+        "",
+        "| text | score |",
+        "|---|---|",
+        *(f"| {name} | {value:+.2f} |" for name, value in result["texts"].items()),
+    ]
+    for name in result["texts"]:
+        least = sorted(
+            (p for p in result["paragraphs"] if p["text"] == name), key=lambda p: p["score"]
+        )
+        lines += ["", f"Least like you in {name}:"]
+        lines += [f"- {p['score']:+.2f} {p['paragraph'][:120]}" for p in least[:shown]]
+    return "\n".join(lines)
+
+
+def _scorers(vault: Path, person: str) -> dict[str, Scorer]:
+    about = trained(vault)
+    if about is None:
+        raise SystemExit("No voice model yet: run `proxenos voice train` first.")
+
+    def scorer(adapter: Path | None) -> Scorer:
+        def logprobs(asks: list[tuple[str, str]]) -> list[tuple[float, int]]:
+            import mlx.core as mx
+            from mlx_lm import load
+
+            model, tokenizer = load(about["base"], adapter_path=str(adapter) if adapter else None)
+            found = []
+            for ask, text in asks:
+                messages = [
+                    {"role": "system", "content": system(person)},
+                    {"role": "user", "content": ask},
+                ]
+                start = tokenizer.apply_chat_template(
+                    messages, add_generation_prompt=True, return_dict=False, **NO_THINKING
+                )
+                ids = mx.array([*start, *tokenizer.encode(text, add_special_tokens=False)])
+                logits = model(ids[None, :-1])[0]
+                logits = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
+                picked = mx.take_along_axis(logits, ids[1:, None], axis=-1)[len(start) - 1 :]
+                found.append((picked.sum().item(), picked.size))
+            del model
+            mx.clear_cache()
+            return found
+
+        return logprobs
+
+    return {"base": scorer(None), "tuned": scorer(vault / "voice" / "adapter")}
+
+
 # ── The command ──────────────────────────────────────────────────────────────
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("action", choices=["build", "train", "serve", "eval"])
+    parser.add_argument("action", choices=["build", "train", "serve", "eval", "score"])
+    parser.add_argument("files", nargs="*", type=Path, help="for score: texts or web pages")
+    parser.add_argument(
+        "--kind", choices=list(KINDS), default="post", help="for score: what the texts are"
+    )
     parser.add_argument("--base", default=BASE, help=f"the model to train (default {BASE})")
     parser.add_argument("--iters", type=int, default=ITERS, help="training steps")
     parser.add_argument("--port", type=int, default=llm.VOICE_PORT, help="where serve answers")
@@ -627,6 +762,11 @@ def run(vault: Path, args: argparse.Namespace) -> None:
         print(_summary(train(vault, args.base, args.iters)))
     elif args.action == "serve":
         serve(vault, args.port)
+    elif args.action == "score":
+        if not args.files:
+            raise SystemExit("usage: proxenos voice score FILE [FILE ...]")
+        texts = {path.name: path.read_text(encoding="utf-8") for path in args.files}
+        print(score_table(score(vault, texts, args.kind)))
     else:
         models = tuple(m for m in args.models.split(",") if m in MODELS)
         print(table(evaluate(vault, args.n, models)))

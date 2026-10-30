@@ -277,3 +277,52 @@ def test_the_drafting_model_gets_a_reply_prompt_with_only_earlier_writing(tmp_pa
     assert "went well!" not in prompt  # never the answer
     assert "You are Tess" not in system and "Tess" in system
     assert result["summary"]["current"]["mean"] > 0.5
+
+
+def test_a_web_page_is_scored_by_its_paragraphs_without_markup():
+    page = """<html><head><title>x</title><script>var a = "<p>no</p>";</script></head><body>
+    <nav><a href="/">Home</a> and all the other links up here</nav>
+    <h1>Proxenos</h1><p>It drafts replies to people &amp; never sends a thing by itself.</p>
+    <p>Too short.</p><ul><li>Everything stays on your own computer, in a folder you choose.</li>
+    </ul></body></html>"""
+    assert voicemodel.paragraphs(page) == [
+        "It drafts replies to people & never sends a thing by itself.",
+        "Everything stays on your own computer, in a folder you choose.",
+    ]
+    assert voicemodel.paragraphs(
+        "# A title that is long enough to count\n\nshort\n\n- one two three four five six seven eight"
+    ) == [
+        "A title that is long enough to count",
+        "one two three four five six seven eight",
+    ]
+
+
+def test_a_text_scores_by_how_much_likelier_the_voice_model_finds_it(tmp_path):
+    vault = make_vault(tmp_path)
+    voicemodel.build(vault, now=NOW)
+    test = vault / "voice" / "data" / "test.jsonl"
+    own = {
+        "messages": [{}, {"content": "A new email to Erin. Subject: Hi"}, {"content": "word " * 40}]
+    }
+    test.write_text(test.read_text() + json.dumps(own) + "\n")
+    asked = []
+
+    def scorer(gain):
+        def logprobs(asks):
+            asked.append(asks)
+            return [(gain * len(text.split()) if "mine" in text else -1.0, 2) for _, text in asks]
+
+        return logprobs
+
+    text = "This one is mine and so it reads like me.\n\nThis one is a model's, smooth and empty prose."
+    result = voicemodel.score(
+        vault, {"post.md": text}, scorers={"base": scorer(0), "tuned": scorer(1)}
+    )
+
+    assert asked[0][0] == ("A LinkedIn post.", "This one is mine and so it reads like me.")
+    assert [p["score"] for p in result["paragraphs"]] == [5.0, 0.0]
+    assert result["texts"] == {"post.md": 2.5}
+    assert result["reference_n"] == 1  # the held-out chat reply is no email or post
+    table = voicemodel.score_table(result)
+    assert "| post.md | +2.50 |" in table
+    assert table.index("+0.00 This one is a model's") < table.index("+5.00 This one is mine")

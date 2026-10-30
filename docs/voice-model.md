@@ -37,6 +37,12 @@ proxenos voice eval
 This drafts 60 of the held-out answers three ways: with the base model untrained, with your voice model, and with the drafting model you use now, given the same prompt reply drafts get, your own last messages in that chat included. Each draft is then scored by how much of it survived into what you actually sent: 1.0 means word for word, near 0 means something else. That's the same measure the Drafts page tracks. A fourth row, your previous message in that chat sent again, shows what a score means on your data. `vault/voice/eval.json` has every draft next to what you sent, so you can read them yourself. After training again, `proxenos voice eval --models tuned` drafts only with the voice model and keeps the other drafts from the last run.
 
 ```bash
+proxenos voice score essay.md page.html
+```
+
+This reads each text paragraph by paragraph and scores how much more likely your voice model finds each paragraph than the base model does, in nats per token. Above 0, it reads more like you than the base model expects; below 0, less. Your own held-out emails and posts are scored the same way for comparison. It lists the paragraphs that read least like you, so you know where to look before you post something. Use `--kind email` for an email.
+
+```bash
 proxenos voice serve
 ```
 
