@@ -34,7 +34,7 @@ This downloads the base model's public weights once and trains a LoRA adapter, a
 proxenos voice eval
 ```
 
-This drafts 60 of the held-out answers three ways: with the base model untrained, with your voice model, and with the drafting model you use now, given the same prompt reply drafts get, your own last messages in that chat included. Each draft is then scored by how much of it survived into what you actually sent: 1.0 means word for word, near 0 means something else. That's the same measure the Drafts page tracks. A fourth row, your previous message in that chat sent again, shows what a score means on your data. `vault/voice/eval.json` has every draft next to what you sent, so you can read them yourself.
+This drafts 60 of the held-out answers three ways: with the base model untrained, with your voice model, and with the drafting model you use now, given the same prompt reply drafts get, your own last messages in that chat included. Each draft is then scored by how much of it survived into what you actually sent: 1.0 means word for word, near 0 means something else. That's the same measure the Drafts page tracks. A fourth row, your previous message in that chat sent again, shows what a score means on your data. `vault/voice/eval.json` has every draft next to what you sent, so you can read them yourself. After training again, `proxenos voice eval --models tuned` drafts only with the voice model and keeps the other drafts from the last run.
 
 ```bash
 proxenos voice serve

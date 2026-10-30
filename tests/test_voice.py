@@ -236,6 +236,13 @@ def test_the_evaluation_scores_each_model_against_what_was_sent(tmp_path):
     assert stat.S_IMODE((vault / "voice" / "eval.json").stat().st_mode) == 0o600
     assert "| tuned | 1.00 | 1.00 | 2 |" in voice.table(result)
 
+    # Trained again: only the voice model drafts, and the base model's drafts are kept.
+    drafters["base"] = lambda points: pytest.fail("drafted again")
+    drafters["tuned"] = lambda points: ["went"]
+    again = voice.evaluate(vault, n=5, models=("tuned",), drafters=drafters)
+    assert again["summary"]["base"] == summary["base"]
+    assert again["summary"]["tuned"]["mean"] < 1.0
+
 
 def test_the_command_builds_the_set(tmp_path, monkeypatch, capsys):
     vault = make_vault(tmp_path)

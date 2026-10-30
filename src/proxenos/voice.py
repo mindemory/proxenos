@@ -418,7 +418,9 @@ def evaluate(
     drafters: dict[str, Callable[[list[dict]], list[str]]] | None = None,
 ) -> dict:
     """Draft `n` held-out answers with each of `models` and score them against what the user
-    sent. Writes vault/voice/eval.json, with every draft, and returns the summary."""
+    sent. Writes vault/voice/eval.json, with every draft, and returns the summary. A model not
+    asked for this time keeps its drafts from the last evaluation of the same answers, so the
+    voice model can be trained and scored again without drafting the rest again."""
     from proxenos import fidelity  # it reads the work clone, which reads this module
 
     person = env("NAME", "the person")
@@ -426,10 +428,14 @@ def evaluate(
     if not points:
         raise SystemExit("Nothing held out to evaluate on: run `proxenos voice build` first.")
     drafters = drafters or _drafters(vault, person)
+    before = _drafted(vault / "voice" / "eval.json", points)
     drafts: dict[str, list[str]] = {"last message again": [p["own"][-1] for p in points]}
-    for name in models:
-        print(f"voice eval: {name}, {len(points)} drafts", file=sys.stderr, flush=True)
-        drafts[name] = drafters[name](points)
+    for name in MODELS:
+        if name in models:
+            print(f"voice eval: {name}, {len(points)} drafts", file=sys.stderr, flush=True)
+            drafts[name] = drafters[name](points)
+        elif name in before:
+            drafts[name] = before[name]
 
     scores = {
         name: [
@@ -502,6 +508,17 @@ def _sample(points: list[dict], n: int) -> list[dict]:
             if by_source[source] and len(picked) < n:
                 picked.append(by_source[source].pop())
     return picked
+
+
+def _drafted(path: Path, points: list[dict]) -> dict[str, list[str]]:
+    """Each model's drafts of these answers in an earlier evaluation, when it had them all."""
+    try:
+        items = json.loads(path.read_text(encoding="utf-8"))["items"]
+        found = {(i["conversation"], i["sent"]): i["drafts"] for i in items}
+        rows = [found[(p.get("conversation"), p["sent"])] for p in points]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+    return {name: [row[name] for row in rows] for name in MODELS if all(name in r for r in rows)}
 
 
 def _drafters(vault: Path, person: str) -> dict[str, Callable[[list[dict]], list[str]]]:
