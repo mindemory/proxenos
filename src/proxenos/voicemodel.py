@@ -661,7 +661,8 @@ def score(
 
 def paragraphs(text: str) -> list[str]:
     """A text's paragraphs, as plain text: a web page's without its markup, scripts and
-    navigation, and none shorter than SCORE_WORDS words."""
+    navigation, a draft's without its front matter, and none shorter than SCORE_WORDS words."""
+    text = re.sub(r"\A---[ \t]*\r?\n.*?\r?\n---[ \t]*(\r?\n|\Z)", "", text, flags=re.DOTALL)
     if re.search(r"<(p|div|html|body|li)\b", text, re.IGNORECASE):
         text = re.sub(r"(?is)<(script|style|nav|header|footer|head)\b.*?</\1>", " ", text)
         text = re.sub(r"(?is)<!--.*?-->", " ", text)

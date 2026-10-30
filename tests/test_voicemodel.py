@@ -295,6 +295,8 @@ def test_a_web_page_is_scored_by_its_paragraphs_without_markup():
         "A title that is long enough to count",
         "one two three four five six seven eight",
     ]
+    draft = '---\nid: post\ntitle: "A post with a long enough title here"\n---\n\nThe post itself, long enough to be scored.'
+    assert voicemodel.paragraphs(draft) == ["The post itself, long enough to be scored."]
 
 
 def test_a_text_scores_by_how_much_likelier_the_voice_model_finds_it(tmp_path):
