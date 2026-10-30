@@ -50,9 +50,10 @@ from proxenos.clones import care
 from proxenos.config import env
 from proxenos.ingest import linkedin
 
-# Qwen3.5 9B at 4 bits: 6 GB, for a Mac with 32 GB. With 16 GB, mlx-community/Qwen3.5-4B-4bit
-# (3 GB) has the same chat template. Their thinking is switched off: a draft doesn't need it.
-BASE = "mlx-community/Qwen3.5-9B-4bit"
+# Gemma 4 E4B at 4 bits: 5 GB, for a Mac with 32 GB; with 16 GB, mlx-community/gemma-4-e2b-it-4bit
+# (3.6 GB). Not Qwen3.5: mlx trains its DeltaNet layers one token at a time, which runs out of
+# memory here. Thinking is switched off for any model that has it: a draft doesn't need it.
+BASE = "mlx-community/gemma-4-e4b-it-4bit"
 NO_THINKING = {"enable_thinking": False}
 YEARS = 5
 PER_CHAT = 40
@@ -61,13 +62,14 @@ VALID = 20
 VALID_MAX = 400
 BURST = timedelta(minutes=15)  # as fidelity counts what was sent
 CONTEXT_CHARS = 3000  # the most of a conversation shown, its newest lines
-ANSWER_CHARS = 3000
+ANSWER_CHARS = 2000  # so that with the conversation it fits MAX_SEQ tokens
 # Training: 1000 steps of 4 examples, about an hour and a half on an M1 Pro with 32 GB.
 ITERS = 1000
-BATCH = 4
+BATCH = 2  # two examples a pass, two passes a step: a vocabulary this big makes large logits
+ACCUMULATE = 2
 LAYERS = 16
 LEARNING_RATE = 1e-4
-MAX_SEQ = 2048
+MAX_SEQ = 1536
 EVAL_N = 60
 MODELS = ("base", "tuned", "current")
 SCORE_WORDS = 8  # a paragraph shorter than this says too little to score
@@ -357,6 +359,8 @@ def train(
         str(iters),
         "--batch-size",
         str(BATCH),
+        "--grad-accumulation-steps",
+        str(ACCUMULATE),
         "--num-layers",
         str(LAYERS),
         "--learning-rate",

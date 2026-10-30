@@ -7,8 +7,8 @@ A voice model is the next step. It's a small open model fine-tuned on your own c
 ## What you need
 
 - **A Mac with Apple silicon.** Training uses [mlx-lm](https://github.com/ml-explore/mlx-lm), Apple's library for running and fine-tuning models on its own chips.
-- **Memory:** 32 GB for the default model, Qwen3.5 9B. With 16 GB, train the 4B model instead: `--base mlx-community/Qwen3.5-4B-4bit`.
-- **Disk:** about 6 GB for the 9B model's weights (3 GB for the 4B), plus a few hundred MB for the training set, the trained adapter and the evaluation.
+- **Memory:** 32 GB for the default model, Google's Gemma 4 E4B. With 16 GB, train the smaller E2B instead: `--base mlx-community/gemma-4-e2b-it-4bit`. Qwen3.5 models don't work here: mlx trains their DeltaNet layers one token at a time, which runs out of memory even on short chats.
+- **Disk:** about 5 GB for the model's weights (3.6 GB for the E2B), plus a few hundred MB for the training set, the trained adapter and the evaluation.
 - **Time:** about a minute to build the training set. Training takes a few hours on an M1 Pro with 32 GB at the default 1000 steps; a newer chip is faster. Evaluating 60 drafts takes minutes for the small model and longer for a big local drafting model. Training uses the GPU flat out, so start it when you won't need the computer.
 - **Your data in the vault:** chats (WhatsApp, Messenger, Instagram, LinkedIn, X, Slack), email, and the LinkedIn export. The more you've written, the better. A few thousand of your replies is plenty.
 
