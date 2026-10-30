@@ -37,7 +37,7 @@ the task, idea or feed item as the other clones wrote it. Raw messages are sent 
 the recent conversation in that one chat. The drafts are text for the user to copy: this clone
 only writes files.
 
-With a voice model set up (PROXENOS_VOICE_MODEL, see proxenos.voice), a reply's body is the voice
+With a voice model set up (PROXENOS_VOICE_MODEL, see proxenos.voicemodel), a reply's body is the voice
 model's, from the same conversation, and the drafting model still writes its title, what it
 rests on and what to ask. When the voice model doesn't answer, the drafting model's reply stands.
 """
@@ -52,7 +52,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, links, llm, research, voice
+from proxenos import chats, links, llm, research, voicemodel
 from proxenos.config import env
 
 MAX_DRAFTS = 20
@@ -484,7 +484,7 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
 def _voiced(chat: dict, person: str) -> str | None:
     """The voice model's reply to a chat, or None when it didn't give one."""
     try:
-        return voice.reply(chat, person) or None
+        return voicemodel.reply(chat, person) or None
     except llm.ModelError as e:
         print(
             f"work: the voice model didn't answer ({' '.join(str(e).split())[:200]})",

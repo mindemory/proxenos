@@ -9,7 +9,7 @@ it's set.
 "error", "status"}:
 - {"settings": {"name": ..., "vault": ..., "docs_dirs": ...}} saves those settings; "" removes
   one. The vault folder is made if it isn't there, and has to be outside this repo. A voice model
-  (for reply drafts, see proxenos.voice) is "mlx", "mlx:<port>" or "ollama:<name>".
+  (for reply drafts, see proxenos.voicemodel) is "mlx", "mlx:<port>" or "ollama:<name>".
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
   it would use) and saves it, and the model is then Anthropic's.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.

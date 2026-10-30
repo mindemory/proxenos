@@ -1,6 +1,6 @@
 """A voice model: a small open model fine-tuned on this computer on the user's own writing, so
 reply drafts sound like them with no paid model behind them. Optional, and off until the voice
-model setting names it (PROXENOS_VOICE_MODEL, see proxenos.llm). docs/voice.md has the how-to.
+model setting names it (PROXENOS_VOICE_MODEL, see proxenos.llm). docs/voice-model.md has the how-to.
 
 `proxenos voice build` writes the training set into vault/voice/, readable only by the user. Each
 example is a conversation as it stood when the user answered someone, and what they sent, as

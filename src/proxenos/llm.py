@@ -7,7 +7,7 @@ Anthropic API with a personal key (ANTHROPIC_API_KEY, in the Keychain or .env), 
 any work or university account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the
 Claude desktop app sets one) never reroutes the key. Everything goes through `ask`.
 
-PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voice): "mlx"
+PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voicemodel): "mlx"
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
 for one imported into Ollama. It goes through `ask_voice`.
 """

@@ -8,7 +8,7 @@ from itertools import pairwise
 
 import pytest
 
-from proxenos import chats, cli, voice
+from proxenos import chats, cli, voicemodel
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 
@@ -107,7 +107,7 @@ def examples(vault):
 def test_the_set_is_each_answer_with_its_chat_then_emails_and_posts(tmp_path):
     vault = make_vault(tmp_path)
 
-    stats = voice.build(vault, now=NOW)
+    stats = voicemodel.build(vault, now=NOW)
 
     assert stats == {
         "conversations": 3,
@@ -137,7 +137,7 @@ def test_the_set_is_each_answer_with_its_chat_then_emails_and_posts(tmp_path):
 
 def test_the_newest_conversations_are_held_out_for_evaluation(tmp_path):
     vault = make_vault(tmp_path)
-    voice.build(vault, now=NOW)
+    voicemodel.build(vault, now=NOW)
 
     (point,) = read_jsonl(vault / "voice" / "eval.jsonl")
     assert (point["conversation"], point["sent"], point["own"]) == (
@@ -151,7 +151,7 @@ def test_the_newest_conversations_are_held_out_for_evaluation(tmp_path):
 
 def test_the_set_is_readable_only_by_you(tmp_path):
     vault = make_vault(tmp_path)
-    voice.build(vault, now=NOW)
+    voicemodel.build(vault, now=NOW)
 
     assert stat.S_IMODE((vault / "voice").stat().st_mode) == 0o700
     for path in (vault / "voice").rglob("*.jsonl"):
@@ -161,12 +161,12 @@ def test_the_set_is_readable_only_by_you(tmp_path):
 def test_a_draft_is_asked_for_just_as_training_saw_it(tmp_path):
     waiting_vault = make_vault(tmp_path / "before", dana_answered=False)
     (chat,) = [c for c in chats.waiting(waiting_vault, NOW) if c["chat"] == "dana"]
-    asked = voice.prompt(chat, "Tess")
+    asked = voicemodel.prompt(chat, "Tess")
 
     answered = make_vault(tmp_path / "after")
-    voice.build(answered, now=NOW)
+    voicemodel.build(answered, now=NOW)
     (point,) = read_jsonl(answered / "voice" / "eval.jsonl")
-    assert voice.prompt(point, "Tess") == asked
+    assert voicemodel.prompt(point, "Tess") == asked
     assert asked == (
         "WhatsApp, with Dana:\n[2026-03-09 09:00] Tess: hey dana\n"
         "[2026-03-09 10:00] Dana: how was the talk?"
@@ -178,24 +178,24 @@ def test_a_long_chat_shows_only_its_newest_lines():
         {"ts": f"2026-03-09T10:{i:02d}:00Z", "mine": False, "sender": "Ann", "text": "x" * 500}
         for i in range(20)
     ]
-    shown = voice.prompt({"source": "slack", "name": "#lab", "waiting": lines}, "Tess")
+    shown = voicemodel.prompt({"source": "slack", "name": "#lab", "waiting": lines}, "Tess")
     assert shown.startswith("Slack, with #lab:\n")
     assert shown.count("Ann: ") == 5 and shown.endswith("[2026-03-09 10:19] Ann: " + "x" * 500)
 
 
 def test_what_the_model_writes_is_cleaned_of_thinking_and_a_copied_label():
-    assert voice.clean("<think>hmm</think>\n[2026-03-09 10:05] Tess: went well!", "Tess") == (
+    assert voicemodel.clean("<think>hmm</think>\n[2026-03-09 10:05] Tess: went well!", "Tess") == (
         "went well!"
     )
-    assert voice.clean("Tess: sure\nsee you", "Tess") == "sure\nsee you"
-    assert voice.clean("Re the talk: it went well", "Tess") == "Re the talk: it went well"
+    assert voicemodel.clean("Tess: sure\nsee you", "Tess") == "sure\nsee you"
+    assert voicemodel.clean("Re the talk: it went well", "Tess") == "Re the talk: it went well"
 
 
 def test_training_runs_mlx_lm_on_the_set_into_the_vault(tmp_path):
     vault = make_vault(tmp_path)
     with pytest.raises(SystemExit, match="voice build"):
-        voice.train(vault, run=lambda *a, **k: pytest.fail("trained with no set"))
-    voice.build(vault, now=NOW)
+        voicemodel.train(vault, run=lambda *a, **k: pytest.fail("trained with no set"))
+    voicemodel.build(vault, now=NOW)
     ran = []
 
     def fake_run(command, **kwargs):
@@ -203,8 +203,8 @@ def test_training_runs_mlx_lm_on_the_set_into_the_vault(tmp_path):
         (vault / "voice" / "adapter" / "adapters.safetensors").write_bytes(b"weights")
         return type("Done", (), {"returncode": 0})()
 
-    assert voice.trained(vault) is None
-    voice.train(vault, base="some/model-4bit", iters=10, run=fake_run)
+    assert voicemodel.trained(vault) is None
+    voicemodel.train(vault, base="some/model-4bit", iters=10, run=fake_run)
 
     (command,) = ran
     assert command[1:4] == ["-m", "mlx_lm", "lora"]
@@ -213,18 +213,18 @@ def test_training_runs_mlx_lm_on_the_set_into_the_vault(tmp_path):
     assert flags["--data"] == str(vault / "voice" / "data")
     assert flags["--adapter-path"] == str(vault / "voice" / "adapter")
     assert "--mask-prompt" in command
-    assert voice.trained(vault)["base"] == "some/model-4bit"
+    assert voicemodel.trained(vault)["base"] == "some/model-4bit"
 
 
 def test_the_evaluation_scores_each_model_against_what_was_sent(tmp_path):
     vault = make_vault(tmp_path)
-    voice.build(vault, now=NOW)
+    voicemodel.build(vault, now=NOW)
     drafters = {
         "base": lambda points: ["It went quite well, thank you for asking." for _ in points],
         "tuned": lambda points: [p["sent"] for p in points],
     }
 
-    result = voice.evaluate(vault, n=5, models=("base", "tuned"), drafters=drafters)
+    result = voicemodel.evaluate(vault, n=5, models=("base", "tuned"), drafters=drafters)
 
     assert result["n"] == 1 and result["by_source"] == {"whatsapp": 1}
     summary = result["summary"]
@@ -234,12 +234,12 @@ def test_the_evaluation_scores_each_model_against_what_was_sent(tmp_path):
     saved = json.loads((vault / "voice" / "eval.json").read_text())
     assert saved["items"][0]["drafts"]["tuned"] == "went well!"
     assert stat.S_IMODE((vault / "voice" / "eval.json").stat().st_mode) == 0o600
-    assert "| tuned | 1.00 | 1.00 | 2 |" in voice.table(result)
+    assert "| tuned | 1.00 | 1.00 | 2 |" in voicemodel.table(result)
 
     # Trained again: only the voice model drafts, and the base model's drafts are kept.
     drafters["base"] = lambda points: pytest.fail("drafted again")
     drafters["tuned"] = lambda points: ["went"]
-    again = voice.evaluate(vault, n=5, models=("tuned",), drafters=drafters)
+    again = voicemodel.evaluate(vault, n=5, models=("tuned",), drafters=drafters)
     assert again["summary"]["base"] == summary["base"]
     assert again["summary"]["tuned"]["mean"] < 1.0
 
@@ -248,7 +248,7 @@ def test_the_command_builds_the_set(tmp_path, monkeypatch, capsys):
     vault = make_vault(tmp_path)
     monkeypatch.setenv("PROXENOS_VAULT", str(vault))
     monkeypatch.setattr(
-        voice, "datetime", type("Frozen", (datetime,), {"now": lambda tz=None: NOW})
+        voicemodel, "datetime", type("Frozen", (datetime,), {"now": lambda tz=None: NOW})
     )
 
     cli.main(["voice", "build"])
