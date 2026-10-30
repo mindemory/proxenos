@@ -61,22 +61,29 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     return sorted(found, key=lambda c: c["since"], reverse=True)
 
 
-def conversations(vault: Path, email_months: int = EMAIL_MONTHS) -> Iterator[tuple]:
+def conversations(
+    vault: Path, months: int | None = None, email: bool = True, email_months: int = EMAIL_MONTHS
+) -> Iterator[tuple]:
     """Every conversation, as (source, chat key, messages, elsewhere, examples): the messages
     as one shape (see below), and for _waiting where the user's own words come from when they
-    haven't written in it, and how many to keep. Email is its last `email_months`, or all of
+    haven't written in it, and how many to keep. `months` reads only each chat stream's newest
+    month files, and email=False leaves email out. Email is its last `email_months`, or all of
     it with 0."""
     for source, (stream, read) in _SOURCES.items():
         chats: dict[str, list[dict]] = defaultdict(list)
-        for message in _messages(sorted((vault / "raw" / source / stream).glob("*.jsonl")), read):
+        paths = sorted((vault / "raw" / source / stream).glob("*.jsonl"))
+        for message in _messages(paths[-months:] if months else paths, read):
             chats[message["chat"]].append(message)
         for key, messages in chats.items():
             yield source, key, messages, None, OWN_MESSAGES
 
     # Slack, one workspace at a time: who the user is differs between workspaces.
     for folder in sorted((vault / "raw" / "slack").glob("*/messages")):
-        yield from _slack(folder.parent.name, sorted(folder.glob("*.jsonl")))
+        paths = sorted(folder.glob("*.jsonl"))
+        yield from _slack(folder.parent.name, paths[-months:] if months else paths)
 
+    if not email:
+        return
     # Email: a thread counts when the user wrote in it, or has written to its sender anywhere.
     months = sorted({p.name for p in (vault / "raw" / "email").glob("*/*.jsonl")})[-email_months:]
     files = [p for p in (vault / "raw" / "email").glob("*/*.jsonl") if p.name in months]

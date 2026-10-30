@@ -12,10 +12,11 @@ For each project that isn't paused, a run:
   from one of its people, so nothing new is missed, then the records nearest its name, what it's
   about and each term, in meaning and in words (research._search);
 - gives the model that, with who the user is in short, the project's last status and the end of
-  its log, and asks where it stands now: the status (where it is, deadlines, what's done and
-  what's open), what changed since the last run, the next steps (what, who, by when), what only
-  the user can decide, and up to two drafts that move it on: a message to a collaborator, a plan
-  for the next analysis, a checklist;
+  its log, and, for the drafts, the rules for writing as the user and their own longer writing
+  as examples (proxenos.voice), and asks where it stands now: the status (where it is,
+  deadlines, what's done and what's open), what changed since the last run, the next steps
+  (what, who, by when), what only the user can decide, and up to two drafts that move it on: a
+  message to a collaborator, a plan for the next analysis, a checklist;
 - writes clones/projects/<id>/status.md, the status now, adds a dated entry to log.md, what
   changed and the next steps, and puts the drafts in clones/drafts/ (for: project), where the
   page shows them with their actions. The project's drafts from earlier runs that the user
@@ -34,7 +35,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory, research
+from proxenos import llm, memory, research, voice
 from proxenos.clones import work
 from proxenos.config import env
 
@@ -188,12 +189,14 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
             + "\n".join(research._line(h, person) for h in near)
             if near
             else "",
+            voice.examples(voice.Writing(vault), "other"),  # how the drafts should read
         )
         if part
     )
+    system = _SYSTEM.format(person=person, drafts=DRAFTS) + "\n\n" + voice.rules(person)
     answer = model(
         prompt,
-        system=_SYSTEM.format(person=person, drafts=DRAFTS) + "\n\n" + work.short_self(vault, now),
+        system=system + "\n\n" + work.short_self(vault, now),
         schema=_schema(),
         effort="medium",
     )

@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import llm
+from proxenos import llm, voice
 from proxenos.clones import care, work
 
 NOW = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
@@ -573,6 +573,10 @@ def test_one_high_effort_call_with_the_schema_and_the_self_model(tmp_path, model
     assert "<identity>\nA researcher.\n</identity>" in call["system"]
     assert "<voice>\nShort, warm, direct.\n</voice>" in call["system"]
     assert "Never diagnose" in call["system"] and "Sam Rivera" in call["system"]
+    assert (
+        "The scripts go out as Sam Rivera's own words. " + voice.rules("Sam Rivera")
+        in call["system"]
+    )
     assert stats == {
         "records": 15,
         "timeline_events": 2,

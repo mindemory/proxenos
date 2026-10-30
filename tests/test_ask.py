@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import ask
+from proxenos import ask, voice
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 PNG = {"type": "image/png", "data": "iVBORw0KGgo="}
@@ -16,7 +16,15 @@ class Model:
         self.calls, self.draft_body = [], draft_body
 
     def __call__(self, prompt, *, system=None, schema=None, effort="medium", images=None, **kw):
-        self.calls.append({"prompt": prompt, "schema": schema, "images": images, "effort": effort})
+        self.calls.append(
+            {
+                "prompt": prompt,
+                "system": system,
+                "schema": schema,
+                "images": images,
+                "effort": effort,
+            }
+        )
         props = (schema or {}).get("properties", {})
         if "seen" in props:
             return {
@@ -105,6 +113,43 @@ def test_a_quick_ask_is_thought_through_again_with_its_screenshots(tmp_path, mon
     assert model.calls[0]["images"] == [PNG] and model.calls[-1]["effort"] == "high"
     with pytest.raises(SystemExit):
         ask.again(tmp_path, "../../etc/passwd", model)
+
+
+def test_a_draft_follows_the_rules_and_my_own_messages(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    folder = tmp_path / "raw" / "whatsapp" / "messages"
+    folder.mkdir(parents=True)
+    said = [("Ana Lee", "are we still on for friday"), (None, "sounds good, see you then")]
+    (folder / "2026-03.jsonl").write_text(
+        "".join(
+            json.dumps(
+                {
+                    "id": f"m{n}",
+                    "ts": f"2026-03-0{n}T09:00:00Z",
+                    "chat_id": "ana",
+                    "chat_name": "Ana Lee",
+                    "chat_type": "direct",
+                    "from_me": who is None,
+                    "sender_name": who,
+                    "text": text,
+                }
+            )
+            + "\n"
+            for n, (who, text) in enumerate(said, 1)
+        )
+    )
+
+    deep = Model()
+    ask.ask(tmp_path, "how should I reply?", [PNG], NOW, deep, deep=True)
+    answer = deep.calls[-1]  # the screenshot is from Ana Lee: their chat first
+    assert voice.rules("Tess") in answer["system"]
+    assert "In their chat with Ana Lee:\n- sounds good, see you then" in answer["prompt"]
+
+    quick = Model()
+    ask.ask(tmp_path, "can you do friday?", [], NOW, quick)
+    [call] = quick.calls
+    assert voice.rules("Tess") in call["system"]
+    assert "In their chats:\n- sounds good, see you then" in call["prompt"]
 
 
 class _Clock:

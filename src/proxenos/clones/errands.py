@@ -14,9 +14,11 @@ email, with my CV". A run:
 4. finds the user's newest CV: a PDF named CV or resume with the user's name in it, in their
    documents and downloaded exports;
 5. reads the emails the user wrote before with a CV attached, as the pattern for this one;
-6. writes the message as the user, and says what in the CV looks out of date and what only the
-   user can settle. When there's no way to reach the person but someone the user knows is
-   there, it also writes that person a note asking for an introduction (one model call);
+6. writes the message as the user, from those emails, their own newest writing where it goes
+   (their chat with the person, or the email they sent) and the rules for writing as them
+   (proxenos.voice), and says what in the CV looks out of date and what only the user can
+   settle. When there's no way to reach the person but someone the user knows is there, it
+   also writes that person a note asking for an introduction (one model call);
 7. stops one tap short: each message waits on the Errands page, ready to send by Mail (with the
    CV attached) or Beeper, or for what's missing (an address the user can type in).
 
@@ -37,7 +39,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory, outbox, research
+from proxenos import llm, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 
@@ -247,9 +249,22 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     )
 
     intro_routes = {p["name"]: _pick(reach(vault, p["name"]), "any") for p in colleagues}
+    # How they write where it goes: in their chat with the person, or in the email they send.
+    goes = route["channel"] if route else "email" if channel == "any" else channel
+    thread = route.get("chat") if route else None
+    own = voice.examples(
+        voice.Writing(vault),
+        goes,
+        name=name,
+        chat=(thread["source"], thread["chat"]) if thread else None,
+    )
+    prompt = _write_prompt(
+        errand, note, hits, colleagues, intro_routes, route, cv, examples, person
+    )
+    system = _WRITE_SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
     answer = model(
-        _write_prompt(errand, note, hits, colleagues, intro_routes, route, cv, examples, person),
-        system=_WRITE_SYSTEM.format(person=person) + "\n\n" + work.short_self(vault, now),
+        prompt + (f"\n\n{own}" if own else ""),
+        system=system + "\n\n" + work.short_self(vault, now),
         schema=_write_schema(),
         effort="medium",
         max_tokens=4000,

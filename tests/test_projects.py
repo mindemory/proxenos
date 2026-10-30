@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 
+from proxenos import voice
 from proxenos.clones import projects
 
 NOW = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)
@@ -125,3 +126,21 @@ def test_one_project_failing_leaves_the_others(tmp_path):
 
     stats = projects.projects(tmp_path, now=NOW, model=flaky)
     assert stats["projects_advanced"] == 1 and stats["projects_failed"] == 1
+
+
+def test_drafts_follow_the_rules_and_my_own_writing(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_NAME", "Joe")
+    write_list(tmp_path, {"id": "cookbook", "name": "The cookbook"})
+    mail = tmp_path / "raw" / "email" / "joe" / "2026-03.jsonl"
+    mail.parent.mkdir(parents=True)
+    body = "Ana, the bread is finally right I think, kind of dense still but good. " * 4
+    record = {"id": "e1", "ts": "2026-03-01T09:00:00Z", "from_me": True, "to": ["ana@x.org"]}
+    mail.write_text(json.dumps(record | {"subject": "Bread", "body_new": body}) + "\n")
+    model = Model()
+
+    projects.projects(tmp_path, now=NOW, model=model)
+
+    [call] = model.calls
+    assert voice.rules("Joe") in call["system"]
+    assert '<example kind="email" date="2026-03-01" title="Bread">' in call["prompt"]
+    assert "the bread is finally right I think" in call["prompt"]

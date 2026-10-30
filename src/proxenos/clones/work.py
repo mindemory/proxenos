@@ -5,9 +5,8 @@ Each run takes what the other clones found and has the model draft a deliverable
 one call apiece, in this order until `--max` drafts are written:
 
 - up to ten chats waiting on the user (see proxenos.chats): the reply, written from the
-  conversation, the user's own last messages in that chat as examples of how they write there,
-  and the pages linked in the messages waiting, which are fetched and read first (see
-  proxenos.links). A reply draft the user hasn't touched is removed once the chat no longer
+  conversation and the pages linked in the messages waiting, which are fetched and read first
+  (see proxenos.links). A reply draft the user hasn't touched is removed once the chat no longer
   waits on that message: they answered it themselves, or more came in and a new draft replaces it;
 - every open task in clones/tasks/tasks.json: the reply or email that answers it, or the doc,
   plan or checklist it asks for, or, when it needs something only the user has, a note saying what
@@ -32,14 +31,19 @@ once they approve, discard, send or edit it on the page: its status says approve
 sent, or clones/drafts/feedback.jsonl has an edit for it, and no run touches it again. Nor does a
 run touch a file without front matter, since no run wrote it.
 
-The model gets the self-model's identity, voice and interests, so drafts sound like the user, and
-the task, idea or feed item as the other clones wrote it. Raw messages are sent only for a reply:
-the recent conversation in that one chat. The drafts are text for the user to copy: this clone
-only writes files.
+The model gets the self-model's identity, voice and interests, and the task, idea or feed item as
+the other clones wrote it. So that drafts read as the user's and not a model's, each also gets
+the rules in proxenos.voice and examples of the user's own writing picked there: for a message
+in a chat, their own messages in that chat, then on that channel; for anything longer, the
+emails they sent and their posts, with addresses, links and numbers blanked for a care message,
+as care blanks its records. Other people's messages are sent only for a reply: the recent
+conversation in that one chat. The drafts are text for the user to copy: this clone only writes
+files.
 
-With a voice model set up (PROXENOS_VOICE_MODEL, see proxenos.voicemodel), a reply's body is the voice
-model's, from the same conversation, and the drafting model still writes its title, what it
-rests on and what to ask. When the voice model doesn't answer, the drafting model's reply stands.
+With a voice model set up (PROXENOS_VOICE_MODEL, see proxenos.voicemodel), a reply's body is the
+voice model's, from the same conversation, and the drafting model still writes its title, what
+it rests on and what to ask. When the voice model doesn't answer, the drafting model's reply
+stands.
 """
 
 import argparse
@@ -52,7 +56,8 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, links, llm, research, voicemodel
+from proxenos import chats, links, llm, research, voice, voicemodel
+from proxenos.clones import care
 from proxenos.config import env
 
 MAX_DRAFTS = 20
@@ -198,12 +203,14 @@ def work(
     queue = sorted(jobs.values(), key=lambda job: job["id"] in existing)
     system = _system(vault / "self", now)
     person = env("NAME", "the person")
+    own = voice.Writing(vault)  # read once, when the first draft needs it
     written = failed = 0
     for job in queue[:limit]:
-        prompt = job["prompt"] + _pages([read(url) for url in job.get("links", [])[:PAGES]])
+        pages = _pages([read(url) for url in job.get("links", [])[:PAGES]])
         try:
+            prompt = job["prompt"] + _examples(own, job) + pages
             if chat := job.get("chat"):  # a reply: what the vault knows beyond this chat
-                prompt += _research(vault, chat, prompt, person)
+                prompt += _research(vault, chat, job["prompt"] + pages, person)
             prompt += job.get("ask", "")
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
             if chat and llm.voice_on():
@@ -281,6 +288,11 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
             "links": links.find(" ".join(m["text"] for m in chat["waiting"])),
             "ask": ask,
             "chat": chat,
+            "voice": {
+                "channel": chat["source"],
+                "chat": (chat["source"], chat["chat"]),
+                "here": chat["own"],
+            },
         }
 
     tasks = _load_json(vault / "clones" / "tasks" / "tasks.json").get("tasks") or []
@@ -289,7 +301,9 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
     )
     for task in tasks:
         if isinstance(task, dict) and task.get("status") == "open" and task.get("id") not in closed:
-            yield _job(task.get("id"), "task", task.get("title"), today, _task_text(task))
+            job = _job(task.get("id"), "task", task.get("title"), today, _task_text(task))
+            channel = task.get("source") or "other"
+            yield job | {"voice": {"channel": channel, "name": task.get("with")}}
 
     # Care scripts to write out: an email or portal message for an item still open, one draft
     # per item and kind, so later runs write the same draft again as the item changes.
@@ -305,7 +319,8 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
             continue
         if item := items.get(script.get("item_id")):
             key = f"care-{item['id']}-{script['kind']}"
-            yield _job(key, "care", script.get("title"), today, _care_text(script, item))
+            job = _job(key, "care", script.get("title"), today, _care_text(script, item))
+            yield job | {"voice": {"channel": "email"}}
 
     network = vault / "clones" / "network"
     ideas = _load_json(network / "ideas.json")
@@ -317,15 +332,18 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
     for idea in outreach:
         text = _outreach_text(idea, people.get(idea.get("person_id")) or {})
         job = _job(f"outreach-{idea['id']}", "outreach", idea.get("name"), today, text)
-        yield job | {"person": _one_line(idea.get("name"))}
+        how = {"channel": idea.get("channel") or "other", "name": idea.get("name")}
+        yield job | {"person": _one_line(idea.get("name")), "voice": how}
     for idea in projects:
         text = _project_text(idea, people)
-        yield _job(f"project-{idea['id']}", "project", idea.get("title"), today, text)
+        job = _job(f"project-{idea['id']}", "project", idea.get("title"), today, text)
+        yield job | {"voice": {"channel": "other", "first": "post"}}
 
     tracker = vault / "tracker"
     reactions = _latest(tracker / "feedback.jsonl", "item_id", ("useful", "not_me", "save"))
     for item in _newest_batch(tracker / "items", reactions)[:READING]:
-        yield _job(f"reading-{item['id']}", "reading", item.get("title"), today, _item_text(item))
+        job = _job(f"reading-{item['id']}", "reading", item.get("title"), today, _item_text(item))
+        yield job | {"voice": {"channel": "other", "first": "post"}}
 
 
 def _job(key: object, kind: str, title: object, today: str, text: str) -> dict:
@@ -365,7 +383,7 @@ def _batch(item: dict) -> str:
 
 def _system(self_dir: Path, now: datetime | None = None) -> str:
     person = env("NAME", "the person")
-    system = _SYSTEM.format(person=person)
+    system = _SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
     parts = []
     for name in SELF_FILES:
         path = self_dir / f"{name}.md"
@@ -464,10 +482,6 @@ def _reply_text(chat: dict, person: str, health: str) -> tuple[str, str]:
             + "\n".join(lines(chat["recent"]))
         )
     parts.append("The messages waiting for a reply:\n" + "\n".join(lines(chat["waiting"])))
-    parts.append(
-        f"How {person} writes in this chat, their own last messages here, oldest first:\n"
-        + "\n".join(f"- {text}" for text in chat["own"])
-    )
     ask = (
         f"\n\nDraft {person}'s reply to the messages waiting, written the way they write in this "
         "chat: match their own messages above in length, case, punctuation, words and emoji, "
@@ -506,6 +520,15 @@ def _research(vault: Path, chat: dict, brief: str, person: str) -> str:
         if p
     ]
     return "\n\n" + "\n\n".join(parts) if parts else ""
+
+
+def _examples(own: voice.Writing, job: dict) -> str:
+    """The user's own writing to draft like, for the job's prompt (see proxenos.voice). A care
+    message's are blanked as care's records are: no addresses, links or numbers."""
+    shown = voice.examples(own, **job["voice"])
+    if job["for"] == "care":
+        shown = care._redact(shown)
+    return f"\n\n{shown}" if shown else ""
 
 
 def _pages(pages: list[dict]) -> str:
