@@ -63,10 +63,13 @@ VALID_MAX = 400
 BURST = timedelta(minutes=15)  # as fidelity counts what was sent
 CONTEXT_CHARS = 3000  # the most of a conversation shown, its newest lines
 ANSWER_CHARS = 2000  # so that with the conversation it fits MAX_SEQ tokens
-# Training: 1000 steps of 4 examples, about an hour and a half on an M1 Pro with 32 GB.
+# Training: 1000 steps of 4 examples, about an hour and a half on an M1 Pro with 32 GB. One
+# example a pass, four passes a step: a vocabulary this big makes large logits.
 ITERS = 1000
-BATCH = 2  # two examples a pass, two passes a step: a vocabulary this big makes large logits
-ACCUMULATE = 2
+BATCH = 1
+ACCUMULATE = 4
+# Smaller GPU command buffers, so macOS doesn't stop training for holding up the screen.
+SMALL_BUFFERS = {"MLX_MAX_OPS_PER_BUFFER": "4", "MLX_MAX_MB_PER_BUFFER": "16"}
 LAYERS = 16
 LEARNING_RATE = 1e-4
 MAX_SEQ = 1536
@@ -381,7 +384,13 @@ def train(
     (out / "adapter").mkdir(mode=0o700, parents=True, exist_ok=True)
     started = datetime.now(UTC)
     with (out / "train.log").open("a", encoding="utf-8") as log:
-        done = run(command, stdout=log, stderr=subprocess.STDOUT, check=False)
+        done = run(
+            command,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+            env=SMALL_BUFFERS | dict(os.environ),
+        )
     if done.returncode:
         raise SystemExit(f"Training stopped (exit {done.returncode}); see {out / 'train.log'}.")
     about = {"base": base, "iters": iters, "trained": _iso(datetime.now(UTC))}
