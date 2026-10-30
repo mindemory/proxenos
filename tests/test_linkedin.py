@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import os
 
 import pytest
 
@@ -215,6 +216,24 @@ def test_file_and_column_names_are_matched_loosely(tmp_path):
         "2024-09",
     )
     assert job["author"] is None  # no Profile.csv
+
+
+def test_newer_exports_suffix_some_file_names_with_an_id_and_the_newest_copy_wins(tmp_path):
+    older = [SHARES[0], ["2024-01-01 09:00:00", "", "From an older export", "", "", "PUBLIC"]]
+    files = {
+        "Shares.csv": older,
+        "Shares_123456789.csv": SHARES,
+        "COMMENTS_123456789.csv": COMMENTS,
+    }
+    export = make_export(tmp_path / "e", files)
+    os.utime(export / "Shares.csv", (0, 0))
+
+    linkedin.ingest(tmp_path / "vault", export)
+    assert sorted(p["text"] for p in stream(tmp_path / "vault", "posts")) == [
+        "A post without a link",
+        'New paper out, "finally".\nLink below.',
+    ]
+    assert [c["text"] for c in stream(tmp_path / "vault", "comments")] == ["Congrats!"]
 
 
 def test_missing_files_are_empty_and_rows_with_bad_dates_are_skipped(tmp_path):
