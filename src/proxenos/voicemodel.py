@@ -63,8 +63,9 @@ VALID_MAX = 400
 BURST = timedelta(minutes=15)  # as fidelity counts what was sent
 CONTEXT_CHARS = 3000  # the most of a conversation shown, its newest lines
 ANSWER_CHARS = 2000  # so that with the conversation it mostly fits MAX_SEQ tokens
-# Training: 1000 steps of 4 examples, about two hours on an M1 Pro with 32 GB. One example a
-# pass, four passes a step: a vocabulary this big makes large logits.
+# Training: 1000 examples, the weights updated every 4, about two hours on an M1 Pro with 32 GB.
+# One example a pass: a vocabulary this big makes large logits. A set of thousands is only
+# partly seen; `--iters` takes more, at the same time per example.
 ITERS = 1000
 BATCH = 1
 ACCUMULATE = 4

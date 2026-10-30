@@ -9,7 +9,7 @@ A voice model is the next step. It's a small open model fine-tuned on your own c
 - **A Mac with Apple silicon.** Training uses [mlx-lm](https://github.com/ml-explore/mlx-lm), Apple's library for running and fine-tuning models on its own chips.
 - **Memory:** 32 GB for the default model, Google's Gemma 4 E4B. With 16 GB, train the smaller E2B instead: `--base mlx-community/gemma-4-e2b-it-4bit`. Qwen3.5 models don't work here: mlx trains their DeltaNet layers one token at a time, which runs out of memory even on short chats.
 - **Disk:** about 5 GB for the model's weights (3.6 GB for the E2B), plus a few hundred MB for the training set, the trained adapter and the evaluation.
-- **Time:** about a minute to build the training set. Training takes about two hours on an M1 Pro with 32 GB at the default 1000 steps; a newer chip is faster. Evaluating 60 drafts takes minutes for the voice model and about 20 minutes for a 26B drafting model in Ollama. Training uses the GPU and most of the memory, so close other models first (Ollama unloads its model a few minutes after its last use) and pause Proxenos's scheduled sync and night run while it trains.
+- **Time:** about a minute to build the training set. Training takes about two hours on an M1 Pro with 32 GB at the default 1000 steps, one example each; a newer chip is faster. A training set of several thousand is then only partly seen: `--iters` sets more steps, at about seven seconds each here. Evaluating 60 drafts takes minutes for the voice model and about 20 minutes for a 26B drafting model in Ollama. Training uses the GPU and most of the memory, so close other models first (Ollama unloads its model a few minutes after its last use) and pause Proxenos's scheduled sync and night run while it trains.
 - **Your data in the vault:** chats (WhatsApp, Messenger, Instagram, LinkedIn, X, Slack), email, and the LinkedIn export. The more you've written, the better. A few thousand of your replies is plenty.
 
 ## Steps
@@ -40,7 +40,7 @@ This drafts 60 of the held-out answers three ways: with the base model untrained
 proxenos voice score essay.md page.html
 ```
 
-This reads each text paragraph by paragraph and scores how much more likely your voice model finds each paragraph than the base model does, in nats per token. Above 0, it reads more like you than the base model expects; below 0, less. Your own held-out emails and posts are scored the same way for comparison. It lists the paragraphs that read least like you, so you know where to look before you post something. Use `--kind email` for an email.
+This reads each text paragraph by paragraph and scores how much more likely your voice model finds each paragraph than the base model does, in nats per token. Above 0, it reads more like you than the base model expects; below 0, less. Your own held-out emails and posts are scored the same way for comparison. It lists the paragraphs that read least like you. Use `--kind email` for an email. Treat it as a rough signal and try it first on texts you know are yours: the model also learns the subjects you write about, so a text on your usual subjects can score high whoever wrote it, more so after a short training run.
 
 ```bash
 proxenos voice serve
