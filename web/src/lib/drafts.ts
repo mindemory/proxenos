@@ -25,9 +25,9 @@ export const KIND_LABELS: Record<string, string> = {
   blocked: "Blocked",
 };
 
-/** Waiting for the reader: not approved, discarded or sent. */
+/** Waiting for the reader to send: not sent or discarded. An approved draft that hasn't gone out still waits. */
 export function isAwaiting(status: string): boolean {
-  return status !== "approved" && status !== "discarded" && status !== "sent";
+  return status !== "discarded" && status !== "sent";
 }
 
 /** Still the reader's to act on: neither sent nor discarded. */

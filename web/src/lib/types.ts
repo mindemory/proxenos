@@ -481,7 +481,7 @@ export interface HomeResponse {
   };
   drafts: {
     exists: boolean;
-    awaiting: number; // not approved or discarded
+    awaiting: number; // not sent or discarded
     top: Draft[]; // up to three of them, newest first
   };
   self: {

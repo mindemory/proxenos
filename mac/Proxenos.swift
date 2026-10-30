@@ -31,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = "Proxenos"
+        // Closing only hides it, so the Dock icon can bring it back (a released window crashed the app).
+        window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0.055, green: 0.063, blue: 0.075, alpha: 1)
         window.contentView = web

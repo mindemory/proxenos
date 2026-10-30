@@ -151,3 +151,52 @@ export function Markdown({ source, compact = false }: { source: string; compact?
     </div>
   );
 }
+
+// ── As HTML, for the clipboard ──────────────────────────────────────────────
+
+function escape(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function inlineHtml(text: string): string {
+  return text
+    .split(INLINE)
+    .filter(Boolean)
+    .map((part) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return `<strong>${escape(part.slice(2, -2))}</strong>`;
+      if (part.startsWith("`") && part.endsWith("`") && part.length > 2) return `<code>${escape(part.slice(1, -1))}</code>`;
+      const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+      if (link) return /^https?:\/\//i.test(link[2]) ? `<a href="${escape(link[2])}">${escape(link[1])}</a>` : escape(link[1]);
+      if (part.startsWith("*") && part.endsWith("*") && part.length > 2) return `<em>${escape(part.slice(1, -1))}</em>`;
+      return escape(part);
+    })
+    .join("");
+}
+
+/**
+ * The same markdown as plain HTML (headings, lists, quotes, bold, italics, links), so a copied
+ * draft pastes into Substack, Gmail or LinkedIn formatted instead of showing its # and ** marks.
+ */
+export function markdownHtml(source: string): string {
+  return parse(source)
+    .map((b) => {
+      switch (b.type) {
+        case "h": {
+          const level = Math.min(b.level + 1, 4); // the post's own title is Substack's; # becomes a section heading
+          return `<h${level}>${inlineHtml(b.text)}</h${level}>`;
+        }
+        case "ul":
+        case "ol":
+          return `<${b.type}>${b.items.map((it) => `<li>${inlineHtml(it)}</li>`).join("")}</${b.type}>`;
+        case "quote":
+          return `<blockquote><p>${inlineHtml(b.text)}</p></blockquote>`;
+        case "code":
+          return `<pre><code>${escape(b.text)}</code></pre>`;
+        case "hr":
+          return "<hr>";
+        default:
+          return `<p>${inlineHtml(b.text)}</p>`;
+      }
+    })
+    .join("\n");
+}

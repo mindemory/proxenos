@@ -76,6 +76,9 @@ export default function AppPage() {
   // A draft the home page wants the drafts view to open, taken and cleared the same way.
   const [draftIntent, setDraftIntent] = useState<string | null>(null);
   const draftConsumed = useCallback(() => setDraftIntent(null), []);
+  // A care item the home page wants the care view to open, the same way.
+  const [careIntent, setCareIntent] = useState<string | null>(null);
+  const careConsumed = useCallback(() => setCareIntent(null), []);
   // Bumped by Refresh: remounting the view makes it fetch again.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,6 +126,11 @@ export default function AppPage() {
     navigate("drafts");
   };
 
+  const openCare = (id: string) => {
+    setCareIntent(id);
+    navigate("care");
+  };
+
   const showNew = () => {
     feed.showPending();
     setView("feed");
@@ -146,7 +154,7 @@ export default function AppPage() {
   const renderView = () => {
     switch (view) {
       case "home":
-        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} />;
+        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} onCare={openCare} />;
       case "ask":
         return <Ask onNavigate={navigate} />;
       case "errands":
@@ -156,7 +164,7 @@ export default function AppPage() {
       case "tasks":
         return <Tasks onChange={home.reload} />;
       case "care":
-        return <Care onChange={home.reload} onMemory={openMemory} />;
+        return <Care onChange={home.reload} onMemory={openMemory} focus={careIntent} onFocused={careConsumed} />;
       case "drafts":
         return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} />;
       case "advice":

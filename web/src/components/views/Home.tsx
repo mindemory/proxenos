@@ -71,6 +71,8 @@ interface HomeProps {
   onMemory: (query: string, id?: string) => void;
   /** Open the drafts view on one draft, shown whole. */
   onDraft: (id: string) => void;
+  /** Open the care view on one item. */
+  onCare: (id: string) => void;
 }
 
 // ── Layout pieces ───────────────────────────────────────────────────────────
@@ -206,7 +208,7 @@ function Greeting({ data, briefing, onNavigate }: { data: HomeResponse; briefing
           <>
             You have {strong(count(events, "event", "events", "no events"))} today,{" "}
             {strong(count(due, overdue ? "task due or overdue" : "task due", overdue ? "tasks due or overdue" : "tasks due", "nothing due"), due ? "tasks" : undefined)}{" "}
-            and {strong(count(drafts, "draft", "drafts", "no drafts"), drafts ? "drafts" : undefined)} waiting for review.
+            and {strong(count(drafts, "draft", "drafts", "no drafts"), drafts ? "drafts" : undefined)} to send.
           </>
         )}
       </p>
@@ -378,9 +380,9 @@ function DraftsCard({ data, briefing, onNavigate, onDraft }: { data: HomeRespons
     <Card
       icon={PenLine}
       kicker="Waiting for you"
-      title="Drafts to approve"
+      title="Drafts to send"
       count={d.exists ? d.awaiting : undefined}
-      link="Review"
+      link="All drafts"
       onLink={() => onNavigate("drafts")}
       tier="priority"
       className="md:col-span-2 lg:col-span-6 xl:col-span-4"
@@ -389,13 +391,13 @@ function DraftsCard({ data, briefing, onNavigate, onDraft }: { data: HomeRespons
         <ReviewBar reviews={reviews} />
       ) : reviews ? (
         <Meta>
-          Written as you; sent only if you switch on the Outbox. Approve, edit or discard them in Drafts; each choice is logged, and once
-          eight in ten are approved a channel can move on to acting.
+          Written as you. Copy one or open it in its app, send it yourself, then mark it sent; replies you send in the chat are
+          noticed and marked for you.
         </Meta>
       ) : null}
       {d.top.length === 0 ? (
         d.exists ? (
-          <Meta>Nothing is waiting for your approval.</Meta>
+          <Meta>Nothing left to send.</Meta>
         ) : (
           <QuietLine command="proxenos clone work">No drafts yet. This writes them from your tasks and ideas:</QuietLine>
         )
@@ -841,7 +843,7 @@ function ProfileCard({ data, onNavigate }: { data: HomeResponse; onNavigate: (v:
 // ── Care ────────────────────────────────────────────────────────────────────
 
 /** Where health care stands, in a sentence, and the one item that most needs doing. */
-function CareCard({ onNavigate }: { onNavigate: (v: View) => void }) {
+function CareCard({ onNavigate, onCare }: Pick<HomeProps, "onNavigate" | "onCare">) {
   const { data, error } = useJson<CareResponse>("/api/care");
   const urgent = data ? mostUrgent(data.items) : null;
   const moves = data ? yourMoves(data.items) : 0;
@@ -878,7 +880,7 @@ function CareCard({ onNavigate }: { onNavigate: (v: View) => void }) {
             )}
           </div>
           {urgent ? (
-            <button onClick={() => onNavigate("care")} className="tile tile-hover block w-full px-3.5 py-3 text-left">
+            <button onClick={() => onCare(urgent.id)} className="tile tile-hover block w-full px-3.5 py-3 text-left">
               <span className={cn("smallcaps text-[0.75rem]", yours && "text-accent")}>
                 {yours ? "Your next step" : "Waiting on others"}
               </span>
@@ -903,7 +905,7 @@ function CareCard({ onNavigate }: { onNavigate: (v: View) => void }) {
 
 // ── The briefing ────────────────────────────────────────────────────────────
 
-export function Home({ home, onNavigate, onMemory, onDraft }: HomeProps) {
+export function Home({ home, onNavigate, onMemory, onDraft, onCare }: HomeProps) {
   const { data, error, clearError } = home;
   const briefing = useJson<BriefingResponse>("/api/briefing");
 
@@ -921,7 +923,7 @@ export function Home({ home, onNavigate, onMemory, onDraft }: HomeProps) {
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
-        <CareCard onNavigate={onNavigate} />
+        <CareCard onNavigate={onNavigate} onCare={onCare} />
       </Section>
 
       <Section id="home-past" label="Brought to mind">

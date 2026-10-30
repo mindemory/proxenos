@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { markdownHtml } from "@/components/Markdown";
 import { useToast } from "@/components/Toasts";
 
 import { markdownFile, openText } from "./actions";
@@ -415,10 +416,22 @@ export const PEOPLE_TOAST: Record<PeopleEdit, string> = {
   hide: "Hidden; the graph is rebuilt",
 };
 
-/** Put text on the clipboard. Falls back to a hidden textarea where the async API isn't allowed. */
-export async function copyText(text: string): Promise<boolean> {
+/**
+ * Put text on the clipboard, and with `html` a formatted copy beside it that rich editors paste
+ * (plain-text fields take the text). Falls back to a hidden textarea where the async API isn't allowed.
+ */
+export async function copyText(text: string, html?: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    if (html && typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
     return true;
   } catch {
     const area = document.createElement("textarea");
@@ -535,7 +548,7 @@ export function useDrafts(onChange?: () => void) {
 
   const copy = useCallback(
     async (draft: Draft) => {
-      if (!(await copyText(draft.body))) {
+      if (!(await copyText(draft.body, markdownHtml(draft.body)))) {
         setError("Couldn't reach the clipboard. Select the text and copy it by hand.");
         return;
       }

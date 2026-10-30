@@ -9,21 +9,17 @@ import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
-import { groupDrafts, isAwaiting } from "@/lib/drafts";
+import { groupDrafts } from "@/lib/drafts";
 import type { Draft } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Show = "awaiting" | "approved";
-
 /**
- * Proxenos acting as you: replies, emails, plans and docs it wrote, waiting for you to approve.
+ * Proxenos acting as you: replies, emails, plans and docs it wrote, for you to copy or open and send.
  * `focus` is a draft opened from another view (the home page). The view takes it on mount and
  * clears it, then shows that draft on its tab, whole, and scrolls to it once the list is there.
  */
 export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
-  const { data, error, flashId, approve, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
-  // null until the reader picks a tab: then the focused draft's own tab, else "awaiting".
-  const [show, setShow] = useState<Show | null>(null);
+  const { data, error, flashId, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
   const [focusId] = useState(focus ?? null);
   const focusStatus = data?.drafts.find((d) => d.id === focusId)?.status ?? null;
@@ -48,8 +44,8 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   if (!data.vault.exists) return <NoVault path={data.vault.path} />;
 
   const kept = data.drafts.filter((d) => d.status !== "discarded");
-  const awaiting = kept.filter((d) => isAwaiting(d.status));
-  const approved = kept.filter((d) => d.status === "approved");
+  // Not sent yet, approved or not: the reader copies or opens one, then says it went.
+  const toSend = kept.filter((d) => d.status !== "sent");
   const sent = kept.filter((d) => d.status === "sent");
 
   const card = (d: Draft) => (
@@ -60,7 +56,6 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
       flash={flashId === d.id}
       plan={data.actions[d.id] ?? null}
       onCopy={copy}
-      onApprove={approve}
       onDiscard={discard}
       onOpen={open}
       onSent={markSent}
@@ -77,16 +72,14 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
         <Outbox />
         <EmptyState icon={PenLine} title="No drafts yet" command="proxenos clone work">
           Drafts appear when Proxenos works through your tasks, outreach, projects and reading: replies, emails, plans
-          and notes written as you, waiting here for your approval. Nothing is sent for you unless you switch on the Outbox.
+          and notes written as you, ready to copy or open and send. Nothing is sent for you unless you switch on the Outbox.
         </EmptyState>
       </div>
     );
   }
 
-  const tab: Show = show ?? (focusStatus === "approved" ? "approved" : "awaiting");
   const sentOpen = showSent ?? focusStatus === "sent";
-  const shown = tab === "awaiting" ? awaiting : approved;
-  const groups = groupDrafts(shown);
+  const groups = groupDrafts(toSend);
 
   return (
     <div className="pb-24 md:pb-20">
@@ -96,35 +89,18 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
       <Outbox />
 
       <div className="px-4 sm:px-6 py-3 border-b border-line flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex gap-2">
-          {(
-            [
-              ["awaiting", "Awaiting you", awaiting.length],
-              ["approved", "Approved", approved.length],
-            ] as const
-          ).map(([id, label, n]) => (
-            <button
-              key={id}
-              onClick={() => setShow(id)}
-              aria-pressed={tab === id}
-              className={cn(
-                "rounded-full border px-3 py-1 text-[13px] transition-colors whitespace-nowrap",
-                tab === id ? "border-accent/40 bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-ink",
-              )}
-            >
-              {label} <span className="num">{n}</span>
-            </button>
-          ))}
-        </div>
+        <p className="text-sm text-ink">
+          To send <span className="num text-muted">{toSend.length}</span>
+        </p>
         <p className="flex items-center gap-1.5 text-sm text-muted sm:ml-auto">
           <ShieldCheck size={15} className="text-ok-ink flex-shrink-0" />
-          Approved drafts open in their app with the text filled in. You press send.
+          Copy one, or open it in its app with the text filled in. You press send, then mark it sent here.
         </p>
       </div>
 
       {groups.length === 0 ? (
         <p className="px-4 sm:px-6 py-8 text-sm text-muted">
-          {tab === "awaiting" ? "Nothing is waiting for your approval." : "You haven't approved any drafts yet."}
+          Nothing left to send.
         </p>
       ) : (
         <div className="p-4 sm:p-6 space-y-8">

@@ -1584,7 +1584,7 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
       met: network.people.list.filter((p) => p.relation === "met").length,
       outreach: network.ideas.outreach.find((o) => o.action === null) ?? null,
     },
-    drafts: { exists: drafts.exists, awaiting: awaiting.length, top: awaiting.slice(0, 3) },
+    drafts: { exists: drafts.exists, awaiting: awaiting.length, top: awaiting.slice(0, 5) },
     self,
     sources,
   };

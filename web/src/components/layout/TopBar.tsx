@@ -84,7 +84,7 @@ export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetwork
       <div className="ml-auto flex items-center gap-2 flex-shrink-0">
         <div className="hidden lg:flex items-center gap-1.5">
           <Count icon={ListTodo} label="Open tasks" value={counts.tasks} view="tasks" onNavigate={onNavigate} />
-          <Count icon={PenLine} label="Drafts awaiting you" value={counts.drafts} view="drafts" onNavigate={onNavigate} />
+          <Count icon={PenLine} label="Drafts to send" value={counts.drafts} view="drafts" onNavigate={onNavigate} />
           <Count icon={Lightbulb} label="Unanswered advice" value={counts.advice} view="advice" onNavigate={onNavigate} />
         </div>
 

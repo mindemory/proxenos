@@ -1,12 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, ChevronDown, Copy, Pencil, Trash2, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Copy, Pencil, Trash2, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
 import { formatDateTime, timeAgo } from "@/lib/format";
-import { isAwaiting } from "@/lib/drafts";
 import type { Draft, DraftOpen } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +22,6 @@ interface DraftCardProps {
   /** Where the draft opens, or null for one that's already sent. */
   plan: DraftOpen | null;
   onCopy: (d: Draft) => void;
-  onApprove: (d: Draft) => void;
   onDiscard: (d: Draft) => void;
   /** Opens the draft in its app (or its second way in, for `viaAlt`). Resolves true once it has. */
   onOpen: (d: Draft, viaAlt: boolean) => Promise<boolean>;
@@ -35,14 +33,13 @@ interface DraftCardProps {
   focused?: boolean;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDiscard, onOpen, onSent, onEdit, focused }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, focused }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(focused ?? false);
   const [asking, setAsking] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
-  const approved = d.status === "approved";
   const sent = d.status === "sent";
   const long = d.body.length > CLIP_CHARS;
 
@@ -70,26 +67,15 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDis
       id={`draft-${d.id}`}
       className={cn(
         "card card-hover flex min-w-0 scroll-mt-20 flex-col gap-3 p-4 sm:p-5",
-        approved && "border-ok-line/60",
         (flash || focused) && "row-flash",
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <KindBadge kind={d.kind} />
         <ChannelBadge channel={d.channel} />
-        {sent ? (
+        {sent && (
           <span className="ml-auto">
             <SentBadge />
-          </span>
-        ) : (
-          <span
-            className={cn(
-              "ml-auto inline-flex items-center gap-1 text-xs",
-              approved ? "text-ok-ink" : isAwaiting(d.status) ? "text-muted" : "text-muted/70",
-            )}
-          >
-            {approved && <Check size={12} />}
-            {approved ? "Approved" : isAwaiting(d.status) ? "Awaiting you" : d.status}
           </span>
         )}
       </div>
@@ -186,10 +172,9 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onApprove, onDis
             <ActionButton icon={Copy} label="Copy" tone="neutral" onClick={() => onCopy(d)} />
           ) : (
             <>
-              {approved && plan && <OpenButton plan={plan} primary onOpen={() => void open(false)} />}
-              <ActionButton icon={Copy} label="Copy" tone={approved ? "neutral" : "accent"} onClick={() => onCopy(d)} />
-              <ActionButton icon={Check} label={approved ? "Approved" : "Approve"} tone="ok" active={approved} onClick={() => onApprove(d)} />
-              {!approved && plan && <OpenButton plan={plan} primary={false} onOpen={() => void open(false)} />}
+              {plan && <OpenButton plan={plan} primary onOpen={() => void open(false)} />}
+              <ActionButton icon={Copy} label="Copy" tone={plan ? "neutral" : "accent"} onClick={() => onCopy(d)} />
+              <ActionButton icon={CheckCheck} label="I sent it" tone="ok" onClick={() => onSent(d)} />
               <ActionButton icon={Pencil} label="Edit" tone="neutral" onClick={start} />
               <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
             </>

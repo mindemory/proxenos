@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, HeartPulse, Info } from "lucide-react";
 
 import { CareItemRow, ScriptCard, SectionHeader, Timeline, VisitBrief, type OpenRecord } from "@/components/care/parts";
@@ -22,12 +22,33 @@ interface CareProps {
   onChange?: () => void;
   /** Open one piece of evidence in Memory. */
   onMemory?: OpenRecord;
+  /** An item opened from the home page: taken on mount and cleared, then scrolled to once the list is there. */
+  focus?: string | null;
+  onFocused?: () => void;
 }
 
-export function Care({ onChange, onMemory }: CareProps) {
+export function Care({ onChange, onMemory, focus, onFocused }: CareProps) {
   const { data, error, flashId, act, clearError } = useCare(onChange);
   const [tab, setTab] = useState<CareTab>("overview");
-  const [showDone, setShowDone] = useState(false);
+  const [focusId] = useState(focus ?? null);
+  const focusItem = data?.items.find((i) => i.id === focusId) ?? null;
+  const [showDone, setShowDone] = useState<boolean | null>(null);
+  const doneOpen = showDone ?? (focusItem !== null && careStatus(focusItem) === "done");
+
+  useEffect(() => {
+    if (focus) onFocused?.();
+  }, [focus, onFocused]);
+
+  const found = focusItem !== null;
+  useEffect(() => {
+    if (!focusId || !found) return;
+    // After its group has rendered.
+    const timer = window.setTimeout(
+      () => document.getElementById(`care-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [focusId, found]);
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load care: ${error}`} /> : <ProseSkeleton label="Loading care" />;
@@ -119,6 +140,7 @@ export function Care({ onChange, onMemory }: CareProps) {
                       cited={data.cited}
                       scripts={scriptsFor(i.id)}
                       flash={flashId === i.id}
+                      focused={i.id === focusId}
                       onAct={act}
                       onOpen={onMemory}
                     />
@@ -129,23 +151,23 @@ export function Care({ onChange, onMemory }: CareProps) {
             {done.length > 0 && (
               <div>
                 <button
-                  onClick={() => setShowDone((v) => !v)}
-                  aria-expanded={showDone}
+                  onClick={() => setShowDone(!doneOpen)}
+                  aria-expanded={doneOpen}
                   className={cn(
                     "flex w-full justify-between gap-3 border-b border-line bg-surface/60 px-4 py-2 text-left hover:bg-surface sm:px-6",
                     flashId === "group:done" && "row-flash",
                   )}
                 >
                   <span className="eyebrow inline-flex items-center gap-1">
-                    <ChevronRight size={12} className={cn("transition-transform", showDone && "rotate-90")} />
+                    <ChevronRight size={12} className={cn("transition-transform", doneOpen && "rotate-90")} />
                     Done
                   </span>
                   <span className="num text-xs text-muted">{done.length}</span>
                 </button>
-                {showDone && (
+                {doneOpen && (
                   <ul className="divide-y divide-line border-b border-line">
                     {done.map((i) => (
-                      <CareItemRow key={i.id} item={i} now={data.now} cited={data.cited} onOpen={onMemory} />
+                      <CareItemRow key={i.id} item={i} now={data.now} cited={data.cited} focused={i.id === focusId} onOpen={onMemory} />
                     ))}
                   </ul>
                 )}

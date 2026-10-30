@@ -154,6 +154,7 @@ export function CareItemRow({
   cited,
   scripts = 0,
   flash = false,
+  focused = false,
   onAct,
   onOpen,
 }: {
@@ -162,13 +163,15 @@ export function CareItemRow({
   cited: Record<string, CareCited>;
   scripts?: number;
   flash?: boolean;
+  /** Opened from the home page: marked so the eye lands on it. */
+  focused?: boolean;
   onAct?: (item: CareItemView, action: CareAction) => void;
   onOpen?: OpenRecord;
 }) {
   const place = careStatus(i);
   const due = careDue(i, now);
   return (
-    <li className={cn("px-4 py-4 sm:px-6", flash && "row-flash")}>
+    <li id={`care-${i.id}`} className={cn("scroll-mt-20 px-4 py-4 sm:px-6", (flash || focused) && "row-flash")}>
       <div className="flex items-start justify-between gap-3">
         <h3 className={cn("min-w-0 break-words font-medium leading-snug", place === "done" ? "text-muted" : "text-ink")}>{i.title}</h3>
         <span className={cn(PILL, "flex-shrink-0 border-line-strong bg-surface-2 text-ink/85")}>{ITEM_KIND_LABEL[i.kind]}</span>

@@ -5,7 +5,8 @@ Every reply draft records its chat. Once the user has written in that chat after
 sent, and closeness is how much of the draft's text survived into it: 1.0 sent as written, near
 0.0 rewritten or about something else. Case, spacing and line breaks don't count. It doesn't
 matter whether they sent it from the page or typed their own; either way it says how near the
-twin got.
+twin got. A draft still waiting when its chat shows the user wrote there after it is marked sent:
+they've answered, so it no longer waits on them.
 
 Written to clones/drafts/fidelity.json: each measured draft {id, source, to, drafted, sent,
 closeness} and, per source, how many and their mean. That's the measure that should decide when a
@@ -36,12 +37,18 @@ def measure(vault: Path) -> dict[str, int]:
         thread = _json(fields.get("thread"))
         if front and isinstance(thread, dict) and fields.get("created"):
             body = text[front.end() :]
-            wanted[thread.get("source"), thread.get("chat")].append(fields | {"body": body})
+            wanted[thread.get("source"), thread.get("chat")].append(
+                fields | {"body": body, "path": path}
+            )
 
     measured = []
+    answered = 0
     for source, key, messages, *_ in chats.conversations(vault):
         for draft in wanted.get((source, key), []):
             if sent := _sent(messages, draft["created"]):
+                if draft.get("status") in ("draft", "approved"):
+                    _mark_sent(draft["path"])
+                    answered += 1
                 measured.append(
                     {
                         "id": draft.get("id"),
@@ -60,7 +67,12 @@ def measure(vault: Path) -> dict[str, int]:
     out = {"generated": _now(), "by_source": summary, "drafts": measured}
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fidelity.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
-    return {"drafts_measured": len(measured)}
+    return {"drafts_measured": len(measured), "drafts_answered": answered}
+
+
+def _mark_sent(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    path.write_text(re.sub(r"(?m)^status:.*$", "status: sent", text, count=1), encoding="utf-8")
 
 
 def _sent(messages: list[dict], drafted: str) -> list[dict]:
