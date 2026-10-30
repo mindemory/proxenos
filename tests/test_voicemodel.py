@@ -182,6 +182,11 @@ def test_a_long_chat_shows_only_its_newest_lines():
     assert shown.startswith("Slack, with #lab:\n")
     assert shown.count("Ann: ") == 5 and shown.endswith("[2026-03-09 10:19] Ann: " + "x" * 500)
 
+    # One message longer than all of it: its start, so the prompt still fits.
+    essay = {"ts": "2026-03-09T11:00:00Z", "mine": False, "sender": "Ann", "text": "word " * 2000}
+    shown = voicemodel.prompt({"source": "slack", "name": "#lab", "waiting": [essay]}, "Tess")
+    assert shown.endswith("word…") and len(shown) <= voicemodel.CONTEXT_CHARS + 20
+
 
 def test_what_the_model_writes_is_cleaned_of_thinking_and_a_copied_label():
     assert voicemodel.clean("<think>hmm</think>\n[2026-03-09 10:05] Tess: went well!", "Tess") == (
@@ -203,14 +208,21 @@ def test_training_runs_mlx_lm_on_the_set_into_the_vault(tmp_path):
         (vault / "voice" / "adapter" / "adapters.safetensors").write_bytes(b"weights")
         return type("Done", (), {"returncode": 0})()
 
+    def tokens(messages):  # one example too long for MAX_SEQ
+        return 99_999 if messages[-1]["content"] == "sending now" else 100
+
     assert voicemodel.trained(vault) is None
-    voicemodel.train(vault, base="some/model-4bit", iters=10, run=fake_run)
+    done = voicemodel.train(vault, base="some/model-4bit", iters=10, run=fake_run, tokens=tokens)
 
     (command,) = ran
     assert command[1:4] == ["-m", "mlx_lm", "lora"]
     flags = {flag: value for flag, value in pairwise(command) if flag.startswith("--")}
     assert flags["--model"] == "some/model-4bit" and flags["--iters"] == "10"
-    assert flags["--data"] == str(vault / "voice" / "data")
+    fit = vault / "voice" / "fit"
+    assert flags["--data"] == str(fit) and done["left out"] == 1
+    trained_on = (fit / "train.jsonl").read_text() + (fit / "valid.jsonl").read_text()
+    assert "sending now" not in trained_on and "bring snacks?" in trained_on
+    assert (fit / "train.jsonl").stat().st_mode & 0o777 == 0o600
     assert flags["--adapter-path"] == str(vault / "voice" / "adapter")
     assert "--mask-prompt" in command
     assert voicemodel.trained(vault)["base"] == "some/model-4bit"

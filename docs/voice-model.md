@@ -9,7 +9,7 @@ A voice model is the next step. It's a small open model fine-tuned on your own c
 - **A Mac with Apple silicon.** Training uses [mlx-lm](https://github.com/ml-explore/mlx-lm), Apple's library for running and fine-tuning models on its own chips.
 - **Memory:** 32 GB for the default model, Google's Gemma 4 E4B. With 16 GB, train the smaller E2B instead: `--base mlx-community/gemma-4-e2b-it-4bit`. Qwen3.5 models don't work here: mlx trains their DeltaNet layers one token at a time, which runs out of memory even on short chats.
 - **Disk:** about 5 GB for the model's weights (3.6 GB for the E2B), plus a few hundred MB for the training set, the trained adapter and the evaluation.
-- **Time:** about a minute to build the training set. Training takes about an hour and a half on an M1 Pro with 32 GB at the default 1000 steps; a newer chip is faster. Evaluating 60 drafts takes minutes for the voice model and about 20 minutes for a 26B drafting model in Ollama. Training uses the GPU and most of the memory, so close other models first (Ollama unloads its model a few minutes after its last use) and pause Proxenos's scheduled sync and night run while it trains.
+- **Time:** about a minute to build the training set. Training takes about two hours on an M1 Pro with 32 GB at the default 1000 steps; a newer chip is faster. Evaluating 60 drafts takes minutes for the voice model and about 20 minutes for a 26B drafting model in Ollama. Training uses the GPU and most of the memory, so close other models first (Ollama unloads its model a few minutes after its last use) and pause Proxenos's scheduled sync and night run while it trains.
 - **Your data in the vault:** chats (WhatsApp, Messenger, Instagram, LinkedIn, X, Slack), email, and the LinkedIn export. The more you've written, the better. A few thousand of your replies is plenty.
 
 ## Steps
@@ -28,7 +28,7 @@ This writes the training set into `vault/voice/`. Each example is a conversation
 proxenos voice train
 ```
 
-This downloads the base model's public weights once and trains a LoRA adapter, a small set of extra weights on top of the model, into `vault/voice/adapter/`. Progress goes to `vault/voice/train.log`.
+This downloads the base model's public weights once and trains a LoRA adapter, a small set of extra weights on top of the model, into `vault/voice/adapter/`. Progress goes to `vault/voice/train.log`, with a checkpoint every 100 steps. Examples longer than the 1536 tokens it trains on (a handful in thousands) are left out: cut to fit, a reply would lose its end, or all of it when the conversation alone is longer, and an example with nothing left to learn from ruins the training from that step on.
 
 ```bash
 proxenos voice eval

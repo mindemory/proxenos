@@ -62,9 +62,9 @@ VALID = 20
 VALID_MAX = 400
 BURST = timedelta(minutes=15)  # as fidelity counts what was sent
 CONTEXT_CHARS = 3000  # the most of a conversation shown, its newest lines
-ANSWER_CHARS = 2000  # so that with the conversation it fits MAX_SEQ tokens
-# Training: 1000 steps of 4 examples, about an hour and a half on an M1 Pro with 32 GB. One
-# example a pass, four passes a step: a vocabulary this big makes large logits.
+ANSWER_CHARS = 2000  # so that with the conversation it mostly fits MAX_SEQ tokens
+# Training: 1000 steps of 4 examples, about two hours on an M1 Pro with 32 GB. One example a
+# pass, four passes a step: a vocabulary this big makes large logits.
 ITERS = 1000
 BATCH = 1
 ACCUMULATE = 4
@@ -102,8 +102,9 @@ def system(person: str) -> str:
 
 def prompt(chat: dict, person: str) -> str:
     """What the voice model answers, the same in training and drafting: where, with whom, and
-    the chat's newest lines up to CONTEXT_CHARS, oldest first, times UTC. `chat` is shaped as
-    chats.waiting gives it (source, name, recent, waiting)."""
+    the chat's newest lines up to CONTEXT_CHARS, oldest first, times UTC, the newest cut to its
+    start if it alone is longer. `chat` is shaped as chats.waiting gives it (source, name,
+    recent, waiting)."""
     name = chat.get("name") or "them"
     lines = [
         f"[{m['ts'][:16].replace('T', ' ')}] "
@@ -115,6 +116,8 @@ def prompt(chat: dict, person: str) -> str:
     for line in reversed(lines):
         if kept and size + len(line) > CONTEXT_CHARS:
             break
+        if len(line) > CONTEXT_CHARS:
+            line = line[: CONTEXT_CHARS - 1].rsplit(" ", 1)[0] + "…"
         kept.append(line)
         size += len(line) + 1
     where = _WHERE.get(chat["source"], chat["source"])
@@ -338,14 +341,17 @@ def train(
     base: str = BASE,
     iters: int = ITERS,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    tokens: Callable[[list[dict]], int] | None = None,
 ) -> dict[str, int]:
     """LoRA fine-tune `base` on the training set with mlx-lm, logging to vault/voice/train.log.
-    The base model's weights download once, into Hugging Face's cache."""
+    The base model's weights download once, into Hugging Face's cache. `tokens` counts an
+    example's tokens, by the base model's tokenizer unless given."""
     out = vault / "voice"
     if not (out / "data" / "train.jsonl").is_file():
         raise SystemExit("No training set yet: run `proxenos voice build` first.")
     if run is subprocess.run and importlib.util.find_spec("mlx_lm") is None:
         raise SystemExit("Training needs mlx-lm, on a Mac with Apple silicon: pip install mlx-lm")
+    left_out = _fit(out, tokens or _tokens(base))
     command = [
         sys.executable,
         "-m",
@@ -355,7 +361,7 @@ def train(
         base,
         "--train",
         "--data",
-        str(out / "data"),
+        str(out / "fit"),
         "--adapter-path",
         str(out / "adapter"),
         "--iters",
@@ -395,7 +401,31 @@ def train(
         raise SystemExit(f"Training stopped (exit {done.returncode}); see {out / 'train.log'}.")
     about = {"base": base, "iters": iters, "trained": _iso(datetime.now(UTC))}
     (out / "voice.json").write_text(json.dumps(about, indent=1))
-    return {"steps": iters, "minutes": round((datetime.now(UTC) - started).total_seconds() / 60)}
+    minutes = round((datetime.now(UTC) - started).total_seconds() / 60)
+    return {"steps": iters, "minutes": minutes, "left out": left_out}
+
+
+def _fit(out: Path, tokens: Callable[[list[dict]], int]) -> int:
+    """The training and validation examples that fit MAX_SEQ tokens, into voice/fit/, and how
+    many were left out. mlx-lm cuts a longer one: its answer loses its end, or, when the
+    conversation alone is longer, all of it, and an example with nothing to learn from makes
+    the loss NaN, which ruins the adapter from there on."""
+    left_out = 0
+    for name in ("train", "valid"):
+        examples = _read_jsonl(out / "data" / f"{name}.jsonl")
+        fit = [e for e in examples if tokens(e["messages"]) <= MAX_SEQ]
+        left_out += len(examples) - len(fit)
+        _write_jsonl(out / "fit" / f"{name}.jsonl", fit)
+    return left_out
+
+
+def _tokens(base: str) -> Callable[[list[dict]], int]:
+    """An example's tokens as mlx-lm counts them, by the base model's tokenizer (which comes
+    with mlx-lm; only its small tokenizer files download here)."""
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(base)
+    return lambda messages: len(tokenizer.apply_chat_template(messages, return_dict=False))
 
 
 def trained(vault: Path) -> dict | None:
