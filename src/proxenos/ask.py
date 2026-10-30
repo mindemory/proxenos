@@ -14,6 +14,10 @@ word for word, and what it is. Then it looks through the user's memory as a repl
 on, by meaning and by words, over rounds it plans itself. Then it thinks the answer through from
 the whole self-model, the "right now" note and what it found, the way the user would.
 
+Either way, for the draft, the model also gets the rules for writing as the user and examples of
+their own writing (proxenos.voice): their chat with the person a screenshot is from, or else
+their newest chat messages, and their longer writing.
+
 Each ask is a file, clones/ask/<id>.json, written first as "working" and then "done" or
 "failed", which the page polls; a drafted reply is also saved as a draft (for: ask), so it shows
 in Drafts with its actions. A quick ask's screenshots are kept beside it, in clones/ask/images/,
@@ -30,7 +34,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from proxenos import llm, research
+from proxenos import llm, research, voice
 from proxenos.clones import work
 from proxenos.config import env
 
@@ -176,6 +180,8 @@ def _quick(
     if hits:
         lines = "\n".join(research._line(h, person) for h in hits)
         prompt = f"From {person}'s memory, the records nearest this:\n{lines}\n\n{prompt}"
+    if own := voice.examples(voice.Writing(vault), None):
+        prompt += f"\n\n{own}"
     return model(
         prompt,
         system=_quick_system(vault, now),
@@ -190,7 +196,8 @@ def _quick_system(vault: Path, now: datetime) -> str:
     """The quick answer's instructions and a short self, the same from one ask to the next so a
     local model can keep it read between them."""
     person = env("NAME", "the person")
-    return _QUICK_SYSTEM.format(person=person) + "\n\n" + work.short_self(vault, now)
+    system = _QUICK_SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
+    return system + "\n\n" + work.short_self(vault, now)
 
 
 def _nearest(vault: Path, text: str) -> list[dict]:
@@ -226,9 +233,9 @@ def _deep(
     found, _ = research.matter(vault, context, person, model, who or None)
     if found:
         found = f"What {person}'s memory holds that this depends on:\n{found}"
-    memory = "\n\n".join(p for p in (about, found) if p)
+    own = voice.examples(voice.Writing(vault), None, name=who)  # how they write, for a draft
     answer = model(
-        brief + (f"\n\n{memory}" if memory else "") + "\n\n" + _ANSWER.format(person=person),
+        "\n\n".join(p for p in (brief, about, found, own, _ANSWER.format(person=person)) if p),
         system=work._system(vault / "self", now),
         schema=_ANSWER_SCHEMA,
         effort="high",

@@ -32,10 +32,12 @@ returns what clones/care/care.json holds:
 - visit_brief: one printable page of markdown for the next clinician.
 
 The model is told to state only what the records say, never diagnose or speculate, mark what's
-uncertain, and name other people only by role or organization. Numbers are blanked again in what
-it returns. Evidence is kept as memory-index ids ("email/<account>/<message id>"), and `cited`
-gives the source and time of each, so the page can show and open them without their text.
-`records` counts what was sent from each source. The file is 0600 in a 0700 folder.
+uncertain, and name other people only by role or organization. Scripts, which go out as the
+user's own words, follow the rules every draft does for writing as them (proxenos.voice).
+Numbers are blanked again in what it returns. Evidence is kept as memory-index ids
+("email/<account>/<message id>"), and `cited` gives the source and time of each, so the page can
+show and open them without their text. `records` counts what was sent from each source. The
+file is 0600 in a 0700 folder.
 
 The page marks items done, waiting or not relevant in clones/care/feedback.jsonl. Done and not
 relevant close an item for good, as the tasks clone does: closed.json remembers them, the model is
@@ -54,7 +56,7 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm
+from proxenos import llm, voice
 from proxenos.config import env
 
 DAYS = 120
@@ -866,6 +868,7 @@ def _entry(ref: str, r: dict) -> str:
 def _system(self_dir: Path, days: float) -> str:
     person = env("NAME", "the person")
     system = _SYSTEM.format(person=person, days=f"{days:g}")
+    system += f"\n\nThe scripts go out as {person}'s own words. " + voice.rules(person)
     parts = []
     for name in SELF_FILES:
         path = self_dir / f"{name}.md"

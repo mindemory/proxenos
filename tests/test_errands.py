@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import llm, memory
+from proxenos import llm, memory, voice
 from proxenos.clones import errands
 
 NOW = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
@@ -250,6 +250,21 @@ def test_an_errand_goes_as_far_as_it_can_and_stops_one_tap_short(vault):
     assert saved["status"] == "ready" and saved["summary"] == errand["summary"]
     assert not (vault / "state" / "asking").exists()  # the foreground mark is gone again
     assert not (vault / "clones" / "outbox" / "log.jsonl").exists()  # nothing went out
+
+
+def test_the_message_follows_the_rules_and_the_email_i_send(vault):
+    body = "Hi Dee, quick one, I think the numbers are kind of off for Q3, can we talk. " * 3
+    write_month(
+        vault, "email/joe", "2026-09", [mail(6, from_me=True, to=["dee@beta.com"], body_new=body)]
+    )
+    model = Model("Ana Lee", "Acme Labs")
+
+    errands.start(vault, "Reach Ana Lee at Acme about the role, with my CV", NOW, model)
+
+    write = model.calls[1]
+    assert voice.rules("Joe Bloggs") in write["system"]
+    assert '<example kind="email" date="2026-09-06" title="Hello">' in write["prompt"]
+    assert "the numbers are kind of off" in write["prompt"]
 
 
 def test_with_no_way_to_reach_them_it_waits_and_asks_someone_there_to_introduce(vault):

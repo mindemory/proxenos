@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import cli, llm
+from proxenos import cli, llm, voice
 from proxenos.clones import work
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -620,3 +620,61 @@ def test_a_right_now_note_shapes_drafts_for_two_days(tmp_path, model):
     assert work.right_now(vault, now=datetime(2026, 3, 13, tzinfo=UTC)) is None  # stale
     notes.write_text(notes.read_text() + json.dumps({"at": "2026-03-10T09:00:00Z", "text": ""}))
     assert work.right_now(vault, now=NOW) is None  # cleared
+
+
+def test_every_draft_gets_the_rules_and_my_own_writing_for_where_it_goes(
+    tmp_path, model, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_EMAILS", "tess@x.org")
+    vault = chat_vault(tmp_path)
+    write_json(
+        vault / "clones" / "care" / "care.json",
+        {
+            "summary": "Waiting on a referral.",
+            "open_items": [{"id": "i1", "status": "open", "title": "Get the referral"}],
+            "scripts": [
+                {"item_id": "i1", "kind": "email", "title": "Ask", "body": "Please send it."}
+            ],
+        },
+    )
+    mail = "hey Ana, I think the poster is kind of done, ring me on 603-555-0142 or tess@x.org. "
+    write_jsonl(
+        vault / "raw" / "email" / "tess" / "2026-03.jsonl",
+        [
+            {
+                "id": "e1",
+                "ts": "2026-03-05T09:00:00Z",
+                "from_me": True,
+                "to": ["ana@acme.org"],
+                "subject": "Poster",
+                "body_new": mail * 3,
+            }
+        ],
+    )
+    post = "So proud of the lab this year, honestly kind of amazed by everyone. "
+    write_jsonl(
+        vault / "raw" / "linkedin" / "posts" / "2026-02.jsonl",
+        [{"id": "l1", "ts": "2026-02-01T09:00:00Z", "from_me": True, "text": post * 4}],
+    )
+
+    work.work(vault, limit=50, now=NOW, read=FakePages())
+
+    assert all(voice.rules("Tess") in c["system"] for c in model.calls)
+    prompts = {
+        re.search(r"^- \w+: (.*)$", c["prompt"], re.MULTILINE)[1]: c["prompt"] for c in model.calls
+    }
+    reply = prompts["Asha"]
+    assert "In this conversation:\n- lol yaa\n- okiees see you thurs" in reply
+    assert "To others on WhatsApp:\n- yaa what's up" in reply
+    assert reply.index("okiees see you thurs") < reply.index("<page")
+    task = prompts["Send Asha the slides"]  # a WhatsApp task with Asha
+    assert "In their chat with Asha:\n- lol yaa" in task and "<example" not in task
+    outreach = prompts["Person 1"]  # no channel: a message, as an email
+    assert outreach.index('<example kind="email"') < outreach.index('<example kind="post"')
+    assert "603-555-0142" in outreach and "lol yaa" not in outreach
+    plan = prompts["Project 0"]
+    assert plan.index('<example kind="post"') < plan.index('<example kind="email"')
+    assert prompts["Paper 8"].index("So proud") < prompts["Paper 8"].index("hey Ana")
+    care = prompts["Get the referral"]  # blanked, as care's own records are
+    assert "hey Ana, I think the poster" in care and "[phone]" in care
+    assert "[address at x.org]" in care and "603-555-0142" not in care
