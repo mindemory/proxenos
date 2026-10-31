@@ -12,6 +12,15 @@ Goal: a page you keep open while you work. Every few hours it shows new things w
 3. **Store** in `$PROXENOS_VAULT/tracker/items/<date>.jsonl`, deduplicated by URL.
 4. **React.** On the page you mark items useful, not-me, or save. Opening an item is logged too. Feedback goes to `$PROXENOS_VAULT/tracker/feedback.jsonl`. This is the "morning reaction" signal from the landscape doc, at a few-hours cadence. It scores Proxenos's predictions and feeds the next profile update.
 
+## With Alexandria
+
+When Alexandria (the library app) is on the same Mac (`ALEXANDRIA_HOME`, default `~/alexandria_vault`), the two feeds share what each does best:
+
+- **Papers:** Alexandria reads far more papers each week (bioRxiv, and new papers citing your library) and scores them against everything you've saved. Its picks (`site/picks.json`) join this feed's candidates, each with Alexandria's line on why it fits your library, and the ranking here weighs them with the news and posts.
+- **Reactions:** what you mark on Alexandria's page steers the ranking here, and a paper you've already answered there isn't offered here. Alexandria reads this feed's arXiv papers and your reactions to papers back, so it learns from both pages too.
+
+Only papers and your reactions to them cross over.
+
 ## The page
 
 - **Stack and look:**

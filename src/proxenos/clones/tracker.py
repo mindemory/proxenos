@@ -12,6 +12,14 @@ counted and skipped, so one dead feed never costs a run.
 
 Every candidate that reaches the model is remembered in tracker/seen.json. Later runs rank
 only what's new, so items it passed over don't come back to fill the slots.
+
+When Alexandria (the library app) is on this computer too (ALEXANDRIA_HOME, else
+~/alexandria_vault), the two feeds share what each does best. Alexandria's picks for the week
+(site/picks.json) join the candidates: it reads far more papers than a run here does, bioRxiv
+and new papers citing the user's library among them, and scores them against everything they've
+saved. And what the user said about papers on its page (reactions.json) steers the ranking here
+like reactions on this page do, and a paper they've already answered there isn't offered here.
+Alexandria reads this feed's papers and reactions back the same way.
 """
 
 import argparse
@@ -28,7 +36,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from functools import partial
@@ -56,6 +64,7 @@ FEEDBACK_WINDOW = timedelta(days=14)
 REACTIONS_SHOWN = 30  # per kind of reaction
 SEEN_WINDOW = timedelta(days=30)
 TOP_DOMAINS = 30
+ALEXANDRIA_HOME = "~/alexandria_vault"  # its default; ALEXANDRIA_HOME names another
 # Room for thinking plus ~150 verdicts. The SDK refuses non-streaming requests above ~21k.
 RANK_MAX_TOKENS = 20000
 
@@ -211,15 +220,20 @@ def track(
     sources = _sources(out / "sources.json", profile, vault / "raw" / "whatsapp" / "messages")
     candidates, failed = fetch_candidates(sources, now - timedelta(days=days), now, fetch)
 
+    library = alexandria_home()
+    picks, answered = alexandria_picks(library), alexandria_reactions(library)
+    if picks:  # first, so a paper it picked keeps the line on why it fits the library
+        candidates = picks + candidates
     items = _load_items(out / "items")
     seen = _load_seen(out / "seen.json", now)
-    fresh = _dedupe(candidates, items.keys() | seen.keys())
+    known = items.keys() | seen.keys() | {item_id(url) for *_, url in answered if url}
+    fresh = _dedupe(candidates, known)
     stats = {"fetched": len(candidates), "new": len(fresh), "kept": 0, "sources_failed": failed}
     if not fresh:
         return stats
 
     pool = trim(fresh, MAX_CANDIDATES)
-    ranked = _rank(pool, profile, _reactions(out / "feedback.jsonl", items, now))
+    ranked = _rank(pool, profile, _reactions(out / "feedback.jsonl", items, now, answered))
     kept = select(ranked, max_items)
     merge_monthly([_record(item, batch) for item in kept], out / "items")
     _save_seen(out / "seen.json", seen | dict.fromkeys((c["id"] for c in pool), batch))
@@ -515,6 +529,55 @@ def _candidate(
     }
 
 
+def alexandria_home() -> Path:
+    return Path(os.environ.get("ALEXANDRIA_HOME") or ALEXANDRIA_HOME).expanduser()
+
+
+def alexandria_picks(home: Path) -> list[dict]:
+    """Alexandria's papers for the week as candidates, each led by its reason; [] without it."""
+    found = _json_file(home / "site" / "picks.json")
+    picks = found.get("picks") if isinstance(found, dict) else None
+    candidates = []
+    for pick in picks if isinstance(picks, list) else []:
+        if not isinstance(pick, dict) or not isinstance(pick.get("title"), str):
+            continue
+        why, abstract = _plain(pick.get("why")), _plain(pick.get("abstract"))
+        authors = pick.get("authors") if isinstance(pick.get("authors"), list) else []
+        candidates.append(
+            _candidate(
+                url=pick.get("url") if isinstance(pick.get("url"), str) else None,
+                title=_plain(pick["title"]),
+                source="Alexandria",
+                kind="paper",
+                published=pick.get("published"),
+                authors=[str(a) for a in authors],
+                summary=(f"Alexandria picked it from their library: {why} " if why else "")
+                + abstract,
+            )
+        )
+    return [c for c in candidates if c["url"] and c["title"]]
+
+
+def alexandria_reactions(home: Path) -> list[tuple[datetime, str, str, str]]:
+    """What the user said about papers on Alexandria's page: (when, reaction, title, url)."""
+    found = _json_file(home / "reactions.json")
+    answered = []
+    for said in found.values() if isinstance(found, dict) else []:
+        if not isinstance(said, dict) or said.get("reaction") not in _REACTIONS:
+            continue
+        if (when := _when(said.get("at"))) and isinstance(said.get("title"), str):
+            url = said.get("url") if isinstance(said.get("url"), str) else ""
+            answered.append((when, said["reaction"], _plain(said["title"]), url))
+    return answered
+
+
+def _json_file(path: Path) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def _dedupe(candidates: list[dict], known: set[str]) -> list[dict]:
     fresh, ids = [], set(known)
     for candidate in candidates:
@@ -524,22 +587,26 @@ def _dedupe(candidates: list[dict], known: set[str]) -> list[dict]:
     return fresh
 
 
-def _reactions(path: Path, items: dict[str, dict], now: datetime) -> dict[str, list[str]]:
-    """Titles of the items the user marked lately, by reaction, newest first. Opens don't count."""
-    if not path.exists():
-        return {}
+def _reactions(
+    path: Path,
+    items: dict[str, dict],
+    now: datetime,
+    elsewhere: Iterable[tuple[datetime, str, str, str]] = (),
+) -> dict[str, list[str]]:
+    """Titles of the items the user marked lately, by reaction, newest first, with the papers
+    they marked on Alexandria's page (`elsewhere`). Opens don't count."""
     cutoff = now - FEEDBACK_WINDOW
-    events = []
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            try:
-                event = json.loads(line)
-                when, action = _when(event["ts"]), event["action"]
-                item = items.get(event["item_id"])
-            except (ValueError, KeyError, TypeError):
-                continue  # the page writes this file, and one bad line shouldn't stop a run
-            if action in _REACTIONS and item and when and when >= cutoff:
-                events.append((when, action, item["title"]))
+    events = [(when, action, title) for when, action, title, _ in elsewhere if when >= cutoff]
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    for line in lines:
+        try:
+            event = json.loads(line)
+            when, action = _when(event["ts"]), event["action"]
+            item = items.get(event["item_id"])
+        except (ValueError, KeyError, TypeError):
+            continue  # the page writes this file, and one bad line shouldn't stop a run
+        if action in _REACTIONS and item and when and when >= cutoff:
+            events.append((when, action, item["title"]))
     titles: dict[str, list[str]] = defaultdict(list)
     for _, action, title in sorted(events, reverse=True):
         if title not in titles[action] and len(titles[action]) < REACTIONS_SHOWN:

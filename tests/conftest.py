@@ -106,6 +106,8 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setattr("proxenos.config.ENV_FILE", app / "repo" / ".env")
     monkeypatch.setattr("proxenos.config._loaded", False)
     monkeypatch.setattr("proxenos.config._origin", {})
+    # Nor Alexandria's vault, whose picks and reactions the feed reads when it's on this computer.
+    monkeypatch.setenv("ALEXANDRIA_HOME", str(app / "no-alexandria"))
     # The repo's data/ folder holds real downloads; tests only ever see their own inbox.
     monkeypatch.setattr("proxenos.importer.inboxes", lambda vault: [vault / "inbox"])
 

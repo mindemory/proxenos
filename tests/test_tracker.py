@@ -485,6 +485,56 @@ def test_recent_reactions_reach_the_ranking_prompt(tmp_path, model):
     assert "Earlier pick 3" not in prompt and "Earlier pick 4" not in prompt
 
 
+def test_alexandria_picks_join_and_its_reactions_steer_the_ranking(tmp_path, model, monkeypatch):
+    vault = make_vault(tmp_path, sources={"hackernews": True})
+    home = tmp_path / "alexandria"
+    (home / "site").mkdir(parents=True)
+    picks = [
+        {
+            "title": "Theta bursts in prefrontal cortex",
+            "url": "https://doi.org/10.1101/2026.03.01.111",
+            "why": "Theta drives gating, like the Lee paper on your shelf.",
+            "abstract": "We record from synthetic neurons.",
+            "authors": ["Jo Doe"],
+            "published": "2026-02-27",
+        },
+        {"title": "", "url": "https://example.org/untitled"},
+        "not a pick",
+    ]
+    (home / "site" / "picks.json").write_text(json.dumps({"picks": picks}))
+    reactions = {
+        "arxiv:2603.00002": {
+            "reaction": "save",
+            "title": "Gating in recurrent nets",
+            "url": "https://arxiv.org/abs/2603.00002",
+            "at": ago(days=1),
+        },
+        # Answered there, so not offered here: HN's link to the rowing notes.
+        "W1": {
+            "reaction": "not_me",
+            "title": "Notes on rowing physiology",
+            "url": "https://blog.example.com/posts/rowing/?utm_source=alexandria",
+            "at": ago(days=2),
+        },
+        "W2": {"reaction": "useful", "title": "Long ago", "url": "", "at": ago(days=40)},
+    }
+    (home / "reactions.json").write_text(json.dumps(reactions))
+    monkeypatch.setenv("ALEXANDRIA_HOME", str(home))
+
+    stats = track(vault, web())
+
+    prompt = model.calls[-1]["prompt"]
+    assert (
+        "paper from Alexandria, 2026-02-27\nTheta bursts in prefrontal cortex\nBy Jo Doe" in prompt
+    )
+    assert "Alexandria picked it from their library: Theta drives gating" in prompt
+    assert "- save: Gating in recurrent nets\n- not_me: Notes on rowing physiology" in prompt
+    assert "Long ago" not in prompt
+    assert "Theta bursts in prefrontal cortex" in stored(vault)
+    assert "Notes on rowing physiology" not in stored(vault)
+    assert stats["new"] == 2  # the pick, and HN's other story
+
+
 def verdict(n, score, explore=False):
     return {"id": f"x{n}", "score": score, "explore": explore}
 
