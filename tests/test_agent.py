@@ -113,7 +113,7 @@ def test_claude_code_works_in_its_sandbox_on_its_own_account(tmp_path, monkeypat
                 "modelUsage": {},
             },
             agent.AgentUnavailable,
-            "couldn't start: Credit balance is too low",
+            "^Credit balance is too low$",
         ),
         (
             {"subtype": "error_max_turns", "is_error": True, "modelUsage": {"m": {}}},

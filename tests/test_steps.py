@@ -228,7 +228,7 @@ def test_when_claude_code_cant_start_the_local_model_takes_the_step(setup):
     vault, _, _ = setup
 
     def out_of_credit(task):
-        raise agent.AgentUnavailable("Claude Code couldn't start: Credit balance is too low")
+        raise agent.AgentUnavailable("Credit balance is too low")
 
     out_of_credit.name, out_of_credit.label = "claude", "Claude Code"
     local = Runner()
@@ -243,14 +243,14 @@ def test_when_claude_code_cant_start_the_local_model_takes_the_step(setup):
         "Claude Code couldn't start",
         "Handed it to the local model",
     ]
-    assert "Credit balance is too low" in step["thread"][2]["detail"]
+    assert step["thread"][2]["detail"] == "Credit balance is too low"
 
 
 def test_a_step_that_fails_before_changing_anything_leaves_nothing_behind(setup):
     vault, repo, _ = setup
 
     def out_of_credit(task):
-        raise agent.AgentUnavailable("Claude Code couldn't start: Credit balance is too low")
+        raise agent.AgentUnavailable("Credit balance is too low")
 
     out_of_credit.name, out_of_credit.label = "claude", "Claude Code"
     with pytest.raises(agent.AgentError, match="couldn't start: Credit balance is too low"):

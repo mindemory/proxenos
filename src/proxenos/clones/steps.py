@@ -164,7 +164,7 @@ def _carry(vault: Path, project: dict, step: dict, tried: list) -> None:
             if _changed(worktree):
                 raise
             _note(vault, step, f"{runner.label} couldn't start", str(e))
-            reasons.append(str(e))
+            reasons.append(f"{runner.label} couldn't start: {e}")
             continue
         step["runner"] = runner.name
         break

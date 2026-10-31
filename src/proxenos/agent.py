@@ -313,7 +313,7 @@ def _answer(code: int, stdout: str, stderr: str) -> dict:
             "error_max_budget_usd": "it reached its spending budget before it reported",
         }.get(str(answer.get("subtype")), str(answer.get("subtype") or "it failed"))
         if answer.get("terminal_reason") == "api_error" and not answer.get("modelUsage"):
-            raise AgentUnavailable(f"Claude Code couldn't start: {why}")
+            raise AgentUnavailable(why)
         raise AgentError(f"Claude Code stopped: {why}")
     report = answer.get("structured_output")
     if not isinstance(report, dict):
