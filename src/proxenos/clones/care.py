@@ -16,14 +16,21 @@ referrals, insurance, bills, prescriptions, records, portals, forms and symptoms
   and social mail need more, mail from a health organization less; spam and trash are skipped.
 - A chat message that clears the bar with a strong match brings the few messages right around
   it in the same chat, within half an hour: the question it answers, the answer to it.
+- Medical records from Apple Health or a patient portal (proxenos.ingest.healthrecords:
+  results, conditions, medications, visits, reports, allergies, immunizations, procedures and
+  documents) are the user's own records of their care, so every one is kept without scoring.
+  A condition, medication or allergy still active comes however old it is, since it's where
+  care stands now, and ranks as if it were from today.
 
 Only those records go to the model, oldest first, up to about 300k characters; a local model
 gets about 60k, each record cut to 1,500 characters around its health terms, which a laptop
 answers in about twenty minutes. When there are more, relevance (the score, halved with each
 month of age) decides what stays, so the weeks that matter now always fit. Before they go,
 people in chats become "contact 1", "contact 2"; phone numbers, long account, member and claim
-numbers, email addresses and links are blanked; and a long text is cut to the passages around
-its health terms. One request, at high effort, returns what clones/care/care.json holds:
+numbers, email addresses and links are blanked (in a medical record's words, never in a
+result's value, unit or reference range: the blanking is for identifiers, not results); and a
+long text is cut to the passages around its health terms. One request, at high effort, returns
+what clones/care/care.json holds:
 
 - summary: three to five sentences on where things stand;
 - timeline: dated events (symptom, visit, test, result, referral, call, message, bill, claim,
@@ -59,6 +66,7 @@ from pathlib import Path
 
 from proxenos import llm, voice
 from proxenos.config import env
+from proxenos.ingest import healthrecords
 
 DAYS = 120
 AHEAD_DAYS = 60  # calendar events this far ahead count too: the appointments still to come
@@ -78,8 +86,22 @@ NEAR_BEFORE, NEAR_AFTER = 2, 3
 HALF_LIFE_DAYS = 30  # under the cap, a record's relevance halves with each month of age
 DONE_KEEP = timedelta(days=30)  # how long a done item stays on the list
 CLOSED_KEEP = timedelta(days=180)  # how long a closed item is remembered, at least
+MEDICAL_SCORE = 6  # a medical record isn't scored: it ranks as a strong match under the cap
+# Medical records that say where care stands now, kept while still active however old they are.
+ONGOING = ("conditions", "medications", "allergies")
+_ACTIVE = ("active", "recurrence", "relapse")
 
-SOURCES = ("email", "calendar", "whatsapp", "slack", "notes", "keep", "gtasks", "drive")
+SOURCES = (
+    "email",
+    "calendar",
+    "whatsapp",
+    "slack",
+    "notes",
+    "keep",
+    "gtasks",
+    "drive",
+    "healthrecords",
+)
 TIMELINE_KINDS = (
     "symptom",
     "visit",
@@ -278,7 +300,8 @@ You help {person} get through the health-care system: appointments, referrals, t
 results, bills, insurance claims, prescriptions, records requests, forms, phone calls and \
 faxes. You get the health-related records from their own mail, calendar, chats, notes and \
 documents over the last {days} days (and calendar events still to come), picked out by \
-keyword, and their list of open items as it stood after the last run. Return where things \
+keyword, their medical records from their providers (results, conditions, medications, \
+visits), and their list of open items as it stood after the last run. Return where things \
 stand, all of it, as JSON.
 
 - summary: three to five plain sentences: where things stand now, what is pending and on whom, \
@@ -334,8 +357,9 @@ Today is {today}. Times are local.
 {current}
 {closed}
 ## Records, oldest first
-From the last {days} days, and calendar events up to {ahead} days ahead. Each starts with its \
-[r..] ref, the time, where it's from and who wrote it ("me" is {person}).
+From the last {days} days, calendar events up to {ahead} days ahead, and the conditions, \
+medications and allergies {person}'s medical records list as active, however old. Each starts \
+with its [r..] ref, the time, where it's from and who wrote it ("me" is {person}).
 {cut}
 {records}"""
 
@@ -533,6 +557,7 @@ def gather(vault: Path, start: datetime, now: datetime, end: datetime) -> list[d
         *_whatsapp(vault, since, today, people, groups),
         *_slack(vault, since, today, people),
         *_documents(vault, since, today),
+        *_medical(vault, since, today),
     ]
 
 
@@ -743,6 +768,35 @@ def _documents(vault: Path, since: str, until: str) -> list[dict]:
     return found
 
 
+def _medical(vault: Path, since: str, until: str) -> list[dict]:
+    """The user's medical records, each kept without scoring. One in ONGOING still active comes
+    however old it is, marked `current` so it ranks as if from today. Their words are redacted;
+    a result's value, unit and range are not."""
+    found = []
+    for directory in sorted(p for p in (vault / "raw" / "healthrecords").glob("*") if p.is_dir()):
+        ongoing = directory.name in ONGOING
+        for r in _records(directory, "" if ongoing else since, until):
+            current = ongoing and r.get("status") in _ACTIVE
+            if r.get("status") == "entered-in-error" or (r["ts"] < since and not current):
+                continue
+            found.append(
+                {
+                    "id": f"healthrecords/{directory.name}/{r['id']}",
+                    "source": "healthrecords",
+                    "ts": r["ts"],
+                    "where": f"medical record, {healthrecords.label(r)}",
+                    "sender": "",
+                    "own": False,
+                    "score": MEDICAL_SCORE,
+                    "terms": [],
+                    "current": current,
+                    "title": "",
+                    "text": _excerpt(healthrecords.describe(r, _redact), DOC_CHARS),
+                }
+            )
+    return found
+
+
 def _document_text(source: str, r: dict) -> str:
     if source == "gtasks":
         state = [f"list {r['list']}" if r.get("list") else "", str(r.get("status") or "")]
@@ -832,16 +886,18 @@ def render(
     """The records as prompt text, oldest first, the record behind each [r..] ref, and whether
     any were left out. Over `limit` characters, the least relevant go first. Relevance is the
     score, halved for every HALF_LIFE_DAYS of age, so the weeks that matter now always fit
-    before older history; upcoming events count as today. A chat message kept for context
-    ranks just below its match. With `clip`, each record's text is first cut to that many
-    characters around its health terms, so more records fit."""
+    before older history; upcoming events count as today, and so do the conditions,
+    medications and allergies still active. A chat message kept for context ranks just below
+    its match. With `clip`, each record's text is first cut to that many characters around its
+    health terms, so more records fit."""
     if clip is not None:
         records = [r | {"text": _excerpt(r["text"], clip)} for r in records]
     by_id = {r["id"]: r for r in records}
 
     def weight(r: dict) -> float:
         anchor = by_id.get(r.get("near") or "", r)
-        age = max(0.0, (now - _time(r["ts"])).total_seconds() / 86400)
+        age = 0.0 if r.get("current") else (now - _time(r["ts"])).total_seconds() / 86400
+        age = max(0.0, age)
         points = min(max(anchor["score"], 1), 12)
         return points * 0.5 ** (age / HALF_LIFE_DAYS) - (0.01 if r.get("near") else 0.0)
 

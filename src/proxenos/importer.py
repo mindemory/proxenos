@@ -11,7 +11,9 @@ the files inside it, and handed to the matching ingester:
 - Instagram, Facebook, Threads and LinkedIn exports;
 - Spotify Extended Streaming History;
 - Letterboxd exports;
-- Notion exports and Obsidian vaults.
+- Notion exports and Obsidian vaults;
+- medical records: Apple Health's export.zip (its clinical-records folder), and a patient
+  portal's FHIR download (Bundles or NDJSON) that nothing else claimed.
 
 Takeout splits big exports into -001, -002, ... zips, and parts of one export unpack into the
 same folder. Loose PDFs are read as notes. Once imported, downloads are filed away in the
@@ -161,6 +163,9 @@ def jobs_for(dest: Path) -> list[tuple[str, list[str]]]:
     for diary in sorted(dest.glob("**/diary.csv")):
         if (diary.parent / "watched.csv").is_file():
             jobs.append(("letterboxd", ["--export", str(diary.parent)]))
+    # Apple Health's export: one FHIR resource per file for each account under Health Records.
+    for records in sorted(p for p in dest.glob("**/clinical-records") if p.is_dir()):
+        jobs.append(("healthrecords", ["--export", str(records)]))
 
     # One calendar job per topmost folder holding .ics files (Google's export, Takeout/Calendar).
     calendars = {p.parent for p in dest.glob("**/*.ics") if "__MACOSX" not in p.parts}
@@ -178,7 +183,31 @@ def jobs_for(dest: Path) -> list[tuple[str, list[str]]]:
         if notion and any(p.suffix.lower() == ".pdf" for p in found):
             argv += ["--pdf-dir", str(dest)]
         jobs.append(("notes", argv))
+
+    # A patient portal's FHIR download, only looked for when nothing else claimed the export, so
+    # no other export's JSON is opened: one job per topmost folder holding FHIR files.
+    if not jobs:
+        fhir = {p.parent for p in found if "__MACOSX" not in p.parts and _fhir(p)}
+        for folder in sorted(fhir):
+            if not any(parent in fhir for parent in folder.parents):
+                jobs.append(("healthrecords", ["--export", str(folder)]))
     return jobs
+
+
+_FHIR = re.compile(rb'"resourceType"\s*:\s*"[A-Z][A-Za-z]+"')
+
+
+def _fhir(path: Path, scan_bytes: int = 65536) -> bool:
+    """A JSON or NDJSON file whose start names a FHIR resource type, as every resource does."""
+    if path.suffix.lower() not in (".json", ".ndjson") or not path.is_file():
+        return False
+    try:
+        with path.open("rb") as f:
+            head = f.read(scan_bytes)
+    except OSError:
+        return False
+    start = head.removeprefix(b"\xef\xbb\xbf").lstrip()[:1]
+    return start in (b"{", b"[") and _FHIR.search(head) is not None
 
 
 def mail_account(mbox: Path, scan_bytes: int = 20_000_000) -> str:
