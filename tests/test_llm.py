@@ -68,16 +68,46 @@ def test_missing_key_says_where_to_put_one(monkeypatch):
         llm._get_client()
 
 
-def local(monkeypatch, answer):
-    """A fake Ollama: records each request body, answers with `answer`."""
-    import io
+class Stream:
+    """An answer from Ollama as it streams in: JSON lines, then `then` raised, if given."""
+
+    def __init__(self, lines, then=None):
+        self.lines, self.then = lines, then
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def __iter__(self):
+        import json
+
+        for line in self.lines:
+            yield json.dumps(line).encode() + b"\n"
+        if self.then:
+            raise self.then
+
+
+def streamed(content, done_reason="stop"):
+    """`content` as Ollama streams it: some thinking, the words in pieces, a last line."""
+    pieces = [content[i : i + 4] for i in range(0, len(content), 4)]
+    return [
+        {"message": {"role": "assistant", "content": "", "thinking": "Hm."}, "done": False},
+        *({"message": {"role": "assistant", "content": p}, "done": False} for p in pieces),
+        {"message": {"role": "assistant", "content": ""}, "done": True, "done_reason": done_reason},
+    ]
+
+
+def local(monkeypatch, content, done_reason="stop", *, lines=None, then=None):
+    """A fake Ollama: records each request body and streams `content` back, or `lines`."""
     import json
 
     sent = []
 
     def urlopen(request, timeout):
         sent.append((request.full_url, json.loads(request.data)))
-        return io.BytesIO(json.dumps(answer).encode())
+        return Stream(streamed(content, done_reason) if lines is None else lines, then)
 
     monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
     monkeypatch.setattr(llm.urllib.request, "urlopen", urlopen)
@@ -86,7 +116,7 @@ def local(monkeypatch, answer):
 
 def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
     fenced = '```json\n{"x": 1}\n```'
-    sent = local(monkeypatch, {"message": {"content": fenced}, "done_reason": "stop"})
+    sent = local(monkeypatch, fenced)
     monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("called the API"))
     schema = {"type": "object", "required": ["x"]}
 
@@ -94,7 +124,7 @@ def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
 
     url, body = sent[0]
     assert url == "http://127.0.0.1:11434/api/chat"
-    assert body["model"] == "gemma4:26b" and body["think"] is True
+    assert body["model"] == "gemma4:26b" and body["think"] is True and body["stream"] is True
     system, user = body["messages"]
     assert user == {"role": "user", "content": "hi"}
     assert system["content"].startswith("sys") and '"required": ["x"]' in system["content"]
@@ -102,18 +132,39 @@ def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
 
 
 def test_a_local_answer_that_isnt_the_json_asked_for_is_tried_again_then_fails(monkeypatch):
-    sent = local(monkeypatch, {"message": {"content": '{"y": 1}'}, "done_reason": "stop"})
+    sent = local(monkeypatch, '{"y": 1}')
     with pytest.raises(llm.ModelError, match="JSON asked for"):
         llm.ask("hi", schema={"type": "object", "required": ["x"]})
     assert len(sent) == 2 and sent[0][1]["think"] is False
 
 
 def test_a_local_prompt_too_long_or_answer_cut_off_fails_rather_than_truncates(monkeypatch):
-    sent = local(monkeypatch, {"message": {"content": "partial"}, "done_reason": "length"})
+    sent = local(monkeypatch, "partial", "length")
     with pytest.raises(llm.ModelError, match="too long"):
         llm.ask("x" * llm.LOCAL_CONTEXT * 3)
     assert not sent  # never sent
     with pytest.raises(llm.ModelError, match="cut off"):
+        llm.ask("hi")
+
+
+def test_a_long_local_answer_isnt_cut_at_a_time_but_a_stalled_one_is(monkeypatch):
+    # Each read waits at most _LOCAL_TIMEOUT for the next piece, however long the whole takes.
+    local(monkeypatch, "a long answer")
+    assert llm.ask("hi") == "a long answer"
+
+    local(monkeypatch, "", lines=streamed("a long")[:2], then=TimeoutError("timed out"))
+    with pytest.raises(llm.ModelError, match="isn't answering"):
+        llm.ask("hi")
+    local(monkeypatch, "", lines=streamed("a long")[:2])  # the stream ended with no last line
+    with pytest.raises(llm.ModelError, match="stopped mid-answer"):
+        llm.ask("hi")
+    local(monkeypatch, "", lines=[{"error": "model runner has unexpectedly stopped"}])
+    with pytest.raises(llm.ModelError, match="unexpectedly stopped"):
+        llm.ask("hi")
+
+    monkeypatch.setattr(llm, "_LOCAL_DEADLINE", -1)  # past the deadline, still going
+    local(monkeypatch, "a long answer")
+    with pytest.raises(llm.ModelError, match="still answering"):
         llm.ask("hi")
 
 

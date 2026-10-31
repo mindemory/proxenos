@@ -361,3 +361,43 @@ def test_a_local_model_reads_the_newest_notes_that_fit():
     assert advisor.newest(notes, None) == notes
     assert advisor.newest(notes, 120) == notes[1:]  # still oldest first
     assert advisor.newest(notes, 10) == notes[2:]  # the newest, even when it alone is too long
+
+
+def test_a_local_model_reads_the_newest_earlier_advice_beside_what_they_acted_on(tmp_path):
+    vault = make_vault(tmp_path)
+    out = vault / "clones" / "advisor"
+    for day in range(1, 10):
+        run = {"suggestions": [given("time", f"Quiet idea from March {day}")]}
+        write(out / f"2026-03-0{day}.json", json.dumps(run))
+    since = NOW - timedelta(days=91)
+
+    whole, _ = advisor._history(out, since)
+    text, not_me = advisor._history(out, since, budget=400)
+
+    assert "Quiet idea from March 1 (given 2026-03-01)" in whole
+    assert len(text) < len(whole) and not_me == {NOT_ME["id"]}
+    assert "Row two easy sessions" in text and "Review subscriptions monthly" in text  # doing
+    assert "Stop screens at 11pm" in text  # not me, kept whatever the budget
+    assert "Quiet idea from March 9 (given 2026-03-09)" in text  # the newest
+    assert "Quiet idea from March 1 " not in text and "Block mornings" not in text
+
+
+def test_a_local_model_gives_the_notes_what_the_rest_of_the_prompt_leaves(
+    tmp_path, model, monkeypatch
+):
+    vault = make_vault(tmp_path)
+    for path in NOTES:
+        write(vault / path, f"# note\n\n{path} " + "seen " * 5_000)  # 25k characters each
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+
+    advisor.advise(vault, now=NOW)
+    write(vault / "self" / "routines.md", "Trains early. " * 7_000)  # a long self-model
+    advisor.advise(vault, now=NOW)
+
+    roomy, tight = (call["prompt"] for call in model.calls)
+    assert roomy.count("<note path=") == 2  # LOCAL_NOTES_CHARS of them
+    assert tight.count("<note path=") == 1 and NOTES[-1] in tight  # the newest
+    assert "only the newest that fit" in tight
+    for call in model.calls:  # what _ask_local sends, within what the model takes
+        size = len(call["prompt"]) + len(call["system"]) + len(json.dumps(call["schema"]))
+        assert size < llm.prompt_chars()

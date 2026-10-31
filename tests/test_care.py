@@ -492,6 +492,45 @@ def test_the_cap_keeps_the_newest_and_strongest_and_says_it_cut():
     assert not cut and len(refs) == 5
 
 
+def test_a_local_model_reads_less_with_each_record_cut_to_a_messages_length(
+    tmp_path, model, monkeypatch
+):
+    def record(key, text, points):
+        return {
+            "id": key,
+            "source": "notes",
+            "ts": ago(days=1),
+            "where": "note",
+            "sender": "",
+            "title": "",
+            "text": text,
+            "own": True,
+            "score": points,
+            "terms": [],
+        }
+
+    note = record("note", "filler " * 300 + "my copay was wrong " + "filler " * 300, 12)
+    mails = [record(f"mail-{n}", f"The urgent care visit is booked ({n}).", 3) for n in range(5)]
+    limit = len(care._entry("r00000", note)) + 20
+
+    text, refs, cut = care.render([note, *mails], NOW, limit)
+    assert [ref["id"] for ref in refs.values()] == ["note"] and cut  # one long note fills it
+    text, refs, cut = care.render([note, *mails], NOW, limit, clip=care.CHAT_CHARS)
+    assert len(refs) == 6 and not cut
+    assert "copay" in text and len(text) < limit
+
+    sizes = []
+    real = care.render
+    monkeypatch.setattr(
+        care, "render", lambda *a, **kw: sizes.append((a[2], kw.get("clip"))) or real(*a, **kw)
+    )
+    vault = make_vault(tmp_path)
+    care.care(vault, now=NOW)
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    care.care(vault, now=NOW)
+    assert sizes == [(care.MAX_CHARS, None), (care.LOCAL_CHARS, care.CHAT_CHARS)]
+
+
 def test_long_texts_are_cut_to_the_passages_around_their_terms():
     text = "filler " * 2000 + "my copay was wrong " + "filler " * 2000
     cut = care._excerpt(text, 1000)

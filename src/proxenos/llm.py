@@ -12,6 +12,7 @@ for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "
 for one imported into Ollama. It goes through `ask_voice`.
 """
 
+import http.client
 import json
 import os
 import time
@@ -37,7 +38,13 @@ _OLLAMA = "http://127.0.0.1:11434"
 # Tokens a local model reads and writes at once: room for a reply's chat and pages, within
 # what a 32 GB Mac holds beside the model. A prompt past it fails rather than being cut.
 LOCAL_CONTEXT = 65536
-_LOCAL_TIMEOUT = 900  # seconds; a long answer on a laptop takes minutes, not hours
+# A local answer streams in as it's written, so a long one isn't cut at a fixed time: a laptop
+# writes ten to twenty-five tokens a second, slower the longer the prompt, and care's thinking and
+# answer, about 10k tokens, take it twenty minutes. Ollama counts as not answering after
+# _LOCAL_TIMEOUT seconds without a word (reading a long prompt comes first, a few minutes), and an
+# answer still going at _LOCAL_DEADLINE fails.
+_LOCAL_TIMEOUT = 900
+_LOCAL_DEADLINE = 3600
 _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON schema:"
 # A local model answers one request at a time, so a question someone is waiting on (an Ask)
 # marks itself here, and other calls, a sync's drafts or the night's notes, wait until it's
@@ -184,7 +191,7 @@ def _ask_local(
             {"role": "user", "content": prompt}
             | ({"images": [i["data"] for i in images]} if images else {}),
         ],
-        "stream": False,
+        "stream": True,
         # Thinking first is for the hard jobs; a draft doesn't need it and is ten times faster.
         "think": effort in ("high", "xhigh", "max"),
         "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
@@ -206,19 +213,42 @@ def _ask_local(
 
 
 def _chat(model: str, body: dict, answer_room: int) -> str:
+    """The answer to one Ollama chat request, read as it streams in, one JSON line at a time:
+    its thinking, then its words, then a last line that says why it stopped."""
     request = urllib.request.Request(
         f"{_OLLAMA}/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"}
     )
+    deadline = time.monotonic() + _LOCAL_DEADLINE
+    words: list[str] = []
+    last: dict = {}
     try:
         with urllib.request.urlopen(request, timeout=_LOCAL_TIMEOUT) as response:
-            answer = json.load(response)
+            for line in response:
+                if not line.strip():
+                    continue
+                chunk = json.loads(line)
+                if chunk.get("error"):
+                    raise ModelError(f"local model {model}: {str(chunk['error'])[:300]}")
+                words.append((chunk.get("message") or {}).get("content") or "")
+                if chunk.get("done"):
+                    last = chunk
+                    break
+                if time.monotonic() > deadline:
+                    raise ModelError(
+                        f"local model {model} was still answering after "
+                        f"{_LOCAL_DEADLINE // 60} minutes"
+                    )
     except urllib.error.HTTPError as e:
         raise ModelError(f"local model {model}: {e.read().decode(errors='replace')[:300]}") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise ModelError(f"the local model isn't answering ({e}); is Ollama running?") from e
-    if answer.get("done_reason") == "length":
+    except (OSError, ValueError, http.client.HTTPException) as e:
+        raise ModelError(f"local model {model} stopped mid-answer ({e})") from e
+    if not last:
+        raise ModelError(f"local model {model} stopped mid-answer")
+    if last.get("done_reason") == "length":
         raise ModelError(f"answer cut off at {answer_room} tokens")
-    return answer["message"]["content"]
+    return "".join(words)
 
 
 def voice_on() -> bool:

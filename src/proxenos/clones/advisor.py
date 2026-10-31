@@ -25,8 +25,13 @@ from proxenos.config import env
 
 MONTHS = 3
 # Observer notes a local model reads (about 15k tokens): a laptop reads the whole window's in
-# longer than one request may take, so it gets the newest that fit.
+# longer than one request may take, so it gets the newest that fit, fewer when the self-model,
+# tasks and earlier advice leave less room in its context.
 LOCAL_NOTES_CHARS = 60_000
+# Earlier advice a local model reads: each run adds a few thousand characters, so past what they
+# acted on (doing, not me), it gets the newest that fit.
+LOCAL_HISTORY_CHARS = 10_000
+PROMPT_CHARS = 10_000  # the instructions, the schema and the headings, about
 TOP_SHOWN = 15  # artists and shows listed
 LONGEST_SHOWN = 3  # longest sessions listed
 
@@ -86,10 +91,20 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
     since = now - timedelta(days=round(months * 365.25 / 12))
     out = vault / "clones" / "advisor"
     profile = read_self(vault / "self")
+    local = llm.prompt_chars() is not None
+    sections = [
+        ("tasks", "Task list, kept up to date from their recent messages", _tasks_text(vault)),
+        ("strava", "Strava, worked out from their activities", strava_summary(vault, since, now)),
+        ("spotify", "Spotify, worked out from their plays", spotify_summary(vault, since, now)),
+    ]
+    history, not_me = _history(out, since, LOCAL_HISTORY_CHARS if local else None)
 
     notes = observations(vault, since)
-    budget = LOCAL_NOTES_CHARS if llm.prompt_chars() is not None else None
-    kept = newest(notes, budget)
+    if local:  # the notes get what's left of the model's room, up to LOCAL_NOTES_CHARS
+        rest = len(profile) + sum(len(text) for _, _, text in sections) + len(history)
+        kept = newest(notes, llm.fit(LOCAL_NOTES_CHARS, overhead=rest + PROMPT_CHARS))
+    else:
+        kept = notes
     cut = len(kept) < len(notes)
     notes = kept
     sources = [path for path, _ in notes]
@@ -107,11 +122,6 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
             or "None for this window."
         ),
     ]
-    sections = [
-        ("tasks", "Task list, kept up to date from their recent messages", _tasks_text(vault)),
-        ("strava", "Strava, worked out from their activities", strava_summary(vault, since, now)),
-        ("spotify", "Spotify, worked out from their plays", spotify_summary(vault, since, now)),
-    ]
     for name, title, text in sections:
         if text:
             sources.append(name)
@@ -123,7 +133,6 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
             f"advisor: nothing to go on from the last {months} months: no observer notes, "
             "tasks, Strava or Spotify. `proxenos master` writes the notes."
         )
-    history, not_me = _history(out, since)
     parts.append(f"# Earlier advice and how they took it\n\n{history}")
 
     answer = llm.ask(
@@ -344,9 +353,10 @@ def _asked(task: dict) -> str | None:
     return f"asked {_local(task['asked_at']):%Y-%m-%d}" if task.get("asked_at") else None
 
 
-def _history(out: Path, since: datetime) -> tuple[str, set[str]]:
+def _history(out: Path, since: datetime, budget: int | None = None) -> tuple[str, set[str]]:
     """Earlier advice and the user's reactions to it as prompt text, and the ids marked not_me.
-    What the user is doing or rejected comes back however old; the rest only from the window."""
+    What the user is doing or rejected comes back however old; the rest only from the window,
+    and with a `budget` in characters, only the newest that fit beside what they acted on."""
     given: dict[str, tuple[str, dict]] = {}
     for path in sorted(out.glob("*.json")):
         if not _DAY.fullmatch(path.stem):
@@ -365,6 +375,18 @@ def _history(out: Path, since: datetime) -> tuple[str, set[str]]:
         action = reactions.get(key)
         if action in ("doing", "not_me") or day >= first:
             groups[action].append(f"- [{s['area']}] {s['suggestion']} (given {day})")
+    if budget is not None:
+        left = budget - sum(
+            len(line) + 1 for action in ("doing", "not_me") for line in groups[action]
+        )
+        for action in ("useful", None):
+            kept = []
+            for line in reversed(groups[action]):
+                left -= len(line) + 1
+                if left < 0:
+                    break
+                kept.append(line)
+            groups[action] = kept[::-1]
     heads = {
         "doing": "They're doing these. Follow up on each: does the evidence show it working, "
         "and what's the next step?",
