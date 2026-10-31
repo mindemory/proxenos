@@ -2,7 +2,10 @@
 model or Claude Code."""
 
 import json
+import os
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -95,7 +98,7 @@ def test_claude_code_works_in_its_sandbox_on_its_own_account(tmp_path, monkeypat
     # Its own account: no API key, nor a host app's settings; caches kept in the worktree.
     env = call["env"]
     assert not any(k.startswith(("ANTHROPIC_", "CLAUDE")) for k in env)
-    assert env["PATH"].split(":")[0] == "/envs/calls/bin"
+    assert env["PATH"].split(os.pathsep)[0] == str(Path("/envs/calls/bin"))
     assert env["PROXENOS_OUT"] == str(t.folder.resolve() / ".proxenos" / "out")
     assert env["MPLBACKEND"] == "Agg"
     assert env["MPLCONFIGDIR"].startswith(str(t.folder.resolve()))
@@ -142,11 +145,12 @@ def test_a_report_given_as_text_is_read_too(tmp_path):
 
 
 def test_a_run_past_its_time_is_stopped_with_its_commands(tmp_path, monkeypatch):
-    script = tmp_path / "slow.sh"
-    script.write_text("#!/bin/sh\nsleep 30 &\nsleep 30\n")
-    script.chmod(0o755)
+    # A command that starts another and waits, in Python so it runs the same on every system.
+    child = "import time; time.sleep(30)"
+    slow = f"import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {child!r}]); "
+    slow += "time.sleep(30)"
     with pytest.raises(agent.AgentError, match="ran past its 0 minutes"):
-        agent._run([str(script)], tmp_path, {"PATH": "/bin:/usr/bin"}, "", 1)
+        agent._run([sys.executable, "-c", slow], tmp_path, dict(os.environ), "", 1)
 
 
 class Model:

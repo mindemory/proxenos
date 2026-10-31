@@ -6,6 +6,7 @@ import io
 import json
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -320,7 +321,7 @@ def test_the_brief_has_where_the_project_stands_and_the_steps_before(setup):
 
     brief = runner.tasks[0].brief
     assert "The project: Calls\nWhat it is: the birdsong paper\nWith: Ana Lee" in brief
-    assert "Its data, read-only: /nowhere/data (not on this computer)" in brief
+    assert f"Its data, read-only: {Path('/nowhere/data')} (not on this computer)" in brief
     assert "Joe's notes on the work: Figures are F*.py." in brief
     assert "Figure 3 still uses means." in brief
     assert (

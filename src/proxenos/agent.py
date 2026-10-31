@@ -269,7 +269,8 @@ def _environment(task: Task) -> dict[str, str]:
 def _run(
     args: list[str], cwd: Path, environment: dict[str, str], stdin: str, timeout: int
 ) -> tuple[int, str, str]:
-    """Run it in a process group of its own, so on timeout its commands stop with it."""
+    """Run it in a process group of its own (on Windows, as the root of its process tree), so
+    on timeout its commands stop with it."""
     proc = subprocess.Popen(
         args,
         cwd=cwd,
@@ -283,13 +284,18 @@ def _run(
     try:
         stdout, stderr = proc.communicate(stdin, timeout=timeout)
     except subprocess.TimeoutExpired:
-        for sig in (signal.SIGTERM, signal.SIGKILL):
-            try:
-                os.killpg(proc.pid, sig)
-                proc.wait(timeout=10)
-                break
-            except (OSError, subprocess.TimeoutExpired):
-                continue
+        if os.name == "nt":
+            tree = ["taskkill", "/F", "/T", "/PID", str(proc.pid)]
+            subprocess.run(tree, check=False, capture_output=True)
+            proc.wait(timeout=10)
+        else:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(proc.pid, sig)
+                    proc.wait(timeout=10)
+                    break
+                except (OSError, subprocess.TimeoutExpired):
+                    continue
         raise AgentError(f"it ran past its {timeout // 60} minutes and was stopped") from None
     return proc.returncode, stdout, stderr
 
