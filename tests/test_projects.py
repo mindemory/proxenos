@@ -144,3 +144,26 @@ def test_drafts_follow_the_rules_and_my_own_writing(tmp_path, monkeypatch):
     assert voice.rules("Joe") in call["system"]
     assert '<example kind="email" date="2026-03-01" title="Bread">' in call["prompt"]
     assert "the bread is finally right I think" in call["prompt"]
+
+
+def test_the_status_knows_the_work_done_and_what_the_user_made_of_it(tmp_path):
+    write_list(tmp_path, {"id": "cookbook", "name": "The cookbook", "repo": "~/cookbook"})
+    done = tmp_path / "clones" / "projects" / "cookbook" / "steps"
+    done.mkdir(parents=True)
+    for when, status, found in [
+        ("20260308-020000", "accepted", "Bread rises 20% more at 24 C."),
+        ("20260309-020000", "ready", "Rye takes 2 h longer."),
+        ("20260309-030000", "working", ""),
+    ]:
+        step = {"status": status, "step": f"Step of {when}", "found": found}
+        (done / f"{when}.json").write_text(json.dumps(step | {"created": f"{when[:4]}-03-0X"}))
+    model = Model()
+
+    projects.projects(tmp_path, now=NOW, model=model)
+
+    prompt = model.calls[0]["prompt"]
+    assert "Work Proxenos did on it lately:" in prompt
+    assert "waiting for the user to accept it: Step of 20260309-020000 It found: Rye" in prompt
+    assert "accepted by the user: Step of 20260308-020000 It found: Bread" in prompt
+    assert "20260309-030000" not in prompt  # still being taken
+    assert projects.listed_projects(tmp_path)[0]["repo"] == "~/cookbook"

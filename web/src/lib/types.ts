@@ -738,8 +738,11 @@ export const SIGN_IN_KINDS: readonly SignInKind[] = ["gmail", "microsoft", "gcal
 export type ConnectJobKind = SignInKind | "whatsapp" | "beeper";
 export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "whatsapp", "beeper"];
 
-/** Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, and a Send. */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send";
+/**
+ * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
+ * project's step, and a decision on one (Accept, Discard, or a change to the queue).
+ */
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -983,4 +986,105 @@ export interface ErrandEdits {
   address?: string;
   subject?: string;
   body?: string;
+}
+
+// ── Projects ────────────────────────────────────────────────────────────────
+//
+// From clones/projects/: projects.json, the user's list; each project's status.md, the projects
+// clone's notes on where it stands; queue.json, the steps the user asked for; and steps/<when>.json,
+// the steps clone's work: one step done on a branch of the project's code, waiting on Accept or
+// Discard.
+
+export const STEP_MAX_TEXT = 2000;
+
+export type StepStatus = "working" | "ready" | "failed" | "accepted" | "discarded";
+
+export interface StepNote {
+  at: string;
+  title: string;
+  detail: string;
+}
+
+/** A file the step changed in the code, with lines added and removed. */
+export interface StepFile {
+  path: string;
+  added: number;
+  removed: number;
+}
+
+/** A figure or table the step made for its report, kept in the vault and not committed. */
+export interface StepMade {
+  name: string;
+  caption: string;
+  image: boolean;
+}
+
+export interface ProjectStep {
+  /** <project>/<when>. */
+  id: string;
+  created: string;
+  updated: string;
+  status: StepStatus;
+  summary: string;
+  /** The step the user queued, or "" when the runner picked it. */
+  asked: string;
+  /** What took it: Claude Code, the local model, or "" before one did. */
+  runner: "claude" | "local" | "";
+  step: string;
+  why: string;
+  did: string;
+  found: string;
+  couldnt: string;
+  next: string;
+  made: StepMade[];
+  files: StepFile[];
+  branch: string;
+  base: string;
+  /** Where its worktree is, with ~ for home, until it's accepted or discarded. */
+  worktree: string;
+  thread: StepNote[];
+  error: string | null;
+  turns: number | null;
+}
+
+export interface QueuedStep {
+  id: string;
+  text: string;
+  added: string;
+}
+
+export interface WorkProject {
+  id: string;
+  name: string;
+  about: string;
+  paused: boolean;
+  /** The folder of its code, with ~ for home; "" when steps aren't taken on it. */
+  repo: string;
+  data: string[];
+  /** Where it stands, as the projects clone last wrote it: markdown, without its title. */
+  status: string;
+  /** The day it was written, YYYY-MM-DD, or "". */
+  statusDate: string;
+  queue: QueuedStep[];
+  /** Newest first. */
+  steps: ProjectStep[];
+}
+
+export interface ProjectsJob {
+  state: "running" | "done" | "failed" | "stopped";
+  message: string;
+  started: string;
+  finished: string | null;
+  /** The project a step is being taken on. */
+  project: string | null;
+}
+
+export interface ProjectsResponse {
+  now: string;
+  vault: VaultInfo;
+  projects: WorkProject[];
+  /** The step being taken now, or how the last one ended. */
+  job: ProjectsJob | null;
+  /** The last Accept, Discard or change to a queue. */
+  deciding: ProjectsJob | null;
 }

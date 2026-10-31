@@ -80,7 +80,7 @@ const MAX_PEOPLE_BYTES = 32 * 1024 * 1024;
 
 // ── Vault location ──────────────────────────────────────────────────────────
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   if (p === "~") return os.homedir();
   if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
   return p;
@@ -158,7 +158,7 @@ export function ownerName(): string | null {
   return first ? first.slice(0, 40) : null;
 }
 
-function displayPath(p: string): string {
+export function displayPath(p: string): string {
   const home = os.homedir();
   return p === home || p.startsWith(home + path.sep) ? "~" + p.slice(home.length) : p;
 }

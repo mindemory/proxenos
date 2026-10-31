@@ -11,7 +11,7 @@ Proxenos's job is to do your work while you're away, not to describe you. Everyt
 | 2. Draft | writes replies, emails, plans, project drafts and reading notes in your voice | done, overnight |
 | 3. Act on approval | carries out a draft you approve: sends it, books it, files it | started: an errand's message goes out when you press Send on it |
 | 4. Act within policy | handles low-risk actions alone, under rules you set, with a daily digest and undo | started: the outbox, switched on per app, off by default |
-| 5. Delegated projects | works on projects for days at a time: literature reviews, analyses, writing, with checkpoints | started: each project's status, log and next drafts, every night |
+| 5. Delegated projects | works on projects for days at a time: literature reviews, analyses, writing, with checkpoints | started: each project's status, log and next drafts, every night, and a step of its work on a branch of its own, for you to accept |
 
 ## The gate between levels
 
@@ -52,7 +52,8 @@ A channel that slips drops back a level automatically.
 - A morning digest of everything done, with one-tap undo.
 
 **Longer projects (level 5).**
-- Checkpoints you approve, redirect or stop, and a sandbox repo per project for analyses and drafts.
+- Done: a step a night on a project's own code, in a sandboxed worktree on a branch of its own, reported for you to accept (which merges it) or discard.
+- Next: steps that build on a step still waiting on you, and a project's steps run on a lab server or cluster where its data lives.
 
 ## What it will never do without you
 - Spend money.

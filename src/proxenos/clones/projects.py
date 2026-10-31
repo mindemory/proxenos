@@ -5,14 +5,21 @@ The projects are the user's own list, clones/projects/projects.json, which only 
 
     {"projects": [{"id": "cookbook", "name": "The cookbook",
                    "about": "the second draft for the editor: her comments, retested recipes",
-                   "people": ["Ana Lee"], "terms": ["cookbook", "recipes"], "paused": false}]}
+                   "people": ["Ana Lee"], "terms": ["cookbook", "recipes"], "paused": false,
+                   "repo": "~/Documents/cookbook", "data": ["~/Documents/cookbook-data"]}]}
+
+A project with a "repo", the folder of its code (a git repository on this computer), also gets
+its work done, a step at a time, by the steps clone (proxenos.clones.steps), which reads its data
+folders ("data") but never writes them, runs Python with "python" and MATLAB with "matlab" when
+they're given, and reads "notes", what the user wants it to know about the work.
 
 For each project that isn't paused, a run:
 - gathers what the vault holds on it: what's new since the last run naming one of its terms or
   from one of its people, so nothing new is missed, then the records nearest its name, what it's
   about and each term, in meaning and in words (research._search);
-- gives the model that, with who the user is in short, the project's last status and the end of
-  its log, and, for the drafts, the rules for writing as the user and their own longer writing
+- gives the model that, with who the user is in short, the project's last status, the end of
+  its log and the steps of its work taken lately (and whether the user accepted them), and, for
+  the drafts, the rules for writing as the user and their own longer writing
   as examples (proxenos.voice), and asks where it stands now: the status (where it is,
   deadlines, what's done and what's open), what changed since the last run, the next steps
   (what, who, by when), what only the user can decide, and up to two drafts that move it on: a
@@ -162,8 +169,28 @@ def listed_projects(vault: Path) -> list[dict]:
                 "people": _strings(p.get("people")),
                 "terms": _strings(p.get("terms")),
                 "paused": p.get("paused") is True,
+                # Where its work is, for the steps clone (proxenos.clones.steps).
+                "repo": str(p.get("repo") or "").strip(),
+                "data": _strings(p.get("data")),
+                "python": str(p.get("python") or "").strip(),
+                "matlab": str(p.get("matlab") or "").strip(),
+                "notes": str(p.get("notes") or "").strip(),
             }
         )
+    return found
+
+
+def steps_taken(vault: Path, project_id: str, limit: int = 5) -> list[dict]:
+    """The steps the steps clone took on the project, newest first."""
+    found = []
+    folder = vault / "clones" / "projects" / project_id / "steps"
+    for path in sorted(folder.glob("*.json"), reverse=True)[:limit]:
+        try:
+            step = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(step, dict):
+            found.append(step)
     return found
 
 
@@ -182,6 +209,7 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
             _about(project),
             f"Where you said it stood last time:\n{last[:STATUS_CHARS]}" if last else "",
             f"The end of its log:\n{_read(log_path)[-LOG_CHARS:]}" if log_path.exists() else "",
+            _work_done(vault, project["id"]),
             f"New since {since:%Y-%m-%d}:\n" + "\n".join(research._line(h, person) for h in new)
             if new
             else f"Nothing new found since {since:%Y-%m-%d}.",
@@ -271,6 +299,27 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
         )
         written += 1
     return written
+
+
+_STEP_STATES = {
+    "ready": "waiting for the user to accept it",
+    "accepted": "accepted by the user",
+    "discarded": "discarded by the user",
+    "failed": "failed",
+}
+
+
+def _work_done(vault: Path, project_id: str) -> str:
+    """The steps of its work Proxenos took lately, and what the user made of each."""
+    lines = []
+    for s in steps_taken(vault, project_id):
+        if s.get("status") not in _STEP_STATES or not _text(s.get("step")):
+            continue
+        line = f"- {str(s.get('created'))[:10]}, {_STEP_STATES[s['status']]}: {_text(s['step'])}"
+        if s["status"] != "failed" and _text(s.get("found")):
+            line += f" It found: {_text(s['found'])[:400]}"
+        lines.append(line)
+    return "Work Proxenos did on it lately:\n" + "\n".join(lines) if lines else ""
 
 
 def _about(project: dict) -> str:

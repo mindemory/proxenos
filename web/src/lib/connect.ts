@@ -10,7 +10,8 @@
 //
 // The Ask page's `proxenos ask` runs through the same jobs, as the kind "ask": one at a time,
 // its question on stdin, its last line the id of the ask. connectJobs() leaves it out; askJobs()
-// reports them. So do the Errands page's errands ("errand") and their Sends and Drops ("send").
+// reports them. So do the Errands page's errands ("errand") and their Sends and Drops ("send"), and
+// the Projects page's steps ("step") and the decisions on them ("decide").
 
 import { execFile, type ChildProcess } from "node:child_process";
 
@@ -32,8 +33,10 @@ import { nowIso, proxenosBin, REPO_ROOT, vaultInfo, vaultPath } from "./vault";
 const STATUS_MS = 30_000;
 // A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while;
 // checking a Beeper token is one request; a question to a local model can take a quarter of an hour,
-// and so can an errand; a Send is one email or chat message.
+// and so can an errand; a Send is one email or chat message. A project's step may run for half an
+// hour, with time to commit after; a decision on one is a git merge or a file.
 export const ASK_MS = 15 * 60_000;
+export const STEP_MS = 40 * 60_000;
 const JOB_MS: Record<JobKind, number> = {
   gmail: 6 * 60_000,
   microsoft: 6 * 60_000,
@@ -43,6 +46,8 @@ const JOB_MS: Record<JobKind, number> = {
   ask: ASK_MS,
   errand: ASK_MS,
   send: 3 * 60_000,
+  step: STEP_MS,
+  decide: 2 * 60_000,
 };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;
