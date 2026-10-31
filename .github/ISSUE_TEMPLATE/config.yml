@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem
+    url: https://github.com/mindemory/proxenos/blob/main/SECURITY.md
+    about: Please report it privately, as SECURITY.md says, not in an issue.

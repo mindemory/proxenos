@@ -19,6 +19,7 @@ source "$repo/scripts/lib.sh"
 web="$repo/web"
 port=4747
 
+refuse_worktree
 find_conda_env
 find_logs
 

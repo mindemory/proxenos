@@ -53,6 +53,18 @@ find_conda_env() {
     fail "the conda env $conda_env has no proxenos command. Set it up as the README says, then run this again."
 }
 
+# Background jobs must run from the clone the person keeps, not from a linked git worktree (a
+# branch checked out beside it, as coding agents make): a worktree can be removed, and a job left
+# pointing at it serves an old page, or none. PROXENOS_ALLOW_WORKTREE=1 overrides.
+refuse_worktree() {
+  local dir common
+  dir="$(git -C "$repo" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+  common="$(cd "$repo" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+  if [ "$dir" != "$common" ] && [ "${PROXENOS_ALLOW_WORKTREE:-}" != 1 ]; then
+    fail "$repo is a linked git worktree. Run this from the main clone ($(dirname "$common")), or set PROXENOS_ALLOW_WORKTREE=1."
+  fi
+}
+
 # The vault's logs folder, made private.
 find_logs() {
   local vault

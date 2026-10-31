@@ -27,6 +27,7 @@ case "$(env_value PROXENOS_MODEL)" in
       fail "$env_file names no model (PROXENOS_MODEL=ollama:<name>, or ANTHROPIC_API_KEY), so a night run could only sync."
     ;;
 esac
+refuse_worktree
 find_conda_env
 find_logs
 

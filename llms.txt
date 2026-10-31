@@ -1,0 +1,29 @@
+# Proxenos
+
+> A free, open-source agent that keeps your own records private on your computer and drafts the next step for you. Built first for people getting through the health care system. Python (src/proxenos) and a local Next.js page (web/). MIT.
+
+Proxenos gathers a person's messages, email, calendar, notes and documents into a private vault on their own computer, keeps a written model of who they are, and runs small agents ("clones") over it: tasks from conversations, where health care stands, replies and emails drafted in the person's own voice, a research feed, advice, a map of people, a searchable memory, and project work done on a branch for the person to accept. It drafts; the person sends. It runs on an open model through Ollama, so nothing has to leave the computer.
+
+## Start here
+
+- [README](https://github.com/mindemory/proxenos/blob/main/README.md): what it is, pictures, privacy, quick start, sources and commands
+- [AGENTS.md](https://github.com/mindemory/proxenos/blob/main/AGENTS.md): the repo map, checks and rules for changing it
+- [CONTRIBUTING.md](https://github.com/mindemory/proxenos/blob/main/CONTRIBUTING.md): how to help, good first contributions, adding a source or a clone
+
+## Docs
+
+- [Architecture](https://github.com/mindemory/proxenos/blob/main/docs/architecture.md): ingesters, observers, the self-model and the clones
+- [Memory](https://github.com/mindemory/proxenos/blob/main/docs/memory.md): search, recall, drafts, how close drafts came to what was sent, the outbox
+- [Data sources](https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md): every source, what it reads and what reaches a model
+- [The feed and the page](https://github.com/mindemory/proxenos/blob/main/docs/tracker.md)
+- [Proxenos for everyone](https://github.com/mindemory/proxenos/blob/main/docs/everyone.md): one download, signing in instead of configuring, a privacy screen
+- [Apps](https://github.com/mindemory/proxenos/blob/main/docs/apps.md): Mac, Windows, phone
+- [Roadmap](https://github.com/mindemory/proxenos/blob/main/docs/roadmap.md): from drafting, to acting on approval, to acting within rules
+- [Voice model](https://github.com/mindemory/proxenos/blob/main/docs/voice-model.md): a model trained on the person's own writing
+- [Related work](https://github.com/mindemory/proxenos/blob/main/docs/landscape.md)
+
+## Optional
+
+- [Acknowledgments](https://github.com/mindemory/proxenos/blob/main/ACKNOWLEDGMENTS.md): the open-source work it builds on
+- [Why it exists](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick): the essay it grew out of
+- [Project page](https://www.mindemory.io/proxenos)

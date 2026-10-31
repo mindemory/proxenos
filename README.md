@@ -4,12 +4,21 @@
 ![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+![Local-first](https://img.shields.io/badge/local--first-your%20data%20stays%20on%20your%20computer-6e56cf)
+[![GitHub stars](https://img.shields.io/github/stars/mindemory/proxenos?style=social)](https://github.com/mindemory/proxenos/stargazers)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/mindemory/badge.svg)](https://hub.xerj.org/contributors/mindemory)
 
-**An agent that holds your entire record and acts on your behalf.**
+**A free, open-source agent that keeps your own records private on your computer and drafts the next step for you. Built first for people getting through the health care system.**
+
+When you're unwell, the hard part is often everything around the care: referrals that go quiet, portals, bills that don't match, forms, and the same story told again at every visit. Proxenos reads what you already have (your mail, chats, calendar and notes), keeps track of where things stand, and writes the message, the call script or the one-page brief for your next appointment, in your own voice. You stay in charge: it drafts, and you press send.
+
+It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
 
 > **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
 >
-> Help of any kind is welcome: code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. See [CONTRIBUTING.md](CONTRIBUTING.md).
+> **Help of any kind is welcome:** code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. Good places to start are in [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions). If you'd like Proxenos to exist for more people, a star helps others find it.
+
+> **Not medical advice.** Proxenos organizes your own records and drafts messages. It doesn't diagnose or recommend treatment: the care view restates what your records say, and anything that matters belongs with your care team.
 
 Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
 - a feed of new papers and news, ranked for you;
@@ -20,7 +29,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - a searchable memory that brings the right past messages and notes to mind;
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
-It drafts; by default it never sends, posts or buys anything by itself, and you approve what goes out. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
+It drafts; by default it never sends, posts or buys anything by itself. You copy a draft or open it in its app with the text filled in, and press send yourself; once your reply shows up in that chat, the draft is marked sent. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
@@ -28,13 +37,13 @@ It drafts; by default it never sends, posts or buys anything by itself, and you 
 
 These come from `proxenos demo` (see [Quick start](#quick-start)): a made-up person, Joe Bloggs, and his made-up records. None of it is real.
 
-![Home: today's agenda and open tasks, drafts waiting for review with their track record, and where health care stands](docs/images/home-desktop.png)
+![Home: today's agenda and open tasks, drafts to send, and where health care stands](docs/images/home-desktop.png)
 
 | Care: where things stand, what's yours to do, what to say | Errands: carried as far as they go, one tap short of sending |
 |---|---|
 | ![Care: a summary of a knee injury's referrals, scan and bill, and the next steps, each with a due date](docs/images/care-desktop.png) | ![Errands: a message to a recruiter with the CV attached, ready to send, with how the address was found](docs/images/errands-desktop.png) |
-| **Drafts: replies and documents in your voice, for your approval** | **Tasks: what was asked of you, pulled from your conversations** |
-| ![Drafts: a WhatsApp reply and an email reply awaiting review, then drafts for open tasks](docs/images/drafts-desktop.png) | ![Tasks: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
+| **Drafts: replies and documents in your voice, ready to send** | **Tasks: what was asked of you, pulled from your conversations** |
+| ![Drafts: a WhatsApp reply and an email reply to send, with each app's track record and the outbox, off](docs/images/drafts-desktop.png) | ![Tasks: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
 
 On a phone, over `proxenos phone`:
 
@@ -183,6 +192,12 @@ npm --prefix web run lint && npm --prefix web run build
 The same checks run on GitHub for every push and pull request.
 
 `scripts/screenshots.sh` retakes the pictures under [What it looks like](#what-it-looks-like), from the demo vault with headless Chrome (it needs Google Chrome and a Python with Pillow). Open each one before committing it.
+
+For AI coding agents, [AGENTS.md](AGENTS.md) maps the repo, its commands and its rules, and [llms.txt](llms.txt) indexes the docs.
+
+## Built on
+
+Proxenos stands on other people's open-source work: Next.js, React, Tailwind, Ollama, slackdump, Beeper's local API, OpenAlex, mlx-lm and more. Each is credited, with its licence, in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md). Code taken from elsewhere keeps its licence and copyright notice, and is listed there too.
 
 ## License
 
