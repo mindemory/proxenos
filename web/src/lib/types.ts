@@ -164,6 +164,58 @@ export interface AdviceResponse {
   suggestions: SuggestionView[];
 }
 
+// ── Choices clone: clones/choices/YYYY-MM-DD.json ───────────────────────────
+
+export type ChoiceAction = "useful" | "not_me" | "doing";
+
+export const CHOICE_ACTIONS: readonly ChoiceAction[] = ["useful", "not_me", "doing"];
+
+export interface ChoiceEvidence {
+  label: string;
+  /** Its record in the memory index ("email/<account>/<id>"), or "" when it isn't one. */
+  id: string;
+}
+
+/** Something to write or do: a first step, or a decline. */
+export interface ChoiceMessage {
+  what: string;
+  to: string;
+  channel: string;
+}
+
+interface ChoiceBase {
+  id: string;
+  kind: string;
+  title: string;
+  why: string;
+  evidence: ChoiceEvidence[];
+  /** The draft the work clone writes for it; status is null until it has written one. */
+  draft: { id: string; status: string | null } | null;
+  action: ChoiceAction | null;
+  acted_at: string | null;
+}
+
+export interface TakeOn extends ChoiceBase {
+  deadline: string; // YYYY-MM-DD, or ""
+  link: string;
+  step: ChoiceMessage & { kind: "draft" | "errand" };
+}
+
+export interface Skip extends ChoiceBase {
+  cost: string;
+  decline: ChoiceMessage | null;
+}
+
+export interface ChoicesResponse {
+  now: string;
+  vault: VaultInfo;
+  dates: string[]; // every YYYY-MM-DD file, newest first
+  date: string | null; // the one shown
+  generated: string | null;
+  take_on: TakeOn[];
+  skip: Skip[];
+}
+
 // ── Network clone: clones/network/people.json and ideas.json ────────────────
 
 export type Relation = "met" | "know_of" | "to_read";

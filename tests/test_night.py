@@ -6,6 +6,7 @@ from proxenos import cli, llm, master
 from proxenos.clones import (
     advisor,
     care,
+    choices,
     errands,
     network,
     projects,
@@ -29,7 +30,19 @@ def calls(tmp_path, monkeypatch):
         return {"sources_synced": 2, "self_files_written": 1}
 
     monkeypatch.setattr(master, "run", fake_master)
-    for module in (tracker, tasks, care, advisor, network, recall, projects, errands, work, steps):
+    for module in (
+        tracker,
+        tasks,
+        care,
+        advisor,
+        network,
+        choices,
+        recall,
+        projects,
+        errands,
+        work,
+        steps,
+    ):
         name = module.__name__.rsplit(".", 1)[1]
 
         def fake_run(vault, args, name=name):
@@ -52,6 +65,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "care: 1 done",
         "advisor: 1 done",
         "network: 1 done",
+        "choices: 1 done",
         "recall: 1 done",
         "projects: 1 done",
         "errands: 1 done",
@@ -60,6 +74,9 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     ]
     assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES]
     assert cli.NIGHT_CLONES.index("recall") < cli.NIGHT_CLONES.index("work")
+    # The week's choices read the tasks and ideas, and their drafts are the work clone's.
+    assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
+    assert cli.NIGHT_CLONES.index("choices") < cli.NIGHT_CLONES.index("work")
     assert all(vault == "vault" for _, vault, _ in calls)
     args = {name: a for name, _, a in calls}
     assert args["network"] == {"people_only": False}  # the full run, ideas too
@@ -68,6 +85,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["care"] == {"days": care.DAYS, "dry_run": False}
     assert args["recall"] == {"people": recall.PEOPLE}
     assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
+    assert args["choices"] == {"force": False}  # once a week
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
 
 
@@ -93,6 +111,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "care: 1 done",
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
+        "choices: 1 done",
         "recall: 1 done",
         "projects: 1 done",
         "errands: 1 done",
@@ -104,6 +123,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "tasks",
         "care",
         "network",
+        "choices",
         "recall",
         "projects",
         "errands",

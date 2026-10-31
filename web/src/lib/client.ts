@@ -10,6 +10,8 @@ import type {
   Action,
   AdviceAction,
   AdviceResponse,
+  ChoiceAction,
+  ChoicesResponse,
   Draft,
   DraftAction,
   DraftReviews,
@@ -25,7 +27,9 @@ import type {
   PeopleEdit,
   PeopleEditResult,
   Reaction,
+  Skip,
   SuggestionView,
+  TakeOn,
   TaskAction,
   TasksResponse,
   TaskView,
@@ -88,6 +92,10 @@ export function sendAdviceFeedback(suggestionId: string, action: AdviceAction): 
   return postJson("/api/advice/feedback", { suggestion_id: suggestionId, action });
 }
 
+export function sendChoiceFeedback(itemId: string, action: ChoiceAction): Promise<void> {
+  return postJson("/api/choices/feedback", { item_id: itemId, action });
+}
+
 // Toast text for each action, written as what just happened.
 export const REACTION_TOAST: Record<Reaction, string> = {
   useful: "Marked useful",
@@ -103,6 +111,12 @@ export const ADVICE_TOAST: Record<AdviceAction, string> = {
   useful: "Marked useful",
   not_me: "Marked not you",
   doing: "Noted: you're doing it",
+};
+
+export const CHOICE_TOAST: Record<ChoiceAction, string> = {
+  useful: "Marked useful",
+  not_me: "Marked not you: it won't come back",
+  doing: "Noted",
 };
 
 export const DRAFT_TOAST: Record<DraftAction, string> = {
@@ -314,6 +328,42 @@ export function useAdvice(date: string | null, onChange?: () => void) {
         },
         () => {
           set(s.action, s.acted_at);
+          setError(SAVE_FAILED);
+        },
+      );
+    },
+    [setData, setError, flash, notify, onChange],
+  );
+
+  return { data, error, flashId, react, clearError: () => setError(null) };
+}
+
+/** One week's choices (null: the newest) and the three actions on each. */
+export function useChoices(date: string | null, onChange?: () => void) {
+  const { data, error, setData, setError } = useJson<ChoicesResponse>(
+    date ? `/api/choices?date=${encodeURIComponent(date)}` : "/api/choices",
+  );
+  const notify = useToast();
+  const { flashId, flash } = useFlash();
+
+  const react = useCallback(
+    (c: TakeOn | Skip, action: ChoiceAction) => {
+      if (c.action === action) return;
+      const set = (a: ChoiceAction | null, at: string | null) =>
+        setData((d) => {
+          if (!d) return d;
+          const f = <T extends TakeOn | Skip>(xs: T[]) => xs.map((x) => (x.id === c.id ? { ...x, action: a, acted_at: at } : x));
+          return { ...d, take_on: f(d.take_on), skip: f(d.skip) };
+        });
+      flash(c.id);
+      set(action, new Date().toISOString());
+      sendChoiceFeedback(c.id, action).then(
+        () => {
+          notify(CHOICE_TOAST[action], action === "not_me" ? "info" : "ok");
+          onChange?.();
+        },
+        () => {
+          set(c.action, c.acted_at);
           setError(SAVE_FAILED);
         },
       );

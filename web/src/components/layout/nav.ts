@@ -2,6 +2,7 @@ import {
   Activity,
   Bookmark,
   Brain,
+  Compass,
   FolderGit2,
   HeartPulse,
   House,
@@ -29,6 +30,7 @@ export type View =
   | "care"
   | "drafts"
   | "advice"
+  | "choices"
   | "network"
   | "memory"
   | "profile"
@@ -55,6 +57,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: HeartPulse, label: "Care", id: "care", group: "clones" },
   { icon: PenLine, label: "Drafts", id: "drafts", group: "clones" },
   { icon: Lightbulb, label: "Advice", id: "advice", group: "clones" },
+  { icon: Compass, label: "Choices", id: "choices", group: "clones" },
   { icon: Network, label: "Network", id: "network", group: "clones" },
   { icon: Brain, label: "Memory", id: "memory", group: "you" },
   { icon: UserRound, label: "Profile", id: "profile", group: "you" },

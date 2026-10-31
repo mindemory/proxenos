@@ -45,6 +45,9 @@ const Drafts = dynamic(() => import("@/components/views/Drafts").then((m) => m.D
 const Advice = dynamic(() => import("@/components/views/Advice").then((m) => m.Advice), {
   loading: () => <ProseSkeleton label="Loading advice" />,
 });
+const Choices = dynamic(() => import("@/components/views/Choices").then((m) => m.Choices), {
+  loading: () => <ProseSkeleton label="Loading choices" />,
+});
 const Network = dynamic(() => import("@/components/views/Network").then((m) => m.Network), { loading: () => <GraphSkeleton /> });
 const Memory = dynamic(() => import("@/components/views/Memory").then((m) => m.Memory), { loading: () => <ResultSkeleton /> });
 const Profile = dynamic(() => import("@/components/views/Profile").then((m) => m.Profile), {
@@ -60,7 +63,21 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /** Views that read as a single column of text, so they sit in a centred column, not across the canvas. */
-const COLUMN_VIEWS: readonly View[] = ["ask", "errands", "feed", "saved", "tasks", "projects", "care", "advice", "profile", "connect", "settings", "status"];
+const COLUMN_VIEWS: readonly View[] = [
+  "ask",
+  "errands",
+  "feed",
+  "saved",
+  "tasks",
+  "projects",
+  "care",
+  "advice",
+  "choices",
+  "profile",
+  "connect",
+  "settings",
+  "status",
+];
 
 export default function AppPage() {
   const [view, setView] = useState<View>("home");
@@ -174,6 +191,8 @@ export default function AppPage() {
         return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} />;
       case "advice":
         return <Advice onChange={home.reload} />;
+      case "choices":
+        return <Choices onChange={home.reload} onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
       case "network":
         return <Network tab={netTab} onChange={home.reload} find={find} onFound={found} onTab={setNetTab} />;
       case "memory":

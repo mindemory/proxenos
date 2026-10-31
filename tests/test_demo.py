@@ -48,6 +48,16 @@ def test_every_view_has_something_current_to_show(vault):
     assert {f["for"] for f in fronts} >= {"reply", "task", "care", "outreach", "reading"}
     assert {f["id"] for f in fronts} >= {t["id"] for t in tasks if t["title"].startswith("Book")}
 
+    (week,) = (vault / "clones/choices").glob("*.json")
+    chosen = json.loads(week.read_text(encoding="utf-8"))
+    assert chosen["take_on"] and chosen["skip"]
+    assert {i["step"]["kind"] for i in chosen["take_on"]} == {"draft", "errand"}
+    # Each choice's evidence opens a real record, and each draft it names was written.
+    ids = [e["id"] for i in chosen["take_on"] + chosen["skip"] for e in i["evidence"] if e["id"]]
+    assert ids and memory.records(ids, vault=vault).keys() == set(ids)
+    named = {i["draft_id"] for i in chosen["take_on"] + chosen["skip"] if i["draft_id"]}
+    assert named and named <= {f["id"] for f in fronts if f["for"] == "choice"}
+
     listed = errands.listed(vault)
     assert {e["status"] for e in listed} == {"ready", "sent"}
     fay = next(e for e in listed if e["person"] == "Fay Moss")

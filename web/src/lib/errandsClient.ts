@@ -39,6 +39,11 @@ export function errandFromAsk(question: string, answer: string): Promise<void> {
   return post({ goal: goal.slice(0, ERRAND_MAX_GOAL) });
 }
 
+/** Start an errand in the words another view gave it, such as a choice's first step. */
+export function errandFromGoal(goal: string): Promise<void> {
+  return post({ goal: goal.slice(0, ERRAND_MAX_GOAL) });
+}
+
 /** What the page started and is waiting to hear the end of: an errand, or a Send or Drop. */
 interface Waiting {
   kind: "errand" | "send";

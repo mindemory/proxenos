@@ -9,6 +9,7 @@ export const DRAFT_GROUPS: readonly { id: string; label: string }[] = [
   { id: "reply", label: "Replies" },
   { id: "task", label: "Tasks" },
   { id: "care", label: "Care" },
+  { id: "choice", label: "This week's choices" },
   { id: "outreach", label: "Outreach" },
   { id: "project", label: "Projects" },
   { id: "reading", label: "Reading notes" },

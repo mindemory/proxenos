@@ -5,8 +5,8 @@ to a pottery class on Thursdays, keeps a plot at the community garden and is par
 sorting out the bill for new glasses. What the ingesters would bring in is written to raw/ in
 their formats, dated around today: WhatsApp chats and groups, two mail accounts, two calendars,
 walks, listening, notes and LinkedIn connections. What the model would write from them is written
-the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, drafts
-and errands. Then the steps that need no model run on it as they would on a real vault: the
+the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the
+week's choices, drafts and errands. Then the steps that need no model run on it as they would on a real vault: the
 memory index, the people index, today's recall and the outbox's track record.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import memory, outbox, store
-from proxenos.clones import advisor, care, errands, network, recall, tasks, tracker, work
+from proxenos.clones import advisor, care, choices, errands, network, recall, tasks, tracker, work
 from proxenos.config import REPO_ROOT
 
 PORT = 4848  # the demo's page, so it can run beside your own on 4747
@@ -123,6 +123,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         _advice(vault, c)
         _ideas(vault, c)
         _drafts(vault, c)
+        _choices(vault, c)
         _errands(vault, c)
         indexed = memory.build(vault)
         people = network.build(vault, people_only=True, now=c.now)
@@ -1819,6 +1820,201 @@ def _drafts(vault: Path, c: _Clock) -> None:
             ],
         },
     )
+
+
+def _choices(vault: Path, c: _Clock) -> None:
+    """The week's choices as choices.py writes them, citing the demo's mail, and the drafts the
+    work clone would have written for them."""
+    mail = {m["subject"]: m for m in [*_home_mail(c), *_work_mail(c)]}
+
+    def cited(subject: str) -> dict:
+        m = mail[subject]
+        return {
+            "ref": "o",
+            "label": f"Email from {m['from_name']}, {m['ts'][:10]}: {subject}",
+            "id": f"email/{m['account']}/{m['id']}",
+        }
+
+    def message(what: str, to: str = "", channel: str = "other") -> dict:
+        return {"what": what, "to": to, "channel": channel}
+
+    take_on = [
+        (
+            "talk",
+            "Offer the holiday-orders story for next month's lunch-and-learn",
+            (
+                "Hana is picking next month's topic, and getting the holiday orders out on time is a "
+                "story people outside Acme already ask you about: Fay Moss heard about your meetup "
+                "talk twice in one week. Telling it at work costs one lunch and puts the December "
+                "plan in front of the whole team."
+            ),
+            [cited("Next lunch-and-learn"), cited("Operations lead role at Beta Corp")],
+            "draft",
+            message(
+                "A short reply to Hana offering the talk, and three things it would cover",
+                "Hana Ito",
+                "email",
+            ),
+        ),
+        (
+            "talk",
+            "Give the talk again at the supply chain meetup",
+            (
+                "Uma Rao's team runs the meetup where you met, and Omar Said keeps its speaker list. "
+                "You have the talk already; a second outing is an evening's work, and it's how Beta "
+                "Corp heard of you."
+            ),
+            [cited("Slides from the meetup")],
+            "errand",
+            message(
+                "Reach Omar Said at Uma Rao's company about giving a talk at the next supply "
+                "chain meetup, by email",
+                "Omar Said",
+                "email",
+            ),
+        ),
+        (
+            "writing",
+            "Write the holiday-orders playbook up as a short post",
+            (
+                "You've told this story out loud and it travels: written down, it reaches the people "
+                "who weren't in the room, and it's the record of what you did for the next role you "
+                "go for."
+            ),
+            [
+                cited("Operations lead role at Beta Corp"),
+                {"ref": "self/identity", "label": "Your identity", "id": ""},
+            ],
+            "draft",
+            message(
+                "An outline of the post: the problem, the three changes, what you'd do differently"
+            ),
+        ),
+    ]
+    skip = [
+        (
+            "commitment",
+            "Leave the offsite planning to Eli this time",
+            (
+                "The offsite lands in a month you've already called busy, after the Q1 budget comments "
+                "and the holiday catalog review. Coming with two ideas is enough."
+            ),
+            "a day of planning in a busy month",
+            [cited("Team offsite next month")],
+            message(
+                "Tell Eli you'll be there with two ideas, but can't help plan it this time",
+                "Eli Park",
+                "email",
+            ),
+        ),
+        (
+            "list",
+            "Let Ops Weekly go",
+            (
+                "An issue lands every Friday morning and you've answered none of them; what's in it "
+                "reaches you through the team anyway."
+            ),
+            "an email a week",
+            [
+                {
+                    "ref": "k",
+                    "label": 'List: mail from "Ops Weekly" (opsweekly.example), 5 in 30 days',
+                    "id": "",
+                }
+            ],
+            None,
+        ),
+    ]
+    items: dict[str, list[dict]] = {"take_on": [], "skip": []}
+    for kind, title, why, evidence, step, what in take_on:
+        key = choices.item_id("take_on", title)
+        items["take_on"].append(
+            {
+                "id": key,
+                "kind": kind,
+                "title": title,
+                "why": why,
+                "deadline": c.day(9) if kind == "talk" and step == "draft" else "",
+                "link": "",
+                "evidence": evidence,
+                "step": {"kind": step} | what,
+                "draft_id": f"choice-{key}" if step == "draft" else None,
+                "excerpt": "",
+            }
+        )
+    for kind, title, why, cost, evidence, decline in skip:
+        key = choices.item_id("skip", title)
+        items["skip"].append(
+            {
+                "id": key,
+                "kind": kind,
+                "title": title,
+                "why": why,
+                "cost": cost,
+                "evidence": evidence,
+                "decline": decline,
+                "draft_id": f"choice-{key}" if decline else None,
+            }
+        )
+    _write_json(
+        vault / "clones" / "choices" / f"{c.day(-2)}.json", {"generated": c.ago(36), **items}
+    )
+
+    talk, _, post = items["take_on"]
+    drafts = [
+        (
+            talk,
+            "Offer Hana the holiday-orders talk",
+            "email",
+            "Hana Ito",
+            (
+                "Hi Hana,\n\nIf you're still looking for next month's topic: I could do how we got "
+                "the holiday orders out on time. Three parts:\n\n- what went wrong last year\n- the "
+                "Saturday shift and splitting the oak tables out\n- what I'd change next time\n\n"
+                "Twenty minutes, plus questions?\n\nJoe"
+            ),
+        ),
+        (
+            post,
+            "Outline: the holiday-orders playbook",
+            "other",
+            "",
+            (
+                "## The problem\nOrders piled up in the last two weeks before the holidays.\n\n"
+                "## Three changes\n1. A Saturday shift in December\n2. Oak tables on their own "
+                "delivery dates\n3. The warehouse schedule shared with sales\n\n"
+                "## What I'd do differently\n[Your words here]"
+            ),
+        ),
+        (
+            items["skip"][0],
+            "Tell Eli you'll come to the offsite, not plan it",
+            "email",
+            "Eli Park",
+            (
+                "Hi Eli,\n\nCount me in for the offsite, and I'll bring two ideas for next year. I "
+                "can't help plan it this time, with the budget comments and the catalog review "
+                "first.\n\nJoe"
+            ),
+        ),
+    ]
+    folder = vault / "clones" / "drafts"
+    for item, title, channel, to, body in drafts:
+        draft = {
+            "id": item["draft_id"],
+            "title": title,
+            "kind": "doc" if channel == "other" else "email",
+            "for": "choice",
+            "channel": channel,
+            "to": to,
+            "created": c.ago(30),
+            "status": "draft",
+            "found": "",
+            "asks": [],
+            "thread": None,
+            "body": body,
+        }
+        work._write(folder / f"{draft['id']}.md", work.render(draft))
 
 
 def _errands(vault: Path, c: _Clock) -> None:

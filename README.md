@@ -25,6 +25,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - your open tasks, pulled from your conversations;
 - where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
 - advice grounded in your own patterns;
+- once a week, what's worth taking on (a call for papers, a fellowship, a talk, a piece of writing, with a first step drafted) and what's worth letting go of (a meeting, a thread, an invitation, with the decline drafted), by your own goals;
 - a map of the people you know and how they connect;
 - a searchable memory that brings the right past messages and notes to mind;
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
@@ -62,8 +63,9 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                               │                                             │
                               └──index──▶ memory (full-text search)         ▼
                                                         clones: feed, tasks, advice,
-                                                        network, recall, projects,
-                                                        project steps, errands, drafts
+                                                        choices, network, recall,
+                                                        projects, project steps,
+                                                        errands, drafts
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -124,7 +126,7 @@ Then build the model and the clones:
 
 ```bash
 proxenos master                 # notes per month, then the self-model
-proxenos clone tracker          # also: tasks, care, advisor, network, recall, projects, work
+proxenos clone tracker          # also: tasks, care, advisor, network, choices, recall, projects, work
 ```
 
 Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it. Each night Proxenos writes where each one stands. Give one its code's folder and its data folders, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
@@ -175,7 +177,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 |---|---|
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
-| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
+| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Choices, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
 | `proxenos demo [PATH]` | A vault of made-up records to try the page on, with no model, and the command that opens it. PATH must be new, empty or an earlier demo |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
@@ -184,8 +186,9 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `recall`, `projects`, `steps` or `work` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `recall`, `projects`, `steps` or `work` |
 | `proxenos clone steps --project ID` | A step of a project's own work (also from the page's Projects view): the next analysis, fix, figure or section, done on a new branch of the project's code in a worktree of its own, by Claude Code where it's installed or else the local model, and reported. Accept on the page merges it into your checkout; Discard deletes the branch. Nothing is pushed |
+| `proxenos clone choices [--force]` | The week's choices: what's worth taking on and what's worth letting go of. The night runs it once a week; `--force` runs it now |
 | `proxenos clone errands "GOAL"` | An errand (from the page's Errands view): something to get done, such as reaching someone about a role with your CV, carried as far as it goes and stopped one tap short, with every step it took. Nothing goes out until you press Send on it |
 | `proxenos night` | Everything above, in order, for a schedule |
 | `proxenos schedule [--once] [--sync-every MIN] [--night-at HH:MM]` | Keep everything current until stopped, on any computer: `sync` every 15 minutes and `night` at 01:30 (or `PROXENOS_SYNC_EVERY` and `PROXENOS_NIGHT_AT`), each in a process of its own with its output in `<vault>/logs/`, once on waking after a missed slot, and never two runs at once. `--once` runs what's due and exits. Where it stands (the last and next run of each, and what's running) is in `<vault>/state/schedule.json`, for the page |

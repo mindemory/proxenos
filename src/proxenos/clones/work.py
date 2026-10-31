@@ -13,11 +13,14 @@ one call apiece, in this order until `--max` drafts are written:
   is missing ("blocked");
 - every email and patient portal message script in clones/care/care.json for an item still
   open: the message itself, from the script, with nothing added;
+- this week's choices (clones/choices, its newest list): the first step of each opening to take
+  on that starts with something written, and the decline of each thing to skip that owes someone
+  an answer, as choice-<id>;
 - the top three outreach ideas and the top three projects in clones/network/ideas.json: the
   message that makes the ask, and a plan to start the project;
 - the top six items of the newest batch in tracker/items: a reading note.
 
-Ideas marked not me or done, tasks closed and feed items marked not me get no draft.
+Ideas marked not me or done, tasks closed, choices and feed items marked not me get no draft.
 
 `proxenos sync` also drafts replies when a model key is set (`replies`): only chats with no
 draft yet, at most five a sync, so a sync with nothing new waiting makes no model call.
@@ -331,6 +334,15 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
             job = _job(key, "care", script.get("title"), today, _care_text(script, item))
             yield job | {"voice": {"channel": "email"}}
 
+    # This week's choices: an opening's first step, a skip's decline.
+    choices = vault / "clones" / "choices"
+    turned = _latest(choices / "feedback.jsonl", "item_id", ("useful", "not_me", "doing"))
+    for item in _choices(choices):
+        if turned.get(item["id"]) != "not_me":
+            message = item.get("step") or item.get("decline") or {}
+            job = _job(item["draft_id"], "choice", item.get("title"), today, _choice_text(item))
+            yield job | {"voice": {"channel": message.get("channel"), "name": message.get("to")}}
+
     network = vault / "clones" / "network"
     ideas = _load_json(network / "ideas.json")
     verdicts = _latest(network / "feedback.jsonl", "item_id", ("useful", "not_me", "done"))
@@ -371,6 +383,19 @@ def _open_ideas(items: object, shut: set[str], field: str) -> list[dict]:
         for i in (items if isinstance(items, list) else [])
         if isinstance(i, dict) and isinstance(i.get("id"), str) and i.get(field)
         if i["id"] not in shut
+    ]
+
+
+def _choices(directory: Path) -> list[dict]:
+    """The items of the newest list in clones/choices that have something to draft."""
+    days = sorted(p for p in directory.glob("*.json") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem))
+    doc = _load_json(days[-1]) if days else {}
+    return [
+        i
+        for i in [*(doc.get("take_on") or []), *(doc.get("skip") or [])]
+        if isinstance(i, dict)
+        and isinstance(i.get("id"), str)
+        and isinstance(i.get("draft_id"), str)
     ]
 
 
@@ -620,6 +645,43 @@ def _care_text(script: dict, item: dict) -> str:
         ],
         "Draft the message, ready to send, from the script: the same facts and nothing added. "
         "Keep its [placeholders], and never write a phone, account, member or claim number.",
+    )
+
+
+def _choice_text(item: dict) -> str:
+    rests = "; ".join(
+        _one_line(e.get("label")) for e in item.get("evidence") or [] if isinstance(e, dict)
+    )
+    if step := item.get("step"):
+        return _brief(
+            "An opening their digital twin picked for them to take on this week",
+            [
+                ("Opening", item.get("title")),
+                ("Kind", item.get("kind")),
+                ("Deadline", item.get("deadline")),
+                ("Why it fits them", item.get("why")),
+                ("What it rests on", rests),
+                ("Link", item.get("link")),
+                ("The announcement", item.get("excerpt")),
+                ("To", step.get("to")),
+                ("Channel", step.get("channel")),
+            ],
+            f"Draft the first step: {_one_line(step.get('what'))}",
+        )
+    decline = item.get("decline") or {}
+    return _brief(
+        "Something their digital twin suggests they let go of this week, where someone is owed "
+        "an answer",
+        [
+            ("What", item.get("title")),
+            ("Why let it go", item.get("why")),
+            ("What it costs them", item.get("cost")),
+            ("What it rests on", rests),
+            ("To", decline.get("to")),
+            ("Channel", decline.get("channel")),
+        ],
+        f"Draft a short, kind decline: {_one_line(decline.get('what'))} Two to four sentences, "
+        "with no reason beyond what's given and nothing that commits them to something else.",
     )
 
 

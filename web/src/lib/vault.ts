@@ -21,6 +21,10 @@ import type {
   AdviceResponse,
   BatchInfo,
   ChangelogSection,
+  ChoiceAction,
+  ChoiceEvidence,
+  ChoiceMessage,
+  ChoicesResponse,
   Cluster,
   Confidence,
   Draft,
@@ -49,6 +53,7 @@ import type {
   ItemsResponse,
   Reaction,
   SelfFile,
+  Skip,
   SourceStatus,
   SourceSync,
   StatusResponse,
@@ -60,6 +65,7 @@ import type {
   TasksResponse,
   TaskStatus,
   TaskView,
+  TakeOn,
   ProfileResponse,
   ToRead,
   VaultInfo,
@@ -68,7 +74,7 @@ import type {
 import { foldReviews, isToSend } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
-import { ACTIONS, ADVICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
+import { ACTIONS, ADVICE_ACTIONS, CHOICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
 
 export const REPO_ROOT = path.resolve(process.cwd(), "..");
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
@@ -774,6 +780,7 @@ function toSuggestion(raw: unknown): Suggestion | null {
   };
 }
 
+/** The YYYY-MM-DD.json files in a clone's folder, newest first. */
 async function adviceDates(dir: string): Promise<string[]> {
   try {
     return (await fs.readdir(dir))
@@ -1035,6 +1042,105 @@ export async function getGraphThumb(limit = 140): Promise<GraphThumb> {
 export async function appendNetworkFeedback(itemId: string, action: NetworkAction) {
   const entry = { item_id: itemId, action, ts: nowIso() };
   await appendJsonl(["clones", "network", "feedback.jsonl"], entry);
+  return entry;
+}
+
+// ── Choices clone ───────────────────────────────────────────────────────────
+
+function toEvidence(raw: unknown): ChoiceEvidence | null {
+  const r = record(raw);
+  const label = str(r?.label)?.trim();
+  if (!r || !label) return null;
+  return { label: label.slice(0, 400), id: str(r.id) ?? "" };
+}
+
+function toMessage(raw: unknown): ChoiceMessage | null {
+  const r = record(raw);
+  const what = str(r?.what)?.trim();
+  if (!r || !what) return null;
+  return { what, to: str(r.to)?.trim() ?? "", channel: (str(r.channel) ?? "other").toLowerCase() };
+}
+
+/** The fields every choice has, and the id of its draft when it has one to write. */
+function choiceBase(r: Record<string, unknown>) {
+  const evidence = (Array.isArray(r.evidence) ? r.evidence.slice(0, 20) : []).map(toEvidence);
+  const draftId = str(r.draft_id);
+  return {
+    id: str(r.id)!,
+    kind: str(r.kind)?.trim() || "other",
+    title: str(r.title)!.trim(),
+    why: str(r.why) ?? "",
+    evidence: evidence.filter((e): e is ChoiceEvidence => e !== null),
+    draftId: draftId && DRAFT_ID.test(draftId) ? draftId : null,
+    ...unacted,
+  };
+}
+
+function toTakeOn(raw: unknown) {
+  const r = record(raw);
+  if (!r || !str(r.id) || !str(r.title)?.trim()) return null;
+  const step = toMessage(r.step);
+  const s = record(r.step);
+  const deadline = str(r.deadline) ?? "";
+  return {
+    ...choiceBase(r),
+    deadline: ISO_DAY.test(deadline) ? deadline : "",
+    link: safeUrl(r.link),
+    step: { ...(step ?? { what: "", to: "", channel: "other" }), kind: s?.kind === "errand" ? ("errand" as const) : ("draft" as const) },
+  };
+}
+
+function toSkip(raw: unknown) {
+  const r = record(raw);
+  if (!r || !str(r.id) || !str(r.title)?.trim()) return null;
+  return { ...choiceBase(r), cost: str(r.cost)?.trim() ?? "", decline: toMessage(r.decline) };
+}
+
+/** A draft's status from its file, or null when it hasn't been written yet. */
+async function draftStatus(vault: string, id: string): Promise<string | null> {
+  const file = path.join(draftsDir(vault), `${id}.md`);
+  try {
+    const st = await fs.lstat(file);
+    if (!st.isFile() || st.size > MAX_DRAFT_BYTES) return null;
+    const { fields } = readDraftFile(`${id}.md`, await fs.readFile(file, "utf8"));
+    return (fields.status ?? "draft").trim().toLowerCase() || "draft";
+  } catch {
+    return null;
+  }
+}
+
+/** One week's choices (the newest unless `date` names another file), with feedback and drafts folded in. */
+export async function getChoices(date?: string | null): Promise<ChoicesResponse> {
+  const vault = vaultPath();
+  const dir = path.join(vault, "clones", "choices");
+  const dates = await adviceDates(dir);
+  const shown = date && dates.includes(date) ? date : (dates[0] ?? null);
+  const doc = shown ? record(await readJsonFile(path.join(dir, `${shown}.json`))) : null;
+  const acted = await foldLog<ChoiceAction>(path.join(dir, "feedback.jsonl"), "item_id", CHOICE_ACTIONS);
+
+  async function finish<T extends { id: string; draftId: string | null }>(item: T) {
+    const { draftId, ...rest } = item;
+    const a = acted.get(item.id);
+    const draft = draftId ? { id: draftId, status: await draftStatus(vault, draftId) } : null;
+    return { ...rest, draft, action: a?.action ?? null, acted_at: a?.ts ?? null };
+  }
+
+  const takeOn: TakeOn[] = await Promise.all(uniqueBy(doc?.take_on, toTakeOn).slice(0, 20).map(finish));
+  const skip: Skip[] = await Promise.all(uniqueBy(doc?.skip, toSkip).slice(0, 20).map(finish));
+  return {
+    now: nowIso(),
+    vault: await vaultInfo(vault),
+    dates,
+    date: shown,
+    generated: doc ? str(doc.generated) : null,
+    take_on: takeOn,
+    skip,
+  };
+}
+
+export async function appendChoiceFeedback(itemId: string, action: ChoiceAction) {
+  const entry = { item_id: itemId, action, ts: nowIso() };
+  await appendJsonl(["clones", "choices", "feedback.jsonl"], entry);
   return entry;
 }
 
