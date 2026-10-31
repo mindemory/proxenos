@@ -70,11 +70,14 @@ import type {
   ToRead,
   VaultInfo,
   DraftCloseness,
+  WatchAction,
+  WatchPick,
+  WatchResponse,
 } from "./types";
 import { foldReviews, isToSend } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
-import { ACTIONS, ADVICE_ACTIONS, CHOICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS } from "./types";
+import { ACTIONS, ADVICE_ACTIONS, CHOICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS, WATCH_ACTIONS } from "./types";
 
 export const REPO_ROOT = path.resolve(process.cwd(), "..");
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
@@ -1141,6 +1144,80 @@ export async function getChoices(date?: string | null): Promise<ChoicesResponse>
 export async function appendChoiceFeedback(itemId: string, action: ChoiceAction) {
   const entry = { item_id: itemId, action, ts: nowIso() };
   await appendJsonl(["clones", "choices", "feedback.jsonl"], entry);
+  return entry;
+}
+
+// ── Watch clone ─────────────────────────────────────────────────────────────
+
+function toWatchPick(raw: unknown): Omit<WatchPick, "action" | "acted_at"> | null {
+  const r = record(raw);
+  const id = str(r?.id);
+  const title = str(r?.title)?.trim();
+  if (!r || !id || !title) return null;
+  const links = (Array.isArray(r.links) ? r.links.slice(0, 4) : [])
+    .map(record)
+    .map((l) => ({ label: str(l?.label)?.trim() ?? "", url: safeUrl(l?.url) }))
+    .filter((l) => l.label && l.url);
+  return {
+    id,
+    kind: r.kind === "show" ? "show" : "film",
+    title,
+    year: typeof r.year === "number" && Number.isInteger(r.year) ? r.year : null,
+    why: str(r.why) ?? "",
+    because: strings(r.because, 6),
+    links,
+  };
+}
+
+/** One week's picks (the newest unless `date` names another file), with marks folded in, and every
+ * pick marked want that hasn't been marked seen or not for me since. */
+export async function getWatch(date?: string | null): Promise<WatchResponse> {
+  const vault = vaultPath();
+  const dir = path.join(vault, "clones", "watch");
+  const dates = await adviceDates(dir);
+  const shown = date && dates.includes(date) ? date : (dates[0] ?? null);
+  const doc = shown ? record(await readJsonFile(path.join(dir, `${shown}.json`))) : null;
+  const marked = await foldLog<WatchAction>(path.join(dir, "feedback.jsonl"), "item_id", WATCH_ACTIONS);
+  const marks = (p: Omit<WatchPick, "action" | "acted_at">): WatchPick => {
+    const m = marked.get(p.id);
+    return { ...p, action: m?.action ?? null, acted_at: m?.ts ?? null };
+  };
+  const list = (raws: unknown) => uniqueBy(raws, toWatchPick).slice(0, 20).map(marks);
+
+  // A wanted pick keeps its links and why from the week it came; history.json has the rest.
+  const history = record(await readJsonFile(path.join(dir, "history.json"))) ?? {};
+  const weeks = new Map<string, Omit<WatchPick, "action" | "acted_at">>();
+  for (const day of [...dates].reverse()) {
+    const week = record(await readJsonFile(path.join(dir, `${day}.json`)));
+    for (const raw of [week?.films, week?.shows, week?.watchlist].flatMap((x) => (Array.isArray(x) ? x : []))) {
+      const p = toWatchPick(raw);
+      if (p && marked.get(p.id)?.action === "want") weeks.set(p.id, p);
+    }
+  }
+  const saved = [...marked.entries()]
+    .filter(([id, m]) => m.action === "want" && (weeks.has(id) || record(history[id])))
+    .sort(([, a], [, b]) => b.ts.localeCompare(a.ts))
+    .slice(0, 50)
+    .map(([id]) => weeks.get(id) ?? toWatchPick({ ...record(history[id]), id, links: [] }))
+    .filter((p): p is Omit<WatchPick, "action" | "acted_at"> => p !== null)
+    .map(marks);
+
+  return {
+    now: nowIso(),
+    vault: await vaultInfo(vault),
+    dates,
+    date: shown,
+    generated: doc ? str(doc.generated) : null,
+    films: list(doc?.films),
+    shows: list(doc?.shows),
+    watchlist: list(doc?.watchlist),
+    saved,
+  };
+}
+
+export async function appendWatchFeedback(itemId: string, action: WatchAction) {
+  const entry = { item_id: itemId, action, ts: nowIso() };
+  await appendJsonl(["clones", "watch", "feedback.jsonl"], entry);
   return entry;
 }
 

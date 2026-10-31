@@ -14,7 +14,7 @@ When you're unwell, the hard part is often everything around the care: referrals
 
 It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
 
-> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 45,000 lines of Python and TypeScript, with 16,000 more in 673 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
+> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 45,000 lines of Python and TypeScript, with 16,000 more in 680 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
 >
 > **Help of any kind is welcome:** code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. Good places to start are in [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions). If you'd like Proxenos to exist for more people, a star helps others find it.
 
@@ -63,9 +63,9 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                               │                                             │
                               └──index──▶ memory (full-text search)         ▼
                                                         clones: feed, tasks, advice,
-                                                        choices, network, recall,
-                                                        projects, project steps,
-                                                        errands, drafts
+                                                        choices, watch, network,
+                                                        recall, projects, project
+                                                        steps, errands, drafts
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -80,7 +80,7 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
 ## Privacy
 
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (picked on the first-run setup page, or `PROXENOS_VAULT`; default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
-- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply, with what your memory holds about that person and what the chat depends on (the newest records naming them, and the results of the searches the model asks for). With a local model none of this leaves your computer.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news; watch also sends the films you've logged and how you rated them. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply, with what your memory holds about that person and what the chat depends on (the newest records naming them, and the results of the searches the model asks for). With a local model none of this leaves your computer.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites. The one way in from elsewhere is `proxenos phone`: your Mac's private address on your own Tailscale network, answered only for your own Tailscale login. Nothing is opened to the internet.
 - **Credentials** stay on your computer: in its own secure store, one item each (the macOS Keychain, Windows Credential Manager, or the Secret Service on Linux), or in `.env` (which git ignores) when you run from source with one. The page shows whether each is set, never what it is.
@@ -126,7 +126,7 @@ Then build the model and the clones:
 
 ```bash
 proxenos master                 # notes per month, then the self-model
-proxenos clone tracker          # also: tasks, care, advisor, network, choices, recall, projects, work
+proxenos clone tracker          # also: tasks, care, advisor, network, choices, watch, recall, projects, work
 ```
 
 Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it. Each night Proxenos writes where each one stands. Give one its code's folder and its data folders, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
@@ -164,7 +164,7 @@ Some sources read a folder on your computer: a folder of documents, your website
 | LinkedIn, X, Instagram, Facebook, Threads | Each service's data export; Instagram, Messenger, X and LinkedIn chats live through [Beeper Desktop](https://www.beeper.com) (free for up to five accounts) |
 | Bluesky | Public posts by handle |
 | Notion, Obsidian, PDFs | Exports or folders |
-| Letterboxd | Data export |
+| Letterboxd | Data export, and your public diary feed by username (`PROXENOS_LETTERBOXD_USER`), which sync reads every run so new logs come in without one |
 | ChatGPT, Claude | Each one's data export (ChatGPT: Settings, Data controls, Export data; Claude: Settings, Privacy, Export data); drop the zip in `data/` |
 | Calendar, live | Any account in the Mac's Calendar app (Google, Exchange, iCloud), read every sync once Proxenos's Python has Full Disk Access |
 | Personal website, papers and mentions | A local site repo; OpenAlex and news search |
@@ -177,7 +177,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 |---|---|
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
-| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Choices, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
+| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Choices, Watch, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
 | `proxenos demo [PATH]` | A vault of made-up records to try the page on, with no model, and the command that opens it. PATH must be new, empty or an earlier demo |
 | `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
@@ -186,9 +186,10 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `recall`, `projects`, `steps` or `work` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps` or `work` |
 | `proxenos clone steps --project ID` | A step of a project's own work (also from the page's Projects view): the next analysis, fix, figure or section, done on a new branch of the project's code in a worktree of its own, by Claude Code where it's installed or else the local model, and reported. Accept on the page merges it into your checkout; Discard deletes the branch. Nothing is pushed |
 | `proxenos clone choices [--force]` | The week's choices: what's worth taking on and what's worth letting go of. The night runs it once a week; `--force` runs it now |
+| `proxenos clone watch [--force]` | What to watch next: films and shows you haven't seen, picked from what you loved on Letterboxd, and the films on your watchlist that suit this week. The night runs it once a week; `--force` runs it now |
 | `proxenos clone errands "GOAL"` | An errand (from the page's Errands view): something to get done, such as reaching someone about a role with your CV, carried as far as it goes and stopped one tap short, with every step it took. Nothing goes out until you press Send on it |
 | `proxenos night` | Everything above, in order, for a schedule |
 | `proxenos schedule [--once] [--sync-every MIN] [--night-at HH:MM]` | Keep everything current until stopped, on any computer: `sync` every 15 minutes and `night` at 01:30 (or `PROXENOS_SYNC_EVERY` and `PROXENOS_NIGHT_AT`), each in a process of its own with its output in `<vault>/logs/`, once on waking after a missed slot, and never two runs at once. `--once` runs what's due and exits. Where it stands (the last and next run of each, and what's running) is in `<vault>/state/schedule.json`, for the page |

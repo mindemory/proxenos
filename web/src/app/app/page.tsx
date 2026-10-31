@@ -48,6 +48,9 @@ const Advice = dynamic(() => import("@/components/views/Advice").then((m) => m.A
 const Choices = dynamic(() => import("@/components/views/Choices").then((m) => m.Choices), {
   loading: () => <ProseSkeleton label="Loading choices" />,
 });
+const Watch = dynamic(() => import("@/components/views/Watch").then((m) => m.Watch), {
+  loading: () => <ProseSkeleton label="Loading picks" />,
+});
 const Network = dynamic(() => import("@/components/views/Network").then((m) => m.Network), { loading: () => <GraphSkeleton /> });
 const Memory = dynamic(() => import("@/components/views/Memory").then((m) => m.Memory), { loading: () => <ResultSkeleton /> });
 const Profile = dynamic(() => import("@/components/views/Profile").then((m) => m.Profile), {
@@ -73,6 +76,7 @@ const COLUMN_VIEWS: readonly View[] = [
   "care",
   "advice",
   "choices",
+  "watch",
   "profile",
   "connect",
   "settings",
@@ -193,6 +197,8 @@ export default function AppPage() {
         return <Advice onChange={home.reload} />;
       case "choices":
         return <Choices onChange={home.reload} onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
+      case "watch":
+        return <Watch onChange={home.reload} />;
       case "network":
         return <Network tab={netTab} onChange={home.reload} find={find} onFound={found} onTab={setNetTab} />;
       case "memory":

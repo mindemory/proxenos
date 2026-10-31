@@ -216,6 +216,38 @@ export interface ChoicesResponse {
   skip: Skip[];
 }
 
+// ── Watch clone: clones/watch/YYYY-MM-DD.json and history.json ───────────────
+
+export type WatchAction = "want" | "seen" | "not_me";
+
+export const WATCH_ACTIONS: readonly WatchAction[] = ["want", "seen", "not_me"];
+
+export interface WatchPick {
+  id: string;
+  kind: "film" | "show";
+  title: string;
+  year: number | null;
+  why: string;
+  /** The films they've seen that it follows from, as "Title (Year), 5/5, hearted". */
+  because: string[];
+  links: { label: string; url: string }[];
+  action: WatchAction | null;
+  acted_at: string | null;
+}
+
+export interface WatchResponse {
+  now: string;
+  vault: VaultInfo;
+  dates: string[]; // every YYYY-MM-DD file, newest first
+  date: string | null; // the one shown
+  generated: string | null;
+  films: WatchPick[];
+  shows: WatchPick[];
+  watchlist: WatchPick[];
+  /** Picks from any week marked want and not marked since, newest mark first. */
+  saved: WatchPick[];
+}
+
 // ── Network clone: clones/network/people.json and ideas.json ────────────────
 
 export type Relation = "met" | "know_of" | "to_read";

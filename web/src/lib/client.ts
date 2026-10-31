@@ -33,6 +33,9 @@ import type {
   TaskAction,
   TasksResponse,
   TaskView,
+  WatchAction,
+  WatchPick,
+  WatchResponse,
 } from "./types";
 
 export const POLL_MS = 5 * 60 * 1000;
@@ -96,6 +99,10 @@ export function sendChoiceFeedback(itemId: string, action: ChoiceAction): Promis
   return postJson("/api/choices/feedback", { item_id: itemId, action });
 }
 
+export function sendWatchFeedback(itemId: string, action: WatchAction): Promise<void> {
+  return postJson("/api/watch/feedback", { item_id: itemId, action });
+}
+
 // Toast text for each action, written as what just happened.
 export const REACTION_TOAST: Record<Reaction, string> = {
   useful: "Marked useful",
@@ -117,6 +124,12 @@ export const CHOICE_TOAST: Record<ChoiceAction, string> = {
   useful: "Marked useful",
   not_me: "Marked not you: it won't come back",
   doing: "Noted",
+};
+
+export const WATCH_TOAST: Record<WatchAction, string> = {
+  want: "Saved to watch",
+  seen: "Marked seen: it won't come back",
+  not_me: "Marked not for you: it won't come back",
 };
 
 export const DRAFT_TOAST: Record<DraftAction, string> = {
@@ -364,6 +377,44 @@ export function useChoices(date: string | null, onChange?: () => void) {
         },
         () => {
           set(c.action, c.acted_at);
+          setError(SAVE_FAILED);
+        },
+      );
+    },
+    [setData, setError, flash, notify, onChange],
+  );
+
+  return { data, error, flashId, react, clearError: () => setError(null) };
+}
+
+/** One week's picks of what to watch (null: the newest), what's saved, and the three marks. */
+export function useWatch(date: string | null, onChange?: () => void) {
+  const { data, error, setData, setError } = useJson<WatchResponse>(
+    date ? `/api/watch?date=${encodeURIComponent(date)}` : "/api/watch",
+  );
+  const notify = useToast();
+  const { flashId, flash } = useFlash();
+
+  const react = useCallback(
+    (p: WatchPick, action: WatchAction) => {
+      if (p.action === action) return;
+      const set = (a: WatchAction | null, at: string | null) =>
+        setData((d) => {
+          if (!d) return d;
+          const f = (xs: WatchPick[]) => xs.map((x) => (x.id === p.id ? { ...x, action: a, acted_at: at } : x));
+          const saved = f(d.saved).filter((x) => x.action === "want");
+          const added = a === "want" && !saved.some((x) => x.id === p.id) ? [{ ...p, action: a, acted_at: at }] : [];
+          return { ...d, films: f(d.films), shows: f(d.shows), watchlist: f(d.watchlist), saved: [...added, ...saved] };
+        });
+      flash(p.id);
+      set(action, new Date().toISOString());
+      sendWatchFeedback(p.id, action).then(
+        () => {
+          notify(WATCH_TOAST[action], action === "want" ? "ok" : "info");
+          onChange?.();
+        },
+        () => {
+          set(p.action, p.acted_at);
           setError(SAVE_FAILED);
         },
       );

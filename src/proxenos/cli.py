@@ -34,9 +34,10 @@ from proxenos.config import vault_path
 
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
 # their health care stands, and advice that read the fresh self-model, the people index and ideas,
-# the week's choices (once a week) that read the tasks and ideas, then what each of those brings
-# to mind from memory, the projects, the errands still waiting on a way to reach someone, the
-# drafts of them all, and last a step of each project's own work, which takes longest.
+# the week's choices (once a week) that read the tasks and ideas, and what to watch (once a
+# week), then what each of those brings to mind from memory, the projects, the errands still
+# waiting on a way to reach someone, the drafts of them all, and last a step of each project's
+# own work, which takes longest.
 NIGHT_CLONES = (
     "tracker",
     "tasks",
@@ -44,6 +45,7 @@ NIGHT_CLONES = (
     "advisor",
     "network",
     "choices",
+    "watch",
     "recall",
     "projects",
     "errands",

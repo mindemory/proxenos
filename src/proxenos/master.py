@@ -26,6 +26,7 @@ from proxenos.ingest import (
     docs,
     gcalendar,
     gmail,
+    letterboxd,
     maccalendar,
     mentions,
     microsoft,
@@ -55,6 +56,7 @@ SLOW = {"identity", "voice"}
 _UNATTENDED = [
     (whatsapp, lambda: True),
     (spotify, lambda: env("SPOTIFY_EXPORT")),
+    (letterboxd, lambda: env("LETTERBOXD_USER")),
     (gmail, gmail.accounts),
     (microsoft, microsoft.accounts),
     (gcalendar, gcalendar.accounts),

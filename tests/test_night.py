@@ -14,6 +14,7 @@ from proxenos.clones import (
     steps,
     tasks,
     tracker,
+    watch,
     work,
 )
 
@@ -37,6 +38,7 @@ def calls(tmp_path, monkeypatch):
         advisor,
         network,
         choices,
+        watch,
         recall,
         projects,
         errands,
@@ -66,6 +68,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "advisor: 1 done",
         "network: 1 done",
         "choices: 1 done",
+        "watch: 1 done",
         "recall: 1 done",
         "projects: 1 done",
         "errands: 1 done",
@@ -85,7 +88,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["care"] == {"days": care.DAYS, "dry_run": False}
     assert args["recall"] == {"people": recall.PEOPLE}
     assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
-    assert args["choices"] == {"force": False}  # once a week
+    assert args["choices"] == args["watch"] == {"force": False}  # once a week
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
 
 
@@ -112,6 +115,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
         "choices: 1 done",
+        "watch: 1 done",
         "recall: 1 done",
         "projects: 1 done",
         "errands: 1 done",
@@ -124,6 +128,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "care",
         "network",
         "choices",
+        "watch",
         "recall",
         "projects",
         "errands",
