@@ -17,12 +17,13 @@ referrals, insurance, bills, prescriptions, records, portals, forms and symptoms
 - A chat message that clears the bar with a strong match brings the few messages right around
   it in the same chat, within half an hour: the question it answers, the answer to it.
 
-Only those records go to the model, oldest first, up to about 300k characters. When there are
-more, relevance (the score, halved with each month of age) decides what stays, so the weeks
-that matter now always fit. Before they go, people in chats become "contact 1", "contact 2";
-phone numbers, long account, member and claim numbers, email addresses and links are blanked;
-and a long text is cut to the passages around its health terms. One request, at high effort,
-returns what clones/care/care.json holds:
+Only those records go to the model, oldest first, up to about 300k characters; a local model
+gets about 60k, each record cut to 1,500 characters around its health terms, which a laptop
+answers in about twenty minutes. When there are more, relevance (the score, halved with each
+month of age) decides what stays, so the weeks that matter now always fit. Before they go,
+people in chats become "contact 1", "contact 2"; phone numbers, long account, member and claim
+numbers, email addresses and links are blanked; and a long text is cut to the passages around
+its health terms. One request, at high effort, returns what clones/care/care.json holds:
 
 - summary: three to five sentences on where things stand;
 - timeline: dated events (symptom, visit, test, result, referral, call, message, bill, claim,
@@ -62,6 +63,10 @@ from proxenos.config import env
 DAYS = 120
 AHEAD_DAYS = 60  # calendar events this far ahead count too: the appointments still to come
 MAX_CHARS = 300_000  # about 75k tokens of records; past this the least relevant are cut
+# Records a local model reads (about 20k tokens): it writes slower the longer the prompt, and a
+# few long notes would otherwise take the room of dozens of mails and messages, so each record is
+# cut to a chat message's length around its health terms first.
+LOCAL_CHARS = 60_000
 CHAT_CHARS = 1500
 MAIL_CHARS = 4000
 DOC_CHARS = 8000
@@ -411,7 +416,10 @@ def care(
     now = now or datetime.now(UTC)
     out = vault / "clones" / "care"
     found = gather(vault, now - timedelta(days=days), now, now + timedelta(days=AHEAD_DAYS))
-    text, refs, cut = render(found, now, llm.fit(MAX_CHARS))
+    if llm.prompt_chars() is None:
+        text, refs, cut = render(found, now, llm.fit(MAX_CHARS))
+    else:
+        text, refs, cut = render(found, now, llm.fit(LOCAL_CHARS), clip=CHAT_CHARS)
     by_source = Counter(r["source"] for r in refs.values())
     if dry_run:
         return {**{s: by_source[s] for s in SOURCES}, "records": len(refs), "chars": len(text)}
@@ -819,13 +827,16 @@ def _with_neighbours(rows: list[dict | None]) -> list[dict]:
 
 
 def render(
-    records: list[dict], now: datetime, limit: int = MAX_CHARS
+    records: list[dict], now: datetime, limit: int = MAX_CHARS, clip: int | None = None
 ) -> tuple[str, dict[str, dict], bool]:
     """The records as prompt text, oldest first, the record behind each [r..] ref, and whether
     any were left out. Over `limit` characters, the least relevant go first. Relevance is the
     score, halved for every HALF_LIFE_DAYS of age, so the weeks that matter now always fit
     before older history; upcoming events count as today. A chat message kept for context
-    ranks just below its match."""
+    ranks just below its match. With `clip`, each record's text is first cut to that many
+    characters around its health terms, so more records fit."""
+    if clip is not None:
+        records = [r | {"text": _excerpt(r["text"], clip)} for r in records]
     by_id = {r["id"]: r for r in records}
 
     def weight(r: dict) -> float:
