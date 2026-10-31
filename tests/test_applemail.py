@@ -193,14 +193,25 @@ def test_a_store_that_stops_changing_while_mail_runs_is_reported(
     read(vault, mail)  # takes m1; the store then sits still for a day
     capsys.readouterr()
 
-    monkeypatch.setattr(applemail, "_mail_running", lambda: False)
+    monkeypatch.setattr(applemail, "_mail_started", lambda: None)
     read(vault, mail)
     assert "nothing new" not in capsys.readouterr().err  # Mail closed: nothing to fetch with
 
-    monkeypatch.setattr(applemail, "_mail_running", lambda: True)
+    monkeypatch.setattr(applemail, "_mail_started", lambda: 0.0)
     read(vault, mail)
     err = capsys.readouterr().err
     assert "nothing new in Mail's store (V10) for 24 hours" in err and "quit and reopen" in err
+
+    # Open since before mail stopped: its window was closed, but it was never quit.
+    monkeypatch.setattr(applemail, "_mail_started", lambda: time.time() - 2 * DAY)
+    read(vault, mail)
+    err = capsys.readouterr().err
+    assert "same Mail that's been running since" in err and "Command-Q" in err
+
+    monkeypatch.setattr(applemail, "_mail_started", lambda: time.time() - 60)  # reopened
+    read(vault, mail)
+    err = capsys.readouterr().err
+    assert "Mail was reopened at" in err and "Internet Accounts" in err
 
     index = mail / "V10" / "MailData" / "Envelope Index"  # Mail busy, but not where we read
     index.parent.mkdir(parents=True, exist_ok=True)
@@ -301,3 +312,9 @@ def test_proxenos_ingest_applemail_runs_and_sync_checks_it_is_available(
 
     assert capsys.readouterr().out.startswith("applemail: 1 read, 1 added")
     assert (applemail, applemail.available) in master._UNATTENDED
+
+
+def test_how_long_mail_has_run_is_read_from_ps():
+    assert applemail._elapsed("02-19:12:18\n") == 2 * 86400 + 19 * 3600 + 12 * 60 + 18
+    assert applemail._elapsed(" 05:07") == 307
+    assert applemail._elapsed("1:00:00") == 3600

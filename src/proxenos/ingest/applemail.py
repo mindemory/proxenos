@@ -100,12 +100,29 @@ def ingest(vault: Path, store: Path, me: Iterable[str], full: bool = False) -> d
     if newest:
         state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         state_path.write_text(json.dumps({"newest": newest, "accounts": addresses}))
-    elif latest and (hours := (time.time() - latest) / 3600) >= STALE_HOURS and _mail_running():
+    elif (
+        latest
+        and (hours := (time.time() - latest) / 3600) >= STALE_HOURS
+        and (started := _mail_started()) is not None
+    ):
         index = _index_changed(store)
         if index and index - latest > 3600:  # Mail is busy, but not where Proxenos reads
             why = (
                 f"Mail's own index changed at {datetime.fromtimestamp(index):%Y-%m-%d %H:%M}, so "
                 "Mail is fetching but keeping new mail somewhere Proxenos doesn't read."
+            )
+        elif 0 < started < latest:  # the same Mail that stopped: closing its window isn't quitting
+            why = (
+                f"It's the same Mail that's been running since "
+                f"{datetime.fromtimestamp(started):%Y-%m-%d %H:%M}: closing its window leaves it "
+                "running. Quit it with Command-Q (or Force Quit, from the Apple menu, if it "
+                "won't), then open it again."
+            )
+        elif started:
+            why = (
+                f"Mail was reopened at {datetime.fromtimestamp(started):%Y-%m-%d %H:%M} and "
+                "still fetched nothing, so check that it's online and that its accounts are "
+                "signed in, in System Settings, Internet Accounts."
             )
         else:
             why = "Check that Mail is online and fetching (quit and reopen it)."
@@ -128,16 +145,36 @@ def _index_changed(store: Path) -> float:
     return max(times, default=0.0)
 
 
-def _mail_running() -> bool:
+def _mail_started() -> float | None:
+    """When the Mail that's running started; None when Mail isn't running, 0 when it is but
+    its start can't be told."""
     try:
-        return (
-            subprocess.run(
-                ["pgrep", "-x", "Mail"], capture_output=True, timeout=5, check=False
-            ).returncode
-            == 0
-        )
+        pids = subprocess.run(
+            ["pgrep", "-x", "Mail"], capture_output=True, text=True, timeout=5, check=False
+        ).stdout.split()
+        if not pids:
+            return None
+        etime = subprocess.run(
+            ["ps", "-o", "etime=", "-p", pids[0]],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout
+        return time.time() - _elapsed(etime)
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
+    except ValueError:
+        return 0.0
+
+
+def _elapsed(etime: str) -> int:
+    """Seconds in the time ps says a process has run, [[dd-]hh:]mm:ss."""
+    days, _, clock = etime.strip().rpartition("-")
+    seconds = 0
+    for part in clock.split(":"):
+        seconds = seconds * 60 + int(part)
+    return int(days or 0) * 86400 + seconds
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
