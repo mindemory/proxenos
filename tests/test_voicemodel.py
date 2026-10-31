@@ -2,6 +2,7 @@
 mlx-lm and every model faked out. No network, no real data."""
 
 import json
+import os
 import stat
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -153,9 +154,9 @@ def test_the_set_is_readable_only_by_you(tmp_path):
     vault = make_vault(tmp_path)
     voicemodel.build(vault, now=NOW)
 
-    assert stat.S_IMODE((vault / "voice").stat().st_mode) == 0o700
+    assert os.name == "nt" or stat.S_IMODE((vault / "voice").stat().st_mode) == 0o700
     for path in (vault / "voice").rglob("*.jsonl"):
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert os.name == "nt" or stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_a_draft_is_asked_for_just_as_training_saw_it(tmp_path):
@@ -222,7 +223,7 @@ def test_training_runs_mlx_lm_on_the_set_into_the_vault(tmp_path):
     assert flags["--data"] == str(fit) and done["left out"] == 1
     trained_on = (fit / "train.jsonl").read_text() + (fit / "valid.jsonl").read_text()
     assert "sending now" not in trained_on and "bring snacks?" in trained_on
-    assert (fit / "train.jsonl").stat().st_mode & 0o777 == 0o600
+    assert os.name == "nt" or stat.S_IMODE((fit / "train.jsonl").stat().st_mode) == 0o600
     assert flags["--adapter-path"] == str(vault / "voice" / "adapter")
     assert "--mask-prompt" in command
     assert voicemodel.trained(vault)["base"] == "some/model-4bit"
@@ -245,7 +246,7 @@ def test_the_evaluation_scores_each_model_against_what_was_sent(tmp_path):
     assert summary["last message again"]["words"] == 2  # "hey dana", the reference row
     saved = json.loads((vault / "voice" / "eval.json").read_text())
     assert saved["items"][0]["drafts"]["tuned"] == "went well!"
-    assert stat.S_IMODE((vault / "voice" / "eval.json").stat().st_mode) == 0o600
+    assert os.name == "nt" or stat.S_IMODE((vault / "voice" / "eval.json").stat().st_mode) == 0o600
     assert "| tuned | 1.00 | 1.00 | 2 |" in voicemodel.table(result)
 
     # Trained again: only the voice model drafts, and the base model's drafts are kept.
