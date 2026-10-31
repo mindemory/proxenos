@@ -86,7 +86,15 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
 
 ## Quick start
 
-Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and a model for the steps that use one: an open model on your Mac through [Ollama](https://ollama.com) (no key, nothing leaves the computer; `gemma4:26b` fits a 32 GB Mac), or an Anthropic API key.
+**One command**, on a Mac with [Homebrew](https://brew.sh):
+
+```bash
+git clone https://github.com/mindemory/proxenos && cd proxenos && scripts/install.sh
+```
+
+It installs what's missing (Node, Ollama, and Miniforge if there's no conda), sets up the `proxenos` env and the page's packages, and pulls a local model that fits your Mac's memory. Then `conda activate proxenos && proxenos web`. Add `--start-at-login` to keep the page and a sync running from login on, or `--no-model` to use a hosted model instead. Running it again only adds what's missing.
+
+**By hand**, step by step. Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and a model for the steps that use one: an open model on your Mac through [Ollama](https://ollama.com) (no key, nothing leaves the computer; `gemma4:26b` fits a 32 GB Mac), or an Anthropic API key.
 
 ```bash
 git clone https://github.com/mindemory/proxenos && cd proxenos
