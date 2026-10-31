@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
 
 import { markdownHtml } from "@/components/Markdown";
 import { useToast } from "@/components/Toasts";
@@ -176,13 +176,37 @@ export function useFlash() {
   return { flashId, flash };
 }
 
-/** Fetch JSON once per mount (and again whenever `url` changes). */
+// What each view last showed, by URL, in this tab's memory only: going back to a view shows it at
+// once while a fresh read replaces it, the way an app keeps its screens, instead of a skeleton.
+const shown = new Map<string, unknown>();
+// A read under way, by URL, so a prefetch and the view opened during it share one request.
+const reading = new Map<string, Promise<unknown>>();
+
+function read<T>(url: string): Promise<T> {
+  const running = reading.get(url) as Promise<T> | undefined;
+  if (running) return running;
+  const work = getJson<T>(url)
+    .then((d) => {
+      shown.set(url, d);
+      return d;
+    })
+    .finally(() => reading.delete(url));
+  reading.set(url, work);
+  return work;
+}
+
+/** Read views' data before they're opened, so the first click on one is instant too. */
+export function prefetch(urls: readonly string[]) {
+  for (const url of urls) if (!shown.has(url)) read(url).catch(() => undefined);
+}
+
+/** Fetch JSON once per mount (and again whenever `url` changes), showing the last answer meanwhile. */
 export function useJson<T>(url: string) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setData] = useState<T | null>(() => (shown.get(url) as T | undefined) ?? null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    getJson<T>(url).then(
+    read<T>(url).then(
       (d) => {
         if (!alive) return;
         setData(d);
@@ -194,7 +218,17 @@ export function useJson<T>(url: string) {
       alive = false;
     };
   }, [url]);
-  return { data, error, setData, setError };
+  // A change the view makes (a reaction, a status) is what it shows next time too.
+  const set = useCallback(
+    (next: SetStateAction<T | null>) =>
+      setData((d) => {
+        const value = typeof next === "function" ? (next as (d: T | null) => T | null)(d) : next;
+        if (value !== null) shown.set(url, value);
+        return value;
+      }),
+    [url],
+  );
+  return { data, error, setData: set, setError };
 }
 
 type Patch = (items: FeedItem[]) => FeedItem[];

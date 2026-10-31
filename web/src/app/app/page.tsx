@@ -21,7 +21,7 @@ import {
 } from "@/components/Skeleton";
 import { Home } from "@/components/views/Home";
 import type { MemoryIntent } from "@/components/views/Memory";
-import { useHome, useItems } from "@/lib/client";
+import { prefetch, useHome, useItems } from "@/lib/client";
 
 // Home and the feed come with the page; every other view loads the first time it's opened,
 // with its own skeleton meanwhile, so the app's first paint carries only what it shows.
@@ -108,6 +108,11 @@ export default function AppPage() {
   const [refreshing, setRefreshing] = useState(false);
   const feed = useItems("/api/items?batches=3", true);
   const home = useHome();
+  // Once Home is up, read the views a phone's tab bar opens, so tapping one shows it at once.
+  const homeLoaded = home.data !== null;
+  useEffect(() => {
+    if (homeLoaded) prefetch(["/api/tasks", "/api/drafts", "/api/network"]);
+  }, [homeLoaded]);
 
   // A link can open a view: /app?view=ask, which is where a share from the phone lands. Read
   // after the first paint, so the server's render (home) and the browser's first one agree.

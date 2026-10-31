@@ -38,7 +38,7 @@ install_job local.proxenos.web "$web" "./node_modules/.bin/next start -H 127.0.0
   "$logs/web.log" '  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>'
+  <true/>' Interactive
 install_job local.proxenos.sync "$HOME" "proxenos sync" "$logs/sync.log" '  <key>RunAtLoad</key>
   <true/>
   <key>StartInterval</key>

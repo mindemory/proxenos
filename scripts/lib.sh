@@ -89,10 +89,13 @@ stop_job() {
   done
 }
 
-# install_job LABEL DIR COMMAND LOG WHEN: run COMMAND in the conda env, from DIR, with its output
-# appended to LOG; WHEN is the plist keys that say when it runs. Replaces any earlier copy.
+# install_job LABEL DIR COMMAND LOG WHEN [TYPE]: run COMMAND in the conda env, from DIR, with its
+# output appended to LOG; WHEN is the plist keys that say when it runs. TYPE is launchd's
+# ProcessType: Background (the default) lets macOS throttle the job's disk and CPU while the Mac is
+# busy, right for syncs; the page a person clicks through is Interactive, or a busy Mac (Mail
+# catching up, Spotlight) makes every click wait. Replaces any earlier copy.
 install_job() {
-  local label="$1" dir="$2" command="$3" log="$4" when="$5"
+  local label="$1" dir="$2" command="$3" log="$4" when="$5" type="${6:-Background}"
   local plist="$HOME/Library/LaunchAgents/$label.plist" tmp
   stop_job "$label"
   mkdir -p "$(dirname "$plist")"
@@ -128,7 +131,7 @@ $when
   <key>StandardErrorPath</key>
   <string>$(xml "$log")</string>
   <key>ProcessType</key>
-  <string>Background</string>
+  <string>$type</string>
 </dict>
 </plist>
 PLIST

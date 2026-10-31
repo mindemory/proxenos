@@ -15,9 +15,12 @@ const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
 const MAX_LINE_CHARS = 16 * 1024 * 1024;
 /** How far back to look: the newest this many months of mail. */
 const MAX_MONTHS = 60;
-/** A name is looked up again after this long, found or not. */
+/** A name found is looked up again after this long; one found nowhere in the mail, after MISS_MS. */
 const CACHE_MS = 10 * 60 * 1000;
+const MISS_MS = 6 * 60 * 60 * 1000;
 const CACHE_MAX = 2000;
+/** The most a reader's click waits on names never looked up before. The look-up goes on behind it. */
+const WAIT_MS = 1500;
 
 interface Cached {
   address: string | null;
@@ -103,17 +106,46 @@ async function scan(file: string, queries: ReadonlySet<string>, prefilter: RegEx
   }
 }
 
+const stale = (hit: Cached, now: number) => now - hit.at >= (hit.address ? CACHE_MS : MISS_MS);
+
 /**
  * The address for each name, matched whole and without regard to case, from the newest message
  * that has it. Names (as `normName` writes them) with no match are left out of the answer.
- * Results are kept for a few minutes, so a page that polls doesn't read the mail again.
+ * Reading 60 months of mail takes seconds, and on the page server's one thread it holds up every
+ * other request, so a reader never waits on it for names already looked up: they're answered from
+ * the last look-up at once, and an old one is redone behind the answer. Only names never looked up
+ * are waited on, for at most WAIT_MS; the next read has them.
  */
+export async function findAddresses(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  const now = Date.now();
+  let unknown = false;
+  let old = false;
+  for (const name of names) {
+    const q = normName(name);
+    const hit = q ? cache.get(`${vault}\0${q}`) : undefined;
+    if (!q) continue;
+    if (!hit) unknown = true;
+    else {
+      if (hit.address) found.set(q, hit.address);
+      old ||= stale(hit, now);
+    }
+  }
+  if (!unknown && !old) return found;
+  const work = lookUp(vault, names);
+  if (!unknown) {
+    work.catch(() => undefined);
+    return found;
+  }
+  return (await Promise.race([work, new Promise<null>((done) => setTimeout(() => done(null), WAIT_MS))])) ?? found;
+}
+
 // A look-up already under way, by vault and names: a second request for the same names (the page's
 // first Drafts read, made at startup, and a reader's click during it) joins it instead of scanning
 // the vault again alongside it.
 const inflight = new Map<string, Promise<Map<string, string>>>();
 
-export function findAddresses(vault: string, names: readonly string[]): Promise<Map<string, string>> {
+function lookUp(vault: string, names: readonly string[]): Promise<Map<string, string>> {
   const key = [vault, ...[...new Set(names)].sort()].join("\0");
   const running = inflight.get(key);
   if (running) return running;
@@ -130,7 +162,7 @@ async function lookUpAddresses(vault: string, names: readonly string[]): Promise
     const q = normName(name);
     if (!q || todo.has(q) || found.has(q)) continue;
     const hit = cache.get(`${vault}\0${q}`);
-    if (hit && now - hit.at < CACHE_MS) {
+    if (hit && !stale(hit, now)) {
       if (hit.address) found.set(q, hit.address);
     } else todo.add(q);
   }
