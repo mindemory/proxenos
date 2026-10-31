@@ -6,7 +6,8 @@ newest message with text isn't the user's and came within the last `days`. A cha
 when the user has written in it before (for an email, in the thread or to that sender at all),
 so businesses, newsletters and strangers they never answered stay out (and an email must be
 addressed to one of their PROXENOS_EMAILS among a few people), and only when what's
-waiting says something: a question, a link or a few words, not a lone "ok" or emoji.
+waiting says something: a question, a link or a few words, not a lone "ok" or emoji. A chat
+with an app's own AI assistant, like Meta AI, never counts.
 
 One email from someone new counts too: their first, written to the user as one person (from no
 role address like info@, with no unsubscribe or copyright line), calling them by name and asking
@@ -75,6 +76,7 @@ _REQUEST = re.compile(
 _REPLY_PREFIX = re.compile(r"^\s*((re|fwd?|aw|wg)\s*(\[\d+\])?\s*:\s*)+", re.IGNORECASE)
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")  # Slack's <@U123> or <@U123|name>
 _WORD = re.compile(r"\w+")
+_ASSISTANTS = {"meta ai"}  # the AI in a chat app: what it sends waits on no one
 
 
 def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
@@ -87,7 +89,8 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     start = _iso(now - timedelta(days=CONTEXT_DAYS))
     found = []
     for source, key, messages, elsewhere, examples in conversations(vault):
-        if chat := _waiting(messages, since, start, elsewhere, examples):
+        chat = _waiting(messages, since, start, elsewhere, examples)
+        if chat and chat["name"].casefold() not in _ASSISTANTS:
             found.append({"source": source, "chat": key, **chat})
     return sorted(found, key=lambda c: c["since"], reverse=True)
 

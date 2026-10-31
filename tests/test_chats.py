@@ -42,6 +42,8 @@ def test_finds_direct_chats_where_someone_else_had_the_last_word(tmp_path):
             wa(
                 "shop", "2026-03-09T09:00:00Z", "your order shipped, any questions?"
             ),  # never answered
+            wa("bot", "2026-03-01T09:00:00Z", "what's a good hike?", mine=True, name="Meta AI"),
+            wa("bot", "2026-03-09T09:00:00Z", "Meet Muse. Want to try it?", name="Meta AI"),
             wa("jo", "2026-03-01T09:00:00Z", "thanks!", mine=True),
             wa("jo", "2026-03-09T09:00:00Z", "ok"),  # says nothing to answer
             wa("kim", "2026-02-01T09:00:00Z", "hey", mine=True),
