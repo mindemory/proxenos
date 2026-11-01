@@ -92,6 +92,14 @@ import {
 } from "./types";
 
 export const REPO_ROOT = path.resolve(process.cwd(), "..");
+
+/** How the page runs the `proxenos` command: from the repo, with no console window flashing up
+ * on Windows, and with Python reading and writing UTF-8 there, where its default is still the
+ * old code page and a name with an accent would come out mangled. */
+export function runOptions(): { cwd: string; windowsHide: boolean; env: NodeJS.ProcessEnv; encoding: "utf8" } {
+  return { cwd: REPO_ROOT, windowsHide: true, env: { ...process.env, PYTHONUTF8: "1" }, encoding: "utf8" };
+}
+
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
 const DAY_FILE = /^\d{4}-\d{2}-\d{2}\.json$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -103,7 +111,7 @@ const MAX_PEOPLE_BYTES = 32 * 1024 * 1024;
 
 export function expandHome(p: string): string {
   if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+  if (p.startsWith("~/") || p.startsWith("~\\")) return path.join(os.homedir(), p.slice(2));
   return p;
 }
 
@@ -1260,7 +1268,7 @@ export async function writeJournalToday(): Promise<{ ok: boolean; message: strin
   const bin = await proxenosBin();
   if (!bin) return { ok: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
   return new Promise((resolve) => {
-    execFile(bin, ["clone", "journal", "--date", "today"], { cwd: REPO_ROOT, timeout: 5 * 60_000 }, (error, stdout) => {
+    execFile(bin, ["clone", "journal", "--date", "today"], { ...runOptions(), timeout: 5 * 60_000 }, (error, stdout) => {
       if (error) resolve({ ok: false, message: error.killed ? "It took too long." : "It failed." });
       else resolve({ ok: true, message: stdout.trim().split("\n").pop() ?? "" });
     });
@@ -1394,7 +1402,7 @@ export function rebuildPeople(): Promise<PeopleEditResult> {
       execFile(
         bin,
         ["clone", "network", "--people-only"],
-        { cwd: REPO_ROOT, timeout: REBUILD_MS, maxBuffer: 1024 * 1024 },
+        { ...runOptions(), timeout: REBUILD_MS, maxBuffer: 1024 * 1024 },
         (error, stdout) => {
           if (error) {
             const why = error.killed ? "it took too long" : "it failed";

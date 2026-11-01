@@ -28,7 +28,7 @@ import type {
   SignInKind,
 } from "./types";
 import { CONNECT_JOB_KINDS } from "./types";
-import { nowIso, proxenosBin, REPO_ROOT, vaultInfo, vaultPath } from "./vault";
+import { nowIso, proxenosBin, runOptions, vaultInfo, vaultPath } from "./vault";
 
 const STATUS_MS = 30_000;
 // A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while;
@@ -135,7 +135,7 @@ export async function getConnect(): Promise<ConnectResponse> {
   const bin = await proxenosBin();
   if (!bin) return { ...base, sources: [], error: NO_COMMAND };
   return new Promise((resolve) => {
-    execFile(bin, ["connect"], { cwd: REPO_ROOT, timeout: STATUS_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    execFile(bin, ["connect"], { ...runOptions(), timeout: STATUS_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (error) {
         const why = lastLine(stderr) || (error.killed ? "it took too long" : "it failed");
         resolve({ ...base, sources: [], error: `proxenos connect didn't answer: ${why}` });
@@ -236,7 +236,7 @@ export async function startJob(
   if (!bin) finish("failed", NO_COMMAND);
   else if (entry.stopping) finish("stopped", "Stopped.");
   else {
-    entry.child = execFile(bin, args, { cwd: REPO_ROOT, timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    entry.child = execFile(bin, args, { ...runOptions(), timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (entry.stopping) finish("stopped", "Stopped.");
       else if (!error) finish("done", lastLine(hide(stdout)));
       else if (error.killed) finish("failed", "It took too long and was stopped.");

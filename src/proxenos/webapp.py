@@ -5,6 +5,7 @@ packages the first time), and stays in the foreground until Ctrl-C. If the page 
 running there, it just opens it.
 """
 
+import shutil
 import socket
 import subprocess
 import time
@@ -22,10 +23,11 @@ def serve(port: int = PORT) -> None:
         print(f"web: already running at {url}")
         return
     web = REPO_ROOT / "web"
+    npm = shutil.which("npm") or "npm"  # npm.cmd on Windows, which a bare "npm" doesn't find
     if not (web / "node_modules").exists():
-        subprocess.run(["npm", "install"], cwd=web, check=True)
+        subprocess.run([npm, "install"], cwd=web, check=True)
     # The script's own -p is 4747; a second one, after it, wins.
-    server = subprocess.Popen(["npm", "run", "dev", "--", "-p", str(port)], cwd=web)
+    server = subprocess.Popen([npm, "run", "dev", "--", "-p", str(port)], cwd=web)
     try:
         for _ in range(120):
             if _listening(port):

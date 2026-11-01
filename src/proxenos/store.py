@@ -65,7 +65,7 @@ def _load(path: Path) -> dict[str, dict]:
 
 def _write(path: Path, records: list[dict]) -> None:
     tmp = path.with_suffix(".jsonl.tmp")
-    with tmp.open("w", encoding="utf-8") as f:
+    with tmp.open("w", encoding="utf-8", newline="\n") as f:  # the same bytes on every platform
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
     os.replace(tmp, path)

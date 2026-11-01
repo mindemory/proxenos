@@ -11,7 +11,7 @@ import { execFile } from "node:child_process";
 import { lastLine, NO_COMMAND } from "./connect";
 import type { SecretState, SettingKey, SettingOrigin, SettingValue, SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
 import { SETTING_KEYS } from "./types";
-import { proxenosBin, REPO_ROOT, setting } from "./vault";
+import { proxenosBin, runOptions, setting } from "./vault";
 
 // Checking a key is one request to Anthropic; everything else answers at once.
 const SETUP_MS = 45_000;
@@ -97,7 +97,7 @@ async function run(args: string[], stdin: string | null, secret: string | null):
     const child = execFile(
       bin,
       ["setup", ...args],
-      { cwd: REPO_ROOT, timeout: SETUP_MS, maxBuffer: MAX_OUTPUT },
+      { ...runOptions(), timeout: SETUP_MS, maxBuffer: MAX_OUTPUT },
       (error, stdout, stderr) => {
         if (error) {
           const why = error.killed ? "it took too long" : lastLine(hide(stderr)) || "it failed";

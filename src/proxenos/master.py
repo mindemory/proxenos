@@ -11,6 +11,7 @@ of the user is a commit.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -54,7 +55,7 @@ SLOW = {"identity", "voice"}
 
 # Sources that sync unattended, each with what tells us it's set up.
 _UNATTENDED = [
-    (whatsapp, lambda: True),
+    (whatsapp, lambda: whatsapp.store_problem() != "missing"),  # WhatsApp for Mac signed in here
     (spotify, lambda: env("SPOTIFY_EXPORT")),
     (letterboxd, lambda: env("LETTERBOXD_USER")),
     (gmail, gmail.accounts),
@@ -239,7 +240,10 @@ def _recent_reactions(vault: Path, days: int = 30) -> str:
 
 
 def _commit(vault: Path, message: str) -> None:
-    """Commit self/ and observations/ in the vault's own local git repo (never pushed)."""
+    """Commit self/ and observations/ in the vault's own local git repo (never pushed). Without
+    git on this computer (Windows has none unless installed) the history is skipped, not the run."""
+    if shutil.which("git") is None:
+        return
 
     def git(*args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
