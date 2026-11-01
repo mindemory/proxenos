@@ -201,3 +201,14 @@ def test_a_draft_sees_the_coming_week_once_per_event(tmp_path):
         "- Thu Mar 12, all day: busy",
     ]
     assert plans.week(tmp_path / "none", NOW) == ""
+
+
+def test_a_plan_called_off_leaves_the_calendar(tmp_path):
+    vault = tmp_path / "vault"
+    now = datetime(2026, 3, 10, 12, tzinfo=UTC)
+    on = task("v1", "Visit the clinic", "2026-03-12T09:00")
+    off = task("v2", "Lunch with Noor", "2026-03-11T12:00", status="cancelled")
+
+    assert plans.write(vault, [on, off], now) == 1
+    text = (vault / "clones" / "tasks" / "plans.ics").read_text()
+    assert "Visit the clinic" in text and "Lunch with Noor" not in text

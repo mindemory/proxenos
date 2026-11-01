@@ -15,7 +15,8 @@ export type Tone = "bad" | "warn" | "ok" | "muted";
 /** Where a task sits once the reader's own actions are applied; null when it was set aside. */
 export function placeOf(t: TaskView): "open" | "waiting" | "done" | null {
   if (t.action === "not_mine" || t.action === "dismiss") return null;
-  if (t.action === "done" || t.status === "done") return "done";
+  // A plan called off is settled like a done one, and listed with them.
+  if (t.action === "done" || t.status === "done" || t.status === "cancelled") return "done";
   return t.status;
 }
 
@@ -39,6 +40,7 @@ export function atLabel(t: TaskView, now: string): string | null {
 }
 
 export function dueLabel(t: TaskView, now: string): { text: string; tone: Tone; title: string } | null {
+  if (t.status === "cancelled" && t.action !== "done") return { text: "Called off", tone: "muted", title: "" };
   if (placeOf(t) === "done") return { text: "Done", tone: "ok", title: t.due ? `Was due ${shortDate(t.due, now)}` : "" };
   if (!t.due) return null;
   const d = daysBetween(localDay(now), t.due);

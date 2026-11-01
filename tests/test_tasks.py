@@ -283,8 +283,9 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "open",
         "waiting",
         "done",
+        "cancelled",
     ]
-    assert stats == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "new": 0} | NONE
+    assert stats == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "cancelled": 0, "new": 0} | NONE
     assert saved(vault) == {"generated": GENERATED, "tasks": []}
 
 
@@ -350,7 +351,7 @@ def test_new_tasks_are_saved_in_the_contract_shape(tmp_path, model):
     assert form["status"] == "waiting" and form["due"] is None and form["with"] is None
     assert form["asked_at"] == ago(days=2) and form["source"] == "email"
     assert form["id"] == tasks.task_id("Submit the travel form", "email", ago(days=2))
-    assert stats == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "new": 2} | NONE
+    assert stats == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "cancelled": 0, "new": 2} | NONE
     assert not (vault / "clones" / "tasks" / "tasks.json.tmp").exists()
 
 
@@ -470,7 +471,7 @@ def test_done_tasks_leave_after_30_days_and_no_messages_means_no_model_call(tmp_
 
     assert model.calls == []
     assert [t["title"] for t in saved(vault)["tasks"]] == ["Still open", "Just done"]
-    assert stats == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "new": 0} | NONE
+    assert stats == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "cancelled": 0, "new": 0} | NONE
     closed = json.loads((vault / "clones" / "tasks" / "closed.json").read_text())
     assert closed["eeeeeeeeeeee"]["closed_at"] == GENERATED
     assert closed["gggggggggggg"]["action"] == "done"  # remembered after it left the list
@@ -618,3 +619,25 @@ def test_the_sync_runs_it_hourly_and_only_once_something_was_said(tmp_path):
     assert tasks.due(vault, NOW)
     out.write_text("{not json")
     assert not tasks.due(vault, NOW)
+
+
+def test_a_plan_called_off_is_settled_like_a_done_one_and_its_drafts_fold_away():
+    now = datetime(2026, 3, 10, 12, tzinfo=UTC)
+    tasks_ = {
+        "v1": task("v1", "Go to Tuesday's visit", status="cancelled"),
+        "o1": task("o1", "Reply"),
+    }
+    closed: dict = {}
+
+    settled = tasks._settle(tasks_, closed, {}, now)
+
+    assert set(settled) == {"v1", "o1"}  # still listed, as cancelled, until it ages out
+    assert closed["v1"]["status"] == "cancelled" and closed["v1"]["action"] is None
+    assert "o1" not in closed
+    later = tasks._settle(tasks_, closed, {}, now + tasks.DONE_KEEP + timedelta(days=1))
+    assert set(later) == {"o1"}
+    drafts = {"v1": {}, "o1": {}}
+    assert tasks._finished(drafts, tasks_, {}) == {
+        "v1": "Its plan was called off: Go to Tuesday's visit."
+    }
+    assert tasks.STATUSES.index("cancelled") > tasks.STATUSES.index("done")  # listed last

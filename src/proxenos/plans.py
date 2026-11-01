@@ -104,7 +104,7 @@ def write(
     events = []
     for task in tasks:
         when = at(task.get("at"))
-        if task.get("status") == "done" or when is None:
+        if task.get("status") in ("done", "cancelled") or when is None:  # gone from the calendar
             continue
         day = when if isinstance(when, date) and not isinstance(when, datetime) else when.date()
         if day < today - timedelta(days=PAST_DAYS) or any(_same(task, when, e) for e in theirs):

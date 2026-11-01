@@ -112,7 +112,8 @@ def _done(vault: Path, start: datetime, end: datetime) -> list[str]:
     closed = _json(vault / "clones" / "tasks" / "closed.json")
     for entry in closed.values() if isinstance(closed, dict) else []:
         if _within(entry.get("closed_at"), start, end) and entry.get("action") in (None, "done"):
-            found.append(f"Done: {entry.get('title')}")
+            settled = "Called off" if entry.get("status") == "cancelled" else "Done"
+            found.append(f"{settled}: {entry.get('title')}")
     drafts = _drafts(vault)
     sent: dict[str, str] = {}  # each draft sent that day, with who it went to
     for event in _jsonl(vault / "clones" / "drafts" / "feedback.jsonl"):

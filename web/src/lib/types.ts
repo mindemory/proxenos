@@ -100,7 +100,7 @@ export interface StatusResponse {
 // ── Tasks clone: clones/tasks/tasks.json ────────────────────────────────────
 
 export type TaskPriority = "high" | "medium" | "low";
-export type TaskStatus = "open" | "waiting" | "done";
+export type TaskStatus = "open" | "waiting" | "done" | "cancelled";
 export type TaskAction = "done" | "not_mine" | "dismiss";
 
 export const TASK_ACTIONS: readonly TaskAction[] = ["done", "not_mine", "dismiss"];
@@ -554,6 +554,8 @@ export interface OutboxLogEntry {
   via: string | null;
   ok: boolean;
   error: string | null;
+  /** Why the outbox left it for the reader to send (a link the chat never had, say), or null. */
+  held: string | null;
 }
 
 /** GET /api/outbox. `state` is null until the first sync has written one. */

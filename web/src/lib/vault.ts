@@ -725,7 +725,7 @@ async function walkSourceSyncs(vault: string): Promise<SourceSync[]> {
 // ── Tasks clone ─────────────────────────────────────────────────────────────
 
 const PRIORITIES: readonly TaskPriority[] = ["high", "medium", "low"];
-const STATUSES: readonly TaskStatus[] = ["open", "waiting", "done"];
+const STATUSES: readonly TaskStatus[] = ["open", "waiting", "done", "cancelled"];
 
 /** A task's "at": a local time to the minute, or a day. */
 const AT = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;

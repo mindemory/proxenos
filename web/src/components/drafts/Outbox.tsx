@@ -374,6 +374,8 @@ export function Outbox() {
                       <Check size={12} />
                       Sent
                     </p>
+                  ) : e.held ? (
+                    <p className="break-words text-xs text-muted">Held for you to send: {e.held}</p>
                   ) : (
                     <p className="break-words text-xs text-bad-ink">Failed{e.error ? `: ${e.error}` : ""}</p>
                   )}

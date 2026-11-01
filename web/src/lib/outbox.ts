@@ -186,6 +186,7 @@ export function outboxLog(rows: readonly unknown[], limit = OUTBOX_LOG_SHOWN): O
       via: text(r.via),
       ok,
       error: ok ? null : (text(r.error)?.slice(0, 300) ?? null),
+      held: ok ? null : (text(r.held)?.slice(0, 300) ?? null),
     });
   }
   return out;

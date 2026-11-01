@@ -57,7 +57,9 @@ DRAFT_CHARS = 300  # of each waiting draft's text the model reads
 MAX_DRAFTS = 60  # the newest waiting drafts it weighs; older ones wait for the next run
 
 SOURCES = ("whatsapp", "slack", "email", "told")
-STATUSES = ("open", "waiting", "done")
+STATUSES = ("open", "waiting", "done", "cancelled")
+# Settled: kept a while, then dropped; a plan settled leaves the calendar, its drafts are moot.
+SETTLED = ("done", "cancelled")
 PRIORITIES = ("high", "medium", "low")
 _CLOSING = ("done", "not_mine", "dismiss")
 _MARKED = {"done": "done", "not_mine": "not theirs", "dismiss": "dismissed"}
@@ -110,7 +112,9 @@ date), else "". Don't invent deadlines.
 optional or open-ended; medium otherwise.
 - status: open while it's theirs to do. waiting when they've done their part and wait on \
 someone else, or someone else is blocking it. done when the messages show it was done (sent, \
-answered, "done", thanked for it).
+answered, "done", thanked for it). cancelled when they show it was called off or won't happen: \
+the visit or meeting cancelled, the ask withdrawn, {person} saying they won't do it. A plan that \
+only moved stays open with its new time in at.
 - evidence: the [m..] refs of the messages that show the task and its current status.
 - at: when it happens, for a meeting, call, visit or appointment at an agreed time: \
 "YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
@@ -124,7 +128,8 @@ it's about changed or was called off. For each: its id, why (one sentence: who d
 when) and the [m..] refs that show it. Leave out any draft the messages don't clearly settle.
 
 Rules:
-- Every task on the current list comes back, changed or not. Keep done ones, marked done.
+- Every task on the current list comes back, changed or not. Keep done and cancelled ones, \
+marked so.
 - Never add back a task {person} closed on their own, however it's worded.
 - Only what the messages show. A message from someone else is evidence of what they asked, \
 not of what {person} agreed to.
@@ -609,11 +614,13 @@ def _overtaken(answer: list[dict], shown: dict[str, dict], refs: dict[str, dict]
 
 
 def _finished(drafts: dict[str, dict], tasks: dict[str, dict], closed: dict[str, dict]) -> dict:
-    """The drafts for a task that's done or that the user closed: nothing left to send."""
+    """The drafts for a task that's done, called off, or closed by the user: nothing to send."""
     found = {}
     for key in drafts:
         if key in tasks and tasks[key]["status"] == "done":
             found[key] = f"Its task is done: {tasks[key]['title']}."
+        elif key in tasks and tasks[key]["status"] == "cancelled":
+            found[key] = f"Its plan was called off: {tasks[key]['title']}."
         elif (closed.get(key) or {}).get("action") in ("not_mine", "dismiss"):
             found[key] = f"You closed its task: {closed[key]['title']}."
     return found
@@ -663,6 +670,7 @@ def _closed_entry(task: dict, action: str | None, closed_at: str) -> dict:
         "with": task.get("with"),
         "asked_at": task.get("asked_at"),
         "action": action,  # None when the messages showed it done, not the user
+        "status": task["status"],  # done, or cancelled: called off
         "closed_at": closed_at,
     }
 
@@ -694,7 +702,7 @@ def _settle(
             continue
         if action == "done":
             task = {**task, "status": "done"}
-        if task["status"] == "done":
+        if task["status"] in SETTLED:
             if key not in closed:
                 closed[key] = _closed_entry(task, None, _iso(now))
             if closed[key]["closed_at"] < _iso(now - DONE_KEEP):
