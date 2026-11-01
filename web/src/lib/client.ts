@@ -36,6 +36,7 @@ import type {
   WatchAction,
   WatchPick,
   WatchResponse,
+  JournalResponse,
 } from "./types";
 
 export const POLL_MS = 5 * 60 * 1000;
@@ -420,6 +421,32 @@ export function useChoices(date: string | null, onChange?: () => void) {
   );
 
   return { data, error, flashId, react, clearError: () => setError(null) };
+}
+
+/** One day's journal (null: the newest), and writing today's on demand. */
+export function useJournal(date: string | null) {
+  const { data, error, setData, setError } = useJson<JournalResponse>(
+    date ? `/api/journal?date=${encodeURIComponent(date)}` : "/api/journal",
+  );
+  const [writing, setWriting] = useState(false);
+  const writeToday = useCallback(async () => {
+    setWriting(true);
+    try {
+      const res = await fetch("/api/journal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? `returned ${res.status}`);
+      setData(body as JournalResponse);
+    } catch (e) {
+      setError(`Couldn't write today's entry: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setWriting(false);
+    }
+  }, [setData, setError]);
+  return { data, error, writing, writeToday, clearError: () => setError(null) };
 }
 
 /** One week's picks of what to watch (null: the newest), what's saved, and the three marks. */

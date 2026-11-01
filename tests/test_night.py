@@ -8,6 +8,7 @@ from proxenos.clones import (
     care,
     choices,
     errands,
+    journal,
     network,
     projects,
     recall,
@@ -44,6 +45,7 @@ def calls(tmp_path, monkeypatch):
         errands,
         work,
         steps,
+        journal,
     ):
         name = module.__name__.rsplit(".", 1)[1]
 
@@ -80,6 +82,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "journal: 1 done",
         "voice: 3 new answers",  # trained again only when it's due
     ]
     assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES, "voice"]
@@ -128,6 +131,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "journal: 1 done",
         "voice: 3 new answers",
     ]
     assert [name for name, *_ in calls] == [
@@ -142,5 +146,6 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands",
         "work",
         "steps",
+        "journal",
         "voice",
     ]

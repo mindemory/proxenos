@@ -237,6 +237,27 @@ export interface WatchPick {
   acted_at: string | null;
 }
 
+/** The journal's parts, in the order the page shows them. */
+export type JournalSection = "done" | "said" | "moved" | "waiting" | "next";
+export const JOURNAL_SECTIONS: readonly JournalSection[] = ["done", "said", "moved", "waiting", "next"];
+
+/** One day of clones/journal/<date>.json: the brief, what's next, and the day's lines. */
+export interface JournalEntry {
+  date: string;
+  generated: string | null;
+  brief: string; // "" when no model wrote one
+  next_up: string[];
+  sections: Record<JournalSection, string[]>;
+}
+
+export interface JournalResponse {
+  now: string;
+  vault: VaultInfo;
+  dates: string[]; // every YYYY-MM-DD entry, newest first
+  date: string | null; // the one shown
+  entry: JournalEntry | null;
+}
+
 export interface WatchResponse {
   now: string;
   vault: VaultInfo;

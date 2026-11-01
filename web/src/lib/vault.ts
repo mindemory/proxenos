@@ -72,12 +72,24 @@ import type {
   DraftCloseness,
   WatchAction,
   WatchPick,
+  JournalEntry,
+  JournalResponse,
   WatchResponse,
 } from "./types";
 import { foldReviews, isToSend } from "./drafts";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
-import { ACTIONS, ADVICE_ACTIONS, CHOICE_ACTIONS, GROUP_KINDS, NETWORK_ACTIONS, RELATIONS, TASK_ACTIONS, WATCH_ACTIONS } from "./types";
+import {
+  ACTIONS,
+  ADVICE_ACTIONS,
+  CHOICE_ACTIONS,
+  GROUP_KINDS,
+  JOURNAL_SECTIONS,
+  NETWORK_ACTIONS,
+  RELATIONS,
+  TASK_ACTIONS,
+  WATCH_ACTIONS,
+} from "./types";
 
 export const REPO_ROOT = path.resolve(process.cwd(), "..");
 const MONTH_FILE = /^\d{4}-\d{2}\.jsonl$/;
@@ -1219,6 +1231,40 @@ export async function getWatch(date?: string | null): Promise<WatchResponse> {
     watchlist: list(doc?.watchlist),
     saved,
   };
+}
+
+/** One day's journal (the newest when `date` is null or missing) and every day there is. */
+export async function getJournal(date?: string | null): Promise<JournalResponse> {
+  const vault = vaultPath();
+  const dir = path.join(vault, "clones", "journal");
+  const dates = await adviceDates(dir);
+  const shown = date && dates.includes(date) ? date : (dates[0] ?? null);
+  const doc = shown ? record(await readJsonFile(path.join(dir, `${shown}.json`))) : null;
+  const lines = (raw: unknown) => (Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : []);
+  const parts = record(doc?.sections) ?? {};
+  const entry: JournalEntry | null =
+    doc && shown
+      ? {
+          date: shown,
+          generated: str(doc.generated),
+          brief: str(doc.brief) ?? "",
+          next_up: lines(doc.next_up),
+          sections: Object.fromEntries(JOURNAL_SECTIONS.map((s) => [s, lines(parts[s])])) as JournalEntry["sections"],
+        }
+      : null;
+  return { now: nowIso(), vault: await vaultInfo(vault), dates, date: shown, entry };
+}
+
+/** Write today's journal with `proxenos clone journal --date today`, a minute or two with a local model. */
+export async function writeJournalToday(): Promise<{ ok: boolean; message: string }> {
+  const bin = await proxenosBin();
+  if (!bin) return { ok: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
+  return new Promise((resolve) => {
+    execFile(bin, ["clone", "journal", "--date", "today"], { cwd: REPO_ROOT, timeout: 5 * 60_000 }, (error, stdout) => {
+      if (error) resolve({ ok: false, message: error.killed ? "It took too long." : "It failed." });
+      else resolve({ ok: true, message: stdout.trim().split("\n").pop() ?? "" });
+    });
+  });
 }
 
 export async function appendWatchFeedback(itemId: string, action: WatchAction) {
