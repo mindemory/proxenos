@@ -5,7 +5,6 @@
 // each call leaves, never its words) and what's read from elsewhere (the connected sources, by
 // name and address). Its answer is read field by field, so nothing else in it reaches the page.
 
-import { execFile } from "node:child_process";
 
 import { lastLine, NO_COMMAND } from "./connect";
 import type {
@@ -22,7 +21,7 @@ import type {
   VaultFolder,
 } from "./types";
 import { MODEL_WHERES, VAULT_FOLDERS } from "./types";
-import { nowIso, proxenosBin, runOptions, vaultInfo, vaultPath } from "./vault";
+import { nowIso, proxenos, vaultInfo, vaultPath } from "./vault";
 
 // Adding up a large vault's folders can take a while on a slow disk.
 const PRIVACY_MS = 60_000;
@@ -168,10 +167,10 @@ function toReport(raw: unknown): PrivacyReport | null {
 /** What stays here, what went to a model and what's read from elsewhere, from `proxenos privacy`. */
 export async function getPrivacy(): Promise<PrivacyResponse> {
   const base = { now: nowIso(), vault: await vaultInfo(vaultPath()) };
-  const bin = await proxenosBin();
-  if (!bin) return { ...base, report: null, error: NO_COMMAND };
+  const cli = await proxenos();
+  if (!cli) return { ...base, report: null, error: NO_COMMAND };
   return new Promise((resolve) => {
-    execFile(bin, ["privacy"], { ...runOptions(), timeout: PRIVACY_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    cli.exec(["privacy"], { timeout: PRIVACY_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (error) {
         const why = lastLine(stderr) || (error.killed ? "it took too long" : "it failed");
         resolve({ ...base, report: null, error: `proxenos privacy didn't answer: ${why}` });

@@ -7,13 +7,12 @@
 // and only when the user presses Call. The values of a sheet's facts (a date of birth, an account
 // number) never reach the page, only their names.
 
-import { execFile, spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { NO_COMMAND } from "./connect";
 import type { CallLine, CallOutcome, CallPhase, CallRecord, CallSheet, CallsResponse } from "./types";
-import { nowIso, proxenosBin, readJsonFile, runOptions, setting, vaultInfo, vaultPath } from "./vault";
+import { nowIso, proxenos, readJsonFile, setting, vaultInfo, vaultPath } from "./vault";
 
 /** A sheet's id: its file name. Never starting with "-", so the command can't take it for an option. */
 export const CALL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -268,8 +267,8 @@ export async function startCall(id: string): Promise<Result> {
     return { ok: false, status: 404, error: "There's no call sheet by that name." };
   }
   if (await liveRecord(vault, id)) return { ok: false, status: 409, error: "A call from this sheet is already going." };
-  const bin = await proxenosBin();
-  if (!bin) return { ok: false, status: 500, error: NO_COMMAND };
+  const cli = await proxenos();
+  if (!cli) return { ok: false, status: 500, error: NO_COMMAND };
 
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const logFile = path.join(dir, LOG);
@@ -277,7 +276,7 @@ export async function startCall(id: string): Promise<Result> {
   let child;
   try {
     // Its own process group, so restarting the page doesn't hang up on whoever's on the line.
-    child = spawn(bin, ["call", "start", id], { ...runOptions(), detached: true, stdio: ["ignore", log.fd, log.fd] });
+    child = cli.spawn(["call", "start", id], { detached: true, stdio: ["ignore", log.fd, log.fd] });
   } finally {
     await log.close();
   }
@@ -303,10 +302,10 @@ export async function startCall(id: string): Promise<Result> {
 
 /** Hang up the call going from this sheet, through `proxenos call stop <id>`. */
 export async function stopCall(id: string): Promise<Result> {
-  const bin = await proxenosBin();
-  if (!bin) return { ok: false, status: 500, error: NO_COMMAND };
+  const cli = await proxenos();
+  if (!cli) return { ok: false, status: 500, error: NO_COMMAND };
   return new Promise((resolve) => {
-    execFile(bin, ["call", "stop", id], { ...runOptions(), timeout: STOP_MS, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
+    cli.exec(["call", "stop", id], { timeout: STOP_MS, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
       const said = (error ? stderr || stdout : stdout).trim().split("\n").pop()?.slice(0, 400) ?? "";
       resolve(error ? { ok: false, status: 502, error: said || "Couldn't hang up." } : { ok: true, message: said || "Hung up." });
     });

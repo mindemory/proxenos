@@ -52,6 +52,16 @@ def test_without_an_env_the_address_goes_to_the_settings_file(monkeypatch):
     assert settings == {"remote_host": "my-mac.tail1234.ts.net", "remote_user": "me@example.org"}
 
 
+def test_serves_the_port_the_desktop_app_picked(monkeypatch):
+    monkeypatch.setattr(phone.shutil, "which", lambda name: "/usr/local/bin/tailscale")
+    monkeypatch.setenv("PROXENOS_PORT", "51234")
+    run, calls = tailscale(lambda c, k: SimpleNamespace(returncode=0, stderr=""))
+
+    phone.setup(run)
+
+    assert calls[1] == ["tailscale", "serve", "--bg", "http://127.0.0.1:51234"]
+
+
 def test_https_off_for_the_tailnet_says_where_to_turn_it_on(tmp_path, monkeypatch):
     monkeypatch.setattr(phone.shutil, "which", lambda name: "/usr/local/bin/tailscale")
 

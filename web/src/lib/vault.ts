@@ -9,7 +9,7 @@
 // Raw source data is never parsed here: the status view only looks at file
 // names, modification times and newline counts.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess, type ExecFileException, type SpawnOptions } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants as fsConstants, createReadStream, promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
@@ -91,12 +91,17 @@ import {
   WATCH_ACTIONS,
 } from "./types";
 
-export const REPO_ROOT = path.resolve(process.cwd(), "..");
+/** The repo: its .env is read, and the `proxenos` command runs from it. The folder above web/, or
+ * PROXENOS_HOME when that's set: the desktop app sets it to its resources, which hold the page as
+ * web/ the same way but where the page's server runs from a folder of its own. */
+export const REPO_ROOT = process.env.PROXENOS_HOME?.trim()
+  ? path.resolve(process.env.PROXENOS_HOME.trim())
+  : path.resolve(process.cwd(), "..");
 
 /** How the page runs the `proxenos` command: from the repo, with no console window flashing up
  * on Windows, and with Python reading and writing UTF-8 there, where its default is still the
  * old code page and a name with an accent would come out mangled. */
-export function runOptions(): { cwd: string; windowsHide: boolean; env: NodeJS.ProcessEnv; encoding: "utf8" } {
+function runOptions(): { cwd: string; windowsHide: boolean; env: NodeJS.ProcessEnv; encoding: "utf8" } {
   return { cwd: REPO_ROOT, windowsHide: true, env: { ...process.env, PYTHONUTF8: "1" }, encoding: "utf8" };
 }
 
@@ -621,7 +626,9 @@ interface SourceDir {
 
 /** The folders the status view reports on, in display order. */
 async function sourceDirs(raw: string): Promise<{ dirs: SourceDir[]; missing: string[] }> {
-  const dirs: SourceDir[] = CORE_SOURCES.map((s) => ({ id: s, kind: s, dir: path.join(raw, s) }));
+  // turbopackIgnore: the vault is found at run time, so the build doesn't copy all of web/ into
+  // the standalone server for these.
+  const dirs: SourceDir[] = CORE_SOURCES.map((s) => ({ id: s, kind: s, dir: path.join(/*turbopackIgnore: true*/ raw, s) }));
 
   const accounts = await subdirs(path.join(raw, "email"));
   if (accounts.length === 0) dirs.push({ id: "email", kind: "email", dir: path.join(raw, "email") });
@@ -642,7 +649,7 @@ async function sourceDirs(raw: string): Promise<{ dirs: SourceDir[]; missing: st
   // raw/<source>/<stream>/YYYY-MM.jsonl: one row per source, newest month summed across streams.
   const missing: string[] = [];
   for (const s of OPTIONAL_SOURCES) {
-    const dir = path.join(raw, s);
+    const dir = path.join(/*turbopackIgnore: true*/ raw, s);
     if (await isDir(dir)) dirs.push({ id: s, kind: s, dir });
     else missing.push(s);
   }
@@ -1265,10 +1272,10 @@ export async function getJournal(date?: string | null): Promise<JournalResponse>
 
 /** Write today's journal with `proxenos clone journal --date today`, a minute or two with a local model. */
 export async function writeJournalToday(): Promise<{ ok: boolean; message: string }> {
-  const bin = await proxenosBin();
-  if (!bin) return { ok: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
+  const cli = await proxenos();
+  if (!cli) return { ok: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
   return new Promise((resolve) => {
-    execFile(bin, ["clone", "journal", "--date", "today"], { ...runOptions(), timeout: 5 * 60_000 }, (error, stdout) => {
+    cli.exec(["clone", "journal", "--date", "today"], { timeout: 5 * 60_000 }, (error, stdout) => {
       if (error) resolve({ ok: false, message: error.killed ? "It took too long." : "It failed." });
       else resolve({ ok: true, message: stdout.trim().split("\n").pop() ?? "" });
     });
@@ -1370,22 +1377,53 @@ export async function editPeople(
 const REBUILD_MS = 120_000;
 let rebuilding: Promise<unknown> = Promise.resolve();
 
-/** The `proxenos` command: PROXENOS_BIN (environment, .env or settings), else the first `proxenos` on PATH. */
-export async function proxenosBin(): Promise<string | null> {
+type Done = (error: ExecFileException | null, stdout: string, stderr: string) => void;
+
+/** The `proxenos` command, ready to run the one way the page runs it (runOptions). */
+export interface Proxenos {
+  /** `proxenos <args>` through execFile, its output as text. */
+  exec(args: string[], options: { timeout: number; maxBuffer?: number }, done: Done): ChildProcess;
+  /** `proxenos <args>` through spawn, for a run that outlives the request. */
+  spawn(args: string[], options: Pick<SpawnOptions, "detached" | "stdio">): ChildProcess;
+}
+
+/**
+ * The one place the page finds the `proxenos` command: `PROXENOS_PYTHON -m proxenos` when that
+ * names a Python (the desktop app's own, whose installed scripts can't move with it), else
+ * proxenosBin(). Null when neither is there.
+ */
+export async function proxenos(): Promise<Proxenos | null> {
+  const python = process.env.PROXENOS_PYTHON?.trim();
+  const file = python ? await runnable(expandHome(python)) : await proxenosBin();
+  if (!file) return null;
+  const lead = python ? ["-m", "proxenos"] : [];
+  return {
+    exec: (args, options, done) => execFile(file, [...lead, ...args], { ...runOptions(), ...options }, done),
+    spawn: (args, options) => spawn(file, [...lead, ...args], { ...runOptions(), ...options }),
+  };
+}
+
+/** PROXENOS_BIN (environment, .env or settings), else the first `proxenos` on PATH. */
+async function proxenosBin(): Promise<string | null> {
   const set = setting("BIN");
   // On Windows, pip makes proxenos.exe, and a conda env keeps it in Scripts rather than bin.
   const windows = process.platform === "win32";
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   if (process.env.CONDA_PREFIX) dirs.push(path.join(process.env.CONDA_PREFIX, windows ? "Scripts" : "bin"));
   for (const candidate of set ? [expandHome(set)] : dirs.map((d) => path.join(d, windows ? "proxenos.exe" : "proxenos"))) {
-    try {
-      await fs.access(candidate, fsConstants.X_OK);
-      return candidate;
-    } catch {
-      // Not here.
-    }
+    if (await runnable(candidate)) return candidate;
   }
   return null;
+}
+
+/** `file`, when it's there and may be run; else null. */
+async function runnable(file: string): Promise<string | null> {
+  try {
+    await fs.access(file, fsConstants.X_OK);
+    return file;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1394,15 +1432,14 @@ export async function proxenosBin(): Promise<string | null> {
  */
 export function rebuildPeople(): Promise<PeopleEditResult> {
   const run = async (): Promise<PeopleEditResult> => {
-    const bin = await proxenosBin();
-    if (!bin) {
+    const cli = await proxenos();
+    if (!cli) {
       return { ok: false, saved: true, rebuilt: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
     }
     return new Promise((resolve) => {
-      execFile(
-        bin,
+      cli.exec(
         ["clone", "network", "--people-only"],
-        { ...runOptions(), timeout: REBUILD_MS, maxBuffer: 1024 * 1024 },
+        { timeout: REBUILD_MS, maxBuffer: 1024 * 1024 },
         (error, stdout) => {
           if (error) {
             const why = error.killed ? "it took too long" : "it failed";

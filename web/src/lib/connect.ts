@@ -13,7 +13,7 @@
 // reports them. So do the Errands page's errands ("errand") and their Sends and Drops ("send"), and
 // the Projects page's steps ("step") and the decisions on them ("decide").
 
-import { execFile, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 
 import { isAddress } from "./actions";
 import { NO_STORE, readLocalJson } from "./guard";
@@ -28,7 +28,7 @@ import type {
   SignInKind,
 } from "./types";
 import { CONNECT_JOB_KINDS } from "./types";
-import { nowIso, proxenosBin, runOptions, vaultInfo, vaultPath } from "./vault";
+import { nowIso, proxenos, vaultInfo, vaultPath } from "./vault";
 
 const STATUS_MS = 30_000;
 // A sign-in waits up to five minutes for the browser; a first read of WhatsApp can take a while;
@@ -132,10 +132,10 @@ function toPhone(raw: unknown): PhoneInfo {
 export async function getConnect(): Promise<ConnectResponse> {
   const vault = vaultPath();
   const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE };
-  const bin = await proxenosBin();
-  if (!bin) return { ...base, sources: [], error: NO_COMMAND };
+  const cli = await proxenos();
+  if (!cli) return { ...base, sources: [], error: NO_COMMAND };
   return new Promise((resolve) => {
-    execFile(bin, ["connect"], { ...runOptions(), timeout: STATUS_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    cli.exec(["connect"], { timeout: STATUS_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (error) {
         const why = lastLine(stderr) || (error.killed ? "it took too long" : "it failed");
         resolve({ ...base, sources: [], error: `proxenos connect didn't answer: ${why}` });
@@ -232,11 +232,11 @@ export async function startJob(
   const secret = stdin?.trim() ?? "";
   const hide = (text: string) => (secret ? text.split(secret).join("[hidden]") : text);
 
-  const bin = await proxenosBin();
-  if (!bin) finish("failed", NO_COMMAND);
+  const cli = await proxenos();
+  if (!cli) finish("failed", NO_COMMAND);
   else if (entry.stopping) finish("stopped", "Stopped.");
   else {
-    entry.child = execFile(bin, args, { ...runOptions(), timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    entry.child = cli.exec(args, { timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
       if (entry.stopping) finish("stopped", "Stopped.");
       else if (!error) finish("done", lastLine(hide(stdout)));
       else if (error.killed) finish("failed", "It took too long and was stopped.");

@@ -6,12 +6,11 @@
 // from here), and the command never prints one back. Its answer is read field by field, so
 // nothing else in it reaches the page.
 
-import { execFile } from "node:child_process";
 
 import { lastLine, NO_COMMAND } from "./connect";
 import type { SecretState, SettingKey, SettingOrigin, SettingValue, SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
 import { SETTING_KEYS } from "./types";
-import { proxenosBin, runOptions, setting } from "./vault";
+import { proxenos, setting } from "./vault";
 
 // Checking a key is one request to Anthropic; everything else answers at once.
 const SETUP_MS = 45_000;
@@ -90,14 +89,13 @@ function toStatus(raw: unknown): SetupStatus | null {
 
 /** Run `proxenos setup [args]` with `stdin`, and parse what it prints. A secret in stdin is blanked from any error. */
 async function run(args: string[], stdin: string | null, secret: string | null): Promise<{ answer: unknown } | { error: string }> {
-  const bin = await proxenosBin();
-  if (!bin) return { error: NO_COMMAND };
+  const cli = await proxenos();
+  if (!cli) return { error: NO_COMMAND };
   const hide = (text: string) => (secret ? text.split(secret).join("[hidden]") : text);
   return new Promise((resolve) => {
-    const child = execFile(
-      bin,
+    const child = cli.exec(
       ["setup", ...args],
-      { ...runOptions(), timeout: SETUP_MS, maxBuffer: MAX_OUTPUT },
+      { timeout: SETUP_MS, maxBuffer: MAX_OUTPUT },
       (error, stdout, stderr) => {
         if (error) {
           const why = error.killed ? "it took too long" : lastLine(hide(stderr)) || "it failed";

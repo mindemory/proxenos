@@ -2,10 +2,10 @@
 
 Tailscale Serve gives this Mac a private HTTPS address on the user's tailnet (the devices signed
 in to their Tailscale account, and no one else's) and passes requests to it on to the page at
-127.0.0.1:4747, saying which Tailscale login is asking. This turns that on and saves the address
-as PROXENOS_REMOTE_HOST and the user's login as PROXENOS_REMOTE_USER, where settings are kept (.env
-from source, else the settings file); the page then lets in requests to that address from that
-login, and no others. Nothing is opened to the internet.
+127.0.0.1:4747 (or PROXENOS_PORT), saying which Tailscale login is asking. This turns that on and
+saves the address as PROXENOS_REMOTE_HOST and the user's login as PROXENOS_REMOTE_USER, where
+settings are kept (.env from source, else the settings file); the page then lets in requests to
+that address from that login, and no others. Nothing is opened to the internet.
 """
 
 import json
@@ -39,7 +39,7 @@ def setup(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> s
 
     try:
         served = run(
-            ["tailscale", "serve", "--bg", f"http://127.0.0.1:{webapp.PORT}"],
+            ["tailscale", "serve", "--bg", f"http://127.0.0.1:{webapp.page_port()}"],
             capture_output=True,
             text=True,
             timeout=SERVE_WAIT,
