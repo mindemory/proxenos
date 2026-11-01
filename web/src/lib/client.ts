@@ -26,6 +26,7 @@ import type {
   OutboxRules,
   PeopleEdit,
   PeopleEditResult,
+  PrivacyResponse,
   Reaction,
   Skip,
   SuggestionView,
@@ -447,6 +448,12 @@ export function useJournal(date: string | null) {
     }
   }, [setData, setError]);
   return { data, error, writing, writeToday, clearError: () => setError(null) };
+}
+
+/** What stays here, what went to a model in the last 30 days, and what's read from elsewhere. Read-only. */
+export function usePrivacy() {
+  const { data, error } = useJson<PrivacyResponse>("/api/privacy");
+  return { data, error };
 }
 
 /** One week's picks of what to watch (null: the newest), what's saved, and the three marks. */

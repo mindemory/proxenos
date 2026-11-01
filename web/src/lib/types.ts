@@ -1266,3 +1266,103 @@ export interface CallsResponse {
   missing: string[];
   sheets: CallSheet[];
 }
+
+// ── Privacy ─────────────────────────────────────────────────────────────────
+//
+// From `proxenos privacy`: paths, names, addresses, counts and dates. Never a message, a prompt,
+// a token or a key.
+
+/** Where a model call ran. A line that doesn't say counts as Anthropic. */
+export type ModelWhere = "this computer" | "Anthropic";
+export const MODEL_WHERES: readonly ModelWhere[] = ["this computer", "Anthropic"];
+
+/** The vault's own folders, in the order the page lists them; the rest is "other". */
+export const VAULT_FOLDERS = ["raw", "memory", "clones", "self", "observations", "state", "other"] as const;
+export type VaultFolder = (typeof VAULT_FOLDERS)[number];
+
+/** Calls added up: how many, how many failed or went to Anthropic, and how much went in and came back. */
+export interface CallTotals {
+  calls: number;
+  failed: number;
+  hosted: number;
+  sentChars: number;
+  images: number;
+  answerChars: number;
+  /** Where the model counted them; a call it didn't count adds nothing. */
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/** One part of Proxenos's calls: `step` as the log names it, `part` as the page does (null when no part covers it). */
+export interface StepCalls extends CallTotals {
+  step: string;
+  part: string | null;
+}
+
+/** One line of the calls log: when, which part asked, the model, where it ran and how much, never the words. */
+export interface ModelCall {
+  at: string;
+  step: string;
+  model: string;
+  where: ModelWhere;
+  sentChars: number | null;
+  images: number | null;
+  answerChars: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  seconds: number | null;
+  ok: boolean;
+}
+
+/** What one part sends a model, in plain words, and the steps of the log it covers. */
+export interface PartSends {
+  part: string;
+  steps: string[];
+  sends: string;
+}
+
+/** A connected source, by its names and addresses. */
+export interface FetchedSource {
+  id: string;
+  how: ConnectHow;
+  lastRead: string | null;
+  accounts: { name: string; address: string }[];
+  workspaces: string[];
+}
+
+export interface PrivacyReport {
+  here: {
+    vault: { path: string; exists: boolean; bytes: number; folders: Record<VaultFolder, number>; cloud: "icloud" | "drive" | null };
+    /** Whether FileVault encrypts the disk; null off a Mac, or when it can't be told. */
+    filevault: boolean | null;
+    settingsFile: string;
+    secretStore: string;
+    /** The secrets that are set, by name, and where each is kept. */
+    secrets: { name: string; from: SettingOrigin | null }[];
+  };
+  sent: {
+    model: { name: string; kind: "local" | "api" | "none"; voice: string | null };
+    days: number;
+    since: string;
+    totals: CallTotals;
+    byWhere: Record<ModelWhere, CallTotals>;
+    /** Most calls first. */
+    byStep: StepCalls[];
+    /** The newest calls, newest first. */
+    recent: ModelCall[];
+    sends: PartSends[];
+  };
+  fetched: {
+    sources: FetchedSource[];
+    /** Whether links in chats waiting on a reply are read: whenever a model is set up. */
+    links: boolean;
+  };
+}
+
+export interface PrivacyResponse {
+  now: string;
+  vault: VaultInfo;
+  report: PrivacyReport | null;
+  /** Why the report couldn't be read, when it couldn't. */
+  error: string | null;
+}

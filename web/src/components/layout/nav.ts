@@ -17,6 +17,7 @@ import {
   Plug,
   Route,
   Rss,
+  ShieldCheck,
   SlidersHorizontal,
   UserRound,
   type LucideIcon,
@@ -42,6 +43,7 @@ export type View =
   | "profile"
   | "connect"
   | "settings"
+  | "privacy"
   | "status";
 
 export interface NavItem {
@@ -72,6 +74,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: UserRound, label: "Profile", id: "profile", group: "you" },
   { icon: Plug, label: "Connect", id: "connect", group: "you" },
   { icon: SlidersHorizontal, label: "Settings", id: "settings", group: "you" },
+  { icon: ShieldCheck, label: "Privacy", id: "privacy", group: "you" },
   { icon: Activity, label: "Status", id: "status", group: "you" },
 ];
 

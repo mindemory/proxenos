@@ -64,6 +64,7 @@ const Profile = dynamic(() => import("@/components/views/Profile").then((m) => m
 });
 const Connect = dynamic(() => import("@/components/views/Connect").then((m) => m.Connect), { loading: () => <StatusSkeleton /> });
 const Settings = dynamic(() => import("@/components/views/Settings").then((m) => m.Settings), { loading: () => <StatusSkeleton /> });
+const Privacy = dynamic(() => import("@/components/views/Privacy").then((m) => m.Privacy), { loading: () => <StatusSkeleton /> });
 const Status = dynamic(() => import("@/components/views/Status").then((m) => m.Status), { loading: () => <StatusSkeleton /> });
 
 const TABS: { id: Tab; label: string }[] = [
@@ -88,6 +89,7 @@ const COLUMN_VIEWS: readonly View[] = [
   "profile",
   "connect",
   "settings",
+  "privacy",
   "status",
 ];
 
@@ -226,6 +228,8 @@ export default function AppPage() {
         return <Connect />;
       case "settings":
         return <Settings />;
+      case "privacy":
+        return <Privacy />;
       case "status":
         return <Status />;
       default:

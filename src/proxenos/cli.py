@@ -27,6 +27,7 @@ from proxenos import (
     memory,
     observe,
     phone,
+    privacy,
     schedule,
     setup,
     vectors,
@@ -132,6 +133,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     forms.add_arguments(form)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
+    commands.add_parser(
+        "privacy", help="what stays here, what went to a model and what's read, as JSON"
+    )
     settings = commands.add_parser("setup", help="your settings and which secrets are set, as JSON")
     settings.add_argument(
         "--apply", action="store_true", help="make one change, read as JSON from stdin"
@@ -175,6 +179,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "connect":
         print(json.dumps(connect.report(vault_path())))  # vault_path also loads settings
+        return
+    if args.command == "privacy":
+        print(json.dumps(privacy.report(vault_path())))  # vault_path also loads settings
         return
     if args.command == "setup":  # works before there's a vault, and with one in the wrong place
         if not args.apply:

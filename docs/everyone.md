@@ -1,6 +1,6 @@
 # Proxenos for everyone
 
-Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. The first two pieces are built: the Connect page, and setup with settings and the Keychain in place of `.env` (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
+Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. Three pieces are built: the Connect page, setup with settings and the Keychain in place of `.env`, and the privacy screen, apart from Delete everything (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
 
 ## One download: a menu-bar app
 
@@ -72,12 +72,12 @@ Every step ends the same way: a first read in the background, its progress on th
 
 ## The privacy screen
 
-One screen with three lists, drawn from what the code does:
+*Built, apart from Delete everything* ([below](#the-privacy-screen-1)). One screen with three lists, drawn from what the code does:
 - **Stays on this computer:** the vault (raw data, notes, the self-model, drafts, the memory index), with its location and size, and the secrets in the Keychain.
 - **Sent to the model** (Anthropic, under your key): what each observer and clone sends, in plain words (the list in the README's [Privacy](../README.md#privacy) section), and the last 30 days of calls: when, which clone, how many tokens. *Built:* `llm.py` logs one line per call to `<vault>/state/model-calls.jsonl` (when, which part asked, the model, where it ran, characters and tokens in and out, seconds, whether it worked), never the words.
 - **Fetched from elsewhere:** the services you connected, read with your sign-in, and the pages linked in chats waiting on you (public hosts only).
 
-**Delete everything** sits at the bottom:
+**Delete everything** (not built yet) sits at the bottom:
 - It lists what it removes: the vault folder with its git history, every Proxenos item in the Keychain, the settings, logs and caches. It also revokes each sign-in where the service allows it (Google, Slack and Strava each have a revoke call).
 - You type `delete` to confirm. It's permanent: nothing goes to the Trash.
 - It says what it can't reach: your accounts' own data (your mail stays in Gmail), what was already sent to Anthropic (their retention applies), and backups of the vault, Time Machine included.
@@ -87,7 +87,7 @@ One screen with three lists, drawn from what the code does:
 
 1. **The Connect page** (built): every source's status, Gmail sign-in, Read WhatsApp now.
 2. **Settings and the Keychain** behind `config.env()`, the setup page and Settings (built).
-3. The privacy screen, the call log and delete everything.
+3. The privacy screen and the call log (built), and delete everything.
 4. More connect steps: downloads with drop zones, Slack and Strava sign-in, folders.
 5. The Electron shell, the bundled runtime, signing, notarization and updates.
 
@@ -107,3 +107,12 @@ One screen with three lists, drawn from what the code does:
 - **Saving:** `config.save_secret(name, value)` writes to `.env` when running from source with one, else to the Keychain, and only accepts Proxenos's secrets (`ANTHROPIC_API_KEY`, `GMAIL_*`, `GCALENDAR_*`, `MICROSOFT_*`, `SLACK_USER_TOKEN*`, `STRAVA_*`, `GOOGLE_CLIENT_*`, `BEEPER_ACCESS_TOKEN`). `config.save_setting` does the same for settings, with the settings file in place of the Keychain. Every `proxenos auth` sign-in and `proxenos phone` use them.
 - **`proxenos setup`** prints where things stand as JSON: the settings and where each comes from, the vault (whether it exists, whether a cloud syncs it), the model, Ollama's pulled models, and whether each secret is set and where. `proxenos setup --apply` makes one change read as JSON from stdin: settings (the vault folder is made, private, and refused inside the repo), an Anthropic key (checked by asking for the model it will use, which costs no tokens), a local model (checked against Ollama), or a secret replaced or removed.
 - **The page:** `/app` sends a first run (no name and no vault set anywhere) to `/setup`, which goes through the four steps above. The Settings view (the "You" group) changes the name, the vault, the model, the folders read on every sync, and each secret, which it shows only as set or not and where it's kept, with Replace and Remove. `GET` and `POST /api/setup` run `proxenos setup`; a key or token goes to it on stdin and nowhere else, and no answer holds one. The route answers only the page itself, as the others do: a loopback host, the same origin, and a JSON body.
+
+### The privacy screen
+
+- **`proxenos privacy`** (`privacy.py`) prints the screen as JSON, in three parts. It holds paths, names, addresses, counts and dates, never a message, a prompt, a token or a key: each call's line is copied field by field, a source by its names and addresses, a secret by its name.
+  - **Stays here:** the vault's path and size, by folder (raw, memory, clones, self, observations, state, and the rest); whether a cloud syncs it (setup's check); whether FileVault is on (`fdesetup status`, on a Mac only); and the secrets that are set, by name, with where each is kept.
+  - **Sent to a model:** the model and where it runs, and the last 30 days of the calls log (`llm.calls`), totalled by where each call ran and by the part that asked (calls, failures, characters and tokens in and out), with the newest 50 one by one. Beside them, what each part sends, in plain words: the README's Privacy list as data, with the parts of the log each covers, the one place the page reads it from.
+  - **Fetched from elsewhere:** the connected sources from `proxenos connect`, by name and address, and whether links in chats are read (whenever a model is set up, as replies are then drafted; public hosts only).
+- **The page:** the Privacy view (the "You" group) shows the three, a table of the month's calls by part and the newest calls. When every call ran here it says so: "Nothing went to a hosted model in the last 30 days." `GET /api/privacy` runs the command and reads its answer field by field; it answers only the page itself, as the other routes do.
+- **Not built:** Delete everything and `proxenos forget`.

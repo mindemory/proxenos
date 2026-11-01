@@ -92,11 +92,17 @@ def status() -> dict:
         "ollama": {"running": pulled is not None, "models": _chat_models(pulled or [])},
         "keychain": keychain.available(),
         "secret_store": keychain.store(),
-        "secrets": [
-            {"name": n, "set": n in held, "from": config.origin(n) if n in held else None}
-            for n in [*SECRETS, *(n for n in held if n not in SECRETS)]
-        ],
+        "secrets": secrets(),
     }
+
+
+def secrets() -> list[dict]:
+    """Each secret: whether it's set and where it comes from, by name. Never its value."""
+    held = config.secrets()
+    return [
+        {"name": n, "set": n in held, "from": config.origin(n) if n in held else None}
+        for n in [*SECRETS, *(n for n in held if n not in SECRETS)]
+    ]
 
 
 def needed() -> bool:
