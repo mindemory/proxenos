@@ -68,6 +68,11 @@ node_modules/
 .next/
 *.tsbuildinfo
 
+# ── The desktop app's build (desktop/build.sh) ───────────────────────────────
+/desktop/.cache/
+/desktop/resources/
+/desktop/dist/
+
 CLAUDE.local.md
 
 # ── OS / editors ─────────────────────────────────────────────────────────────
