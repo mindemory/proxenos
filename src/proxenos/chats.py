@@ -67,6 +67,21 @@ _BULK_TEXT = re.compile(
     r"view (this|it) in (a|your) browser|©|all rights reserved",
     re.IGNORECASE,
 )
+# An answer a system sends on its own, whoever's address it comes from: an auto-reply, a mailbox
+# no one reads, or a notice sent through a mass-mail service's links. And a receipt: thanks for writing, we got your form. Nobody waits on a reply to
+# either, unless the receipt also asks something.
+_AUTO_REPLY = re.compile(
+    r"\bthis is an automated\b|\bautomated (confirmation|response|reply|message|notification)\b|"
+    r"\b(do not|please do not|please don'?t) reply\b|"
+    r"\bnot (set[ -]?up|monitored) for (incoming|replies)\b|\b(mailbox|inbox) is not monitored\b|"
+    r"hubspotlinks|list-manage\.com|sendgrid\.net|constantcontact",
+    re.IGNORECASE,
+)
+_RECEIPT = re.compile(
+    r"\bthank you for (contacting|reaching out)\b|\bwe(?: have|'ve)? received your\b|"
+    r"\bthis is (a )?confirmation\b|\bconfirms that you\b|\backnowledge that we\b",
+    re.IGNORECASE,
+)
 # Asking without a question mark: "let me know", "would love to", "open to a call".
 _REQUEST = re.compile(
     r"\blet me know\b|\bwould love to\b|\b(open|available|free) (to|for) (a )?"
@@ -205,6 +220,11 @@ def _first(
     return bool(names & set(_WORD.findall(text.casefold()))) and _asks(text)
 
 
+def _automatic(text: str) -> bool:
+    """An auto-reply, or a receipt that asks nothing."""
+    return bool(_AUTO_REPLY.search(text)) or (bool(_RECEIPT.search(text)) and not _asks(text))
+
+
 def _asks(text: str) -> bool:
     """Whether a text asks something: a question mark outside its links, or a request."""
     for link in links.find(text):
@@ -307,7 +327,10 @@ def _email(r: dict, me: set[str]) -> dict | None:
     else:
         peers = [a.lower() for a in _ADDRESS.findall(str(r.get("from_address") or ""))]
     sender = r.get("from_name") or r.get("from_address")
-    automated = any(_AUTOMATED.search(a.split("@")[0]) for a in peers) and not mine
+    automated = not mine and (
+        any(_AUTOMATED.search(a.split("@")[0]) for a in peers)
+        or _automatic(str(r.get("body_new") or r.get("body") or ""))
+    )
     everyone = {*to, *(a.lower() for a in _ADDRESS.findall(str(r.get("from_address") or "")))}
     subject = " ".join(_REPLY_PREFIX.sub("", str(r.get("subject") or "")).lower().split())
     thread = r.get("gmail_thread") or (

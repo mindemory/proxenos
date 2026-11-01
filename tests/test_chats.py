@@ -146,6 +146,31 @@ def test_an_email_waits_when_addressed_to_the_user_by_someone_they_write_to(tmp_
     assert chat["own"] == ["Hi Ana, sure."]  # what they wrote Ana in another thread
 
 
+def test_auto_replies_receipts_and_mass_mail_never_wait(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+
+    def thread(n, sender, answer):
+        asked = mail(f"t{n}", "2026-03-08T09:00:00Z", "me@x.org", [sender], "Hi, a question.", True)
+        return [asked, mail(f"t{n}", "2026-03-09T09:00:00Z", sender, ["me@x.org"], answer)]
+
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            *thread(1, "it@x.org", "Thank you for contacting IT. This is an automated reply."),
+            *thread(2, "hr@x.org", "This address is not set-up for incoming mail. Write to us."),
+            *thread(3, "clinic@x.org", "Hi, we have received your intake form. See you Monday."),
+            *thread(
+                4, "boss@x.org", "Review and elect your benefits: https://x.hubspotlinks.com/a"
+            ),
+            *thread(5, "ana@x.org", "Thank you for reaching out! Could you send your CV?"),
+        ],
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert chat["chat"] == "t5"  # a person thanks them and asks something
+
+
 def test_a_first_email_from_someone_new_waits_when_it_is_personal_and_asks(tmp_path, monkeypatch):
     monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
     monkeypatch.setenv("PROXENOS_NAME", "Tess Example")

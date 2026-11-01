@@ -132,6 +132,10 @@ plain sentences (a deadline and how far off it is, what was already done, what w
 - asks: for a reply, each thing only {person} can decide or knows that the draft depends on, \
 as a short question, at most three; leave a [placeholder] in the body for each. [] when there \
 is nothing to ask.
+- needed: for a reply, false when the conversation needs no answer from {person}: it ends on \
+thanks, an acknowledgement, a goodbye or a notice, or what it asks is already settled. Then \
+leave body "" and say why in found, in one sentence. true otherwise, and for anything that \
+isn't a reply.
 
 Rules:
 - Write as {person} would, from their voice and interests below. Never say it was drafted \
@@ -151,8 +155,9 @@ _SCHEMA = {
         "body": {"type": "string"},
         "found": {"type": "string"},
         "asks": {"type": "array", "items": {"type": "string"}},
+        "needed": {"type": "boolean"},
     },
-    "required": ["title", "kind", "channel", "to", "body"],
+    "required": ["title", "kind", "channel", "to", "body", "needed"],
     "additionalProperties": False,
 }
 
@@ -216,7 +221,7 @@ def work(
     system = _system(vault / "self", now) + _shared(out, now)
     person = env("NAME", "the person")
     own = voice.Writing(vault)  # read once, when the first draft needs it
-    written = failed = 0
+    written = failed = unneeded = 0
     for job in queue[:limit]:
         pages = _pages([read(url) for url in job.get("links", [])[:PAGES]])
         try:
@@ -227,9 +232,17 @@ def work(
                 prompt += f"\n\n{who}" if (who := research.person(vault, name, person)) else ""
             prompt += job.get("ask", "")
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
-            if chat and llm.voice_on():
-                answer["body"] = _voiced(chat, person) or answer["body"]
-            draft = _draft(job, answer, now)
+            if chat and answer.get("needed") is False:
+                # No answer needed: filed as overtaken, with why, so it's never drafted again
+                # and the page can still bring it back.
+                why = _one_line(answer.get("found")) or "No reply needed."
+                draft = _draft(job, answer | {"body": "(No reply needed.)", "found": ""}, now)
+                draft |= {"status": "overtaken", "overtaken": _clip(why, FOUND_CHARS)}
+                unneeded += 1
+            else:
+                if chat and llm.voice_on():
+                    answer["body"] = _voiced(chat, person) or answer["body"]
+                draft = _draft(job, answer, now)
         except Exception as e:  # noqa: BLE001 - one failed draft must not cost the others
             failed += 1
             print(f"work: {job['id']} failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
@@ -238,7 +251,8 @@ def work(
         _write(found[0] if found else out / f"{job['id']}.md", render(draft))
         written += 1
     return {
-        "drafts_written": written,
+        "drafts_written": written - unneeded,
+        **({"replies_not_needed": unneeded} if unneeded else {}),
         "drafts_failed": failed,
         "skipped_as_yours": mine,
         "skipped_already_reached": already,
@@ -273,7 +287,8 @@ def render(draft: dict) -> str:
         if key in ("title", "to"):
             value = json.dumps(value, ensure_ascii=False)
         lines.append(f"{key}: {value}")
-    for key in ("found", "asks", "thread"):  # a reply's research and chat, when it has them
+    # A reply's research and chat when it has them, and why it isn't needed when it isn't.
+    for key in ("found", "asks", "thread", "overtaken"):
         if draft.get(key):
             lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
     return "\n".join([*lines, "---", "", draft["body"].strip(), ""])

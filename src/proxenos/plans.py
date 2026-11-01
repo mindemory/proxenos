@@ -1,4 +1,4 @@
-"""The plans on the user's task list, as a calendar they subscribe to.
+"""The plans on the user's task list, on their calendar.
 
 A task with a set time (a meeting, a call, a visit: "at" on clones/tasks/tasks.json, which the
 tasks clone reads from their messages) becomes an event in clones/tasks/plans.ics, unless it's
@@ -13,13 +13,27 @@ calendar already when an event in raw/calendar/ is on the same day, within NEAR 
 both have one, and shares a word with it (its title's or the other person's), so the visit they
 put in themselves isn't shown twice. Subscribed calendars aren't read back in (maccalendar leaves
 them out), so this one never counts as theirs.
+
+A subscription only reaches the Calendar apps that subscribe, and Google Calendar can't fetch a
+file on this Mac. So with PROXENOS_PLANS_CALENDAR naming one of the user's calendars in the Mac's
+Calendar app (their Google one, say "me@gmail.com"), the same events also go there (`push`),
+through the Calendar app, which syncs them to the account like any event they add. Each plan's
+event is made once, made again when the plan moves, and deleted once it's done or gone. Only the
+events it made are ever changed or deleted: their ids are kept in clones/tasks/pushed.json, and
+when the calendar is read back in, those don't count as the user's own. Off until it's set, and
+only on a Mac; macOS asks once whether Proxenos may use Calendar.
 """
 
+import hashlib
 import json
 import re
-from collections.abc import Iterable, Iterator
+import subprocess
+import sys
+from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+
+from proxenos.config import env
 
 MINUTES = 60
 NEAR = timedelta(hours=2)
@@ -33,13 +47,56 @@ _COMMON = {
     *("from", "have", "join", "lunch", "meet", "meeting", "the", "video", "visit", "with", "zoom"),
 }
 _SOURCES = {"whatsapp": "WhatsApp", "slack": "Slack", "email": "email"}
+PUSHED = "pushed.json"  # in clones/tasks/: each plan's event on the user's calendar, by task id
+OSA_SECONDS = 120  # for one change to the Calendar app, which can be slow on a long calendar
+# One change to the Calendar app: delete the event with the given uid, if any, then, unless the
+# action is "delete", make the new one and say its uid. Dates come as "YYYY MM DD HH MM".
+_SCRIPT = """\
+on run argv
+  set {action, calName, oldUid} to {item 1 of argv, item 2 of argv, item 3 of argv}
+  tell application "Calendar"
+    set cal to first calendar whose name is calName
+    if oldUid is not "" then
+      try
+        delete (every event of cal whose uid is oldUid)
+      end try
+    end if
+    if action is "delete" then return ""
+    set props to {summary:item 4 of argv, location:item 5 of argv, description:item 6 of argv}
+    set props to props & {start date:my stamp(item 8 of argv), end date:my stamp(item 9 of argv)}
+    if item 7 of argv is "1" then set props to props & {allday event:true}
+    set made to make new event at end of events of cal with properties props
+    return uid of made
+  end tell
+end run
+
+on stamp(text_)
+  set {y, m, d, hh, mm} to words of text_
+  set t to current date
+  set day of t to 1
+  set year of t to (y as integer)
+  set month of t to (m as integer)
+  set day of t to (d as integer)
+  set hours of t to (hh as integer)
+  set minutes of t to (mm as integer)
+  set seconds of t to 0
+  return t
+end stamp
+"""
 
 
-def write(vault: Path, tasks: Iterable[dict], now: datetime | None = None) -> int:
-    """Write clones/tasks/plans.ics from the tasks, and say how many events it holds."""
+def write(
+    vault: Path,
+    tasks: Iterable[dict],
+    now: datetime | None = None,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> int:
+    """Write clones/tasks/plans.ics from the tasks, put the same events on the calendar
+    PROXENOS_PLANS_CALENDAR names, and say how many events there are."""
     now = now or datetime.now(UTC)
     today = now.astimezone().date()
-    theirs = list(_calendar(vault, today - timedelta(days=PAST_DAYS)))
+    made = {p["uid"] for p in _pushed(vault).values()}  # Proxenos's own, not the user's
+    theirs = list(_calendar(vault, today - timedelta(days=PAST_DAYS), made))
     events = []
     for task in tasks:
         when = at(task.get("at"))
@@ -54,7 +111,96 @@ def write(vault: Path, tasks: Iterable[dict], now: datetime | None = None) -> in
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(ics(events, now), encoding="utf-8", newline="")
     tmp.replace(path)
+    if (calendar := env("PLANS_CALENDAR").strip()) and sys.platform == "darwin":
+        try:
+            push(vault, events, calendar, run)
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
+            print(f"plans: couldn't update {calendar} ({' '.join(str(e).split())[:200]})")
     return len(events)
+
+
+def push(
+    vault: Path,
+    events: list[tuple[dict, datetime | date]],
+    calendar: str,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, int]:
+    """Bring `calendar` in the Calendar app up to date with the events: each new or changed plan
+    made there (a changed one deleted and made again), and each event made for a plan that's
+    gone deleted. What it did, by count."""
+    path = vault / "clones" / "tasks" / PUSHED
+    pushed = _pushed(vault)
+    done = {"added": 0, "moved": 0, "removed": 0}
+    for task, when in events:
+        fields = _fields(task, when)
+        mark = hashlib.sha1(json.dumps([calendar, *fields]).encode()).hexdigest()[:12]
+        old = pushed.get(task["id"])
+        if old and old["mark"] == mark:
+            continue
+        stale = old["uid"] if old and old["calendar"] == calendar else ""
+        uid = _osa(run, "make", calendar, stale, *fields)
+        if not uid:
+            raise ValueError(f"the Calendar app made no event for {task['title']!r}")
+        pushed[task["id"]] = {"uid": uid, "calendar": calendar, "mark": mark}
+        done["moved" if old else "added"] += 1
+        _save(path, pushed)  # after each, so an interrupted run never forgets an event it made
+    current = {task["id"] for task, _ in events}
+    for key in [k for k in pushed if k not in current]:
+        _osa(run, "delete", pushed[key]["calendar"], pushed[key]["uid"])
+        del pushed[key]
+        done["removed"] += 1
+        _save(path, pushed)
+    return done
+
+
+def _fields(task: dict, when: datetime | date) -> list[str]:
+    """An event as the script takes it: title, place, notes, all day, start and end."""
+    if isinstance(when, datetime):
+        start, end, whole = when, when + timedelta(minutes=MINUTES), "0"
+    else:
+        start = datetime(when.year, when.month, when.day)
+        end, whole = start + timedelta(days=1), "1"
+    where = f"From {_SOURCES.get(task.get('source'), 'your messages')}"
+    if task.get("with"):
+        where += f", with {task['with']}"
+    notes = "\n\n".join(p for p in (task.get("detail") or "", f"{where}. Added by Proxenos.") if p)
+    stamp = "%Y %m %d %H %M"
+    return [
+        task["title"],
+        task.get("place") or "",
+        notes,
+        whole,
+        f"{start:{stamp}}",
+        f"{end:{stamp}}",
+    ]
+
+
+def _osa(run: Callable[..., subprocess.CompletedProcess], *args: str) -> str:
+    done = run(
+        ["osascript", "-", *args],
+        input=_SCRIPT,
+        capture_output=True,
+        text=True,
+        timeout=OSA_SECONDS,
+        check=False,
+    )
+    if done.returncode:
+        raise ValueError(done.stderr.strip() or f"osascript exited {done.returncode}")
+    return done.stdout.strip()
+
+
+def _pushed(vault: Path) -> dict[str, dict]:
+    try:
+        found = json.loads((vault / "clones" / "tasks" / PUSHED).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def _save(path: Path, pushed: dict) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(pushed, indent=1) + "\n", encoding="utf-8")
+    tmp.replace(path)
 
 
 def at(text: object) -> datetime | date | None:
@@ -114,8 +260,9 @@ def ics(events: list[tuple[dict, datetime | date]], now: datetime) -> str:
     return "".join(_fold(line) + "\r\n" for line in lines)
 
 
-def _calendar(vault: Path, since: date) -> Iterator[dict]:
-    """The user's own events from `since` on, as {day, time (None all day), words}."""
+def _calendar(vault: Path, since: date, made: set[str] = frozenset()) -> Iterator[dict]:
+    """The user's own events from `since` on, as {day, time (None all day), words}: not those
+    whose ids are in `made`, the events push made."""
     first = f"{since:%Y-%m}.jsonl"
     for path in sorted((vault / "raw" / "calendar").glob("*/*.jsonl")):
         if path.name < first or path.parent.name.startswith("birthdays"):
@@ -125,6 +272,9 @@ def _calendar(vault: Path, since: date) -> Iterator[dict]:
                 event = json.loads(line)
                 start = str(event["start"])
             except (ValueError, KeyError, TypeError):
+                continue
+            mine = "Added by Proxenos." in str(event.get("description") or "")
+            if mine or str(event.get("id", "")).split("/")[0] in made:
                 continue
             if event.get("all_day") or len(start) == 10:
                 when, time = _day(start), None

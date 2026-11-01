@@ -1,6 +1,7 @@
 """The plans calendar from a synthetic task list. No network, no model, no real data."""
 
 import json
+import subprocess
 from datetime import UTC, date, datetime
 
 from proxenos import plans
@@ -91,3 +92,70 @@ def test_at_reads_a_time_or_a_day_and_nothing_else():
     assert plans.at("2026-03-11") == date(2026, 3, 11)
     assert plans.at("2026-02-30") is None
     assert plans.at("noon") is None and plans.at(None) is None
+
+
+class Calendar:
+    """Stands in for osascript and the Calendar app: keeps the events made, by uid."""
+
+    def __init__(self):
+        self.events, self.calls, self.n = {}, [], 0
+
+    def __call__(self, command, *, input, **kw):
+        action, calendar, old, *fields = command[2:]
+        self.calls.append((action, calendar, old))
+        self.events.pop(old, None)
+        uid = ""
+        if action == "make":
+            self.n += 1
+            uid = f"UID-{self.n}"
+            self.events[uid] = fields
+        return subprocess.CompletedProcess(command, 0, stdout=uid + "\n", stderr="")
+
+
+def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@gmail.com")
+    monkeypatch.setattr(plans.sys, "platform", "darwin")
+    cal = Calendar()
+    lunch = task("lunch1", "Lunch with Kim", "2026-03-11T12:00", place="Worthy", with_="Kim")
+    hike = task("hike1", "Hike", "2026-03-14")
+
+    assert plans.write(vault, [lunch, hike], NOW, run=cal) == 2
+    assert sorted(cal.events) == ["UID-1", "UID-2"]
+    title, place, notes, whole, start, end = cal.events["UID-1"]
+    assert (title, place, whole, start, end) == (
+        "Lunch with Kim",
+        "Worthy",
+        "0",
+        "2026 03 11 12 00",
+        "2026 03 11 13 00",
+    )
+    assert notes.endswith("From WhatsApp, with Kim. Added by Proxenos.")
+    assert cal.events["UID-2"][3:] == ["1", "2026 03 14 00 00", "2026 03 15 00 00"]
+
+    # The calendar is read back in with the sync: its own events don't count as mine.
+    write_events(
+        vault,
+        "me-gmail-com",
+        "2026-03",
+        [{"id": "UID-1", "start": local("2026-03-11T12:00:00"), "summary": "Lunch with Kim"}],
+    )
+    plans.write(vault, [lunch, hike], NOW, run=cal)
+    assert len(cal.calls) == 2  # nothing changed, so nothing touched
+
+    moved = lunch | {"at": "2026-03-11T13:00"}
+    plans.write(vault, [moved], NOW, run=cal)  # the lunch moved, the hike is off
+    assert sorted(cal.events) == ["UID-3"] and cal.events["UID-3"][4] == "2026 03 11 13 00"
+    assert ("make", "me@gmail.com", "UID-1") in cal.calls  # the old one deleted first
+    assert ("delete", "me@gmail.com", "UID-2") in cal.calls
+    pushed = json.loads((vault / "clones" / "tasks" / "pushed.json").read_text())
+    assert list(pushed) == ["lunch1"] and pushed["lunch1"]["uid"] == "UID-3"
+
+
+def test_without_a_calendar_named_nothing_is_touched(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROXENOS_PLANS_CALENDAR", raising=False)
+    plans.write(tmp_path, [task("x", "Lunch", "2026-03-11T12:00")], NOW, run=untouched)
+
+
+def untouched(*a, **kw):
+    raise AssertionError("the Calendar app was called")

@@ -28,11 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 860),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "Proxenos"
         // Closing only hides it, so the Dock icon can bring it back (a released window crashed the app).
         window.isReleasedWhenClosed = false
+        // The page names itself, so the title bar shows only the window's buttons, in the page's
+        // own dark, above the page rather than over its top.
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0.055, green: 0.063, blue: 0.075, alpha: 1)
         window.contentView = web

@@ -268,6 +268,7 @@ def test_the_model_writes_as_me_from_the_self_model(tmp_path, model):
         "body",
         "found",
         "asks",
+        "needed",
     }
     for text in ("Tess studies spirals.", "Short, warm", "Spirals (high)."):
         assert text in call["system"]
@@ -543,6 +544,29 @@ def test_a_sync_drafts_only_the_replies_not_drafted_yet(tmp_path, model):
     assert len(model.calls) == 1  # nothing new waiting, so no model call
     assert "A chat waiting for their reply" in model.calls[0]["prompt"]
     assert all(key.startswith("reply-") for key in drafts(vault))  # no tasks, ideas or notes
+
+
+def test_a_reply_nobody_needs_is_filed_away_with_why_and_not_drafted_again(
+    tmp_path, model, monkeypatch
+):
+    vault = chat_vault(tmp_path)
+
+    def no_reply(prompt, **kw):
+        answer = model(prompt, **kw)
+        if "keep" in answer or "searches" in answer:
+            return answer  # the research rounds, as they were
+        return answer | {"needed": False, "body": "", "found": "Asha only said thanks."}
+
+    monkeypatch.setattr(llm, "ask", no_reply)
+    stats = work.replies(vault, now=NOW, read=FakePages())
+    again = work.replies(vault, now=NOW, read=FakePages())
+
+    assert (stats["drafts_written"], stats["replies_not_needed"]) == (0, 1)
+    assert "replies_not_needed" not in again  # filed away: never asked about again
+    (path,) = drafts(vault).values()
+    fields = front(path)
+    assert (fields["status"], fields["overtaken"]) == ("overtaken", "Asha only said thanks.")
+    assert "found" not in fields and fields["thread"]
 
 
 def test_the_command_line_drafts_only_new_replies_and_counts_them(
