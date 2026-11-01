@@ -3,10 +3,17 @@
 Off until the user switches it on, and then only per app ("channel"), and only for an app whose
 replies have earned it: at least min_measured of them measured (fidelity.py) and, on average,
 min_closeness of each draft still in what the user then sent. A reply qualifies only when it is
-a draft nobody has touched, for one person (never a group), with no [placeholder] left and
-nothing it asks the user, and only while its chat is still waiting on exactly the messages it
-answers. A qualifying reply is queued at one sync and goes out at the next, so the user has
-until then (about 15 minutes) to cancel it on the page; at most daily_limit go out a day.
+a draft nobody has touched, for one person (never a group) who has heard from the user before
+(never someone new's first email), with no [placeholder] left and nothing it asks the user, and
+only while its chat is still waiting on exactly the messages it answers. A qualifying reply is
+queued at one sync and goes out at the next, so the user has until then (about 15 minutes) to
+cancel it on the page; at most daily_limit go out a day.
+
+Then, as it goes, it's checked the way a call's words are checked against its sheet: a reply
+with a link, an email address, a phone number or a run of DIGITS or more digits that's in
+neither the chat's messages nor the user's own earlier ones there is held, and so is an email
+reply to mail whose Reply-To isn't its From (a reply would go somewhere else) or that was read
+before Reply-To was kept. A held reply stays a draft for the user, and the log says why.
 
 How each app sends ("routes"): email through the Mail app (it replies in the thread, from the
 account the mail came to, as if the user pressed Reply); Instagram, Messenger, X and LinkedIn,
@@ -31,14 +38,19 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats
+from proxenos import chats, links
 from proxenos.clones import work
 from proxenos.ingest import beeper
 
 CHANNELS = ("email", "whatsapp", "slack", "instagram", "messenger", "x", "linkedin")
 _SOURCE_CHANNEL = {"facebook": "messenger", "twitter": "x"}  # a chat source by its channel
 WAIT = timedelta(minutes=10)  # queued now, sent at the first sync after this
+DIGITS = 6  # a run of digits this long is a number someone could act on: an account, a code
 _PLACEHOLDER = re.compile(r"\[[^\]\n]{1,80}\]")
+_WWW = re.compile(r"\bwww\.[^\s<>\"'(){}\[\]]+", re.IGNORECASE)  # a link without its https://
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# A phone number or another number, with the spaces, dots, dashes and brackets inside it.
+_NUMBER = re.compile(r"\+?\(?\d[\d ().-]*\d")
 DEFAULT_RULE = {"on": False, "min_closeness": 0.9, "min_measured": 5}
 DEMO = "DEMO"  # the file that marks a vault `proxenos demo` made up
 
@@ -72,15 +84,25 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
     log = _jsonl(folder / "log.jsonl")
     today = now.date().isoformat()
     sent_today = sum(1 for e in log if e.get("ok") and str(e.get("at", "")).startswith(today))
+    held = {e.get("draft_id") for e in log if e.get("held")}  # left for the user, logged once
     previous = _json(folder / "state.json") or {}
     replies = {r["id"]: r for r in _replies(vault, now)}  # the drafts that could go out now
+    stats = {"outbox_sent": 0, "outbox_failed": 0, "outbox_held": 0}
 
-    stats = {"outbox_sent": 0, "outbox_failed": 0}
+    def hold(draft: dict) -> None:
+        if draft["id"] not in held:
+            _log(folder, draft, routes[draft["channel"]], now, held=draft["held"])
+            held.add(draft["id"])
+            stats["outbox_held"] += 1
+
     queue = []
     for item in previous.get("queue", []):
         draft = replies.get(item.get("draft_id"))
         if item.get("draft_id") in cancelled or not draft or draft["channel"] not in allowed:
             continue  # cancelled, changed, answered, or no longer allowed: it doesn't go
+        if draft["held"]:  # checked again as it goes, against the chat as it is now
+            hold(draft)
+            continue
         if item.get("sends_at", "") > _iso(now):
             queue.append(item)
             continue
@@ -101,7 +123,11 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
 
     waiting = {item["draft_id"] for item in queue}
     for draft in replies.values():
-        if draft["channel"] in allowed and draft["id"] not in waiting | cancelled:
+        if draft["channel"] not in allowed or draft["id"] in waiting | cancelled | held:
+            continue
+        if draft["held"]:
+            hold(draft)
+        else:
             queue.append(
                 {
                     "draft_id": draft["id"],
@@ -144,8 +170,9 @@ def read_rules(path: Path) -> dict:
 
 
 def _replies(vault: Path, now: datetime) -> list[dict]:
-    """The reply drafts that could go out: nobody has touched them, they're for one person,
-    nothing is left to fill in or ask, and their chat still waits on what they answer."""
+    """The reply drafts that could go out: nobody has touched them, they're for one person
+    who isn't new, nothing is left to fill in or ask, and their chat still waits on what they
+    answer. Each says why it must be held instead (see _held), or None."""
     folder = vault / "clones" / "drafts"
     edited = work._latest(folder / "feedback.jsonl", "draft_id", ("edit",))
     current = {work.reply_key(c): c for c in chats.waiting(vault, now)}
@@ -161,6 +188,8 @@ def _replies(vault: Path, now: datetime) -> list[dict]:
             continue
         if chat["source"] == "slack" and "/" in chat["chat"].split("/", 1)[1]:
             continue  # a channel thread, not a direct message
+        if chat.get("first"):
+            continue  # someone new's first email: the user answers that one themselves
         found.append(
             {
                 "id": path.stem,
@@ -169,9 +198,45 @@ def _replies(vault: Path, now: datetime) -> list[dict]:
                 "to": fields.get("to", ""),
                 "thread": {"source": chat["source"], "chat": chat["chat"], "last": chat["id"]},
                 "text": body,
+                "held": _held(vault, chat, body),
             }
         )
     return found
+
+
+def _held(vault: Path, chat: dict, body: str) -> str | None:
+    """Why a reply mustn't go out on its own, or None. A link, an email address or a number in
+    it that the chat never had is one the model may have made up, and a model that makes up
+    where to go, whom to write or what to pay isn't the one to send it. And an email reply goes
+    where the mail it answers says replies go, so only where that's its sender."""
+    said = [m["text"] for m in [*chat["recent"], *chat["waiting"]]] + list(chat["own"])
+    folded = "\n".join(said).casefold()
+    for link in [*links.find(body), *(w.rstrip(".,;:!?*") for w in _WWW.findall(body))]:
+        if link.casefold() not in folded:
+            return f"it has a link the chat doesn't ({link})"
+    for address in _EMAIL.findall(body):
+        if address.casefold() not in folded:
+            return f"it has an email address the chat doesn't ({address})"
+    known = [re.sub(r"\D", "", n) for text in said for n in _NUMBER.findall(text)]
+    for number in _NUMBER.findall(body):
+        digits = re.sub(r"\D", "", number)
+        if len(digits) >= DIGITS and not any(digits in k for k in known):
+            return f"it has a number the chat doesn't ({number.strip()})"
+    if chat["source"] == "email":
+        answered = _answered(vault, chat)
+        if answered is None or "reply_to" not in answered:
+            return "the mail it answers was read before Proxenos kept its Reply-To; sync mail again"
+        sender = str(answered.get("from_address") or "").lower()
+        if any(str(a).lower() != sender for a in answered.get("reply_to") or []):
+            return "the mail it answers asks for replies to another address (Reply-To)"
+    return None
+
+
+def _answered(vault: Path, chat: dict) -> dict | None:
+    """The mail an email reply answers, the chat's newest message, from its month's files."""
+    month = chat["waiting"][-1]["ts"][:7]
+    paths = sorted((vault / "raw" / "email").glob(f"*/{month}.jsonl"))
+    return next((r for r in chats._records(paths) if str(r.get("id")) == chat["id"]), None)
 
 
 def _routes() -> dict[str, str | None]:
@@ -334,7 +399,18 @@ def _mark_sent(path: Path) -> None:
     _write(path, re.sub(r"(?m)^status:.*$", "status: sent", text, count=1))
 
 
-def _log(folder: Path, draft: dict, route: str, now: datetime, error: str | None = None) -> None:
+def _log(
+    folder: Path,
+    draft: dict,
+    route: str,
+    now: datetime,
+    error: str | None = None,
+    held: str | None = None,
+) -> None:
+    """One attempt in log.jsonl: sent, failed with its error, or held for the user with why
+    (which the page shows as its error)."""
+    if held:
+        error = f"Held for you to send: {held}"
     entry = {
         "draft_id": draft["id"],
         "channel": draft["channel"],
@@ -343,6 +419,7 @@ def _log(folder: Path, draft: dict, route: str, now: datetime, error: str | None
         "via": route,
         "ok": error is None,
         "error": error,
+        **({"held": held} if held else {}),
     }
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (folder / "log.jsonl").open("a", encoding="utf-8") as f:

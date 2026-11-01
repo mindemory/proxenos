@@ -35,6 +35,7 @@ Content-Type: text/html; charset=utf-8
 
 HTML_ONLY = """\
 From: Ravi <ravi@example.com>
+Reply-To: Lab Desk <Desk@Example.com>
 To: me@example.com
 Subject: Agenda
 Date: Sat, 01 Feb 2025 09:00:00 +0000
@@ -171,6 +172,7 @@ def test_multipart_alternative_prefers_plain_text_and_keeps_the_headers(tmp_path
     assert msg["gmail_thread"] == "1790000000000000001"
     assert (msg["body"], msg["body_new"]) == ("Lunch at noon?", "Lunch at noon?")
     assert (msg["in_reply_to"], msg["attachments"]) == (None, None)
+    assert "reply_to" in msg and msg["reply_to"] is None  # kept, as none
 
 
 def test_html_only_body_becomes_text_and_attachments_are_named(tmp_path):
@@ -178,6 +180,7 @@ def test_html_only_body_becomes_text_and_attachments_are_named(tmp_path):
 
     assert msg["body"] == "Agenda for Monday:\nData & models\nNext steps\nThanks,\nRavi"
     assert msg["attachments"] == ["agenda.pdf"]
+    assert msg["reply_to"] == ["desk@example.com"]
     assert msg["gmail_labels"] is None  # not a Takeout export
 
 

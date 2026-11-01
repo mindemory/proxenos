@@ -374,6 +374,7 @@ def _mail(
         "from_me": sender is None,
         "to": to or [mine],
         "cc": None,
+        "reply_to": None,
         "subject": subject,
         "in_reply_to": None,
         "attachments": attachments,

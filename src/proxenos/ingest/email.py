@@ -126,6 +126,9 @@ def _record(raw: bytes, account: str, me: set[str]) -> dict | None:
         "from_me": from_address in me,
         "to": [address for _, address in _addresses(msg, "To") if address] or None,
         "cc": [address for _, address in _addresses(msg, "Cc") if address] or None,
+        # Where a reply goes when it isn't From: the outbox sends nothing on its own to a
+        # Reply-To that differs. None when there's none.
+        "reply_to": [address for _, address in _addresses(msg, "Reply-To") if address] or None,
         "subject": subject,
         "in_reply_to": _message_id(_raw(msg, "In-Reply-To")),
         "gmail_labels": _labels(_header(msg, "X-Gmail-Labels")),

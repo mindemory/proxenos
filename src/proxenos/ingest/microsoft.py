@@ -70,8 +70,8 @@ MAX_WAIT = 60  # seconds, whatever Retry-After says
 
 _ENV = re.compile(r"MICROSOFT_([A-Z0-9_]+)")
 _MAIL_FIELDS = (
-    "internetMessageId,subject,from,toRecipients,ccRecipients,sentDateTime,receivedDateTime,"
-    "isDraft,parentFolderId,conversationId,body,internetMessageHeaders"
+    "internetMessageId,subject,from,toRecipients,ccRecipients,replyTo,sentDateTime,"
+    "receivedDateTime,isDraft,parentFolderId,conversationId,body,internetMessageHeaders"
 )
 _EVENT_FIELDS = (
     "iCalUId,type,subject,start,end,isAllDay,originalStart,originalStartTimeZone,location,"
@@ -407,6 +407,7 @@ def _message(m: dict, account: str, mine: set[str], paths: dict[str, str]) -> di
         "from_me": from_address in mine,
         "to": [a for _, a in _people(m.get("toRecipients"))] or None,
         "cc": [a for _, a in _people(m.get("ccRecipients"))] or None,
+        "reply_to": [a for _, a in _people(m.get("replyTo"))] or None,
         "subject": subject,
         "in_reply_to": email._message_id(headers.get("in-reply-to")),
         "gmail_labels": [folder] if folder else None,

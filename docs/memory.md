@@ -98,8 +98,13 @@ set on the Drafts page. It is off until you switch it on, and then only per app,
 an app whose replies have earned it: by default at least five measured, and on average nine
 tenths of each draft still in what you sent ([fidelity.py](../src/proxenos/fidelity.py)).
 
-- **Which replies:** a draft nobody touched, to one person (never a group), with no blank left
-  and nothing it asks you, while its chat still waits on exactly the messages it answers.
+- **Which replies:** a draft nobody touched, to one person (never a group) you've written to
+  before (never someone new's first email), with no blank left and nothing it asks you, while
+  its chat still waits on exactly the messages it answers.
+- **What holds one back:** a link, an email address, a phone number or a run of six or more
+  digits that's in neither the chat nor your own earlier messages there, or, for email, mail
+  whose Reply-To isn't its sender (or was read before Proxenos kept Reply-To). A held reply
+  stays a draft for you, and the log says why.
 - **When:** a reply is queued at one sync and goes out at the next, so you have about fifteen
   minutes to cancel it on the page. At most ten go out a day, or the limit you set.
 - **How:** email through the Mail app, as a reply in its thread from the account the mail came

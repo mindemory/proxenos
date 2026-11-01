@@ -60,6 +60,7 @@ def mail():
             "2026-10-01T09:00:00Z",
             folder="projects",
             ccRecipients=[person("Bo@Clinic.example")],
+            replyTo=[person("Desk@Clinic.example")],
             attachments=[{"name": "form.pdf"}, {"name": "map.png"}],
             internetMessageHeaders=[{"name": "List-Id", "value": "<news.clinic.example>"}],
         ),
@@ -256,6 +257,7 @@ def test_mail_comes_in_the_mbox_shape_from_every_folder_but_junk_trash_and_draft
     )
     assert not received["from_me"] and sent["from_me"]
     assert received["to"] == ["joe@work.example"] and received["cc"] == ["bo@clinic.example"]
+    assert received["reply_to"] == ["desk@clinic.example"] and sent["reply_to"] is None
     assert received["attachments"] == ["form.pdf", "map.png"] and sent["attachments"] is None
     assert received["bulk"] and not sent["bulk"]
     assert received["gmail_labels"] == ["Inbox/Projects"] and sent["gmail_labels"] == ["Sent Items"]
