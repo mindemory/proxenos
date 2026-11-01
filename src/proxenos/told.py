@@ -3,7 +3,7 @@
 Two kinds of note, written from the page's home view into state/told.jsonl, one line each
 ({at, text, always}):
 - a rule, kept until the user removes it ("always"): how everything drafted for them goes,
-  such as "Mom and Dad must never hear about my health";
+  such as "keep replies to my manager short";
 - a fact, true for now: something that changed and no message shows yet, such as "I'm not
   going to Tuesday's clinic visit". It counts for FACT_DAYS.
 Removing a note appends {at, forget: <the note's at>}, so the file only grows, as feedback does.

@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+import stat
 from datetime import UTC, date, datetime
 
 import pytest
@@ -86,7 +88,9 @@ def test_the_day_is_written_from_what_the_vault_already_holds(tmp_path, monkeypa
     monkeypatch.setattr(llm, "ask", ask)
     stats = journal.write(vault, DAY, NOW)
 
-    entry = json.loads((vault / "clones" / "journal" / "2026-03-10.json").read_text())
+    path = vault / "clones" / "journal" / "2026-03-10.json"
+    entry = json.loads(path.read_text())
+    assert os.name == "nt" or stat.S_IMODE(path.stat().st_mode) == 0o600
     sections = entry["sections"]
     assert sections["done"] == ["Done: Send Asha the slides", "Sent: Reply to Ben to Ben"]
     assert sections["said"] == [

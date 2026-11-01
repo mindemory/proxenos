@@ -17,7 +17,7 @@ When you're unwell, the hard part is often everything around the care: referrals
 
 It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
 
-> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 45,000 lines of Python and TypeScript, with 16,000 more in 680 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
+> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 56,000 lines of Python, TypeScript and Swift, with 21,000 more in 720 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
 >
 > **Help of any kind is welcome:** code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. Good places to start are in [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions). If you'd like Proxenos to exist for more people, a star helps others find it.
 
@@ -26,14 +26,17 @@ It grew out of one person's weeks of getting through the system while unwell. Th
 Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
 - a feed of new papers and news, ranked for you;
 - your open tasks, pulled from your conversations and from what you tell it, kept up through the day, with the plans among them (a lunch at 12, a call at 9) put on your own calendar;
+- a journal of each day, so you never have to narrate it: what got done, where you wrote, what moved in your projects, what's waiting on others and what's next, with a few sentences on how it went;
 - where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
+- the forms you're handed (a PDF application, an intake form) filled from your records, leaving the ID numbers, account numbers and signature to you;
 - advice grounded in your own patterns;
 - once a week, what's worth taking on (a call for papers, a fellowship, a talk, a piece of writing, with a first step drafted) and what's worth letting go of (a meeting, a thread, an invitation, with the decline drafted), by your own goals;
+- where each of your long-running projects stands, from your messages and its code on every branch, and, given its code, the next step of its work done on a branch of its own for you to accept;
 - a map of the people you know and how they connect;
 - a searchable memory that brings the right past messages and notes to mind;
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
-It drafts; by default it never sends, posts or buys anything by itself. You copy a draft or open it in its app with the text filled in, and press send yourself; once your reply shows up in that chat, the draft is marked sent. Chats that need no answer (thanks, a receipt, an auto-reply) get no draft. A draft you changed before sending is shown, beside what you sent, to the drafts written for you after it, and a draft your messages since made moot (someone else did it, or the plan changed) is folded away with why. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). It places a phone call only when you press Call: it waits on hold, says it's an automated assistant calling for you, and rings you when a person answers ([docs/calls.md](docs/calls.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
+It drafts; by default it never sends, posts or buys anything by itself. You copy a draft or open it in its app with the text filled in, and press send yourself; once your reply shows up in that chat, the draft is marked sent. Chats that need no answer (thanks, a receipt, an auto-reply) get no draft. A draft you changed before sending, or rewrote on the page with "Write my own", is shown, beside what you sent, to the drafts written for you after it, and a draft your messages since made moot (someone else did it, or the plan changed) is folded away with why. What you tell it on the home page shapes every draft: a fact your messages don't show ("I'm not going on Tuesday"), kept for two weeks, or a rule kept until you remove it ("keep replies to my manager short"). Drafts never leave a blank for you to fill in. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one ([docs/memory.md](docs/memory.md)). It places a phone call only when you press Call: it waits on hold, says it's an automated assistant calling for you, and rings you when a person answers ([docs/calls.md](docs/calls.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
@@ -47,14 +50,19 @@ These come from `proxenos demo` (see [Quick start](#quick-start)), like the home
 | **Drafts: replies and documents in your voice, ready to send** | **Tasks: what was asked of you, pulled from your conversations** |
 | ![Drafts: a WhatsApp reply and an email reply to send, with each app's track record and the outbox, off](docs/images/drafts-desktop.png) | ![Tasks: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
 
+**Journal: the day, written down, from what Proxenos already tracks**
+
+![Journal: a brief on yesterday, the next three things to do, and the replies sent, what's waiting on others and what's next](docs/images/journal-desktop.png)
+
 On a phone, over `proxenos phone`:
 
 <p>
-  <img src="docs/images/home-phone.png" width="19%" alt="Home on a phone">
-  <img src="docs/images/care-phone.png" width="19%" alt="Care on a phone">
-  <img src="docs/images/errands-phone.png" width="19%" alt="Errands on a phone">
-  <img src="docs/images/drafts-phone.png" width="19%" alt="Drafts on a phone">
-  <img src="docs/images/tasks-phone.png" width="19%" alt="Tasks on a phone">
+  <img src="docs/images/home-phone.png" width="15.5%" alt="Home on a phone">
+  <img src="docs/images/care-phone.png" width="15.5%" alt="Care on a phone">
+  <img src="docs/images/errands-phone.png" width="15.5%" alt="Errands on a phone">
+  <img src="docs/images/drafts-phone.png" width="15.5%" alt="Drafts on a phone">
+  <img src="docs/images/tasks-phone.png" width="15.5%" alt="Tasks on a phone">
+  <img src="docs/images/journal-phone.png" width="15.5%" alt="Journal on a phone">
 </p>
 
 ## How it works
@@ -66,7 +74,8 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                                                         clones: feed, tasks, advice,
                                                         choices, watch, network,
                                                         recall, projects, project
-                                                        steps, errands, drafts
+                                                        steps, errands, drafts,
+                                                        journal
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -81,7 +90,7 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
 ## Privacy
 
 - **Code and data are separate.** This repository holds code only. Everything personal lives in a private vault outside the repo (picked on the first-run setup page, or `PROXENOS_VAULT`; default `~/proxenos_vault`). The vault keeps its own local git history of how the self-model changes.
-- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news; watch also sends the films you've logged and how you rated them. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of, with the title and opening of each draft waiting on you; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply, with what your memory holds about that person and what the chat depends on (the newest records naming them, and the results of the searches the model asks for). On a phone call you start, what the other side says goes to the call's model to decide what the assistant says next, and the call's audio goes through Twilio, which transcribes it ([docs/calls.md](docs/calls.md)). Filling a form (`proxenos form`) sends its labels and the records memory finds for them, never a line for an SSN, an account number or a signature. Every draft also gets what you've told Proxenos on the home page (your rules, and recent notes, which the task list reads too) and your calendar for the coming week (each event's time and title). With a local model none of this leaves your computer, apart from the call's audio.
+- **What reaches the model:** observers send the model only your side of conversations, never other people's messages. Clones send your self-model, plus public items such as papers and news; watch also sends the films you've logged and how you rated them. Three clones also send recent records they need, picked out in code: tasks sends conversations you're part of, with the title and opening of each draft waiting on you; care sends only records about getting health care, with people in chats replaced by labels and phone, account and member numbers blanked; and drafts sends the recent conversation in each direct chat, or Slack thread that mentions you or that you're in, waiting on your reply, with what your memory holds about that person and what the chat depends on (the newest records naming them, and the results of the searches the model asks for). On a phone call you start, what the other side says goes to the call's model to decide what the assistant says next, and the call's audio goes through Twilio, which transcribes it ([docs/calls.md](docs/calls.md)). Filling a form (`proxenos form`) sends its labels and the records memory finds for them, never a line for an SSN, an account number or a signature. Every draft also gets what you've told Proxenos on the home page (your rules, and recent notes, which the task list reads too) and your calendar for the coming week (each event's time and title). The journal sends the day's lines to write its brief: the titles of tasks closed, waiting and due, the names of the chats you wrote in and the drafts sent, what you told Proxenos that day, your projects' commit messages, the next day's calendar and care's open items. With a local model none of this leaves your computer, apart from the call's audio.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites. The one way in from elsewhere is `proxenos phone`: your Mac's private address on your own Tailscale network, answered only for your own Tailscale login. Nothing is opened to the internet, except, if you set up calls, one port Tailscale Funnel opens for Twilio, which answers only during a call and only requests Twilio signed.
 - **Credentials** stay on your computer: in its own secure store, one item each (the macOS Keychain, Windows Credential Manager, or the Secret Service on Linux), or in `.env` (which git ignores) when you run from source with one. The page shows whether each is set, never what it is.
@@ -130,7 +139,7 @@ proxenos master                 # notes per month, then the self-model
 proxenos clone tracker          # also: tasks, care, advisor, network, choices, watch, recall, projects, work
 ```
 
-Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it. Each night Proxenos writes where each one stands. Give one its code's folder and its data folders, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
+Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it. Each night Proxenos writes where each one stands, from what your messages say and, given its code's folder, the commits on every branch since the last run. Give one its data folders too, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
 
 ```json
 {"id": "calls-paper", "name": "The calls paper", "about": "...", "people": ["Ana Lee"],
@@ -146,7 +155,7 @@ To keep it running without a terminal, run `scripts/install-app.sh`: the page an
 
 `px` is a short alias for `proxenos`.
 
-Some sources read a folder on your computer: a folder of documents, your website's repo, a Spotify export, slackdump runs. Set them in Settings, or in `.env` as `PROXENOS_DOCS_DIRS`, `PROXENOS_WEBSITE_REPO`, `PROXENOS_SPOTIFY_EXPORT` and `PROXENOS_SLACKDUMP_DIR`. `.env.example` lists every setting.
+Some sources read a folder on your computer: a folder of documents, your website's repo, a Spotify export, slackdump runs. Set them in Settings, or in `.env` as `PROXENOS_DOCS_DIRS`, `PROXENOS_WEBSITE_REPO`, `PROXENOS_SPOTIFY_EXPORT` and `PROXENOS_SLACKDUMP_DIR`. To have plans from your messages land on one of your calendars, set `PROXENOS_PLANS_CALENDAR` to its name in the Mac's Calendar app, which syncs it to its account (Google, Exchange, iCloud); otherwise subscribe to the page's `/api/plans.ics`. `.env.example` lists every setting.
 
 ## Sources
 
@@ -179,17 +188,18 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
 | `proxenos call start NAME` / `stop NAME` / `list` | Place a phone call from a call sheet (also from the page's Calls view), through your own Twilio account: it waits on hold, says it's an automated assistant calling for you, and rings you when a person answers, or asks for what the sheet lists. It never agrees to pay. See [docs/calls.md](docs/calls.md) |
-| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Choices, Watch, Calls, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
+| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Journal, Ask, Errands, Feed, Tasks, Projects, Care, Drafts, Advice, Choices, Watch, Calls, Network, Memory, Profile, Connect, Settings, Status), after a short setup the first time |
 | `proxenos demo [PATH]` | A vault of made-up records to try the page on, with no model, and the command that opens it. PATH must be new, empty or an earlier demo |
 | `proxenos form PATH` | A PDF form filled in from your records, beside it as `-filled.pdf`, with what it filled, where each answer came from and what's left for you. It never fills an SSN or another ID, an account or card number, or a signature, and keeps only answers your records show |
-| `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With an API key, also draft replies to chats newly waiting on you (at most five a run) |
+| `proxenos sync` | Import new downloads and refresh every source that needs no model; update the memory index and today's recall. With a model, also draft replies to chats newly waiting on you (at most five a run), and, at most hourly when something new was said, update the task list, put new plans on your calendar and fold away drafts made moot |
 | `proxenos import [PATH ...]` | Recognize and import downloaded exports |
 | `proxenos ingest <source>` | Pull one source into the vault |
 | `proxenos auth strava` / `slack` / `slackdump WORKSPACE` / `gmail NAME ADDRESS` / `gcalendar NAME ADDRESS` / `microsoft NAME ADDRESS` / `beeper` | One-time sign-ins: tokens go to the Keychain (to `.env` when running from source with one); slackdump keeps its own. Most can also be done from the app's Connect page |
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps` or `work` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps`, `work` or `journal` |
+| `proxenos clone journal [--date DAY]` | The day, written down (also from the page's Journal view): what got done, where you wrote, what moved in your projects, what's waiting and what's next, with a short brief. The night writes the day that just ended; `--date today` writes today so far |
 | `proxenos clone steps --project ID` | A step of a project's own work (also from the page's Projects view): the next analysis, fix, figure or section, done on a new branch of the project's code in a worktree of its own, by Claude Code where it's installed or else the local model, and reported. Accept on the page merges it into your checkout; Discard deletes the branch. Nothing is pushed |
 | `proxenos clone choices [--force]` | The week's choices: what's worth taking on and what's worth letting go of. The night runs it once a week; `--force` runs it now |
 | `proxenos clone watch [--force]` | What to watch next: films and shows you haven't seen, picked from what you loved on Letterboxd, and the films on your watchlist that suit this week. The night runs it once a week; `--force` runs it now |

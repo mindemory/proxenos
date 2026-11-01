@@ -1,8 +1,10 @@
 #!/bin/bash
-# Retake the README's pictures (docs/images): Home, Care, Errands, Drafts and Tasks at desktop and
-# phone width. They show only the made-up vault `proxenos demo` writes: the page runs on it alone,
-# on the demo's port (never 4747), with no way to run the proxenos command from a button, and
-# Chrome runs headless on a throwaway profile. Everything is removed again afterwards.
+# Retake the README's pictures (docs/images): Home, Care, Errands, Drafts, Tasks and Journal at
+# desktop and phone width. They show only the made-up vault `proxenos demo` writes: the page runs
+# on it alone, on the demo's port (never 4747), with no way to run the proxenos command from a
+# button, and Chrome runs headless on a throwaway profile. Everything is removed again afterwards.
+# They're taken in a time zone where it's nine in the morning, whenever this runs, so the demo's
+# day reads as one (taken at midnight, its coffee "later today" would be at 2 AM).
 #
 # Needs the proxenos conda env, the web packages (npm --prefix web install), Google Chrome (or
 # CHROME=<its binary>) and a Python with Pillow (python3, or PYTHON=<another>) to shrink the
@@ -20,6 +22,8 @@ out="${1:-$repo/docs/images}"
 chrome="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 python="${PYTHON:-python3}"
 debug_port=9339
+offset=$(((9 - 10#$(date -u +%H) + 36) % 24 - 12))  # hours east of UTC where it's 9 now
+if [ "$offset" -ge 0 ]; then export TZ="Etc/GMT-$offset"; else export TZ="Etc/GMT+$((-offset))"; fi
 
 # Python in the conda env, on this checkout's code (the env's install may point at another).
 in_env() {

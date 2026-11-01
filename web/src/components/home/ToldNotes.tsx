@@ -10,7 +10,7 @@ import type { ToldNote } from "@/lib/types";
 /**
  * What the reader tells Proxenos that no message shows: a fact for now ("I'm not going to
  * Tuesday's visit"), which the task list and calendar follow, or a rule for everything it drafts
- * ("Mom and Dad must never hear about my health"). Each can be removed again.
+ * ("keep replies to my manager short"). Each can be removed again.
  */
 export function ToldNotes({ now }: { now: string }) {
   const [notes, setNotes] = useState<ToldNote[]>([]);
@@ -70,7 +70,7 @@ export function ToldNotes({ now }: { now: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
           }}
-          placeholder="e.g. I'm not going to Tuesday's appointment; never tell my parents about my health"
+          placeholder="e.g. I'm not going to Tuesday's appointment; keep replies to my manager short"
           className="min-w-0 flex-1 resize-y rounded-xl border border-line-strong bg-bg p-2.5 text-sm text-ink leading-relaxed font-sans"
         />
         <ActionButton

@@ -27,7 +27,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from proxenos import llm, plans, told
-from proxenos.clones import tasks
+from proxenos.clones import tasks, work
 from proxenos.config import env
 
 DAY_STARTS = 6  # local hour: a run before it writes the day before
@@ -60,26 +60,18 @@ def write(vault: Path, day: date | None = None, now: datetime | None = None) -> 
     """Write the entry for `day` (the day that just ended, before DAY_STARTS), and count it."""
     now = now or datetime.now(UTC)
     day = day or (now.astimezone() - timedelta(hours=DAY_STARTS)).date()
-    start = datetime.combine(day, time.min).astimezone()
-    end = start + timedelta(days=1)
-    sections = {
-        "done": _done(vault, start, end),
-        "said": _said(vault, start, end),
-        "moved": _moved(vault, start, end),
-        "waiting": _waiting(vault),
-        "next": _next(vault, day, end),
-    }
+    sections = lines(vault, day)
     entry = {"date": day.isoformat(), "generated": _iso(now), "brief": "", "next_up": []}
     if any(sections.values()) and llm.configured():
         person = env("NAME", "the person")
-        lines = "\n\n".join(
+        listed = "\n\n".join(
             f"## {name}\n" + "\n".join(f"- {line}" for line in items)
             for name, items in sections.items()
             if items
         )
         try:
             answer = llm.ask(
-                f"The day: {day:%A %Y-%m-%d}.\n\n{lines}",
+                f"The day: {day:%A %Y-%m-%d}.\n\n{listed}",
                 system=_SYSTEM.format(person=person),
                 schema=_SCHEMA,
             )
@@ -87,18 +79,32 @@ def write(vault: Path, day: date | None = None, now: datetime | None = None) -> 
             entry["next_up"] = [" ".join(str(n).split()) for n in answer.get("next_up") or []][:3]
         except llm.ModelError as e:
             print(f"journal: no brief ({' '.join(str(e).split())[:200]})")
-    entry["sections"] = sections
-    out = vault / "clones" / "journal"
-    out.mkdir(parents=True, exist_ok=True)
-    tmp = out / f"{day.isoformat()}.json.tmp"
-    tmp.write_text(json.dumps(entry, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(out / f"{day.isoformat()}.json")
+    save(vault, entry | {"sections": sections})
     return {f"{name} lines": len(items) for name, items in sections.items()} | {
         "briefs": int(bool(entry["brief"]))
     }
 
 
+def save(vault: Path, entry: dict) -> None:
+    """Write one day's entry, {date, generated, brief, next_up, sections}, in place of any before."""
+    path = vault / "clones" / "journal" / f"{entry['date']}.json"
+    work._write(path, json.dumps(entry, indent=1, ensure_ascii=False) + "\n")
+
+
 # What the day held
+
+
+def lines(vault: Path, day: date) -> dict[str, list[str]]:
+    """The day's lines, section by section, with no model."""
+    start = datetime.combine(day, time.min).astimezone()
+    end = start + timedelta(days=1)
+    return {
+        "done": _done(vault, start, end),
+        "said": _said(vault, start, end),
+        "moved": _moved(vault, start, end),
+        "waiting": _waiting(vault),
+        "next": _next(vault, day, end),
+    }
 
 
 def _done(vault: Path, start: datetime, end: datetime) -> list[str]:
@@ -108,18 +114,21 @@ def _done(vault: Path, start: datetime, end: datetime) -> list[str]:
         if _within(entry.get("closed_at"), start, end) and entry.get("action") in (None, "done"):
             found.append(f"Done: {entry.get('title')}")
     drafts = _drafts(vault)
-    sent: dict[str, None] = {}
+    sent: dict[str, str] = {}  # each draft sent that day, with who it went to
     for event in _jsonl(vault / "clones" / "drafts" / "feedback.jsonl"):
         if event.get("action") == "sent" and _within(event.get("ts"), start, end):
-            sent[str(event.get("draft_id"))] = None
+            sent.setdefault(str(event.get("draft_id")), "")
     fidelity = _json(vault / "clones" / "drafts" / "fidelity.json")
     for measured in fidelity.get("drafts", []) if isinstance(fidelity, dict) else []:
         if isinstance(measured, dict) and _within(measured.get("sent"), start, end):
-            sent[str(measured.get("id"))] = None
-    for key in sent:
+            sent[str(measured.get("id"))] = str(measured.get("to") or "")
+    for key, to in sent.items():
         draft = drafts.get(key, {})
-        to = f" to {draft['to']}" if draft.get("to") else ""
-        found.append(f"Sent: {draft.get('title') or key}{to}")
+        to = draft.get("to") or to
+        if draft.get("title"):
+            found.append(f"Sent: {draft['title']}{f' to {to}' if to else ''}")
+        elif to:  # a reply whose draft is gone: who it went to is all there is
+            found.append(f"Sent: a reply to {to}")
     for path in sorted((vault / "clones" / "projects").glob("*/steps/*.json")):
         step = _json(path)
         if step.get("status") == "accepted" and _within(step.get("updated"), start, end):

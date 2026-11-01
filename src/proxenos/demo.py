@@ -6,8 +6,9 @@ sorting out the bill for new glasses. What the ingesters would bring in is writt
 their formats, dated around today: WhatsApp chats and groups, two mail accounts, two calendars,
 walks, listening, notes and LinkedIn connections. What the model would write from them is written
 the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the
-week's choices, drafts and errands. Then the steps that need no model run on it as they would on a real vault: the
-memory index, the people index, today's recall and the outbox's track record.
+week's choices, drafts and errands. Then the steps that need no model run on it as they would on
+a real vault: the memory index, the people index, today's recall, the outbox's track record and
+yesterday's journal, with the brief the model would write.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
 up, phone numbers are 555-01xx (kept for fiction), and addresses and links use the reserved
@@ -28,7 +29,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import memory, outbox, store
-from proxenos.clones import advisor, care, choices, errands, network, recall, tasks, tracker, work
+from proxenos.clones import (
+    advisor,
+    care,
+    choices,
+    errands,
+    journal,
+    network,
+    recall,
+    tasks,
+    tracker,
+    work,
+)
 from proxenos.config import REPO_ROOT
 
 PORT = 4848  # the demo's page, so it can run beside your own on 4747
@@ -129,6 +141,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         people = network.build(vault, people_only=True, now=c.now)
         recalled = recall.recall(vault, now=c.now)
         outbox.run(vault, c.now)  # its track record for the page; a demo has no way to send
+        _journal(vault, c)
     return {
         "records": indexed.get("records_total", 0),
         "people": people.get("people", 0),
@@ -2235,6 +2248,34 @@ def _errands(vault: Path, c: _Clock) -> None:
     )
     for record in [*found, sent]:
         _write_json(vault / "clones" / "errands" / f"{record['id']}.json", record)
+
+
+def _journal(vault: Path, c: _Clock) -> None:
+    """Yesterday's journal entry as the night writes it: the lines from what the demo holds, and
+    the brief and next up the model would write from them."""
+    day = (c.local - timedelta(days=1)).date()
+    lines = journal.lines(vault, day)
+    sent = sum(line.startswith("Sent: ") for line in lines["done"])
+    replies = f"You sent {sent} repl{'y' if sent == 1 else 'ies'}." if sent else "Nothing went out."
+    brief = (
+        f"{replies} Hana Ito still owes you a topic for the lunch-and-learn, and Acme IT hasn't "
+        "fixed the label printer in dispatch. Next is Ben's delivery dates for the holiday "
+        "catalog, then getting Juniper Optical to rebill the glasses through the vision plan."
+    )
+    journal.save(
+        vault,
+        {
+            "date": day.isoformat(),
+            "generated": c.at(0, 1, 30),
+            "brief": brief,
+            "next_up": [
+                "Send Ben the delivery dates for the holiday catalog",
+                "Ask Juniper Optical to rebill through the vision plan",
+                "Reply to Cy about the stove and the holiday sale",
+            ],
+            "sections": lines,
+        },
+    )
 
 
 def _load(path: Path) -> list[dict]:

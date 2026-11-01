@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const [page, debugPort, out] = process.argv.slice(2);
-const VIEWS = ["home", "care", "errands", "drafts", "tasks"];
+const VIEWS = ["home", "care", "errands", "drafts", "tasks", "journal"];
 const SIZES = {
   desktop: { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
   // Drawn at twice the size, then scaled by half: smoother text than drawing it small.

@@ -20,7 +20,7 @@ def test_rules_stay_facts_fade_and_removed_ones_go(tmp_path):
         tmp_path,
         {
             "at": "2026-01-02T09:00:00Z",
-            "text": "Never tell  my parents about my health.",
+            "text": "Keep replies to  my manager short.",
             "always": True,
         },
         {"at": "2026-02-01T09:00:00Z", "text": "Old news.", "always": False},
@@ -30,12 +30,12 @@ def test_rules_stay_facts_fade_and_removed_ones_go(tmp_path):
     )
 
     assert [n["text"] for n in told.notes(tmp_path, NOW)] == [
-        "Never tell my parents about my health.",  # a rule: still here after two months
+        "Keep replies to my manager short.",  # a rule: still here after two months
         "Not going to Tuesday's visit.",  # a fact from yesterday; last month's has faded
     ]
     text = told.prompt(tmp_path, "Tess", NOW)
     assert "Tess's own rules for everything written for them" in text
-    assert "- Never tell my parents about my health." in text
+    assert "- Keep replies to my manager short." in text
     assert "- 2026-03-09: Not going to Tuesday's visit." in text and "Old news" not in text
     assert told.prompt(tmp_path / "none", "Tess", NOW) == ""
 
