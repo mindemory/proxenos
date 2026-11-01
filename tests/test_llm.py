@@ -1,5 +1,6 @@
 """The model wrapper, against a fake client. No network, no key."""
 
+import json
 import os
 import time
 import types
@@ -69,6 +70,38 @@ def test_missing_key_says_where_to_put_one(monkeypatch):
         llm._get_client()
 
 
+SAID = "Your verification code is 482913. Call 603-555-0142 on 11/03 about the $40."
+SYSTEM = "Card 4111 1111 1111 1111; password: hunter2!"
+
+
+def test_a_hosted_model_gets_numbers_and_secrets_blanked_and_the_log_counts_them(
+    monkeypatch, tmp_path
+):
+    log = tmp_path / "state" / "model-calls.jsonl"
+    monkeypatch.setattr(llm, "_calls_path", lambda: log)
+    messages = fake(monkeypatch, text="ok")
+    image = {"type": "image/png", "data": "UGFzc3dvcmQ6IGh1bnRlcjIh"}
+
+    assert llm.ask(SAID, system=SYSTEM, images=[image]) == "ok"
+
+    seen, text = messages.params["messages"][0]["content"]
+    assert text["text"] == (
+        "Your verification code is [code]. Call 603-555-0142 on 11/03 about the $40."
+    )
+    assert messages.params["system"][0]["text"] == "Card [card number]; password: [password]"
+    assert seen["source"]["data"] == image["data"]  # an image goes as it is
+    line = json.loads(log.read_text())
+    assert line["where"] == "Anthropic" and line["redacted"] == 3
+    for secret in ("482913", "4111", "hunter2", "[code]", "password"):
+        assert secret not in log.read_text()
+
+
+def test_what_the_caller_keeps_reaches_a_hosted_model(monkeypatch):
+    messages = fake(monkeypatch, text="ok")
+    llm.ask("Go on.", system="You may say: account number: 12345678", keep=["12345678"])
+    assert messages.params["system"][0]["text"] == "You may say: account number: 12345678"
+
+
 class Stream:
     """An answer from Ollama as it streams in: JSON lines, then `then` raised, if given."""
 
@@ -130,6 +163,18 @@ def test_a_local_model_answers_through_ollama_with_the_schema(monkeypatch):
     assert user == {"role": "user", "content": "hi"}
     assert system["content"].startswith("sys") and '"required": ["x"]' in system["content"]
     assert llm.configured()  # a local model needs no key
+
+
+def test_a_local_model_gets_the_prompt_as_it_is(monkeypatch, tmp_path):
+    log = tmp_path / "state" / "model-calls.jsonl"
+    monkeypatch.setattr(llm, "_calls_path", lambda: log)
+    sent = local(monkeypatch, "ok")
+
+    assert llm.ask(SAID, system=SYSTEM) == "ok"
+
+    system, user = sent[0][1]["messages"]
+    assert (system["content"], user["content"]) == (SYSTEM, SAID)  # nothing left this computer
+    assert json.loads(log.read_text())["redacted"] is None
 
 
 def test_a_local_answer_that_isnt_the_json_asked_for_is_tried_again_then_fails(monkeypatch):

@@ -50,8 +50,8 @@ class Model:
     def __init__(self, *answers):
         self.answers, self.calls = list(answers), []
 
-    def __call__(self, prompt, system, schema):
-        self.calls.append({"prompt": prompt, "system": system, "schema": schema})
+    def __call__(self, prompt, system, schema, keep=()):
+        self.calls.append({"prompt": prompt, "system": system, "schema": schema, "keep": keep})
         answer = self.answers.pop(0)
         return answer() if callable(answer) else answer
 
@@ -209,6 +209,15 @@ def test_when_the_user_doesnt_come_it_asks_itself_and_never_agrees_to_pay(tmp_pa
     assert (
         "never as he or she" in model.calls[0]["system"] and "A-778812" in model.calls[0]["system"]
     )
+    # The facts are there to be said, so a hosted model's blanking keeps them.
+    assert model.calls[0]["keep"] == ["Tess Lee", "01/02/1990", "A-778812"]
+
+
+def test_the_model_is_asked_with_the_facts_to_keep(monkeypatch):
+    asked = []
+    monkeypatch.setattr(calls.llm, "ask", lambda prompt, **kw: asked.append(kw) or {"say": ""})
+    calls._think("p", "account number: 12345678", {}, keep=["12345678"])
+    assert asked[0]["keep"] == ["12345678"] and asked[0]["system"] == "account number: 12345678"
 
 
 def test_a_number_it_doesnt_have_or_a_request_for_the_patient_puts_the_user_through(tmp_path):

@@ -32,6 +32,7 @@ from pathlib import Path
 
 from proxenos import llm, research, told
 from proxenos.config import env
+from proxenos.redact import CARD, SSN
 
 MAX_HITS = 3  # of memory's records for each label or question, the user's own and newest first
 POOL = 12  # records looked at for each, to pick those from
@@ -60,8 +61,6 @@ _PRIVATE = re.compile(
     re.IGNORECASE,
 )
 _SIGNATURE = re.compile(r"\bsignature\b|\bsign here\b|\binitials? here\b", re.IGNORECASE)
-_SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
-_CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
 
 _SYSTEM = """\
 You fill in a form for {person} from what you're given about them. For each blank you can \
@@ -480,7 +479,7 @@ def _date_forms(text: str) -> set[str]:
 
 def _clean(text: str) -> str:
     """Numbers shaped like an SSN or a card never reach the model."""
-    return _CARD.sub("[number]", _SSN.sub("[number]", text))
+    return CARD.sub("[number]", SSN.sub("[number]", text))
 
 
 def _answers(
@@ -496,7 +495,7 @@ def _answers(
             continue  # a local model's answer in another shape
         blank, value = by_id.get(item.get("id")), " ".join(str(item.get("value") or "").split())
         column = str(item.get("column") or "").strip()
-        if not blank or not value or _PRIVATE.search(column) or _SSN.search(value):
+        if not blank or not value or _PRIVATE.search(column) or SSN.search(value):
             continue
         if shown and not _grounded(value, shown):
             continue  # in nothing it was shown: a guess

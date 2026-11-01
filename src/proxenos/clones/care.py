@@ -66,7 +66,7 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, told, untrusted, voice
+from proxenos import llm, redact, told, untrusted, voice
 from proxenos.config import env
 from proxenos.ingest import healthrecords
 
@@ -288,7 +288,6 @@ _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")
 _URL = re.compile(r"https?://[^\s<>()\"']+", re.IGNORECASE)
 _EMAIL = re.compile(r"\b[\w.+-]+@([\w-]+(?:\.[\w-]+)+)\b")
 _PHONE = re.compile(r"(?<![\w.])(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}(?![\w])")
-_SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _CARD = re.compile(r"\b(?:\d{4}[ -]){2,3}\d{4}\b")
 _LONG_NUMBER = re.compile(r"\b[A-Za-z]{0,4}-?\d{6,}[A-Za-z]{0,3}\b")
 _CONTACT = re.compile(r"\bcontacts? \d+\b", re.IGNORECASE)
@@ -1176,7 +1175,7 @@ def _scrub(text: str) -> str:
 
 
 def _numbers(text: str) -> str:
-    text = _SSN.sub("[number]", text)
+    text = redact.SSN.sub("[number]", text)
     text = _CARD.sub("[number]", text)
     text = _PHONE.sub("[phone]", text)
     return _LONG_NUMBER.sub("[number]", text)

@@ -11,10 +11,15 @@ PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (prox
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
 for one imported into Ollama. It goes through `ask_voice`.
 
+What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
+Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
+(proxenos.redact).
+
 Every call leaves one line in <vault>/state/model-calls.jsonl, for the privacy screen and for
 seeing what a night costs: when, which step asked, the model, where it ran (this Mac or
 Anthropic), how many characters went in and came back, the tokens where the model counts them,
-how long it took and whether it worked. Never the words.
+how many numbers and secrets were blanked, how long it took and whether it worked. Never the
+words, nor what was blanked.
 """
 
 import http.client
@@ -25,14 +30,14 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
 
-from proxenos import lock
+from proxenos import lock, redact
 from proxenos.config import env, vault_path
 
 # PROXENOS_MODEL overrides it; read on each call, so a value saved in Settings or .env counts too.
@@ -84,17 +89,19 @@ def ask(
     effort: str = "medium",
     max_tokens: int = 32000,
     images: list[dict] | None = None,
+    keep: Iterable[str] = (),
 ) -> str | dict:
     """One request, one answer: text, or a dict matching `schema` when one is given.
 
     The system prompt is marked cacheable, so repeated calls that share it (ranking runs
     against the same profile) only pay full price for it once. Requests stream, so long
-    inputs and long answers don't hit HTTP timeouts.
+    inputs and long answers don't hit HTTP timeouts. `keep` is what a hosted model is meant to
+    read although it would be blanked, such as an account number a call may tell.
     """
     model = env("MODEL", DEFAULT_MODEL)
     sent = len(prompt) + len(system or "")
     with _recorded(model, sent, len(images or [])) as answered:
-        answer = _ask(model, prompt, system, schema, effort, max_tokens, images)
+        answer = _ask(model, prompt, system, schema, effort, max_tokens, images, keep)
         answered(answer)
     return answer
 
@@ -107,11 +114,17 @@ def _ask(
     effort: str,
     max_tokens: int,
     images: list[dict] | None,
+    keep: Iterable[str] = (),
 ) -> str | dict:
     if model.startswith(LOCAL):
         return _ask_local(
             model.removeprefix(LOCAL), prompt, system, schema, effort, max_tokens, images
         )
+    # Leaving this computer: the numbers and secrets no draft needs are blanked first, and the
+    # log keeps only how many. Images go as they are; nothing here reads the text in them.
+    prompt, blanked = redact.redact(prompt, keep)
+    system, also = redact.redact(system, keep) if system else (system, {})
+    _usage.redacted = sum(blanked.values()) + sum(also.values())
     output_config: dict = {"effort": effort}
     if schema is not None:
         output_config["format"] = {"type": "json_schema", "schema": schema}
@@ -397,8 +410,8 @@ def _ask_voice(model: str, prompt: str, system: str, max_tokens: int) -> str:
         raise ModelError(f"the voice model's answer wasn't one ({e})") from e
 
 
-# What one call cost, set by the call as it ends, read by _recorded; per thread, as a phone
-# call's turns can run beside a sync.
+# What one call cost and how much of it was blanked, set by the call, read by _recorded; per
+# thread, as a phone call's turns can run beside a sync.
 _usage = threading.local()
 
 
@@ -407,7 +420,7 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
     """Time the call inside it and leave its line in the calls log, whether it worked or not.
     The call hands its answer to the function this yields, for the answer's size."""
     began, got = time.monotonic(), {}
-    _usage.tokens = (None, None)
+    _usage.tokens, _usage.redacted = (None, None), None
     try:
         yield lambda answer: got.setdefault("answer", answer)
     finally:
@@ -422,6 +435,7 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
             "where": "this computer" if here else "Anthropic",
             "sent_chars": sent,
             "images": images,
+            "redacted": getattr(_usage, "redacted", None),  # None where nothing left
             "answer_chars": size,
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,

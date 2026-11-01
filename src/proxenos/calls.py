@@ -154,7 +154,8 @@ _OUTCOME = {
     "additionalProperties": False,
 }
 
-Think = Callable[[str, str, dict], dict]  # (prompt, system, schema) → the model's answer
+# (prompt, system, schema, keep=facts) → the model's answer
+Think = Callable[..., dict]
 
 
 @dataclass(frozen=True)
@@ -304,8 +305,10 @@ def _numbers(text: str) -> list[str]:
 # ── The call ────────────────────────────────────────────────────────────────
 
 
-def _think(prompt: str, system: str, schema: dict) -> dict:
-    answer = llm.ask(prompt, system=system, schema=schema, effort="low", max_tokens=600)
+def _think(prompt: str, system: str, schema: dict, keep: Iterable[str] = ()) -> dict:
+    """The model's answer. The sheet's facts are kept from llm's blanking (proxenos.redact): an
+    account number among them is there to be said, and guard checks every number said."""
+    answer = llm.ask(prompt, system=system, schema=schema, effort="low", max_tokens=600, keep=keep)
     if not isinstance(answer, dict):
         raise llm.ModelError("the model didn't answer with JSON")
     return answer
@@ -462,7 +465,10 @@ class Call:
         return twilio.response(self._hear(text))
 
     def _turn(self) -> str:
-        self._pending = self._pool.submit(self.think, self._prompt(), self.system, _TURN)
+        facts = list(self.sheet.facts.values())
+        self._pending = self._pool.submit(
+            self.think, self._prompt(), self.system, _TURN, keep=facts
+        )
         self._waited = False
         return self._await()
 

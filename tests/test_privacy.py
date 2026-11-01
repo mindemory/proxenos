@@ -178,6 +178,7 @@ def test_calls_are_totalled_for_thirty_days_by_where_and_step(home, monkeypatch)
         "hosted": 0,
         "sent_chars": 4000,
         "images": 0,
+        "redacted": 0,
         "answer_chars": 600,
         "tokens_in": 300,
         "tokens_out": 40,
@@ -197,6 +198,7 @@ def test_calls_are_totalled_for_thirty_days_by_where_and_step(home, monkeypatch)
         "where": "this computer",
         "sent_chars": 1000,
         "images": 0,
+        "redacted": None,
         "answer_chars": 200,
         "tokens_in": None,
         "tokens_out": None,
@@ -218,8 +220,8 @@ def test_a_call_that_went_away_counts_as_hosted_and_only_the_newest_are_listed(h
     monkeypatch.setattr(privacy, "NEWEST", 2)
     log(
         vault,
-        call("2026-10-20T00:00:00Z", "care", where="Anthropic", images=2),
-        call("2026-10-21T00:00:00Z", "care", where="Anthropic", ok=False),
+        call("2026-10-20T00:00:00Z", "care", where="Anthropic", images=2, redacted=3),
+        call("2026-10-21T00:00:00Z", "care", where="Anthropic", ok=False, redacted=-1),
         {k: v for k, v in call("2026-10-22T00:00:00Z", "ask").items() if k != "where"},
         call("2026-10-23T00:00:00Z", "ask", sent_chars=True, seconds=float("nan")),
     )
@@ -233,6 +235,7 @@ def test_a_call_that_went_away_counts_as_hosted_and_only_the_newest_are_listed(h
         "hosted": 3,
         "sent_chars": 3000,
         "images": 2,
+        "redacted": 3,  # a count that isn't one adds nothing
         "answer_chars": 400,
         "tokens_in": 0,
         "tokens_out": 0,

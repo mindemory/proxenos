@@ -25,7 +25,8 @@ HERE, HOSTED = "this computer", "Anthropic"
 FOLDERS = ("raw", "memory", "clones", "self", "observations", "state")
 # A call's line as it goes out: these fields and no others, numbers only as numbers.
 _TEXT = ("at", "step", "model")
-_COUNTS = ("sent_chars", "images", "answer_chars", "tokens_in", "tokens_out")
+# "redacted": the numbers and secrets blanked before a call went to Anthropic (proxenos.redact).
+_COUNTS = ("sent_chars", "images", "redacted", "answer_chars", "tokens_in", "tokens_out")
 _TEXT_CHARS = 80
 
 # What each part of Proxenos sends a model, in plain words: the README's Privacy list, with the

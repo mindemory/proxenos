@@ -216,6 +216,12 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
         {said}
         {model.voice && ` Reply drafts are written in your voice by ${model.voice}, on this computer.`}
       </p>
+      {hosted > 0 && (
+        <p className="px-1 text-sm leading-relaxed text-muted">
+          Numbers and secrets blanked before sending: {sent.byWhere.Anthropic.redacted.toLocaleString()} in {days} days (card and
+          Social Security numbers, one-time codes, passwords, keys and tokens, and bank account numbers).
+        </p>
+      )}
 
       {totals.calls > 0 && (
         <>
@@ -350,7 +356,8 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
       )}
       <p className="px-1 text-xs leading-relaxed text-muted">
         From <code className="num">state/model-calls.jsonl</code> in the vault: one line a call, with when, which part asked, the
-        model, where it ran and how many characters went in and came back (tokens where the model counted them), never the words.
+        model, where it ran, how many characters went in and came back (tokens where the model counted them) and how many numbers
+        and secrets were blanked, never the words.
       </p>
     </Section>
   );

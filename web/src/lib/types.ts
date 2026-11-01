@@ -1289,6 +1289,8 @@ export interface CallTotals {
   hosted: number;
   sentChars: number;
   images: number;
+  /** Numbers and secrets blanked before a call went to Anthropic. */
+  redacted: number;
   answerChars: number;
   /** Where the model counted them; a call it didn't count adds nothing. */
   tokensIn: number;
@@ -1309,6 +1311,8 @@ export interface ModelCall {
   where: ModelWhere;
   sentChars: number | null;
   images: number | null;
+  /** Null for a call that didn't leave this computer. */
+  redacted: number | null;
   answerChars: number | null;
   tokensIn: number | null;
   tokensOut: number | null;
