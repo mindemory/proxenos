@@ -59,6 +59,12 @@ Each reply's research leaves one line in `memory/research.jsonl`: the searches' 
 each list's ids in rank order, the fused order and the ids the gate kept. Ids only, never what a
 record says. It is there to tune the searches and the gate. Past 20 MB, its older half goes.
 
+For today, with nothing asked ([recall.py](../src/proxenos/clones/recall.py)): each coming event,
+open task and feed item brings up past records about it. Its title is searched by words and,
+when the embedding model runs, by meaning, which finds a record that says the same thing in
+other words. The two lists are fused the same way. A record found by words must clear a bm25
+bar, and one found by meaning a similarity bar, so a trigger with nothing close brings up nothing.
+
 What it should add, in order:
 - **Salience.** Each record scored as it comes in: deadlines, money, health, promises and
   questions to you score high; routine and bulk mail low. Ties are broken by recency, with a slow

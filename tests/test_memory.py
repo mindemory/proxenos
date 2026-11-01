@@ -583,6 +583,18 @@ def test_records_are_the_raw_records_behind_index_ids_whole(vault):
     assert memory.records([], vault=vault) == {}
 
 
+def test_rows_give_a_record_found_another_way_the_shape_of_a_hit(vault):
+    memory.build(vault)
+
+    found = memory.rows(["slack/acme/messages/s1", "whatsapp/messages/nope"], vault=vault)
+
+    (row,) = found.values()
+    assert row["id"] == "slack/acme/messages/s1" and row["stream"] == "acme/messages"
+    assert row["snippet"].startswith("The centrifuge") and row["score"] == 0
+    assert set(row) == set(memory.search("centrifuge", vault=vault)[0])
+    assert memory.rows([], vault=vault) == {}
+
+
 def hit(n):
     return {"id": f"r{n}", "snippet": f"from list {n}"}
 

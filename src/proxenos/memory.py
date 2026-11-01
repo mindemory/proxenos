@@ -581,6 +581,23 @@ def fuse(ranked: Iterable[list[dict]], limit: int | None = None, keep: int = 0) 
     return [hits[id_] for id_ in order]
 
 
+def rows(ids: Iterable[str], *, vault: Path | None = None) -> dict[str, dict]:
+    """The index's rows for these ids as hits that matched nothing, by id: the snippet is the
+    start of the text, the score 0. For a record found another way (by meaning) to look like
+    one found here. Ids not in the index are left out."""
+    path, wanted = index_path(vault or vault_path()), list(dict.fromkeys(ids))
+    if not wanted or not path.exists():
+        return {}
+    with closing(_connect(path)) as db:
+        found = db.execute(
+            "SELECT id, source, stream, ts, who, where_, title, substr(text, 1, 400) AS in_text, "
+            "'' AS in_title, 0 AS score, from_me FROM records "
+            f"WHERE id IN ({','.join('?' * len(wanted))})",
+            wanted,
+        ).fetchall()
+    return {r["id"]: _hit(r) for r in found}
+
+
 def _hit(row: sqlite3.Row) -> dict:
     snippet = next(
         (s for s in (row["in_text"], row["in_title"]) if MARK_START in s), row["in_text"]

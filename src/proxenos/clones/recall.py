@@ -1,4 +1,5 @@
-"""Memories for today: what the vault remembers that bears on what is coming up. No model.
+"""Memories for today: what the vault remembers that bears on what is coming up. No language
+model; the embedding model on this computer, when it runs, to search by meaning.
 
 Recall starts from the present, with no query typed. For each trigger it searches the memory
 index (`proxenos index`) and keeps the best few past records, so a meeting, a task, a feed item or a
@@ -13,17 +14,22 @@ Triggers:
   recency, found by name among the people in a record.
 
 A trigger's query is the content words of its title plus its people (an event's guests, a
-task's person, a paper's authors), any of which may match. A memory has to score at or below
-MIN_SCORE (bm25: more negative is a better match) and, so one long chat doesn't fill the list,
-at most one comes from the same chat or day. Browsing history is never a memory, and an event
-doesn't recall other calendar entries. A person has no query to rank by, so their memories are
-the newest records they're in, spread over sources. A trigger nothing clears the bar for is
-left out: no memory is better than a poor one.
+task's person, a paper's authors), any of which may match. A memory found by words has to score
+at or below MIN_SCORE (bm25: more negative is a better match). Where the meaning index
+(vectors.py) and its model are there, the title is also searched by meaning, which finds a
+record that says the same thing in other words, and a memory found that way has to be at least
+MIN_SIMILARITY near. The two lists are fused by reciprocal rank (memory.fuse), so a record both
+find comes first; without the model, words alone. So one long chat doesn't fill the list, at
+most one memory comes from the same chat or day. Browsing history is never a memory, and an
+event doesn't recall other calendar entries. A person has no query to rank by, so their
+memories are the newest records they're in, spread over sources. A trigger nothing clears
+either bar for is left out: no memory is better than a poor one.
 
 Writes clones/recall/today.json ({"generated", "triggers": [{"kind", "id", "title", "when",
 "memories"}]}, at most 5 memories each) and clones/recall/people.json (person id to up to 8
 memories). A memory is a search hit: id, source, stream, ts, who, where_, title, snippet (the
-matched words between \\x02 and \\x03), score and from_me.
+matched words between \\x02 and \\x03), score and from_me. One found by meaning alone has no
+matched words, and its score is its similarity (higher is nearer).
 
 An event's repeat rule is read for DAILY, WEEKLY, MONTHLY and YEARLY with INTERVAL, BYDAY,
 BYMONTHDAY, UNTIL and COUNT. Exceptions to a rule aren't kept in the vault, and its times are
@@ -41,7 +47,7 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import memory
+from proxenos import memory, vectors
 from proxenos.config import env
 
 WINDOW = timedelta(hours=48)  # how far ahead events count
@@ -53,6 +59,10 @@ CANDIDATES = 40  # hits fetched per trigger before the bar and the spread cut th
 # A hit must score at most this (bm25, lower is better): about one specific word in a title, or
 # two or three in the text. Matching only common words never gets there.
 MIN_SCORE = -15.0
+# A hit by meaning must be at least this near (cosine similarity). With the embedding model's
+# question prompt, a passage that answers a question scores about 0.6 and up, and one about
+# something else well under 0.3, so meaning alone can't bring up a poor memory either.
+MIN_SIMILARITY = 0.5
 # A word in more rows than this says nothing about what a record is about, so it isn't searched.
 MAX_DOCS = 2000
 MAX_WORDS = 10
@@ -179,7 +189,7 @@ def recall(vault: Path, now: datetime | None = None, people: int = PEOPLE) -> di
     ]
     today = []
     for kind, id_, title, when, words, names in triggers:
-        found = _memories(vault, _query(vault, words, names), exclude=_ignored(kind))
+        found = _memories(vault, _query(vault, words, names), _ignored(kind), about=title)
         if found:
             today.append({"kind": kind, "id": id_, "title": title, "when": when, "memories": found})
 
@@ -227,13 +237,34 @@ def _query(vault: Path, words: list[str], names: list[str]) -> str:
     return " ".join(t for t in terms if 0 < counts[t] <= MAX_DOCS)
 
 
-def _memories(vault: Path, query: str, exclude: tuple[str, ...]) -> list[dict]:
-    """The best past records for a query: good enough, and at most one per chat and day."""
-    if not query:
-        return []
+def _memories(vault: Path, query: str, exclude: tuple[str, ...], about: str = "") -> list[dict]:
+    """The best past records for a query's words and for what `about` means, fused: good
+    enough, and at most one per chat and day."""
     hits = memory.search(query, limit=CANDIDATES, match="any", exclude_sources=exclude, vault=vault)
     good = [h for h in hits if h["score"] <= MIN_SCORE]
-    return _spread(good, PER_TRIGGER, per_source=PER_TRIGGER)
+    fused = memory.fuse([good, _near(vault, about, exclude)])
+    return _spread(fused, PER_TRIGGER, per_source=PER_TRIGGER)
+
+
+def _near(vault: Path, about: str, exclude: tuple[str, ...]) -> list[dict]:
+    """The records nearest `about` in meaning, at least MIN_SIMILARITY near, as memories; none
+    without the meaning index or its model."""
+    try:
+        found = vectors.search(vault, about, limit=CANDIDATES)
+    except RuntimeError:  # the embedding model isn't running: words alone, then
+        return []
+    near = [h for h in found if h["score"] >= MIN_SIMILARITY and h["source"] not in exclude]
+    rows = memory.rows([h["id"] for h in near], vault=vault)
+    return [
+        rows[h["id"]]
+        | {
+            # What was found: a chat's day or a record, without the chat's name in front.
+            "snippet": h["snippet"].removeprefix(f"{h['where_'] or h['source']} | "),
+            "score": h["score"],
+        }
+        for h in near
+        if h["id"] in rows
+    ]
 
 
 def _recent(vault: Path, name: str, count: int) -> list[dict]:

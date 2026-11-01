@@ -1,11 +1,13 @@
 """Triggered recall on a synthetic vault: no model, no real data."""
 
 import json
+import re
+import zlib
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from proxenos import cli, memory
+from proxenos import cli, memory, vectors
 from proxenos.clones import recall
 
 NOW = datetime(2025, 3, 10, 9, 0, tzinfo=UTC)  # a Monday
@@ -340,6 +342,72 @@ def test_a_memory_per_trigger_is_capped(vault):
     recall.recall(vault, now=NOW)
 
     assert all(len(t["memories"]) <= recall.PER_TRIGGER for t in today(vault)["triggers"])
+
+
+SAME = {"funds": "budget", "conference": "symposium", "moss": "lichen"}
+
+
+def fake_embed(texts):
+    """Words as dimensions, a few that mean the same as one, and the question's instructions
+    left out, so meaning finds a record that shares no words with a trigger."""
+    found = []
+    for text in texts:
+        vector = [0.0] * 512
+        for word in re.findall(r"[a-z]+", text.split("Query: ")[-1].lower()):
+            vector[zlib.crc32(SAME.get(word, word).encode()) % 512] += 1
+        found.append(vector)
+    return found
+
+
+@pytest.fixture
+def by_meaning(vault, monkeypatch):
+    """The vault with a grant mail no trigger shares a word with, and a meaning index, with the
+    fake model answering questions."""
+    grant = {
+        "id": "grant",
+        "ts": "2025-02-20T08:00:00Z",
+        "subject": "Grant",
+        "from_name": "Grants Office",
+        "body_new": "Funds for the moss conference.",
+        "from_me": False,
+    }
+    write_month(vault, "raw/email/me", "2025-02", [grant])
+    memory.build(vault)
+    monkeypatch.setattr(vectors, "DAYS", 100_000)
+    vectors.update(vault, embed=fake_embed)
+    monkeypatch.setattr(vectors, "_ollama", fake_embed)
+    return vault
+
+
+def test_meaning_finds_what_words_miss_and_a_poor_match_is_still_no_memory(by_meaning, monkeypatch):
+    recall.recall(by_meaning, now=NOW)
+
+    budget = triggers(by_meaning, "task")["t1"]["memories"]  # Dana's lichen symposium budget
+    (grant,) = [m for m in budget if m["id"] == "email/me/grant"]
+    assert grant["stream"] == "me" and grant["title"] == "Grant"
+    assert grant["snippet"].startswith("Grant\nFunds") and grant["score"] >= recall.MIN_SIMILARITY
+    assert set(budget[0]) == set(grant)  # a memory found by words has the same fields
+    assert len({(m["where_"], m["ts"][:10]) for m in budget}) == len(budget)  # one a chat and day
+    assert set(triggers(by_meaning, "task")) == {"t1"}  # the unmatchable task still finds nothing
+    assert set(triggers(by_meaning, "feed")) == {"f1", "f2"}  # quantum widgets neither
+    kickoff = triggers(by_meaning, "event")["ev1"]["memories"]
+    assert {m["source"] for m in kickoff}.isdisjoint({"calendar", "chrome"})
+
+    monkeypatch.setattr(recall, "MIN_SIMILARITY", 0.99)  # nothing is that near
+    recall.recall(by_meaning, now=NOW)
+    assert "email/me/grant" not in {m["id"] for m in triggers(by_meaning, "task")["t1"]["memories"]}
+
+
+def test_without_the_embedding_model_recall_goes_on_by_words(by_meaning, monkeypatch):
+    def gone(texts):
+        raise RuntimeError("the embedding model isn't answering")
+
+    monkeypatch.setattr(vectors, "_ollama", gone)
+
+    recall.recall(by_meaning, now=NOW)
+
+    budget = triggers(by_meaning, "task")["t1"]["memories"]
+    assert budget and "email/me/grant" not in {m["id"] for m in budget}
 
 
 def test_it_needs_the_index(tmp_path):
