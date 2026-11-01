@@ -1,6 +1,6 @@
 # Apps for Mac, Windows and Android
 
-The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Little here is built yet: so far, the scheduler that will replace launchd ([below](#keeping-it-running-from-source)).
+The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Built so far: the scheduler that replaces launchd ([below](#keeping-it-running-from-source)), secrets in Windows Credential Manager (through `keyring`), settings in `%APPDATA%`, file locks that work on Windows, Gmail, Microsoft 365 and Google Calendar through sign-in, and tests on GitHub's Windows machines. The app itself isn't.
 
 ## Where things stand
 
@@ -8,10 +8,10 @@ Proxenos runs today on one kind of machine: a Mac, set up from the code. Most of
 
 | Mac-only today | What it does | The way across |
 |---|---|---|
-| `ingest/applemail.py` | reads every account in the Mac's Mail app | sign in to Gmail and Microsoft 365 directly (Gmail API, Microsoft Graph) |
-| `ingest/maccalendar.py` | reads the Mac's Calendar app | the same sign-ins, for calendars |
-| `ingest/whatsapp.py` | reads the WhatsApp Mac app's local store | Beeper Desktop, already supported, which runs on Mac, Windows and Linux |
-| `keychain.py` | keeps secrets in the macOS Keychain | one secrets module over the Keychain and Windows Credential Manager (the `keyring` library does both) |
+| `ingest/applemail.py` | reads every account in the Mac's Mail app | *Done:* sign in to Gmail and Microsoft 365 directly (Gmail API, Microsoft Graph) |
+| `ingest/maccalendar.py` | reads the Mac's Calendar app | *Done:* the same sign-ins, for calendars |
+| `ingest/whatsapp.py` | reads the WhatsApp Mac app's local store | Beeper Desktop, already supported, which runs on Mac, Windows and Linux. WhatsApp for Windows is now WhatsApp Web in a window, with no store to read |
+| `keychain.py` | keeps secrets in the macOS Keychain | *Done:* Windows Credential Manager and Linux's Secret Service through `keyring`. Credential Manager holds about 1,280 characters a secret, which a long Microsoft refresh token may pass |
 | `outbox.py` (mail) | sends through the Mail app | send through the same Gmail or Microsoft sign-in |
 | `phone.py` | serves the page to your phone over Tailscale | unchanged on Windows; on Android, see below |
 | `scripts/install-*.sh` | launchd jobs for the page, the 15-minute sync and the nightly run | the app runs the page itself, and `proxenos schedule` (built) the sync and the night, on every platform |
@@ -26,7 +26,7 @@ Before any app ships, make the core platform-neutral, so the Mac and Windows app
 - Paths from the platform's app-data folder, not `~/proxenos_vault` assumptions.
 - The nightly run and the 15-minute sync run by the app instead of launchd. *Built:* `proxenos schedule`, below.
 - Tests on GitHub's Windows machines as well as macOS.
-- Python in UTF-8 mode (`PYTHONUTF8=1`) on Windows, where its default encoding is still the old code page: the scheduler sets it for every job, and anyone running from source there should set it too. It becomes the default in Python 3.15.
+- Python in UTF-8 mode (`PYTHONUTF8=1`) on Windows, where its default encoding is still the old code page: the scheduler and the page set it for every command they start, and anyone running from source there should set it too. It becomes the default in Python 3.15. The page also starts commands with no console window (`windowsHide`).
 
 ### 2. The Mac app (a few weeks after 1)
 
@@ -38,7 +38,7 @@ As [everyone.md](everyone.md) describes: Electron, the page as a standalone Next
 ### 3. The Windows app (weeks, once 1 and 2 exist)
 
 The same Electron app, built for Windows on GitHub's Windows machines.
-- **Signed** with Microsoft's Artifact Signing, so Windows' SmartScreen doesn't block it. Individuals in the US and Canada can use it.
+- **Signed** with Microsoft's Artifact Signing. Individuals in the US and Canada can use it, with an identity check; billing starts when the account is made, and SmartScreen still warns about each new build until it has a reputation. A free second route: the Microsoft Store, where registration is free for individuals since September 2025 and the Store signs the package itself.
 - **Messages** through Beeper Desktop. WhatsApp's Windows app doesn't leave a readable store the way the Mac app does.
 - **A local model** through Ollama, which runs on Windows; or Claude with the person's own key.
 
@@ -135,7 +135,7 @@ Until Google's verification is done, Gmail keeps today's paths: your own sign-in
 ## Sources
 
 - Apple Developer Program fee and notarization: [Apple Developer Forums](https://developer.apple.com/forums/thread/121113); check [developer.apple.com](https://developer.apple.com/programs/) for the current price.
-- Windows signing: [Microsoft, Artifact Signing pricing](https://azure.microsoft.com/pricing/details/trusted-signing/); [DevClass on eligibility (Jan 2026)](https://www.devclass.com/security/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/4079554)
+- Windows signing: [Microsoft, Artifact Signing pricing](https://azure.microsoft.com/pricing/details/artifact-signing/); [Artifact Signing quickstart](https://learn.microsoft.com/azure/artifact-signing/quickstart); [free Store registration for individuals](https://blogs.windows.com/windowsdeveloper/2025/09/10/free-developer-registration-for-individual-developers-on-microsoft-store/); [DevClass on eligibility (Jan 2026)](https://www.devclass.com/security/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/4079554)
 - Android developer verification: [Google, Understanding Android developer verification](https://support.google.com/android-developer-console/answer/16561738); [Android Authority, the first wave](https://androidauthority.com/android-sideloading-developer-verification-first-wave-rollout-3717921)
 - Gmail verification and CASA: [Unipile, Google OAuth verification (2026)](https://www.unipile.com/integrating-google-oauth-2-0-user-authentication-into-your-app/); [DeepStrike, the CASA assessment](https://deepstrike.io/blog/google-casa-security-assessment-2025)
 - On-device models: [Google, LiteRT-LM](https://developers.googleblog.com/en/blazing-fast-on-device-genai-with-litert-lm/); [Gemma on LiteRT, model card](https://huggingface.co/litert-community/Gemma3-1B-IT/blob/main/README.md)
