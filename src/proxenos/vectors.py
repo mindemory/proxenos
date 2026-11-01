@@ -36,6 +36,7 @@ from proxenos.config import env
 EMBED_MODEL = "qwen3-embedding:0.6b"
 DAYS = 365
 CHARS = 1500  # of a unit, embedded
+EMBED_CONTEXT = 2048  # tokens the embedding model reads at once: a unit and its instruction
 SNIPPET_CHARS = 400
 BATCH = 16
 LOCK_WAIT = 120  # seconds to wait for another run's write to finish
@@ -224,7 +225,16 @@ def _normalized(vectors: list[list[float]]) -> np.ndarray:
 
 
 def _ollama(texts: list[str]) -> list[list[float]]:
-    body = json.dumps({"model": env("EMBED_MODEL", EMBED_MODEL), "input": texts}).encode()
+    # A unit is at most CHARS characters, under 1,000 tokens. Asked for no context, Ollama gives
+    # the embedding model 32,768 tokens' worth, about 2 GB, and on a 32 GB Mac evicts the main
+    # model to fit it, throwing away its prompt cache: its log showed it doing so 19 times in 4 days.
+    body = json.dumps(
+        {
+            "model": env("EMBED_MODEL", EMBED_MODEL),
+            "input": texts,
+            "options": {"num_ctx": EMBED_CONTEXT},
+        }
+    ).encode()
     request = urllib.request.Request(
         f"{_OLLAMA}/api/embed", body, {"Content-Type": "application/json"}
     )
