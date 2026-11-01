@@ -5,6 +5,7 @@ import importlib
 import json
 import pkgutil
 import sys
+import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime
@@ -260,7 +261,8 @@ def _command(
 def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     """The master's run (sync, observe, consolidate), then each of NIGHT_CLONES with its
     default arguments, then the voice model trained again where it's due, one summary line
-    each. A step that fails is reported and the rest still run. Whether every step worked."""
+    each with how long it took, so a slow step shows in the log. A step that fails is reported
+    and the rest still run. Whether every step worked."""
     print(f"night: started {datetime.now():%Y-%m-%d %H:%M}", flush=True)
     steps: list[tuple[str, Callable[[], dict[str, int]]]] = [("master", lambda: master.run(vault))]
     for name in NIGHT_CLONES:
@@ -268,14 +270,23 @@ def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     steps.append(("voice", lambda: voicemodel.refresh(vault)))
     ok = True
     for name, step in steps:
+        began = time.monotonic()
         try:
             line = _summary(name, step())
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one failed step must not stop the rest
             ok = False
             reason = str(e) if isinstance(e, SystemExit) else f"{type(e).__name__}: {e}"
             line = f"{name}: failed ({' '.join(reason.split())[:300]})"
-        print(line, flush=True)
+        print(f"{line} [{_took(time.monotonic() - began)}]", flush=True)
     return ok
+
+
+def _took(seconds: float) -> str:
+    """A step's time as the log shows it: "8s", "4m 12s", "1h 03m"."""
+    s = round(seconds)
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m {s % 60:02d}s" if s < 3600 else f"{s // 3600}h {s % 3600 // 60:02d}m"
 
 
 def _defaults(module: ModuleType) -> argparse.Namespace:

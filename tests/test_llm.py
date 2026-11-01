@@ -239,3 +239,33 @@ def test_a_voice_model_in_ollama_or_not_answering(monkeypatch):
     monkeypatch.setenv("PROXENOS_VOICE_MODEL", "mlx")
     with pytest.raises(llm.ModelError, match="isn't answering"):
         llm.ask_voice("the chat", "You are Tess.")
+
+
+def test_a_local_answer_is_held_to_the_schema_item_by_item(monkeypatch):
+    idea = {"type": "object", "properties": {"title": {"type": "string"},
+            "first_step": {"type": "string"}, "kind": {"type": "string", "enum": ["a", "b"]}},
+            "required": ["title", "first_step"], "additionalProperties": False}  # fmt: skip
+    schema = {
+        "type": "object",
+        "properties": {"ideas": {"type": "array", "items": idea}, "count": {"type": "integer"}},
+        "required": ["ideas"],
+    }
+    answer = {
+        "ideas": [
+            {"title": "Kept", "first_step": "Write to Ana.", "extra": 1},
+            {"title": "No first step"},  # a gap in one item drops that item only
+            {"title": "Odd kind", "first_step": "x", "kind": "c"},  # a value off its enum goes
+            "not an idea",
+        ],
+        "count": True,  # a boolean isn't an integer
+    }
+    sent = local(monkeypatch, f"{schema}\n{__import__('json').dumps(answer)}")
+
+    assert llm.ask("hi", schema=schema) == {
+        "ideas": [
+            {"title": "Kept", "first_step": "Write to Ana."},
+            {"title": "Odd kind", "first_step": "x"},
+        ]
+    }
+    assert len(sent) == 1
+    assert llm._object('{"ideas": {"type": "array"}}', schema) is None  # the echoed schema isn't it

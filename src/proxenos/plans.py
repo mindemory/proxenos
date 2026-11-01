@@ -20,7 +20,9 @@ Calendar app (their Google one, say "me@gmail.com"), the same events also go the
 through the Calendar app, which syncs them to the account like any event they add. Each plan's
 event is made once, made again when the plan moves, and deleted once it's done or gone. Only the
 events it made are ever changed or deleted: their ids are kept in clones/tasks/pushed.json, and
-when the calendar is read back in, those don't count as the user's own. Off until it's set, and
+when the calendar is read back in, those don't count as the user's own. An event is found by
+its id (`event id`), never by searching the calendar for it, which takes Calendar over half a
+minute on a calendar years long. Off until it's set, and
 only on a Mac; macOS asks once whether Proxenos may use Calendar. Never from a made-up vault
 (`proxenos demo`), which the page may run with the user's own settings.
 """
@@ -50,7 +52,7 @@ _COMMON = {
 _SOURCES = {"whatsapp": "WhatsApp", "slack": "Slack", "email": "email"}
 WEEK_DAYS = 7  # of the user's calendar a draft sees, to suggest a time that's free
 PUSHED = "pushed.json"  # in clones/tasks/: each plan's event on the user's calendar, by task id
-OSA_SECONDS = 120  # for one change to the Calendar app, which can be slow on a long calendar
+OSA_SECONDS = 120  # for one change to the Calendar app, which can be slow while it syncs
 # One change to the Calendar app: delete the event with the given uid, if any, then, unless the
 # action is "delete", make the new one and say its uid. Dates come as "YYYY MM DD HH MM".
 _SCRIPT = """\
@@ -60,7 +62,7 @@ on run argv
     set cal to first calendar whose name is calName
     if oldUid is not "" then
       try
-        delete (every event of cal whose uid is oldUid)
+        delete (event id oldUid of cal)
       end try
     end if
     if action is "delete" then return ""

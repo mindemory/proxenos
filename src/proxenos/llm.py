@@ -176,8 +176,9 @@ def _ask_local(
     images: list[dict] | None = None,
 ) -> str | dict:
     """`ask`, answered by a model on this Mac through Ollama's API. Ollama can't hold every
-    model to a schema, so a schema goes in the system prompt and the answer is checked here,
-    with one more try when it isn't the JSON asked for."""
+    model to a schema (for gemma4 it answers "structured output is unavailable"), so a schema
+    goes in the system prompt and the answer is held to it here, with one more try when it
+    isn't the JSON asked for."""
     answer_room = min(max_tokens, LOCAL_CONTEXT // 4)
     if schema is not None:
         system = f"{system or ''}\n\n{_JSON_ONLY}\n{json.dumps(schema)}".strip()
@@ -209,19 +210,9 @@ def _ask_local(
 
 
 def _object(text: str, schema: dict) -> dict | None:
-    """The first JSON object in a local model's answer with the schema's required keys, each of
-    the type the schema gives. A model may echo the schema before its answer, whose own parts
-    can have the same keys, or wrap the answer in a code fence."""
-    required = set(schema.get("required", []))
-    types = {"array": list, "object": dict, "string": str, "boolean": bool, "number": (int, float)}
-    props = schema.get("properties", {})
-
-    def fits(found: object) -> bool:
-        if not (isinstance(found, dict) and required <= set(found)):
-            return False
-        wanted = {k: types.get(props.get(k, {}).get("type", ""), object) for k in required}
-        return all(isinstance(found[k], t) for k, t in wanted.items())
-
+    """The first JSON object in a local model's answer that fits the schema, held to it the way
+    a hosted model's answer is (`_conform`). A model may echo the schema before its answer,
+    whose own parts can have the same keys, or wrap the answer in a code fence."""
     decoder = json.JSONDecoder()
     start = text.find("{")
     while start != -1:
@@ -230,10 +221,51 @@ def _object(text: str, schema: dict) -> dict | None:
         except ValueError:
             start = text.find("{", start + 1)
             continue
-        if fits(found):
-            return found
+        if isinstance(found, dict) and (held := _conform(found, schema)) is not _UNFIT:
+            return held
         start = text.find("{", start + 1)  # inside it: the answer may be nested in the echo
     return None
+
+
+_UNFIT = object()  # what _conform returns for a value the schema doesn't allow
+_TYPES = {
+    "object": dict,
+    "array": list,
+    "string": str,
+    "boolean": bool,
+    "integer": int,
+    "number": (int, float),
+    "null": type(None),
+}
+
+
+def _conform(value: object, schema: dict) -> object:
+    """`value` as the schema allows it, or _UNFIT. A local model held to no grammar can leave a
+    required key out of one item of a list ("first_step" in one idea of five): that item goes,
+    and the rest stay, rather than one gap failing the whole answer or the clone that reads it.
+    An object missing a required key, or a value of another type, is unfit; a key the schema
+    doesn't list goes when it says additionalProperties is false."""
+    kinds = schema.get("type")
+    if kinds is not None:
+        wanted = tuple(_TYPES[k] for k in ([kinds] if isinstance(kinds, str) else kinds))
+        is_bool = isinstance(value, bool)
+        if not isinstance(value, wanted) or (is_bool and bool not in wanted):
+            return _UNFIT
+    if "enum" in schema and value not in schema["enum"]:
+        return _UNFIT
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        held = (_conform(item, schema["items"]) for item in value)
+        return [item for item in held if item is not _UNFIT]
+    if isinstance(value, dict) and ("properties" in schema or "required" in schema):
+        props, kept = schema.get("properties"), {}
+        for key, item in value.items():
+            if props is None or key not in props:
+                if props is None or schema.get("additionalProperties") is not False:
+                    kept[key] = item
+            elif (held := _conform(item, props[key])) is not _UNFIT:
+                kept[key] = held
+        return kept if set(schema.get("required", [])) <= set(kept) else _UNFIT
+    return value
 
 
 def _chat(model: str, body: dict, answer_room: int) -> str:

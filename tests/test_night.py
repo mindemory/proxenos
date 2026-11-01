@@ -1,5 +1,7 @@
 """`proxenos night` with the master and every clone faked out. No network, no model, no real data."""
 
+import re
+
 import pytest
 
 from proxenos import cli, llm, master, voicemodel
@@ -63,12 +65,22 @@ def calls(tmp_path, monkeypatch):
     return calls
 
 
+def untimed(lines):
+    """The night's lines without the time each step took, after checking each has one."""
+    assert all(re.search(r" \[\d+s\]$", line) for line in lines)
+    return [re.sub(r" \[\d+s\]$", "", line) for line in lines]
+
+
+def test_each_step_s_time_reads_at_a_glance():
+    assert [cli._took(s) for s in (4.4, 59.6, 252, 3780)] == ["4s", "1m 00s", "4m 12s", "1h 03m"]
+
+
 def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     cli.main(["night"])
 
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith("night: started ")
-    assert lines[1:] == [
+    assert untimed(lines[1:]) == [
         "master: 2 sources synced, 1 self files written",
         "tracker: 1 done",
         "tasks: 1 done",
@@ -116,7 +128,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         cli.main(["night"])
 
     assert exit_.value.code == 1
-    lines = capsys.readouterr().out.splitlines()[1:]
+    lines = untimed(capsys.readouterr().out.splitlines()[1:])
     assert lines == [
         "master: failed (ANTHROPIC_API_KEY is not set. Put a key in .env)",
         "tracker: 1 done",

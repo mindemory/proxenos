@@ -39,7 +39,9 @@ if launchctl print "$domain/$old_label" >/dev/null 2>&1 || [ -f "$old_plist" ]; 
   echo "Removed the old $old_label job."
 fi
 
-install_job "$label" "$repo" "proxenos night" "$logs/night.log" '  <key>StartCalendarInterval</key>
+# It starts in your home folder, as the sync does: a repo under ~/Documents is a folder macOS
+# protects, and a job started there fills its log with "getcwd: Operation not permitted".
+install_job "$label" "$HOME" "proxenos night" "$logs/night.log" '  <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
     <integer>1</integer>
