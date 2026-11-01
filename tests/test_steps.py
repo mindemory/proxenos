@@ -403,6 +403,7 @@ def test_the_runner_never_reads_the_vault_or_secrets(setup, monkeypatch, tmp_pat
 def test_the_runner_never_reads_keys_mail_messages_or_browsers(tmp_path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # where Windows' expanduser looks instead
     places = [
         ".ssh",
         ".kube",
