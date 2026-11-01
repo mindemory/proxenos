@@ -427,6 +427,8 @@ def test_the_runner_never_reads_keys_mail_messages_or_browsers(tmp_path, monkeyp
 
     found = steps.hidden(vault)
 
+    # The checkout's own .env is hidden too where it has one, which depends on the checkout.
+    found = [p for p in found if p != steps.REPO_ROOT / ".env"]
     assert {vault, settings, home / ".netrc", *(home / p for p in places)} == set(found)
     assert len(found) == len(set(found))
     # ~/.config is hidden around the worktrees, so the runner can still read the one it's in.
