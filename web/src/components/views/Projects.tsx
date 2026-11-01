@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { ListPlus, Play, X } from "lucide-react";
+import { ListPlus, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
 import { ErrorBanner, NoVault } from "@/components/EmptyState";
 import { Markdown } from "@/components/Markdown";
+import { ManuscriptPanel } from "@/components/projects/Manuscript";
 import { StepCard } from "@/components/projects/StepCard";
 import { Bone } from "@/components/Skeleton";
 import { timeAgo } from "@/lib/format";
 import { useProjects } from "@/lib/projectsClient";
-import { STEP_MAX_TEXT, type ProjectsResponse, type WorkProject } from "@/lib/types";
+import { STEP_MAX_TEXT, type ManuscriptEdit, type ProjectsResponse, type StepAsk, type WorkProject } from "@/lib/types";
 
 // What was being written in each project's queue box when the view was left.
 const kept = new Map<string, string>();
@@ -28,12 +29,38 @@ interface SectionProps {
   onUnqueue: (id: string) => void;
   onAccept: (step: string) => void;
   onDiscard: (step: string) => void;
+  /** Ask for a step that says more than its words: queue it, or take it now. */
+  onAsk: (text: string, now: boolean, ask: StepAsk) => Promise<boolean>;
+  onSaveEdit: (edit: ManuscriptEdit) => Promise<boolean>;
 }
 
-/** One project: where it stands, the steps asked for, and the steps taken, newest first. */
-function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, onUnqueue, onAccept, onDiscard }: SectionProps) {
+// Which projects' manuscripts were open when the view was left.
+const reading = new Set<string>();
+
+/** One project: where it stands, its manuscript, the steps asked for, and the steps taken, newest first. */
+function ProjectSection({
+  project,
+  data,
+  stepping,
+  deciding,
+  onTake,
+  onQueue,
+  onUnqueue,
+  onAccept,
+  onDiscard,
+  onAsk,
+  onSaveEdit,
+}: SectionProps) {
   const [text, setText] = useState(kept.get(project.id) ?? "");
   const [queueing, setQueueing] = useState(false);
+  const [paper, setPaper] = useState(reading.has(project.id));
+  const showPaper = (open: boolean) => {
+    setPaper(open);
+    if (open) reading.add(project.id);
+    else reading.delete(project.id);
+  };
+  // A step or an edit that comes, goes or is decided changes the manuscript's versions.
+  const again = project.steps.map((s) => `${s.id}:${s.status}`).join(",");
   const mine = data.job?.state === "running" && data.job.project === project.id;
   const starting = mine && !project.steps.some((s) => s.status === "working");
   const waitingOnYou = project.steps.filter((s) => s.status === "ready").length;
@@ -88,6 +115,24 @@ function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, on
         </Fold>
       )}
 
+      {project.repo &&
+        (paper ? (
+          <ManuscriptPanel
+            project={project.id}
+            again={again}
+            stepping={stepping}
+            deciding={deciding}
+            onAsk={onAsk}
+            onSave={onSaveEdit}
+            onClose={() => showPaper(false)}
+          />
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton icon={ScrollText} label="Manuscript" tone="accent" onClick={() => showPaper(true)} />
+            <span className="text-xs text-muted">The paper&apos;s old and new versions, with the changes between them.</span>
+          </div>
+        ))}
+
       {project.repo && (
         <div className="card space-y-3 p-3 sm:p-4">
           <textarea
@@ -107,6 +152,12 @@ function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, on
                 <li key={q.id} className="flex items-start justify-between gap-2 text-sm">
                   <span className="min-w-0 break-words text-ink/90">
                     <span className="num text-faint">{i + 1}.</span> {q.text}
+                    {q.base && (
+                      <span className="text-xs text-muted">
+                        {" "}
+                        · from <span className="font-mono">{q.base}</span>
+                      </span>
+                    )}
                   </span>
                   <button
                     onClick={() => onUnqueue(q.id)}
@@ -165,8 +216,10 @@ function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, on
           step={s}
           now={data.now}
           busy={deciding}
+          stepping={stepping}
           onAccept={() => onAccept(s.id)}
           onDiscard={() => onDiscard(s.id)}
+          onRevise={(text, now) => onAsk(text, now, { base: s.branch })}
         />
       ))}
     </section>
@@ -179,7 +232,7 @@ function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, on
  * for the user to accept, which merges it, or discard.
  */
 export function Projects() {
-  const { data, error, clearError, waiting, take, accept, discard, queue, unqueue } = useProjects();
+  const { data, error, clearError, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
 
@@ -219,6 +272,8 @@ export function Projects() {
             onUnqueue={(id) => void unqueue(p.id, id)}
             onAccept={(id) => void accept(id)}
             onDiscard={(id) => void discard(id)}
+            onAsk={(text, now, ask) => (now ? takeAsked(p.id, text, ask) : queue(p.id, text, ask))}
+            onSaveEdit={(edit) => saveEdit(p.id, edit)}
           />
         ))
       )}

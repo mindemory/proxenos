@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, GitMerge, Trash2, TriangleAlert, X } from "lucide-react";
+import { FileDiff, FileText, GitMerge, MessageSquarePlus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
 import { Markdown } from "@/components/Markdown";
+import { AskBox, StepChanges } from "@/components/projects/Manuscript";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { ProjectStep, StepStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -38,13 +39,22 @@ interface StepCardProps {
   now: string;
   /** An Accept or Discard is going. */
   busy: boolean;
+  /** A step is being taken, so a revision can't start now. */
+  stepping: boolean;
   onAccept: () => void;
   onDiscard: () => void;
+  /** Ask for a change on top of this step, queued or done now. */
+  onRevise: (text: string, now: boolean) => Promise<boolean>;
 }
 
-/** One step of a project's work: what it did, what it shows, what it changed, and Accept or Discard. */
-export function StepCard({ step, now, busy, onAccept, onDiscard }: StepCardProps) {
+/**
+ * One step of a project's work: what it did, what it shows, what it changed, and Accept or
+ * Discard; while it waits, its changes to see, and a change to ask for on top of it.
+ */
+export function StepCard({ step, now, busy, stepping, onAccept, onDiscard, onRevise }: StepCardProps) {
   const [confirm, setConfirm] = useState<"accept" | "discard" | null>(null);
+  const [open, setOpen] = useState<"changes" | "revise" | null>(null);
+  const toggle = (what: "changes" | "revise") => setOpen((o) => (o === what ? null : what));
   const status = STATUS[step.status];
   const decided = step.status === "accepted" || step.status === "discarded";
   const runner = RUNNER[step.runner];
@@ -159,6 +169,7 @@ export function StepCard({ step, now, busy, onAccept, onDiscard }: StepCardProps
         </div>
         <h3 className="text-base font-medium leading-snug text-ink">{step.step || step.asked || "A step of the project's work"}</h3>
         {step.asked && step.step && step.asked !== step.step && <p className="text-xs text-muted">You asked: {step.asked}</p>}
+        {step.buildsOn && <p className="text-xs text-muted">It revises a step that was waiting on you, and builds on its work.</p>}
         {step.why && <p className="text-sm leading-relaxed text-muted">{step.why}</p>}
       </div>
 
@@ -231,10 +242,28 @@ export function StepCard({ step, now, busy, onAccept, onDiscard }: StepCardProps
               </>
             ) : (
               <>
+                {step.status === "ready" && step.files.length > 0 && (
+                  <ActionButton
+                    icon={FileDiff}
+                    label="See the changes"
+                    tone="accent"
+                    active={open === "changes"}
+                    onClick={() => toggle("changes")}
+                  />
+                )}
                 {step.status === "ready" && (
                   <ActionButton icon={GitMerge} label="Accept" tone="ok" disabled={busy} onClick={() => setConfirm("accept")} />
                 )}
                 <ActionButton icon={Trash2} label="Discard" tone="bad" disabled={busy} onClick={() => setConfirm("discard")} />
+                {step.status === "ready" && (
+                  <ActionButton
+                    icon={MessageSquarePlus}
+                    label="Revise this step"
+                    tone="neutral"
+                    active={open === "revise"}
+                    onClick={() => toggle("revise")}
+                  />
+                )}
               </>
             )}
           </div>
@@ -250,6 +279,29 @@ export function StepCard({ step, now, busy, onAccept, onDiscard }: StepCardProps
                   : "Its worktree is kept as it stopped, for you to look at. Discard deletes it and the branch."}
           </p>
           {busy && <p className="text-xs text-muted">The last decision is still going.</p>}
+          {step.status === "ready" && open === "changes" && (
+            <div className="pt-2">
+              <StepChanges project={step.id.split("/")[0]} step={step.id} />
+            </div>
+          )}
+          {step.status === "ready" && open === "revise" && (
+            <div className="space-y-1.5 pt-2">
+              <AskBox
+                label="A change on top of this step"
+                placeholder="What to change in what it did, in your words: “Keep the second paragraph as it was.”"
+                stepping={stepping}
+                deciding={busy}
+                onAsk={async (text, now) => {
+                  const ok = await onRevise(text, now);
+                  if (ok) setOpen(null);
+                  return ok;
+                }}
+              />
+              <p className="text-xs text-muted">
+                The revision starts from {step.branch}. Accepting it merges both into {step.base || "your branch"}.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </article>

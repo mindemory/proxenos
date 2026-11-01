@@ -1200,6 +1200,8 @@ export interface StepMade {
 export interface ProjectStep {
   /** <project>/<when>. */
   id: string;
+  /** A step taken by a runner, or an edit the user made by hand on the page. */
+  kind: "step" | "edit";
   created: string;
   updated: string;
   status: StepStatus;
@@ -1218,6 +1220,8 @@ export interface ProjectStep {
   files: StepFile[];
   branch: string;
   base: string;
+  /** The step still waiting on the user it builds on ("revise this step"), or null. */
+  buildsOn: string | null;
   /** Where its worktree is, with ~ for home, until it's accepted or discarded. */
   worktree: string;
   thread: StepNote[];
@@ -1229,6 +1233,15 @@ export interface QueuedStep {
   id: string;
   text: string;
   added: string;
+  /** The branch it starts from, when not the checkout's: a manuscript's, or a waiting step's. */
+  base: string;
+}
+
+/** What a step asked for from the page may say beyond its words. */
+export interface StepAsk {
+  /** The branch it starts from: the manuscript's, or the branch of a step it revises. */
+  base?: string;
+  manuscript?: { path: string; branch: string };
 }
 
 export interface WorkProject {
@@ -1265,6 +1278,91 @@ export interface ProjectsResponse {
   job: ProjectsJob | null;
   /** The last Accept, Discard or change to a queue. */
   deciding: ProjectsJob | null;
+}
+
+// ── A project's manuscript ──────────────────────────────────────────────────
+//
+// From `proxenos project manuscript`, which reads the project's code with git: the manuscript (a
+// paper.md, manuscript.md or main.tex, on whichever branch holds it), its versions, and one version
+// with its changes since another; or every file a step changed.
+
+/** The longest manuscript the page shows whole and lets the user edit. */
+export const MANUSCRIPT_MAX_TEXT = 400_000;
+
+/** A stretch of text that stayed, came in or went. The same and add texts make the newer version. */
+export interface DiffOp {
+  op: "same" | "add" | "del";
+  text: string;
+}
+
+export interface ManuscriptVersion {
+  commit: string;
+  short: string;
+  date: string;
+  author: string;
+  subject: string;
+  /** The branch it's on: the manuscript's, or that of a step still waiting on the user. */
+  branch: string;
+  /** On a step's branch, waiting on Accept: Proxenos's work, or the user's own edit. */
+  proxenos: boolean;
+  edit: boolean;
+  /** The step's id, when it's on one. */
+  step: string | null;
+  path: string;
+}
+
+/** One file's changes from one version to another: prose word by word, code line by line. */
+export interface FileChanges {
+  kind: "prose" | "code";
+  unit: "words" | "lines";
+  /** The newer version's text. */
+  text: string;
+  ops: DiffOp[];
+  added: number;
+  removed: number;
+  /** Not text, so not compared. */
+  binary: boolean;
+  /** Too long to compare: the text is cut, and shown without changes. */
+  truncated: boolean;
+}
+
+export interface ManuscriptResponse extends FileChanges {
+  project: string;
+  /** Null when no paper was found: `why` says how to name it. */
+  manuscript: { path: string; branch: string; named: boolean } | null;
+  why: string;
+  /** Newest first. */
+  versions: ManuscriptVersion[];
+  /** The manuscript branch's newest commit, which an edit starts from. */
+  tip: string;
+  base: string;
+  head: string;
+  /** The head is the newest version on the manuscript's own branch, whole. */
+  editable: boolean;
+}
+
+export interface ChangedFile extends FileChanges {
+  path: string;
+}
+
+export interface StepChangesResponse {
+  project: string;
+  step: string;
+  branch: string;
+  /** The branch Accept merges it into. */
+  base: string;
+  files: ChangedFile[];
+  /** More files changed than are shown. */
+  truncated: boolean;
+}
+
+/** The text the user saved, and where it came from. */
+export interface ManuscriptEdit {
+  path: string;
+  branch: string;
+  /** The commit the text was read at. */
+  from: string;
+  text: string;
 }
 
 // ── Calls ───────────────────────────────────────────────────────────────────

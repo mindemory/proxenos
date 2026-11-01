@@ -8,7 +8,9 @@
 // Everything it asks for goes to `proxenos clone steps -` as one JSON line on its stdin: take a
 // step now ({take}), which runs as the job "step", one at a time; and Accept, Discard, or a change
 // to a queue, which run as the job "decide". Accept is the one request that changes the user's own
-// code: it merges the step's branch into their checkout, and only when they press it.
+// code: it merges the step's branch into their checkout, and only when they press it. A step asked
+// for may name the branch it starts from (a manuscript's, or a waiting step's it revises) and the
+// manuscript it changes; one can also be asked for and taken at once ({take, step}).
 
 import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
@@ -17,6 +19,7 @@ import { latestJob, startJob, STEP_MS, type Job } from "./connect";
 import {
   STEP_MAX_TEXT,
   type ProjectsJob,
+  type StepAsk,
   type ProjectsResponse,
   type ProjectStep,
   type QueuedStep,
@@ -68,8 +71,43 @@ export function isStepId(value: unknown): value is string {
 export type Decision =
   | { accept: string }
   | { discard: string }
-  | { queue: string; step: string }
+  | ({ queue: string; step: string } & StepAsk)
   | { unqueue: string; id: string };
+
+/** A branch's name, as git takes one and as the steps clone checks it. */
+export function isBranch(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(value) && !value.includes("..");
+}
+
+/** A path in a repository: relative, with / between folders, not leaving it or reaching into git's own folder. */
+export function isRepoPath(value: unknown): value is string {
+  if (typeof value !== "string" || !value || value.length > 300 || /[\\\0\r\n:]/.test(value)) return false;
+  const parts = value.split("/");
+  return parts.every((p) => p && p !== "." && p !== "..") && parts[0] !== ".git";
+}
+
+/** What a step asked for says beyond its words, its base branch and manuscript, or why they're wrong. */
+export function parseAsk(body: Record<string, unknown>): StepAsk | { error: string } {
+  const ask: StepAsk = {};
+  if (body.base !== undefined && body.base !== "") {
+    if (!isBranch(body.base)) return { error: "base must be a branch's name." };
+    ask.base = body.base;
+  }
+  if (body.manuscript !== undefined && body.manuscript !== null) {
+    const m = (typeof body.manuscript === "object" ? body.manuscript : {}) as Record<string, unknown>;
+    if (!isRepoPath(m.path) || !(m.branch === "" || isBranch(m.branch))) return { error: "manuscript must be {path, branch}." };
+    ask.manuscript = { path: m.path, branch: m.branch as string };
+  }
+  return ask;
+}
+
+/** The words of a step asked for, or why they won't do. */
+export function parseStepText(value: unknown): string | { error: string } {
+  const step = typeof value === "string" ? value.trim() : "";
+  if (!step) return { error: "Say what the step is." };
+  if (step.length > STEP_MAX_TEXT) return { error: `Keep it to ${STEP_MAX_TEXT.toLocaleString("en-US")} characters.` };
+  return step;
+}
 
 /** A decision in a request's body, or why it can't be made. */
 export function parseDecision(body: Record<string, unknown>): Decision | { error: string } {
@@ -83,17 +121,18 @@ export function parseDecision(body: Record<string, unknown>): Decision | { error
   }
   if ("queue" in body) {
     if (!isProjectId(body.queue)) return { error: "queue must be a project's id." };
-    const step = typeof body.step === "string" ? body.step.trim() : "";
-    if (!step) return { error: "Say what the step is." };
-    if (step.length > STEP_MAX_TEXT) return { error: `Keep it to ${STEP_MAX_TEXT.toLocaleString("en-US")} characters.` };
-    return { queue: body.queue, step };
+    const step = parseStepText(body.step);
+    if (typeof step !== "string") return step;
+    const ask = parseAsk(body);
+    if ("error" in ask) return { error: ask.error };
+    return { queue: body.queue, step, ...ask };
   }
   return { error: "Ask for take, queue, unqueue, accept or discard." };
 }
 
-/** Take a step on the project now. Null when a step is already being taken. */
-export function startStep(project: string): Promise<Job | null> {
-  return startJob("step", ["clone", "steps", "-"], project, JSON.stringify({ take: project }) + "\n");
+/** Take a step on the project now: the one asked for, else the first queued. Null when a step is already being taken. */
+export function startStep(project: string, asked?: { step: string } & StepAsk): Promise<Job | null> {
+  return startJob("step", ["clone", "steps", "-"], project, JSON.stringify({ take: project, ...asked }) + "\n");
 }
 
 /** Accept or discard a step, or change a queue. Null when another decision is still going. */
@@ -173,6 +212,7 @@ function toStep(raw: unknown, project: string, when: string): ProjectStep | null
   const open = status === "ready" || status === "failed" || status === "working";
   return {
     id: r.id,
+    kind: r.kind === "edit" ? "edit" : "step",
     created: str(r.created),
     updated: str(r.updated),
     status,
@@ -189,6 +229,7 @@ function toStep(raw: unknown, project: string, when: string): ProjectStep | null
     files: list(r.files, toFile, 200),
     branch: str(r.branch),
     base: str(r.base),
+    buildsOn: isStepId(r.builds_on) ? r.builds_on : null,
     worktree: open && str(r.worktree) ? displayPath(str(r.worktree)) : "",
     thread: list(r.thread, toNote, 50),
     error: str(r.error) || null,
@@ -214,7 +255,8 @@ function toQueued(raw: unknown): QueuedStep | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const text = str(r.text).trim();
-  return text && /^q-[0-9a-f]{12}$/.test(str(r.id)) ? { id: str(r.id), text, added: str(r.added) } : null;
+  if (!text || !/^q-[0-9a-f]{12}$/.test(str(r.id))) return null;
+  return { id: str(r.id), text, added: str(r.added), base: isBranch(r.base) ? r.base : "" };
 }
 
 async function readSteps(dir: string, project: string, job: Job | null): Promise<ProjectStep[]> {

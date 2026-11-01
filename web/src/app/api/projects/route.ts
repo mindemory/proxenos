@@ -1,5 +1,5 @@
 import { NO_STORE, readLocalJson, rejectNonLocal } from "@/lib/guard";
-import { getProjects, isProjectId, parseDecision, startDecision, startStep } from "@/lib/projects";
+import { getProjects, isProjectId, parseAsk, parseDecision, parseStepText, startDecision, startStep } from "@/lib/projects";
 import { STEP_MAX_TEXT } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +18,11 @@ export async function GET(req: Request) {
  * POST /api/projects {take: <project>} takes a step on that project now. {accept: <step>} merges
  * the step's branch into the user's checkout, the one request that changes their code; {discard:
  * <step>} deletes its branch and worktree. {queue: <project>, step} asks for a step, up to 2,000
- * characters, and {unqueue: <project>, id} takes one back. Each goes to `proxenos clone steps` on
- * its stdin and nowhere else, and is answered at once; the page follows it through GET.
+ * characters, and {unqueue: <project>, id} takes one back. A step asked for, queued or taken now
+ * ({take, step}), may name the branch it starts from (base: the manuscript's, or the branch of a
+ * step it revises) and the manuscript it changes ({manuscript: {path, branch}}). Each goes to
+ * `proxenos clone steps` on its stdin and nowhere else, and is answered at once; the page follows
+ * it through GET.
  */
 export async function POST(req: Request) {
   const parsed = await readLocalJson(req, MAX_BODY);
@@ -28,7 +31,15 @@ export async function POST(req: Request) {
   let job;
   if ("take" in body) {
     if (!isProjectId(body.take)) return Response.json({ error: "take must be a project's id." }, { status: 400 });
-    job = await startStep(body.take);
+    let asked;
+    if (body.step !== undefined) {
+      const step = parseStepText(body.step);
+      if (typeof step !== "string") return Response.json(step, { status: 400 });
+      const ask = parseAsk(body);
+      if ("error" in ask) return Response.json(ask, { status: 400 });
+      asked = { step, ...ask };
+    }
+    job = await startStep(body.take, asked);
     if (!job) return Response.json({ error: "A step is already being taken: one at a time." }, { status: 409 });
   } else {
     const decision = parseDecision(body);
