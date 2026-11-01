@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Brain,
   CalendarDays,
+  FolderGit2,
   HeartPulse,
   type LucideIcon,
   Lightbulb,
@@ -56,6 +57,7 @@ import type {
   Draft,
   FeedItem,
   HomeResponse,
+  ProjectsResponse,
   RecallKind,
   RecallResponse,
   RecallTrigger,
@@ -905,6 +907,87 @@ function CareCard({ onNavigate, onCare }: Pick<HomeProps, "onNavigate" | "onCare
   );
 }
 
+/** Where a project stands, from its status as the projects clone writes it (markdown with no fixed
+ * layout): its first plain line, and the first two things open or waiting on someone. */
+function standing(status: string): { lead: string; open: string[] } {
+  const lines = status.split("\n").map((l) => l.trim());
+  const at = lines.findIndex((l) => /^(\*\*|#+\s*)(open|waiting|next)/i.test(l));
+  const open: string[] = [];
+  for (const l of at < 0 ? [] : lines.slice(at + 1)) {
+    if (!l.startsWith("- ")) {
+      if (open.length > 0 || l.startsWith("**") || l.startsWith("#")) break;
+      continue;
+    }
+    open.push(l.slice(2).replace(/\*\*/g, ""));
+    if (open.length === 2) break;
+  }
+  // A line's words after any bold label ("**Done**: …"); a label on its own line says nothing.
+  const said = (l: string) => l.replace(/^\*\*[^*]+\*\*:?\s*/, "").replace(/\*\*/g, "").trim();
+  const lead =
+    lines.find(
+      (l) => l && !l.startsWith("#") && !l.startsWith("- ") && !/^\*\*(what it is|collaborators)/i.test(l) && said(l).length > 20,
+    ) ?? lines.find((l) => l.startsWith("- ")) ?? "";
+  return { lead: said(lead.replace(/^- /, "")), open };
+}
+
+function ProjectsCard({ onNavigate }: Pick<HomeProps, "onNavigate">) {
+  const { data, error } = useJson<ProjectsResponse>("/api/projects");
+  const projects = data?.projects.filter((p) => !p.paused) ?? [];
+  const waiting = projects.reduce((n, p) => n + p.steps.filter((s) => s.status === "ready").length, 0);
+  return (
+    <Card
+      icon={FolderGit2}
+      kicker="Your work"
+      title="Projects"
+      link="Open projects"
+      onLink={() => onNavigate("projects")}
+      tier={waiting > 0 ? "priority" : "default"}
+      className="md:col-span-2 lg:col-span-6 xl:col-span-12"
+    >
+      {error ? (
+        <Meta>Couldn&apos;t load projects.</Meta>
+      ) : !data ? (
+        <Bone className="h-24 rounded-xl" />
+      ) : projects.length === 0 ? (
+        <QuietLine command="proxenos clone projects">No projects yet. List them in clones/projects/projects.json, then:</QuietLine>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-3">
+          {projects.map((p) => {
+            const { lead, open } = standing(p.status);
+            const ready = p.steps.filter((s) => s.status === "ready").length;
+            return (
+              <button
+                key={p.id}
+                onClick={() => onNavigate("projects")}
+                className="tile tile-hover flex h-full w-full flex-col items-stretch justify-start px-3.5 py-3 text-left"
+              >
+                <span className="title-3 block break-words">{p.name}</span>
+                {p.statusDate && <span className="num mt-0.5 block text-xs text-muted">Where it stands, {p.statusDate}</span>}
+                {lead && <span className="mt-1.5 line-clamp-3 block break-words text-sm leading-relaxed text-ink/90">{lead}</span>}
+                {open.length > 0 && (
+                  <span className="mt-2 block space-y-1">
+                    <span className="smallcaps block text-[0.7rem]">Open</span>
+                    {open.map((o) => (
+                      <span key={o} className="line-clamp-2 block break-words text-sm leading-relaxed text-muted">
+                        {o}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                {ready > 0 && (
+                  <span className="mt-2 block text-xs text-warn-ink">
+                    {ready} {ready === 1 ? "step" : "steps"} waiting on you
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── The briefing ────────────────────────────────────────────────────────────
 
 export function Home({ home, onNavigate, onMemory, onDraft, onCare }: HomeProps) {
@@ -924,6 +1007,7 @@ export function Home({ home, onNavigate, onMemory, onDraft, onCare }: HomeProps)
 
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
+        <ProjectsCard onNavigate={onNavigate} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
         <CareCard onNavigate={onNavigate} onCare={onCare} />
       </Section>

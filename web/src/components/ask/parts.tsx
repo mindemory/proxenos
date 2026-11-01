@@ -47,8 +47,8 @@ export function ShotCount({ n }: { n: number }) {
 }
 
 /** A heading that opens its text, closed until asked for. */
-export function Fold({ label, children }: { label: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Fold({ label, children, start = false }: { label: string; children: React.ReactNode; start?: boolean }) {
+  const [open, setOpen] = useState(start);
   return (
     <div>
       <button

@@ -83,7 +83,7 @@ function ProjectSection({ project, data, stepping, deciding, onTake, onQueue, on
       </div>
 
       {project.status && (
-        <Fold label={`Where it stands${project.statusDate ? `, ${project.statusDate}` : ""}`}>
+        <Fold label={`Where it stands${project.statusDate ? `, ${project.statusDate}` : ""}`} start>
           <Markdown source={project.status} compact />
         </Fold>
       )}
