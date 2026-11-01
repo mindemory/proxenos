@@ -707,6 +707,9 @@ async function walkSourceSyncs(vault: string): Promise<SourceSync[]> {
 const PRIORITIES: readonly TaskPriority[] = ["high", "medium", "low"];
 const STATUSES: readonly TaskStatus[] = ["open", "waiting", "done"];
 
+/** A task's "at": a local time to the minute, or a day. */
+const AT = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
+
 function toTask(raw: unknown): Task | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -714,6 +717,7 @@ function toTask(raw: unknown): Task | null {
   const title = str(r.title)?.trim();
   if (!id || !title) return null;
   const due = str(r.due);
+  const at = str(r.at);
   const who = str(r.with)?.trim();
   return {
     id,
@@ -726,6 +730,8 @@ function toTask(raw: unknown): Task | null {
     priority: PRIORITIES.includes(r.priority as TaskPriority) ? (r.priority as TaskPriority) : "medium",
     status: STATUSES.includes(r.status as TaskStatus) ? (r.status as TaskStatus) : "open",
     evidence: strings(r.evidence),
+    at: at && AT.test(at) ? at : null,
+    place: str(r.place)?.trim() || null,
   };
 }
 
@@ -1433,6 +1439,7 @@ function toDraft(file: DraftFile): Draft {
     body: body.replace(/\r\n?/g, "\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, ""),
     found: (f.found ?? "").trim(),
     asks: stringList(f.asks),
+    overtaken: (f.overtaken ?? "").trim(),
   };
 }
 
@@ -1543,7 +1550,8 @@ function withBody(file: DraftFile, body: string): string {
 }
 
 /** What each action that changes a draft's file sets its status to. The others only log. */
-const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", discard: "discarded", sent: "sent" };
+// keep puts back in To send a draft the messages were said to have made moot.
+const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft" };
 
 /** How the reader has reviewed drafts so far, from clones/drafts/feedback.jsonl. */
 export async function getDraftReviews(vault: string = vaultPath()): Promise<DraftReviews> {

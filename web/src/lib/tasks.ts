@@ -28,6 +28,16 @@ export function isUrgent(t: TaskView, today: string): boolean {
   return d !== null && d <= SOON_DAYS;
 }
 
+/** When a plan happens, as its task says: "Sun 1 Nov, 12:00", or the day alone; null for no set time. */
+export function atLabel(t: TaskView, now: string): string | null {
+  if (!t.at) return null;
+  const day = shortDate(t.at.slice(0, 10), now);
+  if (t.at.length === 10) return day;
+  const when = new Date(t.at); // no zone: the reader's local time, as the messages said it
+  if (Number.isNaN(when.getTime())) return day;
+  return `${day}, ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
 export function dueLabel(t: TaskView, now: string): { text: string; tone: Tone; title: string } | null {
   if (placeOf(t) === "done") return { text: "Done", tone: "ok", title: t.due ? `Was due ${shortDate(t.due, now)}` : "" };
   if (!t.due) return null;

@@ -24,8 +24,16 @@ Only what the user wrote themselves, read as proxenos.chats reads it:
   posts and replies, not reposts or pages.
 A message of fewer than MIN_WORDS words ("ok", an emoji) shows little of how they write and is
 skipped, a text under LONG_MIN characters isn't longer writing, and no text is shown twice.
+
+Then what they changed. A draft they rewrote before sending says more about how they write than
+any example: fidelity keeps each measured draft beside what they sent instead
+(clones/drafts/fidelity.json), and every draft gets those whose closeness was under CHANGED,
+newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
+write like what was sent and never like what was drafted. So a change counts from the next draft
+on, without training anything.
 """
 
+import json
 import re
 from functools import cached_property
 from pathlib import Path
@@ -39,6 +47,8 @@ MESSAGE_CHARS = 2500  # of examples for a message in a chat
 LONG_CHARS = 5000  # for an email, a post or a doc
 LONG_MIN = 200  # characters a text needs to count as longer writing
 EXAMPLE_CHARS = 1500  # of one piece of longer writing
+CORRECTION_CHARS = 2000  # of drafts the user changed, with what they sent instead
+CHANGED = 0.85  # closeness under this: they changed enough of a draft to learn from
 # Where the user's own posts are, under raw/.
 POSTS = (
     "bluesky/posts",
@@ -106,6 +116,25 @@ class Writing:
         return sorted(found, key=lambda m: m["ts"], reverse=True)
 
     @cached_property
+    def corrections(self) -> list[dict]:
+        """Drafts they changed before sending, newest sent first, as fidelity measured them:
+        {source, to, draft_text, sent_text}."""
+        try:
+            path = self.vault / "clones" / "drafts" / "fidelity.json"
+            measured = json.loads(path.read_text(encoding="utf-8"))["drafts"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return []
+        return [
+            m
+            for m in (measured if isinstance(measured, list) else [])
+            if isinstance(m, dict)
+            and isinstance(m.get("closeness"), int | float)
+            and m["closeness"] < CHANGED
+            and _tidy(m.get("draft_text"))
+            and _enough(_tidy(m.get("sent_text")))
+        ]
+
+    @cached_property
     def long(self) -> list[dict]:
         """Their sent emails and own posts, as {kind, on, ts, title, text}."""
         return sorted([*self._emails(), *self._posts()], key=lambda t: t["ts"], reverse=True)
@@ -165,11 +194,13 @@ def examples(
     proxenos.chats gives them; without it, the chat `chat` (source, key), or the one with the
     person `name`. `first` is the longer writing shown first: "email" or "post"."""
     source = _SOURCE_OF.get(channel, channel) if channel else None
+    changed = corrections(written, source, name)
     if source in NAMES:
-        return messages(written, source, chat=chat, name=name, here=here)
+        return _join(messages(written, source, chat=chat, name=name, here=here), changed)
     if source is None:  # not known yet: how they write in chats, and at length
-        return _join(messages(written, None, name=name), longer(written, first))
-    return _join(messages(written, source, here=here) if here else "", longer(written, first))
+        return _join(messages(written, None, name=name), longer(written, first), changed)
+    mine = messages(written, source, here=here) if here else ""
+    return _join(mine, longer(written, first), changed)
 
 
 def messages(
@@ -234,6 +265,30 @@ def longer(written: Writing, first: str = "email") -> str:
         return ""
     person = env("NAME", "the person")
     head = f"How {person} writes at length, their own emails and posts, newest first. {_COPY}"
+    return "\n".join([head, *shown])
+
+
+def corrections(written: Writing, source: str | None, name: object = "") -> str:
+    """Drafts the user changed before sending, each beside what they sent: to `name` first, then
+    the rest on `source` (any source when None), newest first, CORRECTION_CHARS in all."""
+    pool = [m for m in written.corrections if source in (None, m.get("source"))]
+    to = _fold(name)
+    pool.sort(key=lambda m: not (to and _fold(m.get("to")) == to))  # stable: newest stays first
+    shown, room = [], CORRECTION_CHARS
+    for m in pool:
+        drafted, sent = _tidy(m["draft_text"]), _tidy(m["sent_text"])
+        if len(drafted) + len(sent) > room:
+            continue
+        room -= len(drafted) + len(sent)
+        shown.append(f"<drafted>\n{drafted}\n</drafted>\n<sent>\n{sent}\n</sent>")
+    if not shown:
+        return ""
+    person = env("NAME", "the person")
+    head = (
+        f"Drafts written for {person} that they changed before sending, newest first, each "
+        f"beside what they sent instead. Write like what they sent, never like the draft. "
+        f"{_COPY}"
+    )
     return "\n".join([head, *shown])
 
 

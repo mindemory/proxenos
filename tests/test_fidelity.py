@@ -59,6 +59,7 @@ def test_a_draft_is_compared_with_what_was_sent_in_its_chat_after_it(tmp_path):
         "2026-03-10T12:05:00Z",
     )
     assert m["closeness"] == 1.0  # sent as written, over two messages
+    assert (m["draft_text"], m["sent_text"]) == ("yaa coming\nsee you friday",) * 2
     assert data["by_source"] == {"whatsapp": {"n": 1, "mean": 1.0}}
 
 

@@ -13,6 +13,20 @@ The page marks tasks done, not mine or dismissed in clones/tasks/feedback.jsonl.
 closed: the model is told not to bring them back, and anything that comes back anyway is
 dropped. clones/tasks/closed.json remembers them, and when each done task was closed, so done
 tasks leave the list 30 days later.
+
+A task at a set time (a meeting, a call, a visit) also gets when ("at") and where ("place"),
+and proxenos.plans puts those on a calendar the user subscribes to.
+
+The same run keeps Drafts current. The model also reads the drafts waiting on the user that are
+addressed to someone (their title, whom they're to and the start of their text) and names those
+the messages overtook: someone else already did what one asks, the user said it another way, or
+the plan it's about changed. A draft whose task is done or closed is overtaken too, with no model.
+Each gets status overtaken and why in its front matter, and the page folds it away with the
+reason, unless the user said to keep it there (clones/drafts/feedback.jsonl), which holds for good.
+A reply draft tied to its chat is left to fidelity and the work clone, which already follow it.
+
+The night job runs it, and so does the sync, at most once in EVERY and only when something was
+said since the last run (`due`), so the list and the drafts keep up during the day.
 """
 
 import argparse
@@ -25,7 +39,8 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm
+from proxenos import llm, plans
+from proxenos.clones import work
 from proxenos.config import env
 
 DAYS = 14
@@ -37,6 +52,8 @@ MESSAGE_CHARS = 2000  # long mails and pasted documents are clipped to this
 DONE_KEEP = timedelta(days=30)  # how long a done task stays on the list
 CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at least
 ADDRESS_MONTHS = 6  # newest months searched for the user's own mail addresses and Slack ids
+EVERY = timedelta(hours=1)  # the soonest the sync brings the list up to date again
+DRAFT_CHARS = 300  # of each waiting draft's text the model reads
 
 SOURCES = ("whatsapp", "slack", "email")
 STATUSES = ("open", "waiting", "done")
@@ -64,6 +81,7 @@ _SLACK_EVENTS = re.compile(
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")
 _REF = re.compile(r"m\d+")
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+_WAITING = ("draft", "approved")  # a draft's statuses while it waits on the user
 
 _SYSTEM = """\
 You keep the task list of {person}: what is on their plate right now. You get their \
@@ -93,6 +111,16 @@ optional or open-ended; medium otherwise.
 someone else, or someone else is blocking it. done when the messages show it was done (sent, \
 answered, "done", thanked for it).
 - evidence: the [m..] refs of the messages that show the task and its current status.
+- at: when it happens, for a meeting, call, visit or appointment at an agreed time: \
+"YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
+agreed time when it moved. "" for anything else, and for a deadline, which is due.
+- place: where it happens, as the messages say it ("Worthy", "on Zoom"), or "".
+
+You also get the drafts written for {person} that wait to be sent. Return in overtaken each \
+draft the messages show is no longer needed: someone else already did what it asks or says \
+("I can write to the editor", then "done"), {person} already said it another way, or the plan \
+it's about changed or was called off. For each: its id, why (one sentence: who did what, and \
+when) and the [m..] refs that show it. Leave out any draft the messages don't clearly settle.
 
 Rules:
 - Every task on the current list comes back, changed or not. Keep done ones, marked done.
@@ -107,6 +135,9 @@ Today is {today}. Message times are local.
 ## Current list
 {current}
 {closed}
+## Drafts waiting to be sent
+{drafts}
+
 ## Messages from the last {days} days, one conversation at a time, oldest first
 {cut}
 {messages}"""
@@ -129,6 +160,8 @@ _TASKS_SCHEMA = {
                     "priority": {"type": "string", "enum": list(PRIORITIES)},
                     "status": {"type": "string", "enum": list(STATUSES)},
                     "evidence": {"type": "array", "items": {"type": "string"}},
+                    "at": {"type": "string"},
+                    "place": {"type": "string"},
                 },
                 "required": [
                     "id",
@@ -141,6 +174,8 @@ _TASKS_SCHEMA = {
                     "priority",
                     "status",
                     "evidence",
+                    "at",
+                    "place",
                 ],
                 "additionalProperties": False,
             },
@@ -165,11 +200,14 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
         elif key in closed:
             closed[key] |= {"action": action, "closed_at": ts}
     mine = {k for k, entry in closed.items() if entry["action"]} | verdicts.keys()
+    drafts = waiting_drafts(vault)
+    # The drafts the model weighs: to someone, and not a reply that follows its own chat.
+    asked = {k: d for k, d in drafts.items() if d["to"] and not d["thread"]}
 
     found = conversations(vault, _iso(now - timedelta(days=days)))
     limit = MAX_CHARS if llm.prompt_chars() is None else LOCAL_CHARS
     text, refs, cut = render(found, llm.fit(limit))
-    new = 0
+    new, overtaken = 0, {}
     if refs:
         shown = {k: task for k, task in tasks.items() if k not in mine}
         answer = llm.ask(
@@ -177,23 +215,79 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
                 today=now.astimezone().strftime("%A %Y-%m-%d, %H:%M (UTC%z)"),
                 current="\n".join(map(_task_line, shown.values())) or "Empty: nothing yet.",
                 closed=_closed_text({k: closed[k] for k in mine if k in closed}),
+                drafts="\n".join(map(_draft_line, asked.values())) or "None.",
                 days=f"{days:g}",
                 cut="(Only the newest fit; older ones were cut.)\n" if cut else "",
                 messages=text,
             ),
             system=_system(vault / "self" / "identity.md", days),
-            schema=_TASKS_SCHEMA,
+            schema=_schema(list(asked)),
         )
         updated, new = merge(answer["tasks"], shown, refs, _closed_keys(closed, mine))
         tasks = {k: task for k, task in tasks.items() if k in mine} | updated
+        overtaken = _overtaken(answer.get("overtaken") or [], asked, refs)
 
     tasks = _settle(tasks, closed, verdicts, now)
+    overtaken = _finished(drafts, tasks, closed) | overtaken
     keep = max(CLOSED_KEEP, timedelta(days=days) + DONE_KEEP)
     closed = {k: e for k, e in closed.items() if e["closed_at"] >= _iso(now - keep)}
     _write_json(out / "tasks.json", {"generated": _iso(now), "tasks": _sorted(tasks.values())})
     _write_json(out / "closed.json", closed)
+    for key, why in overtaken.items():
+        _overtake(drafts[key]["path"], why)
+    events = plans.write(vault, tasks.values(), now)
     counts = {status: sum(t["status"] == status for t in tasks.values()) for status in STATUSES}
-    return {"messages": len(refs), **counts, "new": new}
+    return {
+        "messages": len(refs),
+        **counts,
+        "new": new,
+        "overtaken": len(overtaken),
+        "plans": events,
+    }
+
+
+def due(vault: Path, now: datetime | None = None) -> bool:
+    """Whether the sync should bring the list up to date: EVERY since the last run, and someone
+    said something since. A list never made is due once there's something to read."""
+    now = now or datetime.now(UTC)
+    try:
+        last = json.loads((vault / "clones" / "tasks" / "tasks.json").read_text("utf-8"))
+        since = _when(last["generated"])
+    except FileNotFoundError:
+        since = now - timedelta(days=DAYS)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False  # a list it can't read is for the night run to report
+    else:
+        if since is None or now - since < EVERY:
+            return False
+    return bool(conversations(vault, _iso(since)))
+
+
+def waiting_drafts(vault: Path) -> dict[str, dict]:
+    """The drafts waiting on the user that they haven't said to keep, by id: {id, path, title,
+    to, channel, created, thread (whether it follows a chat of its own), text}."""
+    folder = vault / "clones" / "drafts"
+    kept = _kept_drafts(folder / "feedback.jsonl")
+    found = {}
+    for path in sorted(folder.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        front, fields = work._FRONT.match(text), work._front(text)
+        if front is None or fields is None:
+            continue  # no run wrote it
+        key = fields.get("id") or path.stem
+        if (fields.get("status") or "draft").strip().lower() not in _WAITING or key in kept:
+            continue
+        found[key] = {
+            "id": key,
+            "path": path,
+            "title": fields.get("title") or "",
+            "to": (fields.get("to") or "").strip(),
+            "channel": fields.get("channel") or "",
+            "created": fields.get("created") or "",
+            "thread": bool(fields.get("thread")),
+            "text": " ".join(text[front.end() :].split()),
+        }
+    return found
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -280,6 +374,8 @@ def merge(
             "evidence": list(
                 dict.fromkeys([*before.get("evidence", []), *(m["id"] for m in cited)])
             ),
+            "at": _at(item.get("at")) or before.get("at"),
+            "place": " ".join(str(item.get("place") or "").split()) or before.get("place"),
         }
     return tasks, new
 
@@ -455,6 +551,8 @@ def _system(identity: Path, days: float) -> str:
 
 def _task_line(task: dict) -> str:
     state = [task["status"], task["priority"]] + ([f"due {task['due']}"] if task["due"] else [])
+    if task.get("at"):
+        state.append(f"at {task['at']}" + (f" in {task['place']}" if task.get("place") else ""))
     origin = [task["source"]]
     if task.get("with"):
         origin.append(f"with {task['with']}")
@@ -462,6 +560,86 @@ def _task_line(task: dict) -> str:
         origin.append(f"asked {_local_day(task['asked_at'])}")
     detail = f" {task['detail']}" if task.get("detail") else ""
     return f"- id {task['id']} [{', '.join(state)}] {task['title']}.{detail} ({', '.join(origin)})"
+
+
+def _draft_line(draft: dict) -> str:
+    written = f", written {_local_day(draft['created'])}" if _when(draft["created"]) else ""
+    channel = f" ({draft['channel']})" if draft["channel"] else ""
+    head = f'- id {draft["id"]}: "{draft["title"]}", to {draft["to"]}{channel}{written}'
+    return f"{head}: {_clip(draft['text'], DRAFT_CHARS)}"
+
+
+def _schema(drafts: list[str]) -> dict:
+    """The answer's shape: the task list, and the drafts overtaken, by the ids it was shown."""
+    if not drafts:
+        return _TASKS_SCHEMA
+    overtaken = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "enum": drafts},
+                "why": {"type": "string"},
+                "evidence": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["id", "why", "evidence"],
+            "additionalProperties": False,
+        },
+    }
+    return _TASKS_SCHEMA | {
+        "properties": _TASKS_SCHEMA["properties"] | {"overtaken": overtaken},
+        "required": ["tasks", "overtaken"],
+    }
+
+
+def _overtaken(answer: list[dict], shown: dict[str, dict], refs: dict[str, dict]) -> dict:
+    """The drafts the model says the messages overtook, with why: only drafts it was shown, and
+    only where it cites a message it was shown."""
+    found = {}
+    for item in answer:
+        why = " ".join(str(item.get("why") or "").split())
+        cited = [r for r in _refs([str(e) for e in item.get("evidence") or []]) if r in refs]
+        if item.get("id") in shown and why and cited:
+            found[item["id"]] = why
+    return found
+
+
+def _finished(drafts: dict[str, dict], tasks: dict[str, dict], closed: dict[str, dict]) -> dict:
+    """The drafts for a task that's done or that the user closed: nothing left to send."""
+    found = {}
+    for key in drafts:
+        if key in tasks and tasks[key]["status"] == "done":
+            found[key] = f"Its task is done: {tasks[key]['title']}."
+        elif (closed.get(key) or {}).get("action") in ("not_mine", "dismiss"):
+            found[key] = f"You closed its task: {closed[key]['title']}."
+    return found
+
+
+def _overtake(path: Path, why: str) -> None:
+    """Mark a draft overtaken, and why, in its front matter."""
+    text = path.read_text(encoding="utf-8")
+    front = work._FRONT.match(text)
+    if front is None:
+        return
+    head = re.sub(r"(?m)^overtaken:.*\r?\n", "", text[: front.end()])
+    mark = f"status: overtaken\novertaken: {json.dumps(why, ensure_ascii=False)}"
+    head = re.sub(r"(?m)^status:.*$", lambda _: mark, head, count=1)
+    path.write_text(head + text[front.end() :], encoding="utf-8")
+
+
+def _kept_drafts(path: Path) -> set[str]:
+    """The drafts the user said to keep on the page when they'd been marked overtaken."""
+    if not path.exists():
+        return set()
+    kept = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("action") == "keep":
+            kept.add(str(event.get("draft_id")))
+    return kept
 
 
 def _closed_text(closed: dict[str, dict]) -> str:
@@ -588,6 +766,14 @@ def _due(text: str) -> str | None:
         return date.fromisoformat(text).isoformat()
     except ValueError:
         return None
+
+
+def _at(text: object) -> str | None:
+    """A task's "at" as written back: "YYYY-MM-DDTHH:MM", "YYYY-MM-DD", or None."""
+    when = plans.at(text)
+    if isinstance(when, datetime):
+        return when.isoformat(timespec="minutes")
+    return when.isoformat() if when else None
 
 
 def _fold(title: str) -> str:

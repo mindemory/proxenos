@@ -4,7 +4,7 @@ mlx-lm and every model faked out. No network, no real data."""
 import json
 import os
 import stat
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
 import pytest
@@ -341,3 +341,37 @@ def test_a_text_scores_by_how_much_likelier_the_voice_model_finds_it(tmp_path):
     table = voicemodel.score_table(result)
     assert "| post.md | +2.50 |" in table
     assert table.index("+0.00 This one is a model's") < table.index("+5.00 This one is mine")
+
+
+def test_the_night_trains_it_again_once_enough_new_answers_came_in(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    ran = []
+
+    def fake_run(command, **kwargs):
+        ran.append(command)
+        (vault / "voice" / "adapter" / "adapters.safetensors").write_bytes(b"weights")
+        return type("Done", (), {"returncode": 0})()
+
+    def count(messages):
+        return 100
+
+    assert voicemodel.refresh(vault, NOW, run=fake_run, tokens=count) == {"voice_models": 0}
+
+    voicemodel.build(vault, now=NOW)
+    voicemodel.train(vault, run=fake_run, tokens=count)
+    about = vault / "voice" / "voice.json"
+    trained = json.loads(about.read_text())["trained"]
+    then = datetime.fromisoformat(trained)
+    soon = voicemodel.refresh(vault, then + timedelta(days=2), run=fake_run, tokens=count)
+    assert soon == {"days_until_voice_training": 5}
+
+    answers = voicemodel.build(vault, now=NOW)["answers"]
+    about.write_text(json.dumps(json.loads(about.read_text()) | {"answers": answers - 2}))
+    later = then + timedelta(days=8)
+    assert voicemodel.refresh(vault, later, run=fake_run, tokens=count) == {"new_answers": 2}
+    assert len(ran) == 1
+
+    monkeypatch.setattr(voicemodel, "RETRAIN_NEW", 2)
+    done = voicemodel.refresh(vault, later, run=fake_run, tokens=count)
+    assert done["new_answers"] == 2 and len(ran) == 2
+    assert json.loads(about.read_text())["answers"] == answers  # counted from here next time

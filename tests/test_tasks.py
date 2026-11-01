@@ -16,8 +16,9 @@ from proxenos.clones import tasks
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
 CONTRACT = ["id", "title", "detail", "source", "with", "asked_at", "due", "priority", "status"]
-CONTRACT.append("evidence")
+CONTRACT += ["evidence", "at", "place"]
 _n = itertools.count()
+NONE = {"overtaken": 0, "plans": 0}  # no drafts waiting and no plans with a time
 
 
 def ago(**delta):
@@ -283,7 +284,7 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "waiting",
         "done",
     ]
-    assert stats == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "new": 0}
+    assert stats == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "new": 0} | NONE
     assert saved(vault) == {"generated": GENERATED, "tasks": []}
 
 
@@ -342,12 +343,14 @@ def test_new_tasks_are_saved_in_the_contract_shape(tmp_path, model):
         "priority": "high",
         "status": "open",
         "evidence": [asked["id"], reply["id"]],
+        "at": None,
+        "place": None,
     }
     # Written twice by the model, kept once: the later copy wins. Asked at the first evidence.
     assert form["status"] == "waiting" and form["due"] is None and form["with"] is None
     assert form["asked_at"] == ago(days=2) and form["source"] == "email"
     assert form["id"] == tasks.task_id("Submit the travel form", "email", ago(days=2))
-    assert stats == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "new": 2}
+    assert stats == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "new": 2} | NONE
     assert not (vault / "clones" / "tasks" / "tasks.json.tmp").exists()
 
 
@@ -467,7 +470,7 @@ def test_done_tasks_leave_after_30_days_and_no_messages_means_no_model_call(tmp_
 
     assert model.calls == []
     assert [t["title"] for t in saved(vault)["tasks"]] == ["Still open", "Just done"]
-    assert stats == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "new": 0}
+    assert stats == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "new": 0} | NONE
     closed = json.loads((vault / "clones" / "tasks" / "closed.json").read_text())
     assert closed["eeeeeeeeeeee"]["closed_at"] == GENERATED
     assert closed["gggggggggggg"]["action"] == "done"  # remembered after it left the list
@@ -505,3 +508,113 @@ def test_the_command_line_reads_days(tmp_path, model):
     tasks.add_arguments(parser)
     assert parser.parse_args([]).days == 14
     assert parser.parse_args(["--days", "3"]).days == 3
+
+
+def write_draft(vault, key, *, to="", status="draft", thread=None, kind="email", body="Text."):
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True, exist_ok=True)
+    lines = [f"id: {key}", f'title: "About {key}"', f"kind: {kind}", "for: task"]
+    lines += ["channel: email", f"to: {json.dumps(to)}", "created: 2026-03-08T09:00:00Z"]
+    lines += [f"status: {status}"] + ([f"thread: {json.dumps(thread)}"] if thread else [])
+    (folder / f"{key}.md").write_text("---\n" + "\n".join(lines) + f"\n---\n\n{body}\n")
+
+
+def front(vault, key):
+    text = (vault / "clones" / "drafts" / f"{key}.md").read_text()
+    lines = (line.partition(": ") for line in text.split("---")[1].strip().splitlines())
+    return {k: json.loads(v) if v.startswith('"') else v for k, _, v in lines}
+
+
+def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    write_stream(
+        vault / "raw" / "whatsapp" / "messages",
+        [
+            wa(ago(hours=5), "Kim", "Lunch tomorrow at 12 at Worthy?"),
+            wa(ago(hours=4), "Kim", "yes! I'll book it", me=True),
+            wa(ago(hours=3), "Clay", "I wrote to the editor for the extension, done"),
+        ],
+    )
+    write_tasks(vault, task("abcabcabcabc", "Send Asha the slides"))
+    write_draft(vault, "email-journal", to="Journal Office <office@journal.example>")
+    write_draft(vault, "outreach-ben", to="Ben")  # the model can't show why
+    write_draft(vault, "outreach-cy", to="Cy")  # the user kept it
+    write_draft(vault, "reply-asha", to="Asha", thread={"source": "whatsapp", "chat": "a"})
+    write_draft(vault, "abcabcabcabc", to="Asha")  # its task is done
+    write_draft(vault, "plan-1", kind="checklist")  # to no one: not the model's to weigh
+    write_draft(vault, "sent-1", to="Dana", status="sent")
+    feedback = vault / "clones" / "drafts" / "feedback.jsonl"
+    feedback.write_text(json.dumps({"draft_id": "outreach-cy", "action": "keep"}) + "\n{bad\n")
+    calls = []
+
+    def ask(prompt, *, system=None, schema=None, **kw):
+        calls.append({"prompt": prompt, "system": system, "schema": schema})
+        lunch, done = ref(prompt, "Lunch tomorrow"), ref(prompt, "wrote to the editor")
+        listed = item("Send Asha the slides", id="abcabcabcabc", status="done", evidence=[done])
+        lunch_task = item("Lunch with Kim", evidence=[lunch], with_="Kim")
+        lunch_task |= {"at": "2026-03-11T12:00", "place": " Worthy "}
+        why = "Clay wrote to the editor for the extension today."
+        return {
+            "tasks": [listed, lunch_task],
+            "overtaken": [
+                {"id": "email-journal", "why": why, "evidence": [f"[{done}]"]},
+                {"id": "outreach-ben", "why": "Someone did it.", "evidence": ["m999"]},
+            ],
+        }
+
+    monkeypatch.setattr(llm, "ask", ask)
+    stats = tasks.plan(vault, now=NOW)
+
+    [call] = calls
+    shown = call["prompt"].split("## Drafts waiting to be sent\n")[1].split("\n\n## ")[0]
+    day = tasks._local_day("2026-03-08T09:00:00Z")
+    assert shown.splitlines() == [
+        f'- id abcabcabcabc: "About abcabcabcabc", to Asha (email), written {day}: Text.',
+        (
+            '- id email-journal: "About email-journal", to Journal Office '
+            f"<office@journal.example> (email), written {day}: Text."
+        ),
+        f'- id outreach-ben: "About outreach-ben", to Ben (email), written {day}: Text.',
+    ]
+    overtaken = call["schema"]["properties"]["overtaken"]["items"]["properties"]["id"]
+    assert overtaken["enum"] == ["abcabcabcabc", "email-journal", "outreach-ben"]
+
+    assert front(vault, "email-journal")["status"] == "overtaken"
+    assert front(vault, "email-journal")["overtaken"] == (
+        "Clay wrote to the editor for the extension today."
+    )
+    assert front(vault, "abcabcabcabc")["overtaken"] == "Its task is done: Send Asha the slides."
+    for key, status in [("outreach-ben", "draft"), ("outreach-cy", "draft"), ("sent-1", "sent")]:
+        assert front(vault, key)["status"] == status and "overtaken" not in front(vault, key)
+    assert front(vault, "reply-asha")["status"] == front(vault, "plan-1")["status"] == "draft"
+    assert (vault / "clones" / "drafts" / "email-journal.md").read_text().endswith("\n\nText.\n")
+
+    lunch = by_title(vault)["Lunch with Kim"]
+    assert (lunch["at"], lunch["place"]) == ("2026-03-11T12:00", "Worthy")
+    ics = (vault / "clones" / "tasks" / "plans.ics").read_text()
+    assert "SUMMARY:Lunch with Kim" in ics and "DTSTART:20260311T120000" in ics
+    assert stats["overtaken"] == 2 and stats["plans"] == 1
+
+    # The next run sees the lunch with its time, and no longer the drafts it settled.
+    calls.clear()
+    tasks.plan(vault, now=NOW)
+    prompt = calls[0]["prompt"]
+    assert "at 2026-03-11T12:00 in Worthy] Lunch with Kim." in prompt
+    assert "email-journal" not in prompt and "outreach-ben" in prompt
+
+
+def test_the_sync_runs_it_hourly_and_only_once_something_was_said(tmp_path):
+    vault = make_vault(tmp_path)
+    assert tasks.due(vault, NOW)  # no list yet, and messages to read
+    assert not tasks.due(tmp_path / "empty", NOW)
+
+    write_tasks(vault)
+    out = vault / "clones" / "tasks" / "tasks.json"
+    out.write_text(json.dumps({"generated": ago(minutes=30), "tasks": []}))
+    assert not tasks.due(vault, NOW)  # too soon
+    out.write_text(json.dumps({"generated": ago(hours=2), "tasks": []}))
+    assert not tasks.due(vault, NOW)  # nothing said since: the newest is a day old
+    out.write_text(json.dumps({"generated": ago(days=2), "tasks": []}))
+    assert tasks.due(vault, NOW)
+    out.write_text("{not json")
+    assert not tasks.due(vault, NOW)

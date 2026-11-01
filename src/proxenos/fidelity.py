@@ -14,7 +14,10 @@ email, the user's mail to that address. Once they've written to that person ther
 the same way, whether or not they used the draft.
 
 Written to clones/drafts/fidelity.json: each measured draft {id, source, to, drafted, sent,
-closeness} and, per source, how many and their mean. That's the measure that should decide when a
+closeness, draft_text, sent_text} and, per source, how many and their mean. The two texts,
+each cut to TEXT_CHARS, are what proxenos.voice shows the drafting model of a draft the user
+changed before sending, beside what they sent instead, so the next draft starts from the
+change; the voice model learns it when it's trained again (proxenos.voicemodel.refresh). That's the measure that should decide when a
 kind of reply can go out without asking (docs/memory.md). No model; nothing leaves the vault.
 """
 
@@ -29,6 +32,7 @@ from proxenos import chats
 from proxenos.clones import work
 
 WINDOW = timedelta(days=3)
+TEXT_CHARS = 1200  # of a draft and of what was sent, kept for the drafting model
 BURST = timedelta(minutes=15)
 # A draft's channel as the chat source its messages are read from, where the names differ.
 _SOURCE_OF = {channel: source for source, channel in work._CHANNEL_OF.items()}
@@ -76,6 +80,8 @@ def measure(vault: Path) -> dict[str, int]:
                         "drafted": draft["created"],
                         "sent": sent[0]["ts"],
                         "closeness": round(_closeness(draft["body"], sent), 2),
+                        "draft_text": _clip(draft["body"]),
+                        "sent_text": _clip("\n".join(m["text"] for m in sent)),
                     }
                 )
     measured.sort(key=lambda m: m["sent"], reverse=True)
@@ -137,6 +143,11 @@ def _sent(messages: list[dict], drafted: str) -> list[dict]:
 
 def _closeness(draft: str, sent: list[dict]) -> float:
     return SequenceMatcher(None, _plain(draft), _plain(" ".join(m["text"] for m in sent))).ratio()
+
+
+def _clip(text: str) -> str:
+    text = text.strip()
+    return text if len(text) <= TEXT_CHARS else text[: TEXT_CHARS - 1].rstrip() + "…"
 
 
 def _plain(text: str) -> str:

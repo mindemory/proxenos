@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, CheckCheck, ChevronDown, Copy, Pencil, Trash2, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Copy, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
@@ -29,11 +29,13 @@ interface DraftCardProps {
   onSent: (d: Draft) => void;
   /** Resolves true when the new body is saved. */
   onEdit: (d: Draft, body: string) => Promise<boolean>;
+  /** The reader says an overtaken draft is still needed. */
+  onKeep: (d: Draft) => void;
   /** The draft someone opened from another view (the home page): shown whole and highlighted. */
   focused?: boolean;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, focused }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, focused }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -41,6 +43,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
   const [asking, setAsking] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const sent = d.status === "sent";
+  const overtaken = d.status === "overtaken";
   const long = d.body.length > CLIP_CHARS;
 
   const start = () => {
@@ -98,6 +101,13 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
           )}
         </p>
       </div>
+
+      {overtaken && (
+        <p className="rounded-xl border border-line-strong bg-bg px-3 py-2 text-sm leading-relaxed text-ink/90">
+          <span className="font-medium text-ink">No longer needed: </span>
+          {d.overtaken || "the messages since show it isn't."}
+        </p>
+      )}
 
       {editing ? (
         <div className="space-y-2">
@@ -170,6 +180,12 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
         <div className="flex flex-wrap items-center gap-2 pt-1 mt-auto">
           {sent ? (
             <ActionButton icon={Copy} label="Copy" tone="neutral" onClick={() => onCopy(d)} />
+          ) : overtaken ? (
+            <>
+              <ActionButton icon={RotateCcw} label="Still needed" tone="accent" onClick={() => onKeep(d)} />
+              <ActionButton icon={Copy} label="Copy" tone="neutral" onClick={() => onCopy(d)} />
+              <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
+            </>
           ) : (
             <>
               {plan && <OpenButton plan={plan} primary onOpen={() => void open(false)} />}
@@ -182,7 +198,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
         </div>
       )}
 
-      {!editing && !sent && plan?.alt && !asking && (
+      {!editing && !sent && !overtaken && plan?.alt && !asking && (
         <p className="-mt-1 text-xs text-muted">
           Not using Gmail? <AltOpenLink plan={plan} onOpen={() => void open(true)} />
         </p>

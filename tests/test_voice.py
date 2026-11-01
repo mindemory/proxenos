@@ -340,3 +340,37 @@ def test_the_rules_say_how_not_to_write_like_a_model():
     ):
         assert text in rules
     assert "—" not in rules
+
+
+def test_drafts_i_changed_teach_the_next_one_with_what_i_sent(tmp_path):
+    vault = chat_vault(tmp_path)
+    measured = [
+        {"source": "whatsapp", "to": "Ben", "closeness": 0.3, "draft_text": "Dear Ben, kindly.",
+         "sent_text": "yo ben, all good"},
+        {"source": "whatsapp", "to": "Asha", "closeness": 0.2, "draft_text": "Hello Asha!",
+         "sent_text": "hey asha, ya sounds good"},
+        {"source": "whatsapp", "to": "Asha", "closeness": 0.95, "draft_text": "same as sent",
+         "sent_text": "same as sent"},  # barely changed: nothing to learn
+        {"source": "email", "to": "ana@acme.org", "closeness": 0.1, "draft_text": "Hi Ana",
+         "sent_text": "Ana, quick one about the grant"},
+        {"source": "whatsapp", "to": "Cy", "closeness": 0.1, "draft_text": "Hi", "sent_text": "k"},
+        "not a record",
+    ]  # fmt: skip
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True)
+    (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+
+    shown = voice.corrections(voice.Writing(vault), "whatsapp", "asha")
+
+    assert shown.splitlines() == [
+        "Drafts written for Tess that they changed before sending, newest first, each beside "
+        "what they sent instead. Write like what they sent, never like the draft. " + voice._COPY,
+        "<drafted>", "Hello Asha!", "</drafted>", "<sent>", "hey asha, ya sounds good", "</sent>",
+        "<drafted>", "Dear Ben, kindly.", "</drafted>", "<sent>", "yo ben, all good", "</sent>",
+    ]  # fmt: skip
+    # Every draft to that channel gets them, after the examples of how Tess writes.
+    examples = voice.examples(voice.Writing(vault), "whatsapp", name="Asha")
+    assert examples.index("How Tess writes") < examples.index("<drafted>\nHello Asha!")
+    assert "Ana, quick one" in voice.examples(voice.Writing(vault), "email")
+    assert "Ana, quick one" not in examples
+    assert voice.corrections(voice.Writing(tmp_path / "none"), None) == ""

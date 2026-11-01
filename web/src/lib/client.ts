@@ -139,6 +139,7 @@ export const DRAFT_TOAST: Record<DraftAction, string> = {
   copy: "Copied to the clipboard",
   opened: "Opened",
   sent: "Marked sent",
+  keep: "Kept: it's back in To send, and stays",
 };
 
 export const NETWORK_TOAST: Record<NetworkAction, string> = {
@@ -586,7 +587,7 @@ export async function copyText(text: string, html?: string): Promise<boolean> {
 }
 
 /** The status each action that changes a draft's file leaves it in. */
-const STATUS_AFTER = { approve: "approved", discard: "discarded", sent: "sent" } as const;
+const STATUS_AFTER = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft" } as const;
 
 /** Go to a link the way a person clicking it would: a web page in a new tab, an app's address in place. */
 function launch(url: string) {
@@ -728,6 +729,7 @@ export function useDrafts(onChange?: () => void) {
     approve: (d: Draft) => setStatus(d, "approve"),
     discard: (d: Draft) => setStatus(d, "discard"),
     sent: (d: Draft) => setStatus(d, "sent"),
+    keep: (d: Draft) => setStatus(d, "keep"),
     edit,
     copy,
     open,

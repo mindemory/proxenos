@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { ChevronRight, ListTodo } from "lucide-react";
 
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
@@ -21,6 +21,22 @@ function SectionHeader({ title, count, hint }: { title: string; count: number; h
       </span>
       <span className="num text-xs text-muted">{count}</span>
     </div>
+  );
+}
+
+const unsubscribed = () => () => {};
+
+/** Where the plans calendar is, to subscribe to once, from this Mac or a phone over Tailscale. */
+function CalendarNote() {
+  const origin = useSyncExternalStore(unsubscribed, () => window.location.origin, () => "");
+  if (!origin) return null;
+  return (
+    <p className="px-4 sm:px-6 py-4 text-xs leading-relaxed text-muted">
+      Tasks with a set time are also on a calendar you subscribe to once:{" "}
+      <code className="num break-all text-ink/90">{origin}/api/plans.ics</code>. On a Mac, Calendar, File, New Calendar
+      Subscription; on an iPhone, Settings, Calendar, Accounts, Add Account, Other, Add Subscribed Calendar. Nothing is
+      added to your own calendars, and no one is invited.
+    </p>
   );
 }
 
@@ -120,6 +136,8 @@ export function Tasks({ onChange }: { onChange?: () => void }) {
           )}
         </section>
       )}
+
+      <CalendarNote />
     </div>
   );
 }

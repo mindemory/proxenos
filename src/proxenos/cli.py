@@ -242,12 +242,13 @@ def _command(
 
 def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     """The master's run (sync, observe, consolidate), then each of NIGHT_CLONES with its
-    default arguments, one summary line each. A step that fails is reported and the rest
-    still run. Whether every step worked."""
+    default arguments, then the voice model trained again where it's due, one summary line
+    each. A step that fails is reported and the rest still run. Whether every step worked."""
     print(f"night: started {datetime.now():%Y-%m-%d %H:%M}", flush=True)
     steps: list[tuple[str, Callable[[], dict[str, int]]]] = [("master", lambda: master.run(vault))]
     for name in NIGHT_CLONES:
         steps.append((name, lambda module=clones[name]: module.run(vault, _defaults(module))))
+    steps.append(("voice", lambda: voicemodel.refresh(vault)))
     ok = True
     for name, step in steps:
         try:

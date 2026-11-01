@@ -19,10 +19,11 @@ import { cn } from "@/lib/utils";
  * clears it, then shows that draft on its tab, whole, and scrolls to it once the list is there.
  */
 export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
-  const { data, error, flashId, discard, sent: markSent, edit, copy, open, clearError } = useDrafts(onChange);
+  const { data, error, flashId, discard, sent: markSent, keep, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
   const [showNotes, setShowNotes] = useState<boolean | null>(null);
   const [showOlder, setShowOlder] = useState<boolean | null>(null);
+  const [showOvertaken, setShowOvertaken] = useState<boolean | null>(null);
   const [focusId] = useState(focus ?? null);
   const focusDraft = data?.drafts.find((d) => d.id === focusId) ?? null;
   const focusStatus = focusDraft?.status ?? null;
@@ -51,7 +52,9 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   // and notes addressed to no one are kept apart, folded away: they don't wait on the reader. Nor
   // does a message left unchanged for STALE_DAYS: it's folded away as older.
   const nowMs = Date.parse(data.now);
-  const unsent = kept.filter((d) => d.status !== "sent");
+  // Overtaken: the messages since showed it isn't needed (someone else did it, or the plan changed).
+  const overtaken = kept.filter((d) => d.status === "overtaken");
+  const unsent = kept.filter((d) => d.status !== "sent" && d.status !== "overtaken");
   const toSend = unsent.filter((d) => !isNote(d) && !isStale(d, nowMs));
   const older = unsent.filter((d) => !isNote(d) && isStale(d, nowMs));
   const notes = unsent.filter((d) => isNote(d));
@@ -69,6 +72,7 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
       onOpen={open}
       onSent={markSent}
       onEdit={edit}
+      onKeep={keep}
       focused={d.id === focusId}
     />
   );
@@ -90,6 +94,7 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
   const sentOpen = showSent ?? focusStatus === "sent";
   const notesOpen = showNotes ?? notes.some((d) => d.id === focusId);
   const olderOpen = showOlder ?? older.some((d) => d.id === focusId);
+  const overtakenOpen = showOvertaken ?? overtaken.some((d) => d.id === focusId);
   const grouped = (list: Draft[]) => (
     <div className="mt-3 space-y-8">
       {groupDrafts(list).map((g) => (
@@ -150,6 +155,19 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
           onToggle={() => setShowOlder(!olderOpen)}
         >
           {grouped(older)}
+        </Folded>
+      )}
+
+      {overtaken.length > 0 && (
+        <Folded
+          id="drafts-overtaken"
+          title="Overtaken"
+          count={overtaken.length}
+          hint="Your messages since show these aren't needed: someone else did it, you said it another way, or the plan changed. Each says why."
+          open={overtakenOpen}
+          onToggle={() => setShowOvertaken(!overtakenOpen)}
+        >
+          {grouped(overtaken)}
         </Folded>
       )}
 

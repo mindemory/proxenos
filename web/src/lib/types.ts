@@ -117,6 +117,8 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   evidence: string[];
+  at: string | null; // when it happens, local: YYYY-MM-DDTHH:MM, or YYYY-MM-DD for a day
+  place: string | null;
 }
 
 /** A task with the latest line about it from clones/tasks/feedback.jsonl folded in. */
@@ -399,9 +401,9 @@ export interface GraphThumb {
 // ── Drafts: clones/drafts/*.md ──────────────────────────────────────────────
 
 /** opened: the draft was opened in its app; sent: the reader says they sent it. Both are logged. */
-export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "sent";
+export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "sent" | "keep";
 
-export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent"];
+export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent", "keep"];
 
 /**
  * One drafts/<id>.md. kind, for, channel and status are strings so a new value still
@@ -417,10 +419,11 @@ export interface Draft {
   to: string; // "" when the draft is not addressed to anyone
   created: string | null;
   updated: string | null; // when its file last changed: written again, edited, or its status set
-  status: string; // "draft", "approved", "discarded", "sent"
+  status: string; // "draft", "approved", "discarded", "sent", "overtaken"
   body: string; // markdown
   found: string; // for a reply: what the twin's look through memory showed, "" when nothing
   asks: string[]; // for a reply: what only the reader can decide, as questions
+  overtaken: string; // why the messages made it moot, "" when they haven't
 }
 
 export interface DraftsResponse {

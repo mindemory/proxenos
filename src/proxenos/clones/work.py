@@ -101,7 +101,9 @@ CHANNELS = (
 )
 _CHANNEL_OF = {"facebook": "messenger", "twitter": "x"}  # chat sources by their channel names
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
-_MINE = ("approved", "discarded", "sent")  # statuses the page sets; a draft with one is the user's
+# Statuses that settle a draft: the page sets the first three, and the tasks clone sets
+# overtaken when the messages made it moot. A draft with one is never written again.
+_MINE = ("approved", "discarded", "sent", "overtaken")
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the draft ids the page accepts
 _FRONT = re.compile(r"---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", re.DOTALL)
 _FIELD = re.compile(r"([A-Za-z_][\w-]*)\s*:\s*(.*)")

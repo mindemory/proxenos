@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import fidelity, importer, llm, memory, observe, outbox, vectors
-from proxenos.clones import recall, work
+from proxenos.clones import recall, tasks, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
     applemail,
@@ -83,7 +83,8 @@ def run(vault: Path, since: str | None = None) -> dict[str, int]:
 def sync(vault: Path) -> dict[str, int]:
     """Import new downloads, refresh every set-up source and the memory built from them. None
     of that needs a model; with a key set, chats newly waiting on the user also get a reply
-    drafted, a few per sync."""
+    drafted, a few per sync, and once an hour, when something was said since, the task list,
+    its plans and the drafts waiting are brought up to date with it."""
     os.environ.setdefault(env_key("FULL_NAME"), env("NAME"))
     stats = {"sources_synced": 0, "sources_failed": 0}
     stats.update(importer.run(vault))
@@ -136,6 +137,17 @@ def sync(vault: Path) -> dict[str, int]:
         except (Exception, SystemExit) as e:  # noqa: BLE001 - drafts are extra, not the sync
             stats["replies_failed"] = 1
             print(f"sync: replies failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
+        # Then the tasks, so a plan made today reaches the calendar and a draft someone else
+        # made moot leaves Drafts before the night run. After fidelity: a draft that went out is
+        # marked sent, not overtaken.
+        try:
+            if tasks.due(vault):
+                done = tasks.plan(vault)
+                stats |= {"tasks_new": done["new"], "drafts_overtaken": done["overtaken"]}
+                stats["plans"] = done["plans"]
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - tasks are extra, not the sync
+            stats["tasks_failed"] = 1
+            print(f"sync: tasks failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
     return stats
 
 

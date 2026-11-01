@@ -1,9 +1,9 @@
-import { Check, ChevronRight, UserX, X, type LucideIcon } from "lucide-react";
+import { CalendarClock, Check, ChevronRight, UserX, X, type LucideIcon } from "lucide-react";
 
 import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { SourceBadge } from "@/components/SourceBadge";
 import { shortDate } from "@/lib/format";
-import { dueLabel, placeOf, type Tone } from "@/lib/tasks";
+import { atLabel, dueLabel, placeOf, type Tone } from "@/lib/tasks";
 import type { TaskAction, TaskPriority, TaskView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +38,7 @@ interface TaskRowProps {
 
 export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true, flash = false }: TaskRowProps) {
   const due = dueLabel(t, now);
+  const at = atLabel(t, now);
   const done = placeOf(t) === "done";
 
   return (
@@ -72,6 +73,13 @@ export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true
         {due && (
           <span className={cn("num", TONE_TEXT[due.tone])} title={due.title || undefined}>
             {due.text}
+          </span>
+        )}
+        {at && !done && (
+          <span className="inline-flex min-w-0 items-center gap-1 break-words text-ink/90" title="On your Proxenos calendar">
+            <CalendarClock size={12} className="flex-shrink-0" />
+            <span className="num">{at}</span>
+            {t.place && <span>· {t.place}</span>}
           </span>
         )}
       </div>

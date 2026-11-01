@@ -66,4 +66,4 @@ Everything except the base model's public weights, which come from Hugging Face 
 
 - **Windows and Linux:** mlx-lm only runs on Apple silicon. The same training set works with LoRA tools for NVIDIA GPUs, and that's the next step there.
 - **Android:** running a small model on a phone is possible, but not in Proxenos yet. See [apps.md](apps.md).
-- **Learning as you go:** training again each night on the day's sent messages, so the model keeps up without a full retrain.
+- **Learning as you go:** the night job already trains it again, at most once a week and once you've sent at least 50 new answers, on what you sent rather than what was drafted, so a draft you rewrote teaches it your version. Training a little each night on the day's messages alone, without a full retrain, is still to come.

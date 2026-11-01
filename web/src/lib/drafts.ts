@@ -26,9 +26,12 @@ export const KIND_LABELS: Record<string, string> = {
   blocked: "Blocked",
 };
 
-/** Waiting for the reader to send: not sent or discarded. An approved draft that hasn't gone out still waits. */
+/** Statuses that settle a draft: the reader's, and overtaken, when the messages made it moot. */
+const SETTLED = new Set(["discarded", "sent", "overtaken"]);
+
+/** Waiting for the reader to send: not sent, discarded or overtaken. An approved draft that hasn't gone out still waits. */
 export function isAwaiting(status: string): boolean {
-  return status !== "discarded" && status !== "sent";
+  return !SETTLED.has(status);
 }
 
 const NOTE_KINDS = new Set(["doc", "checklist", "plan", "note"]);
@@ -52,9 +55,9 @@ export function isToSend(d: Draft, now: number): boolean {
   return isAwaiting(d.status) && !isNote(d) && !isStale(d, now);
 }
 
-/** Still the reader's to act on: neither sent nor discarded. */
+/** Still the reader's to act on: not sent, discarded or overtaken. */
 export function isLive(status: string): boolean {
-  return status !== "discarded" && status !== "sent";
+  return !SETTLED.has(status);
 }
 
 /** A value from the file as text for a badge: known labels as written, anything else tidied. */

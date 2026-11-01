@@ -2,7 +2,7 @@
 
 import pytest
 
-from proxenos import cli, llm, master
+from proxenos import cli, llm, master, voicemodel
 from proxenos.clones import (
     advisor,
     care,
@@ -52,6 +52,12 @@ def calls(tmp_path, monkeypatch):
             return {"done": 1}
 
         monkeypatch.setattr(module, "run", fake_run)
+
+    def fake_refresh(vault):
+        calls.append(("voice", vault.name, {}))
+        return {"new_answers": 3}
+
+    monkeypatch.setattr(voicemodel, "refresh", fake_refresh)
     return calls
 
 
@@ -74,8 +80,9 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "voice: 3 new answers",  # trained again only when it's due
     ]
-    assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES]
+    assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES, "voice"]
     assert cli.NIGHT_CLONES.index("recall") < cli.NIGHT_CLONES.index("work")
     # The week's choices read the tasks and ideas, and their drafts are the work clone's.
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
@@ -121,6 +128,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "voice: 3 new answers",
     ]
     assert [name for name, *_ in calls] == [
         "tracker",
@@ -134,4 +142,5 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands",
         "work",
         "steps",
+        "voice",
     ]

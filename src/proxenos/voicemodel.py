@@ -17,6 +17,10 @@ eval.jsonl for `eval` and data/test.jsonl, never into training. Of the rest, one
 VALID goes to data/valid.jsonl, for the loss mlx-lm reports while it trains.
 
 `train` LoRA fine-tunes the base model with mlx-lm (Apple silicon only) into vault/voice/adapter.
+The night job trains it again (`refresh`) once there's enough new to learn from: only where one
+was trained before, at most once in RETRAIN_DAYS, and once the user has sent RETRAIN_NEW answers
+since. What they sent, not what was drafted, is what it learns, so a draft they rewrote teaches
+it their version. Scoring it against the drafting model stays `eval`, and using it stays theirs.
 `serve` runs mlx-lm's server with it on 127.0.0.1, which drafts reach as PROXENOS_VOICE_MODEL=mlx.
 `eval` drafts the newest held-out answer in each held-out chat with the base model, the fine-tuned
 one and the drafting model set up now, given the prompt reply drafts get, with the examples of
@@ -75,6 +79,8 @@ LAYERS = 16
 LEARNING_RATE = 1e-4
 MAX_SEQ = 1536
 EVAL_N = 60
+RETRAIN_DAYS = 7  # the soonest the night job trains it again
+RETRAIN_NEW = 50  # answers sent since the last training that make training again worth it
 MODELS = ("base", "tuned", "current")
 SCORE_WORDS = 8  # a paragraph shorter than this says too little to score
 REFERENCE = 30  # of the user's own held-out emails and posts, scored the same way
@@ -427,6 +433,34 @@ def _tokens(base: str) -> Callable[[list[dict]], int]:
 
     tokenizer = AutoTokenizer.from_pretrained(base)
     return lambda messages: len(tokenizer.apply_chat_template(messages, return_dict=False))
+
+
+def refresh(
+    vault: Path,
+    now: datetime | None = None,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    tokens: Callable[[list[dict]], int] | None = None,
+) -> dict[str, int]:
+    """Build the training set and train again when it's due (see the module's notes); what was
+    found either way. Nothing where no voice model was ever trained, or mlx-lm isn't here."""
+    now = now or datetime.now(UTC)
+    about = trained(vault)
+    if about is None or (run is subprocess.run and importlib.util.find_spec("mlx_lm") is None):
+        return {"voice_models": 0}
+    last = datetime.fromisoformat(about["trained"])
+    left = last + timedelta(days=RETRAIN_DAYS) - now
+    if left > timedelta(0):
+        return {"days_until_voice_training": -(-left // timedelta(days=1))}  # rounded up
+    counted = build(vault, now)
+    new = counted["answers"] - int(about.get("answers") or 0)
+    if new < RETRAIN_NEW:
+        return {"new_answers": new}
+    done = train(vault, about.get("base") or BASE, run=run, tokens=tokens)
+    about = json.loads((vault / "voice" / "voice.json").read_text()) | {
+        "answers": counted["answers"]
+    }
+    (vault / "voice" / "voice.json").write_text(json.dumps(about, indent=1))
+    return {"new_answers": new, "voice_training_minutes": done["minutes"]}
 
 
 def trained(vault: Path) -> dict | None:

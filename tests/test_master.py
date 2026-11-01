@@ -219,3 +219,26 @@ def test_a_local_model_consolidates_the_newest_months_that_fit(tmp_path, monkeyp
 
     assert "2026-03:" in prompts[0] and "2026-01:" not in prompts[0]
     assert "oldest left out" in prompts[0]
+
+
+def test_sync_brings_the_tasks_up_to_date_when_they_are_due(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    monkeypatch.setattr(master, "_UNATTENDED", [])
+    monkeypatch.setattr(master.work, "replies", lambda v: {"drafts_written": 0})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    ran = []
+    monkeypatch.setattr(master.tasks, "due", lambda v: False)
+    monkeypatch.setattr(master.tasks, "plan", lambda v: ran.append(v) or {})
+    assert "tasks_new" not in master.sync(vault) and ran == []
+
+    monkeypatch.setattr(master.tasks, "due", lambda v: True)
+    done = {"messages": 9, "open": 2, "waiting": 0, "done": 1, "new": 1, "overtaken": 3}
+    monkeypatch.setattr(master.tasks, "plan", lambda v: done | {"plans": 1})
+    stats = master.sync(vault)
+    assert (stats["tasks_new"], stats["drafts_overtaken"], stats["plans"]) == (1, 3, 1)
+
+    def broken(vault):
+        raise llm.ModelError("model declined")
+
+    monkeypatch.setattr(master.tasks, "plan", broken)
+    assert master.sync(vault)["tasks_failed"] == 1
