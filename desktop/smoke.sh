@@ -28,8 +28,13 @@ native() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else printf '
 work="$(mktemp -d)"
 server=""
 cleanup() {
-  [ -n "$server" ] && kill "$server" 2>/dev/null && wait "$server" 2>/dev/null
+  local status=$?
+  if [ -n "$server" ]; then
+    kill "$server" 2>/dev/null || true
+    wait "$server" 2>/dev/null || true
+  fi
   rm -rf "$work"
+  exit "$status"
 }
 trap cleanup EXIT
 mkdir -p "$work/home"

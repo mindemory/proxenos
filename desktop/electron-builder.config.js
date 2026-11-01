@@ -26,6 +26,8 @@ module.exports = {
   files: ["main.js", "package.json"],
   extraResources: [
     { from: "resources/web", to: "web" },
+    // A folder's own node_modules is always left out of a copy, so the server's comes on its own.
+    { from: "resources/web/node_modules", to: "web/node_modules" },
     { from: "resources/python", to: "python" },
   ],
   icon: "resources/icon.png",
