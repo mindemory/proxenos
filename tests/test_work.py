@@ -883,3 +883,27 @@ def test_every_draft_knows_what_i_put_out_lately_and_not_what_i_sent_one_person(
     assert "Launch post: The toolbox is out today." in system
     assert "February" not in system and "Just for Asha" not in system
     assert all(c["system"] == system for c in model.calls)
+
+
+def test_an_older_chat_is_drafted_while_newer_ones_keep_coming(tmp_path, model, monkeypatch):
+    vault = make_vault(tmp_path)
+    names = ["Ana", "Ben", "Cy", "Dee"]  # oldest first
+    write_jsonl(
+        vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            message
+            for n, name in enumerate(names)
+            for message in (
+                wa(name.lower(), name, f"2026-03-0{n + 1}T09:00:00Z", "hi", mine=True),
+                wa(name.lower(), name, f"2026-03-0{n + 5}T10:00:00Z", "are you free this week?"),
+            )
+        ],
+    )
+    monkeypatch.setattr(work, "REPLIES", 2)  # the chats a run looks at
+
+    first = work.replies(vault, limit=2, now=NOW, read=FakePages())
+    then = work.replies(vault, limit=2, now=NOW, read=FakePages())
+
+    to = sorted(front(path)["to"] for path in drafts(vault).values())
+    assert (first["drafts_written"], then["drafts_written"]) == (2, 2)
+    assert to == ["Ana", "Ben", "Cy", "Dee"]  # the two newest, then the two left waiting

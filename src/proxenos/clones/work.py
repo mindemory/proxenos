@@ -210,7 +210,8 @@ def work(
     limit = max(limit, 0)
     reached = _reached(out, edited)
     already = 0
-    for job in _jobs(vault, now):
+    waiting = chats.waiting(vault, now)
+    for job in _jobs(vault, now, waiting):
         if not _ID.fullmatch(job["id"]) or job["id"] in seen:
             continue  # no file name the page would read, or listed twice
         seen.add(job["id"])
@@ -224,10 +225,17 @@ def work(
         elif not (new_only and found):
             jobs[job["id"]] = job
 
-    # A reply draft still the clone's own goes once its chat stops waiting on that message.
+    # A reply draft still the clone's own goes once its chat stops waiting on that message: not
+    # when its chat is merely past the REPLIES this run looks at, which would undo it each night.
+    still = {reply_key(chat) for chat in waiting}
     cleared = 0
     for key, (path, status) in existing.items():
-        if key.startswith("reply-") and key not in seen and key not in edited and status == "draft":
+        if (
+            key.startswith("reply-")
+            and key not in still
+            and key not in edited
+            and status == "draft"
+        ):
             path.unlink(missing_ok=True)
             cleared += 1
 
@@ -317,7 +325,7 @@ def render(draft: dict) -> str:
 # What to draft
 
 
-def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
+def _jobs(vault: Path, now: datetime, waiting: list[dict] | None = None) -> Iterator[dict]:
     """Each deliverable to draft, as {id, for, title, prompt}, in the order they're drafted. A
     reply also has its channel and recipient, the links to read, and what to draft (ask), which
     goes after the pages."""
@@ -327,7 +335,13 @@ def _jobs(vault: Path, now: datetime) -> Iterator[dict]:
 
     person = env("NAME", "the person")
     health = _clip(_one_line(doc.get("summary")), CARE_CHARS)
-    for chat in chats.waiting(vault, now)[:REPLIES]:
+    waiting = list(chats.waiting(vault, now) if waiting is None else waiting)
+    # Chats with no draft yet come first (each kind newest first, as waiting lists them): taking
+    # the newest REPLIES alone, already drafted most nights, an older chat could wait out its
+    # DAYS without ever being drafted, as a friend's did with twenty-two chats waiting.
+    drafted = set(_existing(vault / "clones" / "drafts"))
+    waiting.sort(key=lambda chat: reply_key(chat) in drafted)
+    for chat in waiting[:REPLIES]:
         fence = untrusted.tag()
         text, ask = _reply_text(chat, person, health, fence)
         title = f"Reply to {chat['name']}"
