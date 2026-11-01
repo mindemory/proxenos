@@ -1408,9 +1408,9 @@ def test_meetings_are_groups_of_who_came(tmp_path, monkeypatch):
             event(
                 "e5",
                 "2026-02-05T15:00:00Z",
-                [(None, "tess@lab.test", "accepted"), gil, ("Kim Lab", "kim@lab.test", None)],
+                [(None, "tess@lab.test", "accepted"), gil, ("Oak Lab", "oak@lab.test", None)],
                 "Lab sync",
-                "kim@lab.test",
+                "oak@lab.test",
             )
         ],
     )
@@ -1420,7 +1420,7 @@ def test_meetings_are_groups_of_who_came(tmp_path, monkeypatch):
     gil_ = people["Gil Meet"]
     assert (gil_["relation"], gil_["sources"], gil_["interactions"]) == ("met", ["calendar"], 3)
     assert "Lab sync" in gil_["context"] and gil_["context"].endswith("3 events)")
-    assert people["Kim Lab"]["sources"] == ["calendar"]
+    assert people["Oak Lab"]["sources"] == ["calendar"]
     assert not {"Ivy No", "Jo Later", "Crowd A"} & set(people)
 
 

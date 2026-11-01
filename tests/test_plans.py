@@ -164,9 +164,9 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
     assert list(pushed) == ["lunch1"] and pushed["lunch1"]["uid"] == "UID-3"
 
     # Another calendar named: the event moves there, and none is left on the first.
-    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@nyu.edu")
+    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@uni.test")
     plans.write(vault, [moved], NOW, run=cal)
-    assert cal.calls[-2:] == [("delete", "me@gmail.com", "UID-3"), ("make", "me@nyu.edu", "")]
+    assert cal.calls[-2:] == [("delete", "me@gmail.com", "UID-3"), ("make", "me@uni.test", "")]
     assert sorted(cal.events) == ["UID-4"]
 
 
@@ -182,8 +182,8 @@ def untouched(*a, **kw):
 def test_a_draft_sees_the_coming_week_once_per_event(tmp_path):
     vault = tmp_path / "vault"
     event = {"id": "e1", "start": local("2026-03-11T14:00:00"), "summary": "Lab  meeting"}
-    write_events(vault, "me-nyu-edu", "2026-03", [event, {"id": "e2", "start": "2026-03-12"}])
-    write_events(vault, "me-dartmouth-edu", "2026-03", [event])  # on two calendars
+    write_events(vault, "me-uni-test", "2026-03", [event, {"id": "e2", "start": "2026-03-12"}])
+    write_events(vault, "me-work-test", "2026-03", [event])  # on two calendars
     later = {"id": "e3", "start": local("2026-03-30T10:00:00"), "summary": "Too far"}
     write_events(vault, "me-gmail-com", "2026-03", [later])
 

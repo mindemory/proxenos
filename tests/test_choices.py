@@ -295,7 +295,7 @@ def offline(monkeypatch):
         "own": ["sure"],
         "first": False,
     }
-    fresh = waiting | {"chat": "666@s.whatsapp.net", "name": "Kim", "since": "2026-03-09T10:00:00Z"}
+    fresh = waiting | {"chat": "666@s.whatsapp.net", "name": "Uma", "since": "2026-03-09T10:00:00Z"}
     monkeypatch.setattr(chats, "waiting", lambda vault, now, days: [fresh, waiting, waiting])
 
 
@@ -459,7 +459,7 @@ def test_a_week_s_choices_from_mail_slack_calendar_tasks_and_chats(tmp_path, mod
     assert '"Reading group", 2 time(s) in the next 14 days, 2.0 h, repeating: 1.0 h a week' in text
     assert "organized by Ana Lee" in text
     assert "Writing day" not in text and "Office hours slots" not in text
-    assert text.count("chat with Sam") == 1 and "Kim" not in text
+    assert text.count("chat with Sam") == 1 and "Uma" not in text
     assert 'waiting on you 18 days, since 2026-02-20: "Coffee?"' in text
     assert '"Send Ben the slides", on the list since 2026-02-01 (open, with Ben, slack)' in text
     assert "Book the climbing wall" not in text
