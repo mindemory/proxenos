@@ -285,7 +285,10 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
         "done",
         "cancelled",
     ]
-    assert stats == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "cancelled": 0, "new": 0} | NONE
+    assert (
+        stats
+        == {"messages": 13, "open": 0, "waiting": 0, "done": 0, "cancelled": 0, "new": 0} | NONE
+    )
     assert saved(vault) == {"generated": GENERATED, "tasks": []}
 
 
@@ -351,7 +354,10 @@ def test_new_tasks_are_saved_in_the_contract_shape(tmp_path, model):
     assert form["status"] == "waiting" and form["due"] is None and form["with"] is None
     assert form["asked_at"] == ago(days=2) and form["source"] == "email"
     assert form["id"] == tasks.task_id("Submit the travel form", "email", ago(days=2))
-    assert stats == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "cancelled": 0, "new": 2} | NONE
+    assert (
+        stats
+        == {"messages": 13, "open": 1, "waiting": 1, "done": 0, "cancelled": 0, "new": 2} | NONE
+    )
     assert not (vault / "clones" / "tasks" / "tasks.json.tmp").exists()
 
 
@@ -471,7 +477,10 @@ def test_done_tasks_leave_after_30_days_and_no_messages_means_no_model_call(tmp_
 
     assert model.calls == []
     assert [t["title"] for t in saved(vault)["tasks"]] == ["Still open", "Just done"]
-    assert stats == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "cancelled": 0, "new": 0} | NONE
+    assert (
+        stats
+        == {"messages": 0, "open": 1, "waiting": 0, "done": 1, "cancelled": 0, "new": 0} | NONE
+    )
     closed = json.loads((vault / "clones" / "tasks" / "closed.json").read_text())
     assert closed["eeeeeeeeeeee"]["closed_at"] == GENERATED
     assert closed["gggggggggggg"]["action"] == "done"  # remembered after it left the list
