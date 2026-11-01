@@ -11,7 +11,9 @@ The projects are the user's own list, clones/projects/projects.json, which only 
 A project with a "repo", the folder of its code (a git repository on this computer), also gets
 its work done, a step at a time, by the steps clone (proxenos.clones.steps), which reads its data
 folders ("data") but never writes them, runs Python with "python" and MATLAB with "matlab" when
-they're given, and reads "notes", what the user wants it to know about the work.
+they're given, and reads "notes", what the user wants it to know about the work. Its
+"manuscript", {"path": "docs/paper.md", "branch": "paper"}, names the paper the page shows with
+its changes (proxenos.manuscript), which is otherwise found in the code's history.
 
 For each project that isn't paused, a run:
 - gathers what the vault holds on it: what's new since the last run naming one of its terms or
@@ -176,9 +178,20 @@ def listed_projects(vault: Path) -> list[dict]:
                 "python": str(p.get("python") or "").strip(),
                 "matlab": str(p.get("matlab") or "").strip(),
                 "notes": str(p.get("notes") or "").strip(),
+                # The paper, when the user names it (proxenos.manuscript finds it otherwise).
+                "manuscript": _manuscript(p.get("manuscript")),
             }
         )
     return found
+
+
+def _manuscript(value: object) -> dict | None:
+    """{path, branch} from "manuscript": a path, or {"path", "branch"}; branch "" when unsaid."""
+    if isinstance(value, str):
+        value = {"path": value}
+    if not isinstance(value, dict) or not str(value.get("path") or "").strip():
+        return None
+    return {"path": str(value["path"]).strip(), "branch": str(value.get("branch") or "").strip()}
 
 
 def steps_taken(vault: Path, project_id: str, limit: int = 5) -> list[dict]:

@@ -11,7 +11,9 @@ step" on the page. A step:
    script, make a figure, draft a section as markdown;
 2. gets a worktree of its own: a new branch, proxenos/<project>-<when>, from the branch the
    user's checkout is on, in a folder beside Proxenos's settings. The user's own checkout is
-   never touched;
+   never touched. A step queued with a branch starts there instead: a manuscript's branch
+   (proxenos.manuscript), which Accept then merges into, or the branch of a step still waiting
+   on the user ("revise this step"), which it builds on, so Accept merges both;
 3. is done by a runner (proxenos.agent): Claude Code where it's installed, which runs the code
    in a sandbox that can't write outside the worktree, else the local model, which can only
    write;
@@ -42,6 +44,7 @@ from proxenos.clones import projects, work
 from proxenos.config import FROM_SOURCE, REPO_ROOT, env, settings_file
 
 STEP_ID = re.compile(r"([a-z0-9][a-z0-9-]{0,39})/(\d{8}-\d{6})")
+BRANCH = re.compile(r"(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}")  # a branch a step may name
 STATUS_CHARS = 6000  # of the project's status the runner reads
 EARLIER = 5  # steps before this one the runner reads
 QUEUE_MAX = 20
@@ -76,8 +79,10 @@ def take(
     project: dict,
     now: datetime | None = None,
     tried: list | None = None,
+    asked: dict | None = None,
 ) -> dict:
-    """One step on the project, from its worktree to its report. The step as saved."""
+    """One step on the project, from its worktree to its report: the one `asked` (an item as
+    queue makes it), else the first queued, else one the runner picks. The step as saved."""
     now = now or datetime.now(UTC)
     repo = _repo(project)
     gate = lock.Lock(vault / "state" / f"steps-{project['id']}.lock")
@@ -85,16 +90,25 @@ def take(
         raise SystemExit(f"steps: {project['id']} is taking a step already")
     try:
         _settle(vault, project["id"])
-        return _take(vault, project, repo, now, tried)
+        return _take(vault, project, repo, now, tried, asked)
     finally:
         gate.release()
 
 
-def _take(vault: Path, project: dict, repo: Path, now: datetime, tried: list | None) -> dict:
-    base = _git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
-    if not base:
-        raise SystemExit(f"steps: {_home(repo)} isn't on a branch, so nothing could merge into it")
-    asked = _pop_queue(vault, project["id"])
+def _take(
+    vault: Path,
+    project: dict,
+    repo: Path,
+    now: datetime,
+    tried: list | None,
+    asked: dict | None,
+) -> dict:
+    queued_first = asked is None
+    if queued_first:
+        asked = next(iter(queued(vault, project["id"])), None)
+    start = begin(vault, project["id"], repo, str((asked or {}).get("base") or ""))
+    if queued_first and asked:
+        _pop_queue(vault, project["id"])
     when = f"{now:%Y%m%d-%H%M%S}"
     step = {
         "id": f"{project['id']}/{when}",
@@ -103,13 +117,23 @@ def _take(vault: Path, project: dict, repo: Path, now: datetime, tried: list | N
         "status": "working",
         "asked": asked["text"] if asked else "",
         "repo": str(repo),
-        "base": base,
-        "base_commit": _git(repo, "rev-parse", "HEAD"),
+        "base": start["base"],
+        "base_commit": start["base_commit"],
         "branch": f"proxenos/{project['id']}-{when}",
         "worktree": str(worktrees() / project["id"] / when),
         "thread": [],
     }
+    step |= {k: start[k] for k in ("from", "builds_on") if k in start}
+    if asked and isinstance(asked.get("manuscript"), dict):
+        step["manuscript"] = asked["manuscript"]
     _save(vault, step)
+    if start.get("gone"):
+        _note(
+            vault,
+            step,
+            "Started from your branch",
+            f"{start['gone']} is gone, so it starts from {start['base']} instead.",
+        )
     try:
         _carry(vault, project, step, tried if tried is not None else agent.runners())
     except BaseException as e:  # the step says how it failed, for the page, and the run fails
@@ -138,8 +162,8 @@ def _carry(vault: Path, project: dict, step: dict, tried: list) -> None:
         vault,
         step,
         "Made a worktree",
-        f"Branch {step['branch']}, from {step['base']} at {step['base_commit'][:7]}, in "
-        f"{_home(worktree)}. Your own checkout isn't touched.",
+        f"Branch {step['branch']}, from {step.get('from') or step['base']} at "
+        f"{step['base_commit'][:7]}, in {_home(worktree)}. Your own checkout isn't touched.",
     )
     person = env("NAME", "the person")
     data = [Path(d).expanduser() for d in project["data"]]
@@ -213,7 +237,7 @@ def brief(vault: Path, project: dict, step: dict, person: str) -> str:
     code = _home(Path(step["repo"]))
     folders = [
         f"Its code: this folder, a worktree of {code} on the branch {step['branch']}, made "
-        + f"from {step['base']} at {step['base_commit'][:7]}."
+        + f"from {step.get('from') or step['base']} at {step['base_commit'][:7]}."
     ]
     data = [Path(d).expanduser() for d in project["data"]]
     if data:
@@ -230,6 +254,21 @@ def brief(vault: Path, project: dict, step: dict, person: str) -> str:
         else f"{person} didn't ask for a step: pick the one that helps most from where the "
         "project stands and the steps before, and that you can finish here and now."
     )
+    paper = step.get("manuscript") if isinstance(step.get("manuscript"), dict) else {}
+    if paper.get("path"):
+        parts.append(
+            f"It's a change to the manuscript, {paper['path']} in this folder, which is on "
+            f"{paper.get('branch') or step['base']}. Change that file, in its own style and "
+            "markup, and only what was asked."
+        )
+    if step.get("builds_on"):
+        earlier = _load_quietly(vault, step["builds_on"])
+        parts.append(
+            f"It builds on a step still waiting on {person}, whose work this branch starts "
+            f"from: {_text(earlier.get('step')) or step['builds_on']}. Change it as {person} "
+            "asked; Accept merges both."
+            + (f"\nWhat that step did:\n{str(earlier['did'])[:1500]}" if earlier.get("did") else "")
+        )
     status = projects._read(vault / "clones" / "projects" / project["id"] / "status.md")
     if status:
         parts.append(
@@ -318,11 +357,15 @@ def _commit(worktree: Path, message: str) -> tuple[list[str], list[str]]:
     files = _git(worktree, "diff", "--cached", "--name-only").splitlines()
     if not files:
         return [], big
-    who = []
-    if not _git(worktree, "config", "user.email", check=False):
-        who = ["-c", f"user.name={env('NAME', 'Proxenos')}", "-c", "user.email=proxenos@localhost"]
-    _git(worktree, *who, "commit", "-q", "--no-verify", "-m", message)
+    _git(worktree, *who(worktree), "commit", "-q", "--no-verify", "-m", message)
     return files, big
+
+
+def who(worktree: Path) -> list[str]:
+    """Who a commit is by: the user, as their git names them, else their name from Proxenos."""
+    if _git(worktree, "config", "user.email", check=False):
+        return []
+    return ["-c", f"user.name={env('NAME', 'Proxenos')}", "-c", "user.email=proxenos@localhost"]
 
 
 def _changed_files(worktree: Path, base: str) -> list[dict]:
@@ -364,6 +407,42 @@ def _settle(vault: Path, project_id: str) -> None:
             _note(vault, step, "Stopped", "It stopped before it finished.")
 
 
+def begin(vault: Path, project_id: str, repo: Path, named: str = "") -> dict:
+    """Where a step's branch starts, and what Accept merges it into: {base, base_commit}. As a
+    rule, the branch the user's checkout is on, at its newest commit. A branch the user named
+    (a manuscript's, which the checkout may not be on) instead, and Accept merges back into it.
+    A step still waiting on the user, named by its branch, is built on: {from, builds_on} too,
+    and Accept merges both into the branch that step came from. "gone" names a branch that
+    isn't there any more, so the checkout's is used."""
+    gone = {}
+    if named:
+        if not BRANCH.fullmatch(named):
+            raise SystemExit(f"steps: {named!r} isn't a branch's name")
+        commit = _git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{named}", check=False)
+        earlier = next(
+            (
+                s
+                for s in projects.steps_taken(vault, project_id, 20)
+                if s.get("branch") == named and s.get("status") == "ready"
+            ),
+            None,
+        )
+        if commit and earlier:
+            return {
+                "base": earlier["base"],
+                "base_commit": commit,
+                "from": named,
+                "builds_on": earlier["id"],
+            }
+        if commit and not named.startswith("proxenos/"):
+            return {"base": named, "base_commit": commit}
+        gone = {"gone": named}
+    base = _git(repo, "symbolic-ref", "--short", "-q", "HEAD", check=False)
+    if not base:
+        raise SystemExit(f"steps: {_home(repo)} isn't on a branch, so nothing could merge into it")
+    return gone | {"base": base, "base_commit": _git(repo, "rev-parse", "HEAD")}
+
+
 # Deciding: only when the user presses Accept or Discard.
 
 
@@ -381,7 +460,7 @@ def accept(vault: Path, step_id: str, now: datetime | None = None) -> dict:
             f"steps: your checkout of {_home(repo)} is on {on or 'no branch'}, not "
             f"{step['base']}: switch to {step['base']} first, or merge {step['branch']} yourself"
         )
-    if _git(repo, "rev-list", "--count", f"{step['base_commit']}..{step['branch']}") == "0":
+    if _git(repo, "rev-list", "--count", f"{step['base']}..{step['branch']}") == "0":
         detail = "It changed no file, so there was nothing to merge."
     else:
         done = _git_run(repo, "merge", "--no-edit", step["branch"])
@@ -399,7 +478,29 @@ def accept(vault: Path, step_id: str, now: datetime | None = None) -> dict:
     _remove(repo, step)
     step |= {"status": "accepted", "decided": _iso(now)}
     _note(vault, step, "You accepted it", detail + " The branch and its worktree are gone.")
+    if step.get("builds_on"):
+        _accepted_with(vault, repo, step, now)
     return step
+
+
+def _accepted_with(vault: Path, repo: Path, step: dict, now: datetime) -> None:
+    """The step this one built on, merged with it, is accepted too."""
+    earlier = _load_quietly(vault, step["builds_on"])
+    head = str(earlier.get("head") or "")
+    if earlier.get("status") != "ready" or not head:
+        return
+    merged = _git_run(repo, "merge-base", "--is-ancestor", head, step["base"]).returncode == 0
+    if not merged:
+        return
+    _remove(repo, earlier)
+    earlier |= {"status": "accepted", "decided": _iso(now)}
+    _note(
+        vault,
+        earlier,
+        "You accepted it",
+        f"With the step that built on it, merged into {step['base']}. The branch and its "
+        "worktree are gone.",
+    )
 
 
 def discard(vault: Path, step_id: str, now: datetime | None = None) -> dict:
@@ -416,14 +517,18 @@ def discard(vault: Path, step_id: str, now: datetime | None = None) -> dict:
 
 def _remove(repo: Path, step: dict) -> None:
     """The step's worktree and branch, gone. Only those Proxenos made: the branch is named for
-    the step, and the worktree is its own."""
-    worktree = Path(step["worktree"])
+    the step, and the worktree is its own. A step made by hand has no worktree left."""
+    if step.get("worktree"):
+        remove_worktree(repo, Path(step["worktree"]))
+    _drop_branch(repo, step["branch"])
+
+
+def remove_worktree(repo: Path, worktree: Path) -> None:
     if worktree.exists():
         _git(repo, "worktree", "remove", "--force", str(worktree), check=False)
         if worktree.exists() and worktree.is_relative_to(worktrees()):
             shutil.rmtree(worktree, ignore_errors=True)
     _git(repo, "worktree", "prune", check=False)
-    _drop_branch(repo, step["branch"])
 
 
 def _drop_branch(repo: Path, branch: str) -> None:
@@ -443,19 +548,53 @@ def queued(vault: Path, project_id: str) -> list[dict]:
     return [q for q in items or [] if isinstance(q, dict) and _text(q.get("text"))]
 
 
-def queue(vault: Path, project_id: str, text: str, now: datetime | None = None) -> dict:
+def queue(
+    vault: Path,
+    project_id: str,
+    text: str,
+    now: datetime | None = None,
+    base: str = "",
+    manuscript: dict | None = None,
+) -> dict:
+    """A step asked for, last in the project's queue. `base` names the branch it starts from (see
+    begin); `manuscript`, {path, branch}, says it's a change to the project's manuscript."""
+    items = queued(vault, project_id)
+    if len(items) >= QUEUE_MAX:
+        raise SystemExit(f"steps: {project_id} has {QUEUE_MAX} steps queued already")
+    item = asked_for(vault, project_id, text, now, base, manuscript)
+    _write_queue(vault, project_id, [*items, item])
+    return item
+
+
+def asked_for(
+    vault: Path,
+    project_id: str,
+    text: str,
+    now: datetime | None = None,
+    base: str = "",
+    manuscript: dict | None = None,
+) -> dict:
+    """A step the user asked for, checked: what to do, and the branch it starts from."""
     now = now or datetime.now(UTC)
-    _project(vault, project_id)
+    project = _project(vault, project_id)
     text = text.strip()
     if not text:
         raise SystemExit("steps: say what the step is")
     if len(text) > STEP_CHARS:
         raise SystemExit(f"steps: keep a step to {STEP_CHARS} characters")
-    items = queued(vault, project_id)
-    if len(items) >= QUEUE_MAX:
-        raise SystemExit(f"steps: {project_id} has {QUEUE_MAX} steps queued already")
     item = {"id": f"q-{secrets.token_hex(6)}", "text": text, "added": _iso(now)}
-    _write_queue(vault, project_id, [*items, item])
+    if base:
+        repo = _repo(project)
+        if not BRANCH.fullmatch(base) or not _git(
+            repo, "rev-parse", "--verify", "-q", f"refs/heads/{base}", check=False
+        ):
+            raise SystemExit(f"steps: there's no branch {base!r} in {_home(repo)}")
+        item["base"] = base
+    if manuscript:
+        path, branch = str(manuscript.get("path") or ""), str(manuscript.get("branch") or "")
+        if not in_repo(path) or (branch and not BRANCH.fullmatch(branch)):
+            raise SystemExit("steps: the manuscript is a path in the repository and its branch")
+        item["manuscript"] = {"path": path, "branch": branch}
     return item
 
 
@@ -617,6 +756,26 @@ def _project(vault: Path, project_id: str) -> dict:
 # Small helpers.
 
 
+def in_repo(rel: str) -> bool:
+    """Whether `rel` names a file in a repository, as git does: relative, with / between its
+    folders, never leaving the repository or reaching into .git."""
+    parts = rel.split("/")
+    return (
+        0 < len(rel) <= 300
+        and all(parts)
+        and not {".", ".."} & set(parts)
+        and parts[0] != ".git"
+        and not any(c in rel for c in "\0\n\r\\:")
+    )
+
+
+def _load_quietly(vault: Path, step_id: str) -> dict:
+    try:
+        return load(vault, step_id)
+    except SystemExit:
+        return {}
+
+
 def _message(commit: object, step: str) -> str:
     """A commit message: one plain sentence."""
     text = _text(commit) or step or "A step of the project's work"
@@ -653,7 +812,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "request",
         nargs="?",
         help='"-" reads {take}, {queue, step}, {unqueue, id}, {accept} or {discard} as JSON from '
-        "stdin. With none, each project with a repo whose last step is decided takes one",
+        "stdin; a step asked for may name its base (a branch) and manuscript ({path, branch}), "
+        "and {take, step} takes it now. With none, each project with a repo whose last step is "
+        "decided takes one",
     )
     parser.add_argument("--project", help="take a step on this project now, by its id")
 
@@ -691,11 +852,17 @@ def night(vault: Path, now: datetime | None = None, tried: list | None = None) -
 
 
 def _answer(vault: Path, request: dict) -> dict[str, int]:
+    asked = {"base": request.get("base") or "", "manuscript": request.get("manuscript")}
     if "take" in request:
-        step = take(vault, _project(vault, request["take"]))
+        given = (
+            asked_for(vault, request["take"], request["step"], **asked)
+            if "step" in request
+            else None
+        )
+        step = take(vault, _project(vault, request["take"]), asked=given)
         return {"steps_taken": 1, "files_changed": len(step.get("files") or [])}
     if "queue" in request:
-        queue(vault, request["queue"], request["step"])
+        queue(vault, request["queue"], request["step"], **asked)
         return {"steps_queued": 1}
     if "unqueue" in request:
         return {"steps_unqueued": int(unqueue(vault, request["unqueue"], request["id"]))}
@@ -708,18 +875,26 @@ def _answer(vault: Path, request: dict) -> dict[str, int]:
 
 def _request(line: str) -> dict:
     """The page's request, checked: {take: project}, {queue: project, step}, {unqueue: project,
-    id}, {accept: step} or {discard: step}."""
+    id}, {accept: step} or {discard: step}. A step asked for, queued or taken now ({take,
+    step}), may name the branch it starts from (base) and the manuscript it changes
+    ({manuscript: {path, branch}})."""
     try:
         request = json.loads(line)
     except ValueError:
         raise SystemExit("steps: the request isn't JSON") from None
     if not isinstance(request, dict):
         raise SystemExit("steps: the request isn't an object")
+    if not isinstance(request.get("base", ""), str):
+        raise SystemExit("steps: base must be a branch's name")
+    if not isinstance(request.get("manuscript") or {}, dict):
+        raise SystemExit("steps: manuscript must be {path, branch}")
     for key in ("take", "queue", "unqueue", "accept", "discard"):
         if key in request:
             if not isinstance(request[key], str):
                 raise SystemExit(f"steps: {key} must be text")
             if key == "queue" and not isinstance(request.get("step"), str):
+                raise SystemExit("steps: say what the step is")
+            if key == "take" and not isinstance(request.get("step", ""), str):
                 raise SystemExit("steps: say what the step is")
             if key == "unqueue" and not isinstance(request.get("id"), str):
                 raise SystemExit("steps: unqueue needs the queued step's id")

@@ -23,6 +23,7 @@ from proxenos import (
     forms,
     importer,
     lock,
+    manuscript,
     master,
     memory,
     observe,
@@ -135,6 +136,10 @@ def main(argv: list[str] | None = None) -> None:
         "form", help="a PDF form filled in from your records, for you to check, sign and send"
     )
     forms.add_arguments(form)
+    paper = commands.add_parser(
+        "project", help="a project's manuscript, its versions and their changes, as JSON"
+    )
+    manuscript.add_arguments(paper)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     commands.add_parser(
         "privacy", help="what stays here, what went to a model and what's read, as JSON"
@@ -179,6 +184,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "call":  # a call can go on while a sync runs, so it takes no lock
         callserver.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "project":  # reads the code's history; writes only an edit the user saves
+        print(json.dumps(manuscript.run(vault_path(), args), ensure_ascii=False))
         return
     if args.command == "connect":
         print(json.dumps(connect.report(vault_path())))  # vault_path also loads settings
