@@ -15,8 +15,8 @@ month years ago can be read like a page of a diary rather than searched for reco
   their own side of each source) and the month's days, trimmed to fit the model. It's kept in
   clones/life/months/YYYY-MM.json.
 - How many records each local day holds is counted over the whole index in one query
-  (`calendar`) and kept in clones/life/calendar.json until the index changes, for the page's
-  years and months and for the night.
+  (`calendar`), kept in clones/life/calendar.json, and counted again only for the month files
+  the index reads again, for the page's years and months and for the night.
 
 The night (`night`) writes the month that just ended, rewrites the current one at most once a
 week, then up to BACKFILL older months with no story, newest first, so years fill in over a few
@@ -102,32 +102,59 @@ _SCHEMA = {
 
 
 def calendar(vault: Path) -> dict[str, dict[str, int]]:
-    """Records per local day and source over the whole index, {"YYYY-MM-DD": {source: n}}, in
-    one query, kept until the index or the time zone changes. Spotify and Strava have one row a
-    month in the index rather than a row a play or a walk, so they're left out here. An event
-    at midnight UTC counts on that date: it's most likely an all-day one, which the index keeps
-    at that hour."""
+    """Records per local day and source over the whole index, {"YYYY-MM-DD": {source: n}}.
+    The first time, one query counts every month file's days; after that, only the files the
+    index read again since (its `files` table says when each was read) are counted again, so a
+    sync's few changed files cost milliseconds, not a pass over years. Kept in calendar.json,
+    with the whole count again when the time zone changes. Spotify and Strava have one row a
+    month in the index rather than a row a play or a walk, so they're left out here. An event at
+    midnight UTC counts on that date: it's most likely an all-day one, which the index keeps at
+    that hour."""
     path = memory.index_path(vault)
     if not path.exists():
         return {}
-    info = path.stat()
-    key = [info.st_mtime_ns, info.st_size, "/".join(time.tzname)]
     kept_at = vault / "clones" / "life" / "calendar.json"
     kept = _json(kept_at)
-    if kept.get("index") == key and isinstance(kept.get("days"), dict):
-        return kept["days"]
-    found: dict[str, dict[str, int]] = {}
+    zone = "/".join(time.tzname)
+    counted = kept.get("files") if kept.get("zone") == zone else None
+    counted = {
+        rel: entry
+        for rel, entry in (counted.items() if isinstance(counted, dict) else [])
+        if isinstance(entry, dict) and isinstance(entry.get("days"), dict)
+    }
     with closing(memory._connect(path)) as db:
+        files = {
+            r["path"]: [r["mtime_ns"], r["size"]]
+            for r in db.execute("SELECT path, mtime_ns, size FROM files")
+            if r["path"].split("/", 1)[0] not in memory.SUMMARIZED
+        }
+        stale = {rel for rel, at in files.items() if (counted.get(rel) or {}).get("at") != at}
+        if not stale and counted.keys() == files.keys() and isinstance(kept.get("days"), dict):
+            return kept["days"]
+        counted = {rel: c for rel, c in counted.items() if rel in files and rel not in stale}
+        for rel in stale:
+            counted[rel] = {"at": files[rel], "days": {}}
+        # One pass over everything beats many lookups, and a query takes so many names at most.
+        # That pass reads the table in order: through the index on file it would be a lookup a row.
+        every = len(stale) > min(len(files) // 2, 500)
         rows = db.execute(
-            "SELECT CASE WHEN source = 'calendar' AND substr(ts, 12) = '00:00:00Z' THEN date(ts) "
-            "ELSE date(ts, 'localtime') END AS day, source, count(*) AS n FROM records "
-            f"WHERE source NOT IN ({','.join('?' * len(memory.SUMMARIZED))}) GROUP BY day, source",
-            memory.SUMMARIZED,
+            "SELECT file, CASE WHEN source = 'calendar' AND substr(ts, 12) = '00:00:00Z' THEN "
+            "date(ts) ELSE date(ts, 'localtime') END AS day, count(*) AS n FROM records "
+            + ("NOT INDEXED " if every else f"WHERE file IN ({','.join('?' * len(stale))}) ")
+            + "GROUP BY file, day",
+            [] if every else sorted(stale),
         )
         for row in rows:
-            if row["day"]:
-                found.setdefault(row["day"], {})[row["source"]] = row["n"]
-    _save(kept_at, {"index": key, "days": found})
+            if row["day"] and row["file"] in stale:
+                counted[row["file"]]["days"][row["day"]] = row["n"]
+    found: dict[str, dict[str, int]] = {}
+    for rel, entry in counted.items():
+        source = rel.split("/", 1)[0]
+        for day, n in entry["days"].items():
+            here = found.setdefault(day, {})
+            here[source] = here.get(source, 0) + n
+    found = dict(sorted(found.items()))
+    _save(kept_at, {"zone": zone, "days": found, "files": counted})
     return found
 
 

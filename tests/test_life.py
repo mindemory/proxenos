@@ -174,7 +174,7 @@ def test_a_day_is_titles_names_counts_and_only_the_user_s_own_words(vault):
     assert life.day(vault, date(2026, 3, 25))["records"] == 0
 
 
-def test_a_month_lists_its_days_from_one_count_of_the_whole_index(vault, monkeypatch):
+def test_a_month_lists_its_days_from_one_count_of_the_whole_index(vault):
     counts = life.calendar(vault)
     assert counts["2026-03-10"]["whatsapp"] == 4  # local days, from one query
     # An all-day event, at midnight UTC in the index, counts on its own date, not the evening
@@ -189,9 +189,18 @@ def test_a_month_lists_its_days_from_one_count_of_the_whole_index(vault, monkeyp
     listed = life.days(vault, "2026-03")
     assert [d["date"] for d in listed] == ["2026-03-04", "2026-03-05", "2026-03-10", "2026-03-11"]
 
-    # Kept until the index changes: the next count reads no index at all.
-    monkeypatch.setattr(memory, "_connect", lambda *a, **k: pytest.fail("counted again"))
+    # Kept: when the index reads a month file again, only that file's days are counted again.
     assert life.calendar(vault) == counts
+    saved = json.loads(kept.read_text())
+    saved["files"]["notes/pages/2026-03.jsonl"]["days"] = {"2026-03-10": 7}  # a recount undoes it
+    kept.write_text(json.dumps(saved))
+    jsonl(
+        vault / "raw" / "whatsapp" / "messages" / "2026-04.jsonl",
+        [wa(9, "2026-04-02T15:00:00Z", "Ana", "hi", True)],
+    )
+    memory.build(vault)
+    counts = life.calendar(vault)
+    assert counts["2026-04-02"] == {"whatsapp": 1} and counts["2026-03-10"]["notes"] == 7
 
 
 def test_a_month_s_story_reads_notes_and_days_never_anyone_else_s_words(vault, monkeypatch):
