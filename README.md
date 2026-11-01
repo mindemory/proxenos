@@ -17,7 +17,7 @@ When you're unwell, the hard part is often everything around the care: referrals
 
 It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
 
-> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 56,000 lines of Python, TypeScript and Swift, with 21,000 more in 720 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
+> **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 59,000 lines of Python, TypeScript, Swift and JavaScript, with 23,000 more in 790 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track ([docs/everyone.md](docs/everyone.md)): the privacy screen is built, and so is a first desktop app for Mac and Windows, unsigned for now; signing it, and signing in instead of configuring, come next. Expect rough edges, and readers that assume a particular export format.
 >
 > **Help of any kind is welcome:** code, an issue, or an idea over a message or a call. Healthcare comes first, so people with medical training are especially welcome. Knowing what's worth tracking and what to ask is what would make this preventive, not just a way through the system. Good places to start are in [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions). If you'd like Proxenos to exist for more people, a star helps others find it.
 
@@ -25,7 +25,7 @@ It grew out of one person's weeks of getting through the system while unwell. Th
 
 Proxenos gathers your own data (messages, email, calendar, notes, documents, activity) into one private vault on your computer. From that it keeps a written model of who you are, and runs small agents ("clones") that work for you:
 - a feed of new papers and news, ranked for you;
-- your open tasks, pulled from your conversations and from what you tell it, kept up through the day, with the plans among them (a lunch at 12, a call at 9) put on your own calendar;
+- your open tasks, pulled from your conversations and from what you tell it, kept up through the day, with the plans among them (a lunch at 12, a call at 9) put on your own calendar, and taken off it when they're called off;
 - a journal of each day, so you never have to narrate it: what got done, where you wrote, what moved in your projects, what's waiting on others and what's next, with a few sentences on how it went;
 - where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
 - the forms you're handed (a PDF application, an intake form) filled from your records, leaving the ID numbers, account numbers and signature to you;
@@ -33,10 +33,12 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - once a week, what's worth taking on (a call for papers, a fellowship, a talk, a piece of writing, with a first step drafted) and what's worth letting go of (a meeting, a thread, an invitation, with the decline drafted), by your own goals;
 - where each of your long-running projects stands, from your messages and its code on every branch, and, given its code, the next step of its work done on a branch of its own for you to accept;
 - a map of the people you know and how they connect;
-- a searchable memory that brings the right past messages and notes to mind;
+- a searchable memory that brings the right past messages and notes to mind, by their words and by their meaning;
 - drafts of replies, emails and plans, written in your voice: a reply for each chat waiting on you, in the way you write to that person, after reading any link they sent.
 
 It drafts; by default it never sends, posts or buys anything by itself. You copy a draft or open it in its app with the text filled in, and press send yourself; once your reply shows up in that chat, the draft is marked sent. Chats that need no answer (thanks, a receipt, an auto-reply) get no draft. A draft you changed before sending, or rewrote on the page with "Write my own", is shown, beside what you sent, to the drafts written for you after it, and a draft your messages since made moot (someone else did it, or the plan changed) is folded away with why. What you tell it on the home page shapes every draft: a fact your messages don't show ("I'm not going on Tuesday"), kept for two weeks, or a rule kept until you remove it ("keep replies to my manager short"). Drafts never leave a blank for you to fill in. An outbox you switch on per app lets replies go out on their own, only where that app's drafts have gone out nearly unchanged many times, with a window to cancel each one, never to someone new, and never with a link, an address or a number the chat didn't already have ([docs/memory.md](docs/memory.md)). It places a phone call only when you press Call: it waits on hold, says it's an automated assistant calling for you, and rings you when a person answers ([docs/calls.md](docs/calls.md)). The longer-term plan, moving from drafting to acting on approval to acting within rules you set, is in [docs/roadmap.md](docs/roadmap.md).
+
+A Privacy view on the page shows what stays on your computer, every call to a model in the last 30 days and where it ran (on your computer or at Anthropic), and what's read from elsewhere. Other people's words go into prompts marked as data, never as instructions.
 
 *The name: in the Greek city-states, a proxenos was the citizen who formally acted on someone else's behalf.*
 
@@ -120,16 +122,16 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
 git clone https://github.com/mindemory/proxenos && cd proxenos && scripts/install.sh
 ```
 
-It installs what's missing (Node, Ollama, and Miniforge if there's no conda), sets up the `proxenos` env and the page's packages, and pulls a local model that fits your Mac's memory. Then `conda activate proxenos && proxenos web`. Add `--start-at-login` to keep the page and a sync running from login on, or `--no-model` to use a hosted model instead. Running it again only adds what's missing.
+It installs what's missing (Node, Ollama's own app, and Miniforge if there's no conda), sets up the `proxenos` env and the page's packages, and pulls a local model that fits your Mac's memory. Then `conda activate proxenos && proxenos web`. Add `--start-at-login` to keep the page and a sync running from login on, or `--no-model` to use a hosted model instead. Running it again only adds what's missing.
 
-**By hand**, step by step. Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and a model for the steps that use one: an open model on your Mac through [Ollama](https://ollama.com) (no key, nothing leaves the computer; `gemma4:26b` fits a 32 GB Mac), or an Anthropic API key.
+**By hand**, step by step. Requirements: macOS, Python 3.12 (conda shown here), Node 22+, and a model for the steps that use one: an open model on your Mac through [Ollama](https://ollama.com) (no key, nothing leaves the computer; `gemma4:26b` fits a 32 GB Mac), or an Anthropic API key. Use Ollama's own app, not Homebrew's `ollama` formula, whose build can't hold a model to the JSON shape a step asks for.
 
 ```bash
 git clone https://github.com/mindemory/proxenos && cd proxenos
 CONDA_SUBDIR=osx-arm64 conda env create -f environment.yml
 conda activate proxenos
 pip install -e ".[dev]"
-brew install ollama && brew services start ollama && ollama pull gemma4:26b   # the local model
+brew install --cask ollama-app && open -a Ollama && ollama pull gemma4:26b   # the local model
 ollama pull qwen3-embedding:0.6b   # search memory by meaning (optional)
 proxenos web                    # http://127.0.0.1:4747; leave it open, and use another window below
 ```
@@ -163,7 +165,7 @@ Your long-running projects are a list you keep in the vault, `clones/projects/pr
  "notes": "F*.py make the paper's figures."}
 ```
 
-To keep it running without a terminal, run `scripts/install-app.sh`: the page and a sync every 15 minutes then start at login. `scripts/build-mac-app.sh` then builds Proxenos.app into ~/Applications: the page in a window of its own, with a Dock icon and menus, no browser. To reach it from your phone, put [Tailscale](https://tailscale.com/download) on both, signed in to the same account, and run `proxenos phone`: the page gets a private address only your own devices can open, and Chrome on the phone can add it to the home screen.
+To keep it running without a terminal, run `scripts/install-app.sh`: the page and a sync every 15 minutes then start at login. `scripts/build-mac-app.sh` then builds Proxenos.app into ~/Applications: the page in a window of its own, with a Dock icon and menus, no browser. `desktop/build.sh` builds the coming one-download app instead: an Electron app with its own Python inside, a menu-bar menu (Open, Sync now, Pause, Quit) and the sync and night built in, as a Mac `.dmg` or a Windows installer. It's unsigned until the owner's signing accounts exist, so macOS asks you to allow it under Privacy & Security first ([docs/apps.md](docs/apps.md)). To reach it from your phone, put [Tailscale](https://tailscale.com/download) on both, signed in to the same account, and run `proxenos phone`: the page gets a private address only your own devices can open, and Chrome on the phone can add it to the home screen.
 
 `proxenos night` runs the whole loop. `scripts/install-night.sh` schedules it every night with launchd.
 

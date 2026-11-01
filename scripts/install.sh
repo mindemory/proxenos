@@ -39,13 +39,23 @@ step() { printf '\n==> %s\n' "$*"; }
 command -v brew >/dev/null || fail 'Homebrew is needed first: see https://brew.sh, then run this again.'
 
 step "Tools: Node and Ollama"
-for tool in node ollama; do
-  if command -v "$tool" >/dev/null; then
-    echo "$tool: already installed"
-  else
-    brew install "$tool"
+if command -v node >/dev/null; then
+  echo "node: already installed"
+else
+  brew install node
+fi
+# Ollama's own app (the ollama-app cask), not Homebrew's ollama formula: the formula's build
+# leaves out the grammar library that holds a model to a JSON schema as it writes, so Ollama
+# answers "structured output is unavailable" and every answer can only be checked afterwards.
+if command -v ollama >/dev/null; then
+  echo "ollama: already installed"
+  if brew list --formula ollama >/dev/null 2>&1; then
+    echo "  It's Homebrew's build, which can't hold a model to a schema. To switch, keeping your models:"
+    echo "  brew services stop ollama && brew uninstall ollama && brew install --cask ollama-app"
   fi
-done
+else
+  brew install --cask ollama-app
+fi
 
 step "Python: the $env_name conda env"
 if [ ! -f "$conda_sh" ]; then
@@ -81,7 +91,12 @@ fi
 
 if [ "$model" = 1 ]; then
   step "A local model, through Ollama"
-  brew services start ollama >/dev/null 2>&1 || true
+  # The app serves Ollama while it runs; a formula install is started as a service instead.
+  if brew list --formula ollama >/dev/null 2>&1; then
+    brew services start ollama >/dev/null 2>&1 || true
+  else
+    open -ga Ollama >/dev/null 2>&1 || true
+  fi
   for _ in $(seq 30); do
     ollama list >/dev/null 2>&1 && break
     sleep 1
