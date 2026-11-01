@@ -23,11 +23,14 @@ class FakeModel:
         self.plans = []  # a reply's research rounds: what to look up
         self.gated = []  # what research found, put to the model to keep or leave out
         self.searches = []  # what those rounds ask for, the first round's first
+        self.opens = []  # what the second round opens of what the first found, by number
         self.fail_on = set()  # words that make a call fail
 
     def __call__(self, prompt, *, system=None, schema=None, effort="medium", max_tokens=32000):
         if schema and "searches" in schema["properties"]:
             self.plans.append(prompt)
+            if len(self.plans) == 2 and self.opens:
+                return {"searches": [], "open": self.opens}
             return {"searches": self.searches if len(self.plans) == 1 else []}
         if schema and "keep" in schema["properties"]:
             self.gated.append(prompt)
@@ -735,6 +738,42 @@ def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_
     assert "- relation: close friend" in prompt and "happy valentines!" in prompt
     assert "Hall B" in prompt and len(model.gated) == 1
     assert "okiees see you thurs" not in prompt.split("elsewhere")[1]  # this chat isn't repeated
+
+
+def test_what_research_opened_reaches_the_draft_inside_the_tag_for_others_words(tmp_path, model):
+    from proxenos import memory
+
+    vault = chat_vault(tmp_path)
+    write_jsonl(  # a thread whose middle mail is found, and the mail on each side of it
+        vault / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            {
+                "id": f"e{i}",
+                "ts": f"2026-03-0{i + 3}T09:00:00Z",
+                "subject": f"{'Re: ' if i > 1 else ''}Friday retreat",
+                "from_name": "Lab",
+                "body": body,
+            }
+            for i, body in enumerate(
+                ["Is the retreat still on?", "Yes, Friday at noon in Hall B.", "Bring a laptop."], 1
+            )
+        ],
+    )
+    memory.build(vault)
+    model.searches, model.opens = [{"words": "hall"}], [1]
+
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+
+    assert len(model.plans) == 3  # searched, opened, then read what was opened
+    prompt = model.calls[0]["prompt"]
+    (fence,) = set(re.findall(r"</?(untrusted-[0-9a-f]{8})>", prompt))
+
+    def inside(text):
+        before = prompt[: prompt.index(text)]
+        return before.count(f"<{fence}>") > before.count(f"</{fence}>")
+
+    assert inside("Lab: Is the retreat still on?") and inside("Lab: Bring a laptop.")
+    assert inside("> [2026-03-05 09:00] Lab: Yes, Friday at noon in Hall B.")
 
 
 def test_what_a_reply_found_and_asks_go_in_its_file(tmp_path, model):

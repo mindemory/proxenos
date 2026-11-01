@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 from datetime import UTC, date, datetime
 
@@ -214,3 +215,130 @@ def test_the_log_keeps_its_newer_half_past_its_size(tmp_path, monkeypatch):
 
     kept = [json.loads(line)["n"] for line in (tmp_path / research.LOG).read_text().splitlines()]
     assert kept == list(range(kept[0], 10)) and len(kept) < 10
+
+
+def test_a_plan_may_leave_out_what_to_open_and_opens_only_records_found():
+    schema = research._PLAN_SCHEMA
+    assert llm._conform({"searches": []}, schema) == {"searches": []}
+    assert llm._conform({"searches": [], "open": "3"}, schema) == {"searches": []}
+    held = llm._conform({"searches": [], "open": [2, "3", 1.5, True]}, schema)
+    assert held == {"searches": [], "open": [2]}  # a local model's stray items go, the rest stay
+
+    hits = [hit(i, "x") for i in range(1, 6)]
+    asked = [5, 9, 0, "2", 5, 1, 2, 3, 4]  # out of range, not a number, twice, opened before
+    chosen = research._chosen(asked, hits, {"r1": []})
+
+    assert [h["id"] for h in chosen] == ["r5", "r2", "r3"]  # OPENS a round
+    assert research._chosen(None, hits, {}) == []
+
+
+def message(i, text, target=False, mine=False):
+    return {
+        "id": f"c{i}",
+        "ts": f"2026-10-0{i}T09:30:00Z",
+        "who": "Ravi",
+        "title": "",
+        "text": text,
+        "from_me": mine,
+        "target": target,
+    }
+
+
+def test_an_opened_record_shows_whats_around_it_its_own_words_first():
+    rows = [
+        message(1, "lovely to meet"),
+        message(2, "which draft?", mine=True),
+        message(3, "the second one, by the 7th", target=True),
+        message(4, "ok", mine=True),
+        message(5, "thanks"),
+    ]
+
+    assert research._around(rows, "Tess", 1, 800) == [
+        "  [2026-10-02 09:30] Tess: which draft?",
+        "> [2026-10-03 09:30] Ravi: the second one, by the 7th",
+        "  [2026-10-04 09:30] Tess: ok",
+    ]
+
+    long = [message(1, "w " * 2000), message(2, "x " * 2000, target=True), message(3, "y " * 2000)]
+    lines = research._around(long, "Tess", 3, 600)
+    assert sum(map(len, lines)) <= 600
+    assert lines[1].count("x") > lines[0].count("w") > 10  # its own words get the most
+    (alone,) = research._around([message(1, "x " * 2000, target=True)], "Tess", 3, 600)
+    assert len(alone) == 600
+    assert research._around([message(1, "no target")], "Tess", 3, 600) == []
+
+
+def editor_vault(tmp_path):
+    """A chat with an editor where "due by the 7th" says nothing without the question before
+    it, and another chat that shares the word."""
+    chat = [
+        ("2026-10-01T09:00:00Z", "ravi", False, "lovely to meet at the fair"),
+        ("2026-10-02T09:00:00Z", "ravi", True, "which cookbook draft comes first?"),
+        ("2026-10-02T10:00:00Z", "ravi", False, "the second one, due by the 7th"),
+        ("2026-10-03T09:00:00Z", "ravi", True, "got it, will send"),
+        ("2026-10-04T09:00:00Z", "ravi", False, "thanks!"),
+        ("2026-10-05T09:00:00Z", "asha", False, "rent is due friday"),
+    ]
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-10.jsonl",
+        [
+            {
+                "id": f"c{i}",
+                "ts": ts,
+                "chat_id": name,
+                "chat_name": name.title(),
+                "chat_type": "direct",
+                "from_me": mine,
+                "sender_name": None if mine else name.title(),
+                "text": text,
+            }
+            for i, (ts, name, mine, text) in enumerate(chat, 1)
+        ],
+    )
+    memory.build(tmp_path)
+    return tmp_path
+
+
+def test_a_round_opens_what_it_found_reads_around_it_and_the_reply_gets_a_few_lines(tmp_path):
+    vault = editor_vault(tmp_path)
+    plans, gated = [], []
+    answer = re.compile(r"(\d+)\. \[[^]]*\] Ravi: the second one")
+
+    def ask(prompt, *, schema, **kwargs):
+        if "keep" in schema["properties"]:
+            gated.append(prompt)
+            return {"keep": [int(n) for n in answer.findall(prompt)]}
+        plans.append(prompt)
+        if len(plans) == 1:
+            return {"searches": [{"words": "due"}]}
+        if len(plans) == 2:  # the editor's answer, twice, and a number no record has
+            (n,) = answer.findall(prompt)
+            return {"searches": [], "open": [int(n), int(n), 99]}
+        return {"searches": []}  # it read what was opened, and needs nothing more
+
+    found, _ = research.matter(vault, "Chat: is the draft on track?", "Tess", ask)
+
+    assert len(plans) == 3  # searched, opened, then read what was opened
+    (fence,) = set(re.findall(r"</?(untrusted-[0-9a-f]{8})>", plans[2]))
+    shown = plans[2].split(f"<{fence}>")[1].split(f"</{fence}>")[0]  # all of it inside the tag
+    opened = shown.split("opened, with what's around it")[1].split("Search")[0]
+    for line in (
+        "  [2026-10-01 09:00] Ravi: lovely to meet at the fair",
+        "  [2026-10-02 09:00] Tess: which cookbook draft comes first?",
+        "> [2026-10-02 10:00] Ravi: the second one, due by the 7th",
+        "  [2026-10-04 09:00] Ravi: thanks!",
+    ):
+        assert line in opened
+    assert "rent" not in opened  # another chat's
+    assert "  > [2026-10-02 10:00] Ravi: the second one" in gated[0] and f"<{fence}>" in gated[0]
+
+    lines = found.splitlines()
+    assert lines[0] == "- [2026-10-02, whatsapp, Ravi] Ravi: the second one, due by the 7th"
+    assert "    [2026-10-02 09:00] Tess: which cookbook draft comes first?" in lines
+    assert "    [2026-10-03 09:00] Tess: got it, will send" in lines
+    assert "fair" not in found and "thanks!" not in found  # a few lines, not the whole chat
+    assert fence not in found  # the caller puts what comes back inside its own tag
+
+    run = json.loads((vault / research.LOG).read_text(encoding="utf-8"))
+    assert run["opened"] == ["whatsapp/messages/c3"] and run["kept"] == ["whatsapp/messages/c3"]
+    assert "cookbook" not in json.dumps(run)  # ids, never what a record says

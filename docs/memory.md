@@ -51,13 +51,25 @@ For a reply today ([research.py](../src/proxenos/research.py)):
 3. one list from many: the searches' lists are fused by reciprocal rank (Cormack, Clarke and
    Buettcher, SIGIR 2009). A record scores 1 / (60 + its rank) in each list it is in, summed, so
    one that several searches rank high comes first. Each search's best always stays in.
-4. a gate: the model marks each record found as needed or a near miss, and only the needed ones
+4. opening what was found: each record found has a number, and a round may open up to three of
+   them. An opened record comes back with the three records before and after it in its chat or
+   thread, or its fuller text, about 2,000 characters in all. The next round reads it, so there
+   are up to three rounds. A snippet often isn't enough: "due by the 7th" says little without
+   the question before it. In LongMemEval-V2 (May 2026), agents that searched the stored records
+   and opened what they found scored 69 to 72 percent, against 48.5 for the best that only
+   retrieved. In Letta's LoCoMo run (August 2025), search and open beat Mem0.
+5. a gate: the model marks each record found as needed or a near miss, and only the needed ones
    reach the draft, as Engram's gate does. That stops a long prompt of near misses from drowning
-   the one letter that matters.
+   the one letter that matters. A kept record that was opened brings the record before and after
+   it: a few lines, not the whole thread.
+
+What research finds and opens holds other people's words. It goes to the model inside a tag for
+them ([untrusted.py](../src/proxenos/untrusted.py)), in research's own prompts and in the draft's.
 
 Each reply's research leaves one line in `memory/research.jsonl`: the searches' words and days,
-each list's ids in rank order, the fused order and the ids the gate kept. Ids only, never what a
-record says. It is there to tune the searches and the gate. Past 20 MB, its older half goes.
+each list's ids in rank order, the fused order, the ids opened and the ids the gate kept. Ids
+only, never what a record says. It is there to tune the searches and the gate. Past 20 MB, its
+older half goes.
 
 For today, with nothing asked ([recall.py](../src/proxenos/clones/recall.py)): each coming event,
 open task and feed item brings up past records about it. Its title is searched by words and,
