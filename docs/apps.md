@@ -1,6 +1,6 @@
 # Apps for Mac, Windows and Android
 
-The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Built so far: the scheduler that replaces launchd ([below](#keeping-it-running-from-source)), secrets in Windows Credential Manager (through `keyring`), settings in `%APPDATA%`, file locks that work on Windows, Gmail, Microsoft 365 and Google Calendar through sign-in, and tests on GitHub's Windows machines. The app itself isn't.
+The goal: anyone can install Proxenos the way they install any app, on a Mac, a Windows PC or an Android phone, and use it without code. This plan extends [everyone.md](everyone.md), which covers the Mac app's design: an Electron shell around the page and a bundled Python. Built so far: the scheduler that replaces launchd ([below](#keeping-it-running-from-source)), secrets in Windows Credential Manager (through `keyring`), settings in `%APPDATA%`, file locks that work on Windows, Gmail, Microsoft 365 and Google Calendar through sign-in, tests on GitHub's Windows machines, and the app itself, unsigned: `desktop/`, built by `desktop/build.sh` for a Mac with Apple silicon and for Windows x64 ([everyone.md](everyone.md#the-desktop-app)). Signing it and updating it wait on the owner ([below](#what-only-the-owner-can-do)).
 
 ## Where things stand
 
@@ -30,14 +30,14 @@ Before any app ships, make the core platform-neutral, so the Mac and Windows app
 
 ### 2. The Mac app (a few weeks after 1)
 
-As [everyone.md](everyone.md) describes: Electron, the page as a standalone Next.js build, Python from python-build-standalone with the `proxenos` wheel, a menu-bar icon, and the setup page that's already built.
+As [everyone.md](everyone.md) describes: Electron, the page as a standalone Next.js build, Python from python-build-standalone with the `proxenos` wheel, a menu-bar icon, and the setup page that's already built. *Built, unsigned:* `desktop/build.sh` makes `Proxenos-<version>-arm64.dmg` and a `.zip`, and the desktop workflow builds them on GitHub's Macs, by hand or for a `v*` tag.
 - **Signed and notarized** so macOS opens it without warnings. This needs an Apple Developer Program membership.
 - **Released on GitHub** as `Proxenos.dmg`. The website's download button points at the latest release, which anyone can download with no GitHub account.
 - **Updates** from signed GitHub releases.
 
 ### 3. The Windows app (weeks, once 1 and 2 exist)
 
-The same Electron app, built for Windows on GitHub's Windows machines.
+The same Electron app, built for Windows on GitHub's Windows machines. *Built, unsigned:* the desktop workflow makes a per-user installer (NSIS), which needs no administrator.
 - **Signed** with Microsoft's Artifact Signing. Individuals in the US and Canada can use it, with an identity check; billing starts when the account is made, and SmartScreen still warns about each new build until it has a reputation. A free second route: the Microsoft Store, where registration is free for individuals since September 2025 and the Store signs the package itself.
 - **Messages** through Beeper Desktop. WhatsApp's Windows app doesn't leave a readable store the way the Mac app does.
 - **A local model** through Ollama, which runs on Windows; or Claude with the person's own key.
@@ -64,7 +64,7 @@ A phone-only Proxenos, care first, for people without a computer.
 
 ## Keeping it running from source
 
-`proxenos schedule` keeps a vault current on any computer: `proxenos sync` every 15 minutes and `proxenos night` at 01:30, local time. The coming Mac and Windows apps will start it themselves when they open at log-on, so nobody sets anything up; until then, people running from source keep it going as below. On a Mac, `scripts/install-app.sh` and `scripts/install-night.sh` stay as they are and do the same with launchd: use either.
+`proxenos schedule` keeps a vault current on any computer: `proxenos sync` every 15 minutes and `proxenos night` at 01:30, local time. The desktop app runs it itself while it's open (Pause in its menu stops it), so nobody sets anything up; people running from source keep it going as below. On a Mac, `scripts/install-app.sh` and `scripts/install-night.sh` stay as they are and do the same with launchd: use either.
 
 How it behaves:
 - **Each run is a process of its own** (`python -m proxenos sync`), so a crash in one never stops the schedule. Its output is appended to `<vault>/logs/sync.log` or `night.log`, as the launchd jobs' is, followed by one line from the scheduler: how it ended, when, and how long it took.
@@ -125,6 +125,8 @@ Each of these needs your identity, your payment, or both. Nothing here can be do
 | Gmail for everyone | Google's app verification. Reading mail is a restricted scope, which needs a yearly security assessment (CASA); sending only needs verification | about $540 to a few thousand dollars a year; 2 to 8 weeks |
 
 Until Google's verification is done, Gmail keeps today's paths: your own sign-in client, an app password, or Microsoft 365 and Outlook.
+
+Once the Apple and Microsoft accounts exist, signing is a matter of giving `desktop/build.sh` the variables `desktop/electron-builder.config.js` names: on GitHub, as secrets the desktop workflow passes on, which it doesn't yet. Updates come after: electron-updater reading signed GitHub releases, a TODO in `desktop/main.js`.
 
 ## Decisions
 

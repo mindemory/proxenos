@@ -28,6 +28,14 @@ updates:
       major:
         update-types: [major]
 
+  # Electron and electron-builder, for the desktop app.
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

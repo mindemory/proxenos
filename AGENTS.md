@@ -10,6 +10,7 @@ Notes for AI coding agents (and people) working in this repo. The README says wh
   - `calls.py`, `callserver.py`, `twilio.py`: phone calls the user starts, through their own Twilio account.
   - `master.py`: sync, observe and the self-model. `chats.py`: conversations waiting on the user. `voice.py`: writing as the user. `fidelity.py`: how close drafts came to what was sent. `llm.py`: the model, local (Ollama) or hosted.
 - `web/`: the local page (Next.js). API routes in `web/src/app/api/` read the vault and run the `proxenos` command; views in `web/src/components/views/`.
+- `desktop/`: the desktop app, Electron around the page and a bundled Python, built unsigned by `desktop/build.sh` ([docs/everyone.md](docs/everyone.md#the-desktop-app)).
 - `tests/`: pytest, synthetic data only.
 - `docs/`: architecture, memory, data sources, roadmap, the plan for everyone ([docs/everyone.md](docs/everyone.md)).
 - `scripts/`: installers for the Mac (launchd jobs, the app), and the README's screenshots.

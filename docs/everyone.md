@@ -1,6 +1,6 @@
 # Proxenos for everyone
 
-Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. Three pieces are built: the Connect page, setup with settings and the Keychain in place of `.env`, and the privacy screen, apart from Delete everything (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
+Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. Four pieces are built: the Connect page, setup with settings and the Keychain in place of `.env`, the privacy screen, apart from Delete everything, and a first, unsigned desktop app (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
 
 ## One download: a menu-bar app
 
@@ -22,7 +22,7 @@ Three things have to ship together:
 ### Recommendation: Electron around a bundled Python
 
 - **The page:** `next build` with `output: "standalone"`, run by Electron's own Node (a `utilityProcess`) on a free loopback port picked at launch, not a fixed 4747. The window is an Electron window on that port; the route guard stays as it is.
-- **Python:** python-build-standalone with the `proxenos` wheel installed, under `Contents/Resources/python`. The shell sets `PROXENOS_BIN` to its `proxenos`, which the page already honours.
+- **Python:** python-build-standalone with the `proxenos` wheel installed, under `Contents/Resources/python`. The shell sets `PROXENOS_PYTHON` to it and the page runs `python -m proxenos`, since the `proxenos` script pip writes names the Python it was installed with and can't move with the app.
 - **The menu bar:** Open Proxenos, Sync now, Last synced …, Pause, Quit. No Dock icon.
 - **Nights:** the app opens at login and runs `proxenos schedule` (built), which runs `proxenos night` at 01:30 and a sync every 15 minutes, replacing the launchd jobs from `scripts/install-night.sh` and `scripts/install-app.sh` ([apps.md](apps.md#keeping-it-running-from-source)).
 - **Signed once, trusted once:** Developer ID, hardened runtime, notarized and stapled, updated from signed GitHub releases. macOS grants Full Disk Access (which WhatsApp needs) to `Proxenos.app` itself, and the commands it starts inherit it. Keeping one signing identity keeps that grant across updates.
@@ -89,9 +89,20 @@ Every step ends the same way: a first read in the background, its progress on th
 2. **Settings and the Keychain** behind `config.env()`, the setup page and Settings (built).
 3. The privacy screen and the call log (built), and delete everything.
 4. More connect steps: downloads with drop zones, Slack and Strava sign-in, folders.
-5. The Electron shell, the bundled runtime, signing, notarization and updates.
+5. The Electron shell and the bundled runtime (built, unsigned), then signing, notarization and updates.
 
 ## Built so far
+
+### The desktop app
+
+*Built, unsigned.* `desktop/` is the menu-bar app the recommendation above describes, for macOS on Apple silicon and Windows x64:
+- **The shell** (`desktop/main.js`): one copy at a time. It picks a loopback port (last launch's when it's free, so the page keeps its address), starts the page's standalone server in a utility process with Electron's own Node, and opens a window once it answers. Links to other sites open in the browser, and `mailto:`, `whatsapp:` and `slack:` links in their apps; downloads go to Downloads. On a Mac there's no Dock icon until the window shows.
+- **The menu:** Open Proxenos, Sync now (`python -m proxenos sync`, its output in the vault's `logs/sync.log`), Last synced (from `<vault>/state/schedule.json`), Pause or Resume syncing, and Quit.
+- **The schedule:** `python -m proxenos schedule` runs while the app is open, once a vault is set up; it starts again on the new vault when setup moves it, and Quit stops it cleanly (SIGTERM, then SIGKILL after 30 seconds; on Windows it ends at once, which is safe).
+- **Its own files:** Chromium's storage, the page's and the scheduler's logs, and the port, in `desktop/` inside the settings folder (`~/Library/Application Support/Proxenos` on a Mac), private like the rest. Nothing is sent anywhere: no telemetry, and no updates yet.
+- **How the page finds things in it:** `PROXENOS_HOME` is the folder holding the page as `web/` (the app's resources; from source, the repo), `PROXENOS_PYTHON` the Python to run `-m proxenos` with (else `PROXENOS_BIN` or `proxenos` on the PATH, as before), and `PROXENOS_PORT` the page's port, which `proxenos phone` and `proxenos web` follow too. `PROXENOS_STANDALONE=1` makes `npm run build` write the standalone server.
+- **Building it:** `desktop/build.sh`, on the computer it's for, with git, curl, Node 22.12 or newer and npm. It downloads a pinned python-build-standalone CPython 3.12 from its GitHub releases and checks its SHA-256, installs a wheel of this checkout into it, builds the page from the checkout's tracked files, and runs electron-builder: a `.dmg` and a `.zip` on a Mac, a per-user installer on Windows, in `desktop/dist`. `desktop/smoke.sh` then tries the built app's Python and page on a demo vault. The [desktop workflow](../.github/workflows/desktop.yml) does both on GitHub's Mac and Windows machines, by hand or for a `v*` tag, and keeps the installers as the run's artifacts.
+- **Not yet:** signing and notarizing with an Apple Developer ID, signing on Windows with Artifact Signing, and updates (a TODO for electron-updater from GitHub releases), which wait on the owner's accounts ([apps.md](apps.md#what-only-the-owner-can-do)); `desktop/electron-builder.config.js` says which variables turn signing on. Until then a downloaded copy opens only once it's allowed in System Settings, Privacy & Security (Open Anyway), and Windows SmartScreen warns about the installer. Also not yet: opening at login, and the menu bar's folder picker.
 
 ### The Connect page
 
