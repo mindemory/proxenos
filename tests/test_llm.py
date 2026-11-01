@@ -2,6 +2,7 @@
 
 import os
 import time
+import types
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -269,3 +270,38 @@ def test_a_local_answer_is_held_to_the_schema_item_by_item(monkeypatch):
     }
     assert len(sent) == 1
     assert llm._object('{"ideas": {"type": "array"}}', schema) is None  # the echoed schema isn't it
+
+
+def ask_another():
+    return llm.ask("another secret", schema={"type": "object", "required": ["x"]})
+
+
+def test_each_call_leaves_a_line_in_the_log_and_never_the_words(monkeypatch, tmp_path):
+    log = tmp_path / "state" / "model-calls.jsonl"
+    monkeypatch.setattr(llm, "_calls_path", lambda: log)
+    lines = [
+        {"message": {"content": '{"x": 1}'}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "stop",
+         "prompt_eval_count": 12, "eval_count": 5},
+    ]  # fmt: skip
+    local(monkeypatch, None, lines=lines)
+
+    assert llm.ask("a secret prompt", system="sys", schema={"type": "object", "required": ["x"]})
+    local(monkeypatch, '{"y": 1}')
+    # Asked from a clone's code: the same function, run as if it lived in the journal clone.
+    as_clone = {"__name__": "proxenos.clones.journal", "llm": llm, "__builtins__": __builtins__}
+    with pytest.raises(llm.ModelError):
+        types.FunctionType(ask_another.__code__, as_clone)()
+
+    import json
+
+    first, second = [json.loads(line) for line in log.read_text().splitlines()]
+    assert first["where"] == "this computer" and first["model"] == "ollama:gemma4:26b"
+    assert (first["sent_chars"], first["answer_chars"], first["ok"]) == (18, 8, True)
+    assert (first["tokens_in"], first["tokens_out"]) == (12, 5)
+    assert first["step"] == "proxenos"  # a test isn't one of Proxenos's own parts
+    assert second["step"] == "journal" and second["ok"] is False and second["answer_chars"] == 0
+    assert "secret" not in log.read_text()
+    assert os.name == "nt" or (log.stat().st_mode & 0o777) == 0o600
+    assert [c["ok"] for c in llm.calls(tmp_path)] == [True, False]
+    assert llm.calls(tmp_path, since="2999-01-01") == []

@@ -10,16 +10,24 @@ Claude desktop app sets one) never reroutes the key. Everything goes through `as
 PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voicemodel): "mlx"
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
 for one imported into Ollama. It goes through `ask_voice`.
+
+Every call leaves one line in <vault>/state/model-calls.jsonl, for the privacy screen and for
+seeing what a night costs: when, which step asked, the model, where it ran (this Mac or
+Anthropic), how many characters went in and came back, the tokens where the model counts them,
+how long it took and whether it worked. Never the words.
 """
 
 import http.client
 import json
 import os
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
@@ -51,6 +59,8 @@ _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON s
 # answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
 _FOREGROUND = "state/asking"
 FOREGROUND_MAX = 900
+CALLS = "state/model-calls.jsonl"
+CALLS_KEPT = 20000  # lines kept, newest last: months of nights and syncs
 VOICE_PORT = 8899
 VOICE_TEMPERATURE = 0.7
 VOICE_TOKENS = 600
@@ -79,6 +89,22 @@ def ask(
     inputs and long answers don't hit HTTP timeouts.
     """
     model = env("MODEL", DEFAULT_MODEL)
+    sent = len(prompt) + len(system or "")
+    with _recorded(model, sent, len(images or [])) as answered:
+        answer = _ask(model, prompt, system, schema, effort, max_tokens, images)
+        answered(answer)
+    return answer
+
+
+def _ask(
+    model: str,
+    prompt: str,
+    system: str | None,
+    schema: dict | None,
+    effort: str,
+    max_tokens: int,
+    images: list[dict] | None,
+) -> str | dict:
     if model.startswith(LOCAL):
         return _ask_local(
             model.removeprefix(LOCAL), prompt, system, schema, effort, max_tokens, images
@@ -101,6 +127,8 @@ def ask(
 
     with _get_client().beta.messages.stream(**params) as stream:
         response = stream.get_final_message()
+    usage = getattr(response, "usage", None)
+    _usage.tokens = (getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None))
     if response.stop_reason == "refusal":
         raise ModelError(f"model declined: {response.stop_details}")
     if response.stop_reason == "max_tokens":
@@ -302,6 +330,7 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
         raise ModelError(f"local model {model} stopped mid-answer ({e})") from e
     if not last:
         raise ModelError(f"local model {model} stopped mid-answer")
+    _usage.tokens = (last.get("prompt_eval_count"), last.get("eval_count"))
     if last.get("done_reason") == "length":
         raise ModelError(f"answer cut off at {answer_room} tokens")
     return "".join(words)
@@ -316,6 +345,13 @@ def ask_voice(prompt: str, system: str, max_tokens: int = VOICE_TOKENS) -> str:
     """One answer from the voice model, as plain text: no schema, which a small model trained
     only to write as the user wouldn't keep to."""
     model = env("VOICE_MODEL").strip()
+    with _recorded(f"voice:{model}", len(prompt) + len(system), 0) as answered:
+        answer = _ask_voice(model, prompt, system, max_tokens)
+        answered(answer)
+    return answer
+
+
+def _ask_voice(model: str, prompt: str, system: str, max_tokens: int) -> str:
     if model.startswith(LOCAL):
         return _ask_local(model.removeprefix(LOCAL), prompt, system, None, "low", max_tokens)
     kind, _, port = model.partition(":")
@@ -345,6 +381,100 @@ def ask_voice(prompt: str, system: str, max_tokens: int = VOICE_TOKENS) -> str:
         raise ModelError(f"the voice model isn't answering ({e}); is it being served?") from e
     except (ValueError, KeyError, IndexError, TypeError) as e:
         raise ModelError(f"the voice model's answer wasn't one ({e})") from e
+
+
+# What one call cost, set by the call as it ends, read by _recorded; per thread, as a phone
+# call's turns can run beside a sync.
+_usage = threading.local()
+
+
+@contextmanager
+def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object], None]]:
+    """Time the call inside it and leave its line in the calls log, whether it worked or not.
+    The call hands its answer to the function this yields, for the answer's size."""
+    began, got = time.monotonic(), {}
+    _usage.tokens = (None, None)
+    try:
+        yield lambda answer: got.setdefault("answer", answer)
+    finally:
+        answer = got.get("answer")
+        size = len(answer if isinstance(answer, str) else json.dumps(answer)) if got else 0
+        tokens_in, tokens_out = getattr(_usage, "tokens", (None, None))
+        here = model.startswith((LOCAL, "voice:mlx", "voice:ollama"))
+        record = {
+            "at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "step": _step(),
+            "model": model,
+            "where": "this computer" if here else "Anthropic",
+            "sent_chars": sent,
+            "images": images,
+            "answer_chars": size,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "seconds": round(time.monotonic() - began, 1),
+            "ok": bool(got),
+        }
+        _log(record)
+
+
+def _step() -> str:
+    """The part of Proxenos that asked: the innermost of its modules on the call's stack outside
+    this one ("tasks", "forms", "calls"), else "proxenos"."""
+    frame = sys._getframe(1)
+    while frame is not None:
+        name = frame.f_globals.get("__name__", "")
+        if name.startswith("proxenos.") and name not in (__name__, "contextlib"):
+            return name.rsplit(".", 1)[-1]
+        frame = frame.f_back
+    return "proxenos"
+
+
+def _calls_path() -> Path | None:
+    """The calls log, or None while there's no vault to keep it in."""
+    try:
+        vault = vault_path()
+    except ValueError:
+        return None
+    return vault / CALLS if vault.is_dir() else None
+
+
+def _log(record: dict) -> None:
+    """Append one call's line, private to the user, keeping the newest CALLS_KEPT. A log that
+    can't be written never fails the call it records."""
+    path = _calls_path()
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+        if path.stat().st_size > CALLS_KEPT * 400:  # about twice the lines kept: trim
+            lines = path.read_text(encoding="utf-8").splitlines(keepends=True)[-CALLS_KEPT:]
+            tmp = path.with_name(f".{path.name}.tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def calls(vault: Path, since: str | None = None) -> list[dict]:
+    """The calls log's lines, oldest first, from `since` (an ISO time) on."""
+    try:
+        lines = (vault / CALLS).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    found = []
+    for line in lines:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue  # a line being written
+        if isinstance(item, dict) and (since is None or str(item.get("at", "")) >= since):
+            found.append(item)
+    return found
 
 
 def _get_client() -> anthropic.Anthropic:

@@ -121,6 +121,8 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setattr("proxenos.setup._ollama_models", lambda: None)
     # Nor an Ask running on this computer, which a local model call would wait out.
     monkeypatch.setattr("proxenos.llm.waiting", lambda vault=None: False)
+    # Nor the real vault's log of model calls: a test that checks the log points it elsewhere.
+    monkeypatch.setattr("proxenos.llm._calls_path", lambda: None)
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)
