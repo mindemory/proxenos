@@ -54,6 +54,9 @@ LOCAL_CONTEXT = 65536
 _LOCAL_TIMEOUT = 900
 _LOCAL_DEADLINE = 3600
 _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON schema:"
+# What Ollama says when its build can't hold a model to a schema, and the models it said it of.
+_UNGRAMMATICAL = "structured output is unavailable"
+_NO_GRAMMAR: set[str] = set()
 # A local model answers one request at a time, so a question someone is waiting on (an Ask)
 # marks itself here, and other calls, a sync's drafts or the night's notes, wait until it's
 # answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
@@ -203,10 +206,12 @@ def _ask_local(
     max_tokens: int,
     images: list[dict] | None = None,
 ) -> str | dict:
-    """`ask`, answered by a model on this Mac through Ollama's API. Ollama can't hold every
-    model to a schema (for gemma4 it answers "structured output is unavailable"), so a schema
-    goes in the system prompt and the answer is held to it here, with one more try when it
-    isn't the JSON asked for."""
+    """`ask`, answered by a model on this Mac through Ollama's API. A schema goes in the system
+    prompt and in `format`, which holds the model to it as it writes, thinking first or not.
+    Ollama installed from Homebrew can't (its build leaves out the grammar library, so it answers
+    "structured output is unavailable"): then the request goes again without `format`, and that
+    model isn't asked with one again in this process. Either way the answer is held to the schema
+    here (`_object`), with one more try when it isn't the JSON asked for."""
     answer_room = min(max_tokens, LOCAL_CONTEXT // 4)
     if schema is not None:
         system = f"{system or ''}\n\n{_JSON_ONLY}\n{json.dumps(schema)}".strip()
@@ -225,11 +230,20 @@ def _ask_local(
         "think": effort in ("high", "xhigh", "max"),
         "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
     }
+    if schema is not None and model not in _NO_GRAMMAR:
+        body["format"] = schema
     deadline = time.monotonic() + FOREGROUND_MAX
     while waiting() and time.monotonic() < deadline:
         time.sleep(2)
     for _ in range(2):
-        text = _chat(model, body, answer_room)
+        try:
+            text = _chat(model, body, answer_room)
+        except ModelError as e:
+            if "format" not in body or _UNGRAMMATICAL not in str(e):
+                raise
+            _NO_GRAMMAR.add(model)
+            body.pop("format")
+            text = _chat(model, body, answer_room)
         if schema is None:
             return text
         if (answer := _object(text, schema)) is not None:

@@ -102,7 +102,10 @@ def watch(vault: Path, force: bool = False, now: datetime | None = None) -> dict
     answer = llm.ask(
         prompt(vault, seen, refs, history, marks, now),
         system=_SYSTEM.format(
-            person=env("NAME", "the person"), films=FILMS, shows=SHOWS, queue=QUEUE
+            person=env("NAME", "the person"),
+            films=FILMS + EXTRA,
+            shows=SHOWS + EXTRA,
+            queue=QUEUE,
         ),
         schema=_schema(list(refs), [r for r in refs if r.startswith("W")]),
     )
@@ -278,10 +281,9 @@ def _schema(refs: list[str], queue: list[str]) -> dict:
     def tags(allowed: list[str]) -> dict:
         return {"type": "string", "enum": allowed} if allowed else text
 
-    def picks(size: int, properties: dict) -> dict:
-        return {
+    def picks(properties: dict) -> dict:  # how many is said in the prompt and kept in code:
+        return {  # the API refuses a schema with maxItems past 1
             "type": "array",
-            "maxItems": size,
             "items": {
                 "type": "object",
                 "properties": properties,
@@ -295,9 +297,9 @@ def _schema(refs: list[str], queue: list[str]) -> dict:
     return {
         "type": "object",
         "properties": {
-            "films": picks(FILMS + EXTRA, pick),
-            "shows": picks(SHOWS + EXTRA, pick),
-            "watchlist": picks(QUEUE, {"ref": tags(queue), "why": text}),
+            "films": picks(pick),
+            "shows": picks(pick),
+            "watchlist": picks({"ref": tags(queue), "why": text}),
         },
         "required": ["films", "shows", "watchlist"],
         "additionalProperties": False,

@@ -198,7 +198,8 @@ openings came from.
 def _schema(refs: list[str]) -> dict:
     text = {"type": "string"}
     channel = {"type": "string", "enum": list(work.CHANNELS)}
-    cited = {"type": "array", "items": {"type": "string", "enum": refs}}
+    # An empty enum is refused (by Ollama and the API alike): with nothing to cite, any string.
+    cited = {"type": "array", "items": {"type": "string", "enum": refs} if refs else text}
 
     def item(properties: dict) -> dict:
         return {

@@ -305,3 +305,36 @@ def test_each_call_leaves_a_line_in_the_log_and_never_the_words(monkeypatch, tmp
     assert os.name == "nt" or (log.stat().st_mode & 0o777) == 0o600
     assert [c["ok"] for c in llm.calls(tmp_path)] == [True, False]
     assert llm.calls(tmp_path, since="2999-01-01") == []
+
+
+def test_a_schema_holds_the_local_model_as_it_writes_where_ollama_can(monkeypatch):
+    import io
+    import json
+    from urllib.error import HTTPError
+
+    sent = []
+    schema = {"type": "object", "required": ["x"]}
+
+    def urlopen(request, timeout):
+        body = json.loads(request.data)
+        sent.append(body)
+        if "format" in body and body["model"] == "plain":
+            error = io.BytesIO(b'{"error":"structured output is unavailable"}')
+            raise HTTPError(request.full_url, 501, "Not Implemented", {}, error)
+        return Stream(streamed('{"x": 1}'))
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(llm, "_NO_GRAMMAR", set())
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:held")
+    assert llm.ask("hi", schema=schema) == {"x": 1}
+    assert sent[-1]["format"] == schema  # held to it as it writes
+
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:plain")  # Homebrew's build: no grammar library
+    sent.clear()
+    assert llm.ask("hi", schema=schema) == {"x": 1}
+    assert ["format" in body for body in sent] == [True, False]
+    sent.clear()
+    assert llm.ask("again", schema=schema) == {"x": 1}
+    assert ["format" in body for body in sent] == [False]  # not asked with one again
+    texts = local(monkeypatch, "hello")  # a text answer is held to nothing
+    assert llm.ask("text") == "hello" and "format" not in texts[0][1]
