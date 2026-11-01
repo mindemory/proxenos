@@ -23,6 +23,7 @@ If you add code or data from another project, keep its licence and copyright not
 | [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python) | MIT | A hosted model, when you choose one |
 | [NumPy](https://github.com/numpy/numpy) | BSD-3-Clause | The memory's vector search |
 | [pypdf](https://github.com/py-pdf/pypdf) | BSD-3-Clause | Reading PDFs |
+| [pdfminer.six](https://github.com/pdfminer/pdfminer.six) | MIT | Where a PDF form's labels and lines sit, to fill it |
 | [python-dotenv](https://github.com/theskumar/python-dotenv) | BSD-3-Clause | Reading `.env` when running from source |
 | [keyring](https://github.com/jaraco/keyring) | MIT | Secrets on Windows and Linux |
 | [pytest](https://github.com/pytest-dev/pytest), [Ruff](https://github.com/astral-sh/ruff) | MIT | Tests and lint |

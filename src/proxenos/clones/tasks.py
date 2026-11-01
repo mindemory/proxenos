@@ -115,7 +115,7 @@ answered, "done", thanked for it).
 - at: when it happens, for a meeting, call, visit or appointment at an agreed time: \
 "YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
 agreed time when it moved. "" for anything else, and for a deadline, which is due.
-- place: where it happens, as the messages say it ("Worthy", "on Zoom"), or "".
+- place: where it happens, as the messages say it ("the café on Main Street", "on Zoom"), or "".
 
 You also get the drafts written for {person} that wait to be sent. Return in overtaken each \
 draft the messages show is no longer needed: someone else already did what it asks or says \

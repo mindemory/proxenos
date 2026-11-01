@@ -19,6 +19,7 @@ from proxenos import (
     callserver,
     connect,
     demo,
+    forms,
     importer,
     lock,
     master,
@@ -124,6 +125,10 @@ def main(argv: list[str] | None = None) -> None:
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
     voicemodel.add_arguments(tune)
+    form = commands.add_parser(
+        "form", help="a PDF form filled in from your records, for you to check, sign and send"
+    )
+    forms.add_arguments(form)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     settings = commands.add_parser("setup", help="your settings and which secrets are set, as JSON")
     settings.add_argument(
@@ -155,6 +160,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "voice":
         voicemodel.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "form":
+        print(_summary("form", forms.run(vault_path(), args)))
         return
     if args.command == "phone":
         vault_path()  # loads settings

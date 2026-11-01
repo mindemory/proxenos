@@ -203,13 +203,37 @@ def _ask_local(
         text = _chat(model, body, answer_room)
         if schema is None:
             return text
-        try:
-            answer = json.loads(text[text.index("{") : text.rindex("}") + 1])
-        except ValueError:
-            continue
-        if isinstance(answer, dict) and set(schema.get("required", [])) <= set(answer):
+        if (answer := _object(text, schema)) is not None:
             return answer
     raise ModelError(f"local model {model} didn't answer with the JSON asked for")
+
+
+def _object(text: str, schema: dict) -> dict | None:
+    """The first JSON object in a local model's answer with the schema's required keys, each of
+    the type the schema gives. A model may echo the schema before its answer, whose own parts
+    can have the same keys, or wrap the answer in a code fence."""
+    required = set(schema.get("required", []))
+    types = {"array": list, "object": dict, "string": str, "boolean": bool, "number": (int, float)}
+    props = schema.get("properties", {})
+
+    def fits(found: object) -> bool:
+        if not (isinstance(found, dict) and required <= set(found)):
+            return False
+        wanted = {k: types.get(props.get(k, {}).get("type", ""), object) for k in required}
+        return all(isinstance(found[k], t) for k, t in wanted.items())
+
+    decoder = json.JSONDecoder()
+    start = text.find("{")
+    while start != -1:
+        try:
+            found, _ = decoder.raw_decode(text, start)
+        except ValueError:
+            start = text.find("{", start + 1)
+            continue
+        if fits(found):
+            return found
+        start = text.find("{", start + 1)  # inside it: the answer may be nested in the echo
+    return None
 
 
 def _chat(model: str, body: dict, answer_room: int) -> str:

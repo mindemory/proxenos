@@ -51,7 +51,12 @@ def test_plans_with_a_time_become_events_and_the_rest_stay_off(tmp_path):
     )
     write_events(vault, "birthdays_me", "2026-03", [{"start": "2026-03-14", "summary": "Ben"}])
     tasks = [
-        task("lunch1", "Lunch with Kim, then book Worthy", "2026-03-11T12:00", place="Worthy, VT"),
+        task(
+            "lunch1",
+            "Lunch with Noor, then book Lantern",
+            "2026-03-11T12:00",
+            place="Lantern, Riverton",
+        ),
         task("trip1", "Hike day; bring snacks", "2026-03-14", detail="Line one\nline two"),
         task("neuro", "Attend the neurology video visit", "2026-03-12T16:00"),  # theirs already
         task("party", "Go to Asha's party", "2026-03-13", with_="Asha"),  # theirs already
@@ -70,8 +75,8 @@ def test_plans_with_a_time_become_events_and_the_rest_stay_off(tmp_path):
     assert "UID:lunch1@proxenos" in lunch
     assert "DTSTART:20260311T120000\r\n" in lunch  # floating: local wherever it's read
     assert "DTEND:20260311T130000\r\n" in lunch
-    assert "SUMMARY:Lunch with Kim\\, then book Worthy" in lunch
-    assert "LOCATION:Worthy\\, VT" in lunch
+    assert "SUMMARY:Lunch with Noor\\, then book Lantern" in lunch
+    assert "LOCATION:Lantern\\, Riverton" in lunch
     assert "DESCRIPTION:From WhatsApp." in lunch
     assert "DTSTART;VALUE=DATE:20260314" in trip and "DTEND;VALUE=DATE:20260315" in trip
     assert "SUMMARY:Hike day\\; bring snacks" in trip
@@ -117,20 +122,20 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
     monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@gmail.com")
     monkeypatch.setattr(plans.sys, "platform", "darwin")
     cal = Calendar()
-    lunch = task("lunch1", "Lunch with Kim", "2026-03-11T12:00", place="Worthy", with_="Kim")
+    lunch = task("lunch1", "Lunch with Noor", "2026-03-11T12:00", place="Lantern", with_="Noor")
     hike = task("hike1", "Hike", "2026-03-14")
 
     assert plans.write(vault, [lunch, hike], NOW, run=cal) == 2
     assert sorted(cal.events) == ["UID-1", "UID-2"]
     title, place, notes, whole, start, end = cal.events["UID-1"]
     assert (title, place, whole, start, end) == (
-        "Lunch with Kim",
-        "Worthy",
+        "Lunch with Noor",
+        "Lantern",
         "0",
         "2026 03 11 12 00",
         "2026 03 11 13 00",
     )
-    assert notes.endswith("From WhatsApp, with Kim. Added by Proxenos.")
+    assert notes.endswith("From WhatsApp, with Noor. Added by Proxenos.")
     assert cal.events["UID-2"][3:] == ["1", "2026 03 14 00 00", "2026 03 15 00 00"]
 
     # The calendar is read back in with the sync: its own events don't count as mine.
@@ -142,8 +147,8 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
             {
                 "id": "UID-1",
                 "start": local("2026-03-11T12:00:00"),
-                "summary": "Lunch with Kim",
-                "description": "From WhatsApp, with Kim. Added by Proxenos.",  # marked as its own
+                "summary": "Lunch with Noor",
+                "description": "From WhatsApp, with Noor. Added by Proxenos.",  # marked as its own
             }
         ],
     )

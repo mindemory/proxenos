@@ -530,9 +530,9 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
     write_stream(
         vault / "raw" / "whatsapp" / "messages",
         [
-            wa(ago(hours=5), "Kim", "Lunch tomorrow at 12 at Worthy?"),
-            wa(ago(hours=4), "Kim", "yes! I'll book it", me=True),
-            wa(ago(hours=3), "Clay", "I wrote to the editor for the extension, done"),
+            wa(ago(hours=5), "Noor", "Lunch tomorrow at 12 at Lantern Cafe?"),
+            wa(ago(hours=4), "Noor", "yes! I'll book it", me=True),
+            wa(ago(hours=3), "Ravi", "I wrote to the editor for the extension, done"),
         ],
     )
     write_tasks(vault, task("abcabcabcabc", "Send Asha the slides"))
@@ -551,9 +551,9 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
         calls.append({"prompt": prompt, "system": system, "schema": schema})
         lunch, done = ref(prompt, "Lunch tomorrow"), ref(prompt, "wrote to the editor")
         listed = item("Send Asha the slides", id="abcabcabcabc", status="done", evidence=[done])
-        lunch_task = item("Lunch with Kim", evidence=[lunch], with_="Kim")
-        lunch_task |= {"at": "2026-03-11T12:00", "place": " Worthy "}
-        why = "Clay wrote to the editor for the extension today."
+        lunch_task = item("Lunch with Noor", evidence=[lunch], with_="Noor")
+        lunch_task |= {"at": "2026-03-11T12:00", "place": " Lantern Cafe "}
+        why = "Ravi wrote to the editor for the extension today."
         return {
             "tasks": [listed, lunch_task],
             "overtaken": [
@@ -581,7 +581,7 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
 
     assert front(vault, "email-journal")["status"] == "overtaken"
     assert front(vault, "email-journal")["overtaken"] == (
-        "Clay wrote to the editor for the extension today."
+        "Ravi wrote to the editor for the extension today."
     )
     assert front(vault, "abcabcabcabc")["overtaken"] == "Its task is done: Send Asha the slides."
     for key, status in [("outreach-ben", "draft"), ("outreach-cy", "draft"), ("sent-1", "sent")]:
@@ -589,17 +589,17 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
     assert front(vault, "reply-asha")["status"] == front(vault, "plan-1")["status"] == "draft"
     assert (vault / "clones" / "drafts" / "email-journal.md").read_text().endswith("\n\nText.\n")
 
-    lunch = by_title(vault)["Lunch with Kim"]
-    assert (lunch["at"], lunch["place"]) == ("2026-03-11T12:00", "Worthy")
+    lunch = by_title(vault)["Lunch with Noor"]
+    assert (lunch["at"], lunch["place"]) == ("2026-03-11T12:00", "Lantern Cafe")
     ics = (vault / "clones" / "tasks" / "plans.ics").read_text()
-    assert "SUMMARY:Lunch with Kim" in ics and "DTSTART:20260311T120000" in ics
+    assert "SUMMARY:Lunch with Noor" in ics and "DTSTART:20260311T120000" in ics
     assert stats["overtaken"] == 2 and stats["plans"] == 1
 
     # The next run sees the lunch with its time, and no longer the drafts it settled.
     calls.clear()
     tasks.plan(vault, now=NOW)
     prompt = calls[0]["prompt"]
-    assert "at 2026-03-11T12:00 in Worthy] Lunch with Kim." in prompt
+    assert "at 2026-03-11T12:00 in Lantern Cafe] Lunch with Noor." in prompt
     assert "email-journal" not in prompt and "outreach-ben" in prompt
 
 
