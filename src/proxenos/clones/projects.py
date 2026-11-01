@@ -36,6 +36,7 @@ It only writes notes and drafts; nothing is sent.
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from collections.abc import Callable
@@ -210,6 +211,7 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
             f"Where you said it stood last time:\n{last[:STATUS_CHARS]}" if last else "",
             f"The end of its log:\n{_read(log_path)[-LOG_CHARS:]}" if log_path.exists() else "",
             _work_done(vault, project["id"]),
+            _code(project, since),
             f"New since {since:%Y-%m-%d}:\n" + "\n".join(research._line(h, person) for h in new)
             if new
             else f"Nothing new found since {since:%Y-%m-%d}.",
@@ -320,6 +322,46 @@ def _work_done(vault: Path, project_id: str) -> str:
             line += f" It found: {_text(s['found'])[:400]}"
         lines.append(line)
     return "Work Proxenos did on it lately:\n" + "\n".join(lines) if lines else ""
+
+
+def _code(project: dict, since: datetime) -> str:
+    """What happened in the project's code since `since`, on any branch: the commits, the branch
+    the user's checkout is on, and the documents changed (a draft on a branch the checkout isn't
+    on is easy to lose), so the status says where the work is. "" without a repo."""
+    repo = Path(str(project.get("repo") or "")).expanduser()
+    if not (repo / ".git").exists():
+        return ""
+
+    def git(*args: str) -> str:
+        try:
+            done = subprocess.run(
+                ["git", "-C", str(repo), *args],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return done.stdout.strip() if done.returncode == 0 else ""
+
+    after = f"--since={since:%Y-%m-%d}"
+    commits = git("log", "--all", after, "--format=%h %ad %D | %s", "--date=short", "-n", "30")
+    if not commits:
+        return ""
+    files = git("log", "--all", after, "--name-only", "--format=", "-n", "30").splitlines()
+    papers = sorted({f for f in files if f.lower().endswith((".md", ".docx", ".tex"))})
+    branch = git("branch", "--show-current") or "(no branch)"
+    lines = [
+        f"Its code ({repo}), checked out on {branch}. Commits since {since:%Y-%m-%d}, newest first:"
+    ]
+    lines.append(commits)
+    if papers:
+        lines.append(
+            "Documents changed in them (say which branch holds each draft): "
+            + ", ".join(papers[:20])
+        )
+    return "\n".join(lines)
 
 
 def _about(project: dict) -> str:

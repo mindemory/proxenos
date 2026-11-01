@@ -1,7 +1,8 @@
 """The project clone, with the model faked out. No model, no real data."""
 
 import json
-from datetime import UTC, datetime
+import subprocess
+from datetime import UTC, datetime, timedelta
 
 from proxenos import voice
 from proxenos.clones import projects
@@ -167,3 +168,30 @@ def test_the_status_knows_the_work_done_and_what_the_user_made_of_it(tmp_path):
     assert "accepted by the user: Step of 20260308-020000 It found: Bread" in prompt
     assert "20260309-030000" not in prompt  # still being taken
     assert projects.listed_projects(tmp_path)[0]["repo"] == "~/cookbook"
+
+
+def test_a_project_s_status_sees_its_code_on_every_branch(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "tess@example.org")
+    git("config", "user.name", "Tess")
+    (repo / "a.py").write_text("x = 1\n")
+    git("add", ".")
+    git("commit", "-q", "-m", "Start")
+    git("checkout", "-q", "-b", "draft")
+    (repo / "paper.md").write_text("# The paper\n")
+    git("add", ".")
+    git("commit", "-q", "-m", "Write the draft")
+    git("checkout", "-q", "main")
+
+    text = projects._code({"repo": str(repo)}, datetime.now(UTC) - timedelta(days=1))
+
+    assert "checked out on main" in text  # the draft is on a branch the checkout isn't on
+    assert "draft | Write the draft" in text and "Start" in text
+    assert text.endswith("paper.md")
+    assert projects._code({"repo": str(tmp_path / "none")}, datetime.now(UTC)) == ""
