@@ -12,6 +12,9 @@
 
 When you're unwell, the hard part is often everything around the care: referrals that go quiet, portals, bills that don't match, forms, and the same story told again at every visit. Proxenos reads what you already have (your mail, chats, calendar and notes), keeps track of where things stand, and writes the message, the call script or the one-page brief for your next appointment, in your own voice. You stay in charge: it drafts, and you press send.
 
+![Home: today's agenda and open tasks, drafts to send, and where health care stands](docs/images/home-desktop.png)
+*The home page of `proxenos demo`, a made-up person with made-up records. More [below](#what-it-looks-like).*
+
 It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
 
 > **Status: early, and used every day by one person.** It runs on a Mac (Apple Silicon) for someone comfortable with a terminal, and every check passes from a fresh clone. It's about 45,000 lines of Python and TypeScript, with 16,000 more in 680 tests that run on macOS and Windows on every push. It isn't yet something you can download and use without code. That's the next track: one download, signing in instead of configuring, and a clear privacy screen ([docs/everyone.md](docs/everyone.md)). Expect rough edges, and readers that assume a particular export format.
@@ -36,9 +39,7 @@ It drafts; by default it never sends, posts or buys anything by itself. You copy
 
 ## What it looks like
 
-These come from `proxenos demo` (see [Quick start](#quick-start)): a made-up person, Joe Bloggs, and his made-up records. None of it is real.
-
-![Home: today's agenda and open tasks, drafts to send, and where health care stands](docs/images/home-desktop.png)
+These come from `proxenos demo` (see [Quick start](#quick-start)), like the home page at the top: a made-up person, Joe Bloggs, and his made-up records. None of it is real.
 
 | Care: where things stand, what's yours to do, what to say | Errands: carried as far as they go, one tap short of sending |
 |---|---|
