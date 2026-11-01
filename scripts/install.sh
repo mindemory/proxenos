@@ -3,7 +3,7 @@
 # by hand. It installs what's missing with Homebrew (Node, Ollama, and Miniforge when there's no
 # conda), creates the `proxenos` conda env and installs the package into it, installs the page's
 # packages, starts Ollama and pulls a local model that fits this Mac's memory. Running it again
-# skips whatever is already there.
+# skips whatever is already there, except packages older than the ones this clone asks for.
 #
 #   scripts/install.sh                     set up, then `conda activate proxenos && proxenos web`
 #   scripts/install.sh --no-model          skip the model downloads (use a hosted model instead)
@@ -65,11 +65,15 @@ fi
 conda activate "$env_name"
 set -u
 conda config --env --set subdir osx-arm64 >/dev/null 2>&1 || true
+# Also upgrades any package below the floor pyproject.toml sets, as after a security fix: pip
+# replaces an installed version that doesn't meet a requirement, and leaves the rest alone.
 python -m pip install -q -e "$repo"
 command -v proxenos >/dev/null || fail "the proxenos command didn't install; see the pip output above."
 
 step "The page's packages"
-if [ -d "$repo/web/node_modules" ]; then
+# npm writes node_modules/.package-lock.json on each install; a lockfile newer than it (a pull
+# that patched a package) installs again, so node_modules never keeps an old version.
+if [ "$repo/web/node_modules/.package-lock.json" -nt "$repo/web/package-lock.json" ]; then
   echo "web/node_modules: already there"
 else
   npm --prefix "$repo/web" ci --no-audit --no-fund

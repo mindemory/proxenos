@@ -13,8 +13,8 @@ dependencies = [
     # Secret Service is used when keyring is installed.
     "keyring>=25; sys_platform == 'win32'",
     "numpy>=1.26",
-    "pdfminer.six>=20250000",  # where a flat PDF form's labels and lines sit (forms.py)
-    "pypdf>=6.0",
+    "pdfminer.six>=20251230",  # where a flat PDF form's labels and lines sit (forms.py)
+    "pypdf>=6.21.4",
     "python-dotenv>=1.0",
     "tzdata; sys_platform == 'win32'",  # zoneinfo has no time zones of its own on Windows
 ]
