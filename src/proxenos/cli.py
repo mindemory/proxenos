@@ -31,6 +31,7 @@ from proxenos import (
     schedule,
     setup,
     vectors,
+    voice,
     voicemodel,
     webapp,
 )
@@ -267,14 +268,16 @@ def _command(
 
 def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     """The master's run (sync, observe, consolidate), then each of NIGHT_CLONES with its
-    default arguments, then the voice model trained again where it's due, one summary line
-    each with how long it took, so a slow step shows in the log. A step that fails is reported
-    and the rest still run. Whether every step worked."""
+    default arguments, then the voice model trained again where it's due, and last the writing
+    rules learned from drafts the user changed (proxenos.voice.lessons, nothing until enough are
+    new), one summary line each with how long it took, so a slow step shows in the log. A step
+    that fails is reported and the rest still run. Whether every step worked."""
     print(f"night: started {datetime.now():%Y-%m-%d %H:%M}", flush=True)
     steps: list[tuple[str, Callable[[], dict[str, int]]]] = [("master", lambda: master.run(vault))]
     for name in NIGHT_CLONES:
         steps.append((name, lambda module=clones[name]: module.run(vault, _defaults(module))))
     steps.append(("voice", lambda: voicemodel.refresh(vault)))
+    steps.append(("lessons", lambda: voice.lessons(vault)))
     ok = True
     for name, step in steps:
         began = time.monotonic()

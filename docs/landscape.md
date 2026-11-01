@@ -112,11 +112,11 @@ The original LongMemEval is close to saturated, and vendors' scores on it can't 
   - Meaning, not only words, for proactive recall.
   - Planned searches that can carry a date range. Time-aware queries raised recall on time questions by 6.8–11.3% in [LongMemEval](https://arxiv.org/abs/2410.10813).
   - A log of what each research run kept, to tune the merging on real decisions later.
+  - Voice rules inferred from drafts the user rewrote and checked against their own sent messages, proposed for them to accept ([PROSE, ICML 2025](https://arxiv.org/abs/2505.23815), which improved on [CIPHER](https://arxiv.org/abs/2404.15269)).
 - **Next:**
   - A small local reranker, [Qwen3-Reranker-0.6B](https://github.com/QwenLM/Qwen3-Embedding) (Apache-2.0, through mlx-lm). On Qwen's own table it lifts retrieval from 61.8 to 65.8.
   - Research that opens the records it finds and reads around them. Agents searching raw records scored 69–72% against 48.5% for the best retrieval baseline in [LongMemEval-V2](https://arxiv.org/abs/2605.12493).
   - Tasks that can be cancelled or moved, not only done. Agents fumble cancellations ([ProEvent](https://arxiv.org/abs/2607.17701)), and recording what replaced what helps ([StateMemBench](https://arxiv.org/abs/2608.19652)).
-  - Voice rules inferred from drafts the user rewrote and checked against their own sent messages ([PROSE, ICML 2025](https://arxiv.org/abs/2505.23815), which improved on [CIPHER](https://arxiv.org/abs/2404.15269)).
   - Fidelity that scores style apart from content ([StyleDistance](https://huggingface.co/StyleDistance/styledistance)).
 - **Left out:**
   - Graph memory servers (Graphiti/Zep, Mem0's graph): they need a database and a model call per message, and break on small local models' JSON. Proxenos borrows their ideas instead: time ranges, and invalidating rather than deleting.

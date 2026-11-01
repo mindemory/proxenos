@@ -1,10 +1,11 @@
 """`proxenos night` with the master and every clone faked out. No network, no model, no real data."""
 
+import json
 import re
 
 import pytest
 
-from proxenos import cli, llm, master, voicemodel
+from proxenos import cli, llm, master, voice, voicemodel
 from proxenos.clones import (
     advisor,
     care,
@@ -62,7 +63,16 @@ def calls(tmp_path, monkeypatch):
         return {"new_answers": 3}
 
     monkeypatch.setattr(voicemodel, "refresh", fake_refresh)
+
+    def fake_lessons(vault):
+        calls.append(("lessons", vault.name, {}))
+        return {"new_changed_drafts": 2}
+
+    monkeypatch.setattr(voice, "lessons", fake_lessons)
     return calls
+
+
+LESSONS = voice.lessons  # the real one, which the fixture fakes
 
 
 def untimed(lines):
@@ -96,8 +106,9 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "steps: 1 done",
         "journal: 1 done",
         "voice: 3 new answers",  # trained again only when it's due
+        "lessons: 2 new changed drafts",  # rules learned only once enough are new
     ]
-    assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES, "voice"]
+    assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES, "voice", "lessons"]
     assert cli.NIGHT_CLONES.index("recall") < cli.NIGHT_CLONES.index("work")
     # The week's choices read the tasks and ideas, and their drafts are the work clone's.
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
@@ -145,6 +156,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "steps: 1 done",
         "journal: 1 done",
         "voice: 3 new answers",
+        "lessons: 2 new changed drafts",
     ]
     assert [name for name, *_ in calls] == [
         "tracker",
@@ -160,4 +172,24 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "steps",
         "journal",
         "voice",
+        "lessons",
     ]
+
+
+def test_too_few_new_changed_drafts_ask_no_model(calls, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(voice, "lessons", LESSONS)
+    monkeypatch.setattr(llm, "ask", lambda *a, **k: pytest.fail("a model call"))
+    measured = [
+        {"source": "whatsapp", "to": "Ana", "closeness": 0.2, "sent": f"2026-03-0{n}T09:00:00Z",
+         "draft_text": f"Dear Ana, note {n}.", "sent_text": f"hey ana, note {n}"}
+        for n in range(1, voice.NEW_PAIRS)
+    ]  # fmt: skip
+    folder = tmp_path / "vault" / "clones" / "drafts"
+    folder.mkdir(parents=True)
+    (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+
+    cli.main(["night"])
+
+    lines = untimed(capsys.readouterr().out.splitlines()[1:])
+    assert lines[-1] == f"lessons: {voice.NEW_PAIRS - 1} new changed drafts"
+    assert not (tmp_path / "vault" / voice.LESSONS).exists()  # it didn't run

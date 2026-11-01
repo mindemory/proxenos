@@ -17,8 +17,10 @@ Written to clones/drafts/fidelity.json: each measured draft {id, source, to, dra
 closeness, draft_text, sent_text} and, per source, how many and their mean. The two texts,
 each cut to TEXT_CHARS, are what proxenos.voice shows the drafting model of a draft the user
 changed before sending, beside what they sent instead, so the next draft starts from the
-change; the voice model learns it when it's trained again (proxenos.voicemodel.refresh). That's the measure that should decide when a
-kind of reply can go out without asking (docs/memory.md). No model; nothing leaves the vault.
+change, and what proxenos.voice.lessons learns writing rules from; the voice model learns it
+when it's trained again (proxenos.voicemodel.refresh). That's the measure that should decide
+when a kind of reply can go out without asking (docs/memory.md). No model; nothing leaves the
+vault.
 """
 
 import json

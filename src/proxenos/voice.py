@@ -32,15 +32,32 @@ in clones/drafts/feedback.jsonl), and every draft gets those whose closeness was
 newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
 write like what was sent and never like what was drafted. So a change counts from the next draft
 on, without training anything.
+
+Ahead of those pairs go the writing rules the user kept (RULES_FILE, RULES_CHARS of them): short
+rules learned from the same changes, the PROSE way (arXiv 2505.23815, which improved on CIPHER,
+arXiv 2404.15269). Each night `lessons` reads the changed drafts it hasn't read yet, and once
+there are NEW_PAIRS of them, has the model infer rules from each batch of pairs: how the user
+writes, to a person or on a channel where the evidence is that specific. A rule is kept only if
+it holds on at least HOLDS of the user's own sent messages outside the pairs it read, as one
+more call per batch of rules judges them; a rule about health, or quoting more than a few words,
+never is. The rules kept are proposed, not used: how the user writes is a slow part of the
+self-model, which changes only through proposals they accept, so the rules go in self/proposals/
+as the master's slow files do, and reach a draft only once the user accepts them (`proxenos
+master accept`). That needs nothing new, where keeping rules on the page would: accept already
+moves every proposal into self/, and the page already shows self/'s files. The accepted file is
+theirs to edit; each line starting with "- " is a rule. A proposal starts from it as it stands.
 """
 
+import hashlib
 import json
+import os
 import re
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from functools import cached_property
 from pathlib import Path
 
-from proxenos import chats
+from proxenos import chats, llm
 from proxenos.config import env
 
 MONTHS = 3  # of each chat stream, the newest month files read for examples
@@ -51,6 +68,22 @@ LONG_MIN = 200  # characters a text needs to count as longer writing
 EXAMPLE_CHARS = 1500  # of one piece of longer writing
 CORRECTION_CHARS = 2000  # of drafts the user changed, with what they sent instead
 CHANGED = 0.85  # closeness under this: they changed enough of a draft to learn from
+RULES_FILE = Path("self", "voice_rules.md")  # the writing rules the user kept
+PROPOSED = Path("self", "proposals", "voice_rules.md")  # rules waiting on them
+LESSONS = Path("state", "voice_lessons.json")  # when lessons last ran, and the pairs it read
+RULES_CHARS = 1500  # of kept rules in a draft's prompt
+RULE_CHARS = 200  # of one rule
+MAX_RULES = 30  # a proposal adds none past this many
+NEW_PAIRS = 5  # changed drafts not read yet, before lessons asks the model anything
+PAIRS = 24  # the most of them one run reads, newest first; the rest wait for the next
+PAIR_BATCH = 8  # pairs per call that infers rules
+PAIR_CHARS = 1200  # of a draft and of what was sent, as fidelity keeps them
+RULE_BATCH = 6  # rules per call that checks them
+SAMPLE = 8  # of the user's own sent messages a rule is checked on
+SAMPLE_CHARS = 600  # of one: its start and its end, where greetings and sign-offs are
+HOLDS = 3  # of those a rule must hold on, and on more than it breaks on, to be kept
+QUOTE_WORDS = 4  # the longest quote a rule may carry: a greeting, a sign-off, a filler
+LEARNED = 2000  # pairs remembered as read
 # Where the user's own posts are, under raw/.
 POSTS = (
     "bluesky/posts",
@@ -73,6 +106,16 @@ _SOURCE_OF = {"messenger": "facebook", "x": "twitter"}  # chat sources by a draf
 _MONTH = re.compile(r"\d{4}-\d{2}\.jsonl")
 _WORD = re.compile(r"\w+")
 _COPY = "Copy how they write, never what they say."
+# What makes a rule about health, which a writing rule never is.
+_HEALTH = re.compile(
+    r"health|\bmedic|\bdoctors?\b|\bdentists?\b|\bclinics?\b|\bhospital|\bnurs(e|es|ing)\b|"
+    r"\btherap|\bdiagnos|\bsymptom|\bill(ness)?\b|\bsick|\bunwell\b|\bpains?\b|\binjur|"
+    r"\bdiseases?\b|\bprescri|\bpharmac|\bsurg(ery|eon)|\bmental|\banxi|\bdepress|\bpregnan|"
+    r"\bmeds\b",
+    re.IGNORECASE,
+)
+_QUOTE = re.compile(r"\"([^\"]*)\"|“([^”]*)”|‘([^’]*)’|(?<!\w)'([^']*)'(?!\w)")
+_BULLET = re.compile(r"\s*[-*]\s+(.*\S)")
 
 RULES = """\
 Write as {person} writes, not as an AI writes. Where their own writing is given as examples, \
@@ -140,6 +183,11 @@ class Writing:
             and _tidy(m.get("draft_text"))
             and _enough(_tidy(m.get("sent_text")))
         ]
+
+    @cached_property
+    def rules(self) -> list[str]:
+        """The writing rules they kept (RULES_FILE), in their order."""
+        return kept(self.vault)
 
     @cached_property
     def long(self) -> list[dict]:
@@ -306,8 +354,30 @@ def _edits(path: Path) -> list[dict]:
 
 
 def corrections(written: Writing, source: str | None, name: object = "") -> str:
-    """Drafts the user changed before sending, each beside what they sent: to `name` first, then
-    the rest on `source` (any source when None), newest first, CORRECTION_CHARS in all."""
+    """The writing rules the user kept, RULES_CHARS of them, then the drafts they changed before
+    sending, each beside what they sent: to `name` first, then the rest on `source` (any source
+    when None), newest first, CORRECTION_CHARS in all."""
+    return _join(_kept_rules(written.rules), _changed(written, source, name))
+
+
+def _kept_rules(rules: list[str]) -> str:
+    """The rules, in order, as many as fit in RULES_CHARS. Each says where it applies."""
+    shown, room = [], RULES_CHARS
+    for rule in rules:
+        if len(rule) <= room:
+            shown.append(f"- {rule}")
+            room -= len(rule)
+    if not shown:
+        return ""
+    person = env("NAME", "the person")
+    head = (
+        f"How {person} writes, in rules learned from drafts they changed, checked against their "
+        f"own messages and kept by them. Follow each one where it applies:"
+    )
+    return "\n".join([head, *shown])
+
+
+def _changed(written: Writing, source: str | None, name: object) -> str:
     pool = [m for m in written.corrections if source in (None, m.get("source"))]
     to = _fold(name)
     pool.sort(key=lambda m: not (to and _fold(m.get("to")) == to))  # stable: newest stays first
@@ -327,6 +397,338 @@ def corrections(written: Writing, source: str | None, name: object = "") -> str:
         f"{_COPY}"
     )
     return "\n".join([head, *shown])
+
+
+# Rules learned from the drafts the user changed
+
+_INFER = """\
+You learn how {person} writes from drafts written for them that they changed before sending. \
+Each pair is a draft and what {person} sent instead, with the channel it went on and whom it \
+was to.
+
+Write the rules the changes show: what {person} does that the drafts didn't, as instructions \
+a writer could follow.
+- One habit per rule, under 25 words, about how they write: length, greeting, sign-off, the \
+languages they mix, case, punctuation, emoji, tone, what comes first, what they leave out.
+- Say where it applies, in the rule and in channel and to: to one person ("To Mom, in \
+Marathi-English mix, no sign-off") or on one channel ("Emails to editors: two short \
+paragraphs, thanks first") where the pairs that show it are all to that person or on that \
+channel. to is that person's name as a pair gives it, else "". channel "any" and to "" only \
+when pairs on several channels or to several people agree.
+- Only habits the pairs show plainly. A change of facts (a date, a name, a plan) says nothing \
+about how they write.
+- Never about health, illness or anyone's body or mind, and never about what a message said.
+- Never quote a sentence. A rule may quote a greeting, a sign-off or a filler of a few words \
+that {person} wrote, never anyone else's words.
+- Leave out any rule already in their rules so far, however it's worded.
+Return no rules when the changes show nothing about how they write."""
+
+_CHECK = """\
+You check rules about how {person} writes against messages {person} sent. Each rule names the \
+messages to check it on. For each of those, say whether the rule holds (the message does what \
+the rule says) or breaks (the message is the kind the rule is about and doesn't do it), and \
+leave a message out of both when the rule isn't about that kind of message. Judge only how a \
+message is written, never what it says. Give a verdict for every rule."""
+
+_HEAD = """\
+# How {person} writes
+
+Rules learned from drafts written for {person} that they changed before sending, each checked \
+against their own sent messages. Every draft written for them follows each line below that \
+starts with "- ". Change or delete any line, or add your own."""
+
+
+def lessons(vault: Path, now: datetime | None = None) -> dict[str, int]:
+    """Rules learned from the changed drafts not read yet, checked against the user's own sent
+    messages, and proposed for RULES_FILE. While fewer than NEW_PAIRS are new it does nothing,
+    and asks the model nothing. LESSONS keeps when it last ran, the pairs it read, and the rules
+    it proposed, so a rule the user deleted or turned down isn't proposed again."""
+    now = now or datetime.now(UTC)
+    state = _state(vault)
+    written = Writing(vault)
+    new, seen = {}, set(state["read"])
+    for m in written.corrections:  # newest first, each pair once
+        if (key := _pair_key(m)) not in seen:
+            seen.add(key)
+            new[key] = m
+    if len(new) < NEW_PAIRS:
+        return {"new_changed_drafts": len(new)}
+    reading = list(new)[:PAIRS]
+    pairs = [new[key] for key in reading]
+    person = env("NAME", "the person")
+    have = [*kept(vault), *_rules_in(_text(vault / PROPOSED))]
+    inferred: list[dict] = []
+    for start in range(0, len(pairs), PAIR_BATCH):
+        inferred += _infer(pairs[start : start + PAIR_BATCH], have, person)
+    known = {_fold(rule) for rule in [*have, *state["proposed"]]}
+    fresh, refused = [], 0
+    for rule in inferred:
+        if _fold(rule["rule"]) in known:
+            continue
+        known.add(_fold(rule["rule"]))
+        if _allowed(rule["rule"]):
+            fresh.append(rule)
+        else:
+            refused += 1
+    held = _check(written, fresh, pairs, person)
+    proposed = _propose(vault, held, person)
+    state = {
+        "ran": now.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "read": [*reading, *state["read"]][:LEARNED],
+        "proposed": [*proposed, *state["proposed"]][:LEARNED],
+    }
+    _write_private(vault / LESSONS, json.dumps(state, ensure_ascii=False, indent=1))
+    return {
+        "new_changed_drafts": len(new),
+        "rules_inferred": len(fresh) + refused,
+        "rules_refused": refused,
+        "rules_held": len(held),
+        "rules_proposed": len(proposed),
+    }
+
+
+def kept(vault: Path) -> list[str]:
+    """The writing rules in RULES_FILE as the user keeps it, in order, each cut to RULE_CHARS."""
+    return _rules_in(_text(vault / RULES_FILE))
+
+
+def _infer(pairs: list[dict], have: list[str], person: str) -> list[dict]:
+    """One call: the rules a batch of changed drafts shows, as {rule, channel, to}."""
+    shown = []
+    for n, m in enumerate(pairs, 1):
+        about = f'n="{n}" channel="{_channel(m.get("source"))}"'
+        if to := _one_line(m.get("to")).replace('"', "'"):
+            about += f' to="{to}"'
+        shown.append(
+            f"<pair {about}>\n<drafted>\n{_cut(m['draft_text'])}\n</drafted>\n"
+            f"<sent>\n{_cut(m['sent_text'])}\n</sent>\n</pair>"
+        )
+    parts = []
+    if have:
+        parts.append(f"{person}'s rules so far:\n" + "\n".join(f"- {rule}" for rule in have))
+    parts.append(
+        f"Drafts written for {person} that they changed before sending, newest first:\n"
+        + "\n".join(shown)
+    )
+    answer = llm.ask(
+        "\n\n".join(parts),
+        system=_INFER.format(person=person),
+        schema=_INFER_SCHEMA,
+        effort="medium",
+    )
+    found = []
+    for rule in answer.get("rules") or []:
+        text = _one_line(rule.get("rule")) if isinstance(rule, dict) else ""
+        if text and len(text) <= RULE_CHARS:
+            channel = rule.get("channel") if rule.get("channel") in _RULE_CHANNELS else "any"
+            found.append({"rule": text, "channel": channel, "to": _one_line(rule.get("to"))})
+    return found
+
+
+def _allowed(rule: str) -> bool:
+    """A rule never about health, and quoting no more than a few words."""
+    quoted = (next(q for q in m.groups() if q is not None) for m in _QUOTE.finditer(rule))
+    return not _HEALTH.search(rule) and all(len(_WORD.findall(q)) <= QUOTE_WORDS for q in quoted)
+
+
+def _check(written: Writing, rules: list[dict], pairs: list[dict], person: str) -> list[str]:
+    """The rules that hold on at least HOLDS of the user's own sent messages, and on more of
+    them than they break on, with none of what was sent in `pairs` among them: one call for
+    each RULE_BATCH rules. A rule with fewer than HOLDS messages to check isn't asked about."""
+    sent = [_tidy(m["sent_text"]) for m in pairs]
+    skip = {_key(text) for whole in sent for text in [whole, *whole.splitlines()]}
+    asked = [(rule, _sample(written, rule, skip)) for rule in rules]
+    asked = [(rule, sample) for rule, sample in asked if len(sample) >= HOLDS]
+    held = []
+    for start in range(0, len(asked), RULE_BATCH):
+        batch = asked[start : start + RULE_BATCH]
+        numbers: dict[str, int] = {}  # each message once, by its key
+        shown, lines, ids = [], [], []
+        for n, (rule, sample) in enumerate(batch, 1):
+            mine = []
+            for m in sample:
+                if _key(m["text"]) not in numbers:
+                    numbers[_key(m["text"])] = len(numbers) + 1
+                    shown.append(_message(len(numbers), m))
+                mine.append(numbers[_key(m["text"])])
+            ids.append(set(mine))
+            which = ", ".join(map(str, mine))
+            lines.append(f'<rule n="{n}" messages="{which}">{rule["rule"]}</rule>')
+        prompt = (
+            f"Messages {person} sent, newest first:\n"
+            + "\n".join(shown)
+            + "\n\nThe rules, each with the messages to check it on:\n"
+            + "\n".join(lines)
+        )
+        answer = llm.ask(
+            prompt, system=_CHECK.format(person=person), schema=_CHECK_SCHEMA, effort="medium"
+        )
+        verdicts = {v.get("rule"): v for v in answer.get("verdicts") or [] if isinstance(v, dict)}
+        for n, ((rule, _), mine) in enumerate(zip(batch, ids, strict=True), 1):
+            verdict = verdicts.get(n) or {}
+            holds = _numbers(verdict.get("holds")) & mine
+            breaks = (_numbers(verdict.get("breaks")) & mine) - holds
+            if len(holds) >= HOLDS and len(holds) > len(breaks):
+                held.append(rule["rule"])
+    return held
+
+
+def _sample(written: Writing, rule: dict, skip: set[str]) -> list[dict]:
+    """The user's own sent messages a rule is checked on, newest first, SAMPLE at most and none
+    in `skip`: on its channel, and in chats, only those to the person it names."""
+    channel = rule["channel"]
+    mine = [
+        {"channel": m["source"], "to": m["name"], "ts": m["ts"], "text": m["text"]}
+        for m in written.messages
+        if channel in ("any", m["source"])
+    ]
+    if channel in ("any", "email"):  # an email's recipients aren't kept: its greeting says
+        mine += [
+            {"channel": "email", "to": "", "ts": t["ts"], "text": t["text"]}
+            for t in written.long
+            if t["kind"] == "email"
+        ]
+    mine.sort(key=lambda m: m["ts"], reverse=True)
+    mine = [m for m in mine if _key(m["text"]) not in skip]
+    if (to := _fold(rule["to"])) and channel != "email":
+        mine = [m for m in mine if _fold(m["to"]) == to]
+    return mine[:SAMPLE]
+
+
+def _message(n: int, m: dict) -> str:
+    about = f'n="{n}" channel="{m["channel"]}"'
+    if to := _one_line(m["to"]).replace('"', "'"):
+        about += f' to="{to}"'
+    text = m["text"]
+    if len(text) > SAMPLE_CHARS:  # its start and its end
+        half = SAMPLE_CHARS // 2
+        text = f"{text[:half].rstrip()} … {text[-half:].lstrip()}"
+    return f"<message {about}>\n{text}\n</message>"
+
+
+def _propose(vault: Path, rules: list[str], person: str) -> list[str]:
+    """Add `rules` to the proposal for RULES_FILE: the file as the user keeps it, then the rules
+    already waiting in the proposal, then these, MAX_RULES in all. The rules added."""
+    text = _text(vault / RULES_FILE)
+    current = _rules_in(text)
+    known = {_fold(rule) for rule in current}
+    waiting = [rule for rule in _rules_in(_text(vault / PROPOSED)) if _fold(rule) not in known]
+    known |= {_fold(rule) for rule in waiting}
+    new = []
+    for rule in rules:
+        if _fold(rule) not in known and len(current) + len(waiting) + len(new) < MAX_RULES:
+            known.add(_fold(rule))
+            new.append(rule)
+    if not new:
+        return []
+    head = text.rstrip() or _HEAD.format(person=person)
+    between = "\n" if _BULLET.fullmatch(head.splitlines()[-1]) else "\n\n"
+    lines = "\n".join(f"- {rule}" for rule in [*waiting, *new])
+    _write_private(vault / PROPOSED, f"{head}{between}{lines}\n")
+    return new
+
+
+def _rules_in(text: str) -> list[str]:
+    """Each item of the list in a rules file ("- " or "* "), as one line, cut to RULE_CHARS."""
+    rules = []
+    for line in text.splitlines():
+        if (bullet := _BULLET.fullmatch(line)) and (rule := _one_line(bullet[1])):
+            if len(rule) > RULE_CHARS:  # up to the last whole word that fits
+                rule = rule[: RULE_CHARS - 1].rsplit(" ", 1)[0].rstrip() + "…"
+            rules.append(rule)
+    return rules
+
+
+def _state(vault: Path) -> dict[str, list[str]]:
+    try:
+        state = json.loads((vault / LESSONS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    state = state if isinstance(state, dict) else {}
+    return {
+        key: [x for x in state.get(key) or [] if isinstance(x, str)] for key in ("read", "proposed")
+    }
+
+
+def _pair_key(m: dict) -> str:
+    pair = f"{_tidy(m.get('draft_text'))}\0{_tidy(m.get('sent_text'))}"
+    return hashlib.sha1(pair.encode()).hexdigest()[:16]
+
+
+def _channel(source: object) -> str:
+    """A pair's channel as a rule names it: "email", a chat source, or "other"."""
+    return str(source) if source in _RULE_CHANNELS and source != "any" else "other"
+
+
+def _numbers(value: object) -> set[int]:
+    if not isinstance(value, list):
+        return set()
+    return {n for n in value if isinstance(n, int) and not isinstance(n, bool)}
+
+
+def _cut(text: object) -> str:
+    text = _tidy(text)
+    return text if len(text) <= PAIR_CHARS else text[: PAIR_CHARS - 1].rstrip() + "…"
+
+
+def _text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Swap the file in whole, private to the user."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+_RULE_CHANNELS = ("any", "email", *NAMES)
+_INFER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "rule": {"type": "string"},
+                    "channel": {"type": "string", "enum": list(_RULE_CHANNELS)},
+                    "to": {"type": "string"},
+                },
+                "required": ["rule", "channel", "to"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["rules"],
+    "additionalProperties": False,
+}
+_CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdicts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "rule": {"type": "integer"},
+                    "holds": {"type": "array", "items": {"type": "integer"}},
+                    "breaks": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["rule", "holds", "breaks"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["verdicts"],
+    "additionalProperties": False,
+}
 
 
 def _pick(texts: list[str], room: int, seen: set[str]) -> list[str]:

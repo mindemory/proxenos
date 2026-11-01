@@ -1,12 +1,14 @@
-"""Examples of the user's own writing, picked for a draft, on a synthetic vault. No model, no
-real data."""
+"""Examples of the user's own writing, picked for a draft, and the writing rules learned from
+drafts the user changed, on a synthetic vault. A fake model, no real data."""
 
 import json
+import os
+import re
 from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import chats, voice
+from proxenos import chats, llm, master, voice
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 
@@ -393,3 +395,198 @@ def test_a_draft_i_rewrote_on_the_page_teaches_the_next_one(tmp_path):
 
     assert "<drafted>\nDear Asha, I hope you are well.\n</drafted>" in shown
     assert "<sent>\nhey asha!! all good?\n</sent>" in shown and "Same." not in shown
+
+
+# Rules learned from drafts I changed
+
+SENT = [  # what Tess sent instead of six drafts to Aai, the first also a message in their chat
+    "ok aai coming sunday",
+    "ho aai done",
+    "yes yes all set",
+    "theek aahe call later",
+    "coming at six aai",
+    "will bring it aai",
+]
+MINE = [  # her other messages to Aai, which the drafts weren't
+    "haan will call you tonight",
+    "reached home, all good",
+    "kal bhetu, bye",
+    "nako worry, all set here",
+    "sending photos now",
+]
+
+
+class Teacher:
+    """A fake model. Asked for rules, it gives `rules` (a text is a rule to Aai on WhatsApp);
+    asked to check them, it judges each by its text as `verdicts` says: holding on every message
+    it's asked about (the default), breaking on all of them, or holding on two ("few")."""
+
+    def __init__(self, rules, verdicts=None):
+        self.rules, self.verdicts, self.calls = rules, verdicts or {}, []
+
+    def __call__(self, prompt, *, system=None, schema=None, **kwargs):
+        self.calls.append({"prompt": prompt, "system": system, "schema": schema})
+        if "rules" in schema["properties"]:
+            return {
+                "rules": [
+                    {"rule": r, "channel": "whatsapp", "to": "Aai"} if isinstance(r, str) else r
+                    for r in self.rules
+                ]
+            }
+        verdicts = []
+        for n, ids, rule in re.findall(r'<rule n="(\d+)" messages="([\d, ]+)">(.*)</rule>', prompt):
+            ids = [int(i) for i in ids.split(", ")]
+            how = self.verdicts.get(rule, "holds")
+            holds = {"holds": ids, "few": ids[:2]}.get(how, [])
+            breaks = ids if how == "breaks" else []
+            verdicts.append({"rule": int(n), "holds": holds, "breaks": breaks})
+        return {"verdicts": verdicts}
+
+
+@pytest.fixture(autouse=True)
+def offline(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("live model"))
+
+
+def changed(vault, sent):
+    """A draft to Aai for each text Tess sent instead, as fidelity measured them."""
+    measured = [
+        {"source": "whatsapp", "to": "Aai", "closeness": 0.2, "sent": f"2026-03-{day:02d}T10:00:00Z",
+         "draft_text": f"Dear Mom, {text.capitalize()}. Best regards, Tess", "sent_text": text}
+        for day, text in enumerate(sent, 1)
+    ]  # fmt: skip
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+
+
+def lessons_vault(tmp_path):
+    vault = tmp_path / "vault"
+    write_month(
+        vault,
+        "whatsapp/messages",
+        "2026-03",
+        [
+            wa("aai", "Aai", 1, SENT[0], mine=True),
+            *(wa("aai", "Aai", day, text, mine=True) for day, text in enumerate(MINE, 2)),
+            wa("aai", "Aai", 7, "jevlas ka? call me"),  # her words
+            wa("ben", "Ben", 3, "can u send the pics"),
+            wa("ben", "Ben", 4, "sure thing will do tonight", mine=True),
+            wa("ben", "Ben", 5, "yep see you there", mine=True),
+        ],
+    )
+    changed(vault, SENT)
+    return vault
+
+
+def test_a_rule_learned_from_drafts_i_changed_is_kept_only_where_my_messages_bear_it_out(
+    tmp_path, monkeypatch
+):
+    vault = lessons_vault(tmp_path)
+    teacher = Teacher(
+        [
+            "To Aai, all lower case, no sign-off",
+            "To Aai, ends every message with a question",
+            {"rule": "On WhatsApp, long formal paragraphs", "channel": "whatsapp", "to": ""},
+            {"rule": "To Ben, one line", "channel": "whatsapp", "to": "Ben"},
+        ],
+        {
+            "To Aai, ends every message with a question": "few",  # holds on two: not enough
+            "On WhatsApp, long formal paragraphs": "breaks",
+        },
+    )
+    monkeypatch.setattr(llm, "ask", teacher)
+
+    stats = voice.lessons(vault, NOW)
+
+    assert stats == {
+        "new_changed_drafts": 6,
+        "rules_inferred": 4,
+        "rules_refused": 0,
+        "rules_held": 1,
+        "rules_proposed": 1,
+    }
+    infer, check = teacher.calls  # one batch of pairs, one of rules
+    drafted = "<drafted>\nDear Mom, Ok aai coming sunday. Best regards, Tess\n</drafted>"
+    assert drafted in infer["prompt"]
+    assert '<pair n="1" channel="whatsapp" to="Aai">' in infer["prompt"]
+    # Checked on what Tess sent Aai that no draft was, never on what Aai wrote.
+    assert all(text in check["prompt"] for text in MINE)
+    assert SENT[0] not in check["prompt"]
+    assert "jevlas" not in infer["prompt"] + check["prompt"]
+    assert "To Ben" not in check["prompt"]  # two of her messages to Ben: too few to check on
+    # Proposed, not kept: no draft follows it until she accepts it.
+    assert not (vault / voice.RULES_FILE).exists()
+    proposal = (vault / voice.PROPOSED).read_text()
+    assert proposal.startswith("# How Tess writes\n")
+    assert voice._rules_in(proposal) == ["To Aai, all lower case, no sign-off"]
+    assert voice.Writing(vault).rules == []
+
+
+def test_a_rule_about_health_or_quoting_a_sentence_is_never_kept(tmp_path, monkeypatch):
+    vault = lessons_vault(tmp_path)
+    teacher = Teacher(
+        [
+            "To Aai, never mentions the doctor or how she slept",
+            'To Aai, says "I will be there by six with everything you asked for"',
+            'To Aai, opens with "ho aai"',  # a few of her own words may be quoted
+        ]
+    )
+    monkeypatch.setattr(llm, "ask", teacher)
+
+    stats = voice.lessons(vault, NOW)
+
+    assert (stats["rules_inferred"], stats["rules_refused"], stats["rules_held"]) == (3, 2, 1)
+    assert "doctor" not in teacher.calls[-1]["prompt"]
+    assert "by six" not in teacher.calls[-1]["prompt"]
+    assert voice._rules_in((vault / voice.PROPOSED).read_text()) == ['To Aai, opens with "ho aai"']
+    assert not voice._allowed("Emails to the clinic: thanks first")
+    assert voice._allowed("Emails to editors: two short paragraphs, thanks first")
+
+
+def test_rules_i_accept_reach_every_draft_ahead_of_the_drafts_i_changed(tmp_path, monkeypatch):
+    vault = lessons_vault(tmp_path)
+    monkeypatch.setattr(llm, "ask", Teacher(["To Aai, all lower case, no sign-off"]))
+    voice.lessons(vault, NOW)
+    assert "no sign-off" not in voice.examples(voice.Writing(vault), "whatsapp", name="Aai")
+
+    assert master.accept(vault) == {"accepted": 1}  # `proxenos master accept`
+    path = vault / voice.RULES_FILE
+    path.write_text(path.read_text() + "- Emails: no exclamation marks\n")  # and one of her own
+
+    shown = voice.examples(voice.Writing(vault), "whatsapp", name="Aai")
+    rules = shown.index("How Tess writes, in rules learned from drafts they changed")
+    assert shown.index("How Tess writes, their own messages") < rules
+    assert rules < shown.index("\n- To Aai, all lower case, no sign-off\n")
+    assert shown.index("\n- Emails: no exclamation marks\n") < shown.index("<drafted>")
+    monkeypatch.setattr(voice, "RULES_CHARS", len("To Aai, all lower case, no sign-off"))
+    shown = voice.corrections(voice.Writing(vault), "whatsapp", "Aai")
+    assert "no sign-off" in shown and "exclamation" not in shown  # capped
+
+
+def test_only_new_changed_drafts_are_read_and_too_few_ask_no_model(tmp_path, monkeypatch):
+    vault = lessons_vault(tmp_path)
+    teacher = Teacher(["To Aai, all lower case, no sign-off"])
+    monkeypatch.setattr(llm, "ask", teacher)
+    voice.lessons(vault, NOW)
+    state = json.loads((vault / voice.LESSONS).read_text())
+    assert state["ran"] == "2026-03-10T12:00:00Z" and len(state["read"]) == len(SENT)
+    if os.name != "nt":
+        assert (vault / voice.LESSONS).stat().st_mode & 0o777 == 0o600
+        assert (vault / voice.PROPOSED).stat().st_mode & 0o777 == 0o600
+    teacher.calls.clear()
+
+    assert voice.lessons(vault, NOW) == {"new_changed_drafts": 0}
+    more = ["ok bye aai", "haan haan", "nahi aai later", "kal sangto aai", "done aai sorted"]
+    changed(vault, [*SENT, *more[:4]])
+    assert voice.lessons(vault, NOW) == {"new_changed_drafts": 4}
+    assert teacher.calls == []
+
+    # A fifth: only the new ones are read, and the rule she turned down isn't proposed again.
+    (vault / voice.PROPOSED).unlink()
+    changed(vault, [*SENT, *more])
+    stats = voice.lessons(vault, NOW)
+    assert (stats["new_changed_drafts"], stats["rules_proposed"]) == (5, 0)
+    (infer,) = teacher.calls  # nothing new to check
+    assert "kal sangto aai" in infer["prompt"] and SENT[1] not in infer["prompt"]
+    assert not (vault / voice.PROPOSED).exists()

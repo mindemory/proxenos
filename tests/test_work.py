@@ -873,6 +873,17 @@ def test_every_draft_gets_the_rules_and_my_own_writing_for_where_it_goes(
     assert "[address at x.org]" in care and "603-555-0142" not in care
 
 
+def test_the_writing_rules_i_kept_reach_every_draft_and_proposed_ones_dont(tmp_path, model):
+    vault = chat_vault(tmp_path)
+    write(vault / voice.RULES_FILE, "# How Tess writes\n\n- To Asha, no capital letters\n")
+    write(vault / voice.PROPOSED, "# How Tess writes\n\n- To Ben, one word\n")
+
+    work.work(vault, limit=50, now=NOW, read=FakePages())
+
+    assert model.calls and all("- To Asha, no capital letters" in c["prompt"] for c in model.calls)
+    assert not any("To Ben, one word" in c["prompt"] for c in model.calls)
+
+
 def test_a_task_message_picks_up_from_what_was_said_with_that_person(tmp_path, model):
     from proxenos import memory
 

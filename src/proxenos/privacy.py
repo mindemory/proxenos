@@ -65,6 +65,14 @@ SENDS = (
         ),
     ),
     (
+        "Writing rules",
+        ("voice",),
+        (
+            "Drafts you changed beside what you sent instead, and some of your own sent messages "
+            "to check each rule on, never other people's messages."
+        ),
+    ),
+    (
         "Choices",
         ("choices",),
         (
