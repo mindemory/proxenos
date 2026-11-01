@@ -225,9 +225,11 @@ def work(
         elif not (new_only and found):
             jobs[job["id"]] = job
 
-    # A reply draft still the clone's own goes once its chat stops waiting on that message: not
-    # when its chat is merely past the REPLIES this run looks at, which would undo it each night.
-    still = {reply_key(chat) for chat in waiting}
+    # A reply draft still the clone's own goes once its chat stops waiting on that message (they
+    # answered, or wrote again): not when its chat is merely past the REPLIES this run looks at,
+    # nor past the week a chat counts as newly waiting, which would undo it unseen. One still
+    # unanswered stays for CONTEXT_DAYS.
+    still = {reply_key(chat) for chat in chats.waiting(vault, now, days=chats.CONTEXT_DAYS)}
     cleared = 0
     for key, (path, status) in existing.items():
         if (

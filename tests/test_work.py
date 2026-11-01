@@ -4,11 +4,11 @@ import json
 import os
 import re
 import stat
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import cli, llm, voice
+from proxenos import chats, cli, llm, voice
 from proxenos.clones import work
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -957,3 +957,16 @@ def test_an_older_chat_is_drafted_while_newer_ones_keep_coming(tmp_path, model, 
     to = sorted(front(path)["to"] for path in drafts(vault).values())
     assert (first["drafts_written"], then["drafts_written"]) == (2, 2)
     assert to == ["Ana", "Ben", "Cy", "Dee"]  # the two newest, then the two left waiting
+
+
+def test_a_reply_draft_stays_while_its_chat_waits_past_the_week(tmp_path, model):
+    vault = chat_vault(tmp_path)  # Asha's chat waits from 2026-03-09
+    work.replies(vault, now=NOW, read=FakePages())
+    (kept,) = drafts(vault)
+
+    later = NOW + timedelta(days=chats.DAYS + 3)  # past the week, still unanswered
+    stats = work.replies(vault, now=later, read=FakePages())
+
+    assert kept in drafts(vault) and stats["replies_cleared"] == 0
+    far = NOW + timedelta(days=chats.CONTEXT_DAYS + 1)
+    assert work.replies(vault, now=far, read=FakePages())["replies_cleared"] == 1
