@@ -31,6 +31,7 @@ import { Bone, HomeSkeleton } from "@/components/Skeleton";
 import { SourceBadge, SourceChip, SourceIcon, sourceMeta } from "@/components/SourceBadge";
 import { TaskRow } from "@/components/tasks/TaskRow";
 import { NowNote } from "@/components/home/NowNote";
+import { ToldNotes } from "@/components/home/ToldNotes";
 import { careDue, careStatus, firstSentence, mostUrgent, yourMoves } from "@/lib/careClient";
 import { sendFeedback, useJson, type useHome } from "@/lib/client";
 import {
@@ -223,6 +224,7 @@ function Greeting({ data, briefing, onNavigate }: { data: HomeResponse; briefing
         )}
       </p>
       <NowNote />
+      <ToldNotes now={data.now} />
     </header>
   );
 }

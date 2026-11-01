@@ -64,7 +64,7 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, voice
+from proxenos import llm, told, voice
 from proxenos.config import env
 from proxenos.ingest import healthrecords
 
@@ -944,6 +944,8 @@ def _system(self_dir: Path, days: float) -> str:
     if parts:
         system += f"\n\nWho {person} is and how they write, from their self-model:\n"
         system += "\n".join(parts)
+    if notes := told.prompt(self_dir.parent, person):
+        system += "\n\n" + notes
     return system
 
 

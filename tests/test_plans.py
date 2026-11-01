@@ -138,7 +138,14 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
         vault,
         "me-gmail-com",
         "2026-03",
-        [{"id": "UID-1", "start": local("2026-03-11T12:00:00"), "summary": "Lunch with Kim"}],
+        [
+            {
+                "id": "UID-1",
+                "start": local("2026-03-11T12:00:00"),
+                "summary": "Lunch with Kim",
+                "description": "From WhatsApp, with Kim. Added by Proxenos.",  # marked as its own
+            }
+        ],
     )
     plans.write(vault, [lunch, hike], NOW, run=cal)
     assert len(cal.calls) == 2  # nothing changed, so nothing touched
@@ -151,6 +158,12 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
     pushed = json.loads((vault / "clones" / "tasks" / "pushed.json").read_text())
     assert list(pushed) == ["lunch1"] and pushed["lunch1"]["uid"] == "UID-3"
 
+    # Another calendar named: the event moves there, and none is left on the first.
+    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@nyu.edu")
+    plans.write(vault, [moved], NOW, run=cal)
+    assert cal.calls[-2:] == [("delete", "me@gmail.com", "UID-3"), ("make", "me@nyu.edu", "")]
+    assert sorted(cal.events) == ["UID-4"]
+
 
 def test_without_a_calendar_named_nothing_is_touched(tmp_path, monkeypatch):
     monkeypatch.delenv("PROXENOS_PLANS_CALENDAR", raising=False)
@@ -159,3 +172,18 @@ def test_without_a_calendar_named_nothing_is_touched(tmp_path, monkeypatch):
 
 def untouched(*a, **kw):
     raise AssertionError("the Calendar app was called")
+
+
+def test_a_draft_sees_the_coming_week_once_per_event(tmp_path):
+    vault = tmp_path / "vault"
+    event = {"id": "e1", "start": local("2026-03-11T14:00:00"), "summary": "Lab  meeting"}
+    write_events(vault, "me-nyu-edu", "2026-03", [event, {"id": "e2", "start": "2026-03-12"}])
+    write_events(vault, "me-dartmouth-edu", "2026-03", [event])  # on two calendars
+    later = {"id": "e3", "start": local("2026-03-30T10:00:00"), "summary": "Too far"}
+    write_events(vault, "me-gmail-com", "2026-03", [later])
+
+    assert plans.week(vault, NOW).splitlines() == [
+        "- Wed Mar 11 14:00: Lab meeting",
+        "- Thu Mar 12, all day: busy",
+    ]
+    assert plans.week(tmp_path / "none", NOW) == ""

@@ -405,6 +405,13 @@ export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "
 
 export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent", "keep"];
 
+/** One thing the reader told Proxenos (state/told.jsonl): a fact for now, or a rule ("always"). */
+export interface ToldNote {
+  at: string;
+  text: string;
+  always: boolean;
+}
+
 /**
  * One drafts/<id>.md. kind, for, channel and status are strings so a new value still
  * renders; lib/drafts.ts has the known ones (kind: reply, email, doc, plan, checklist,

@@ -1595,7 +1595,10 @@ export async function applyDraftAction(draftId: string, action: DraftAction, bod
   }
 
   const entry = { draft_id: draftId, action, ts: nowIso() };
-  await appendJsonl(["clones", "drafts", "feedback.jsonl"], entry);
+  // An edit keeps what it replaced and where the draft goes, so later drafts learn from the change.
+  const draft = toDraft(file);
+  const lesson = action === "edit" ? { before: draft.body, after: body ?? "", channel: draft.channel, to: draft.to } : {};
+  await appendJsonl(["clones", "drafts", "feedback.jsonl"], { ...entry, ...lesson });
   return entry;
 }
 

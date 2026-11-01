@@ -569,6 +569,34 @@ def test_a_reply_nobody_needs_is_filed_away_with_why_and_not_drafted_again(
     assert "found" not in fields and fields["thread"]
 
 
+def test_a_draft_with_a_blank_is_written_again_and_rules_and_the_week_are_shown(
+    tmp_path, model, monkeypatch
+):
+    vault = chat_vault(tmp_path)
+    (vault / "state").mkdir(exist_ok=True)
+    rule = {"at": "2026-03-01T09:00:00Z", "text": "Never mention my health to Mom.", "always": True}
+    (vault / "state" / "told.jsonl").write_text(json.dumps(rule) + "\n")
+    answers = []
+
+    def blank_once(prompt, **kw):
+        answer = model(prompt, **kw)
+        if "keep" in answer or "searches" in answer:
+            return answer
+        answers.append(prompt)
+        body = "How's [day] at 7?" if len(answers) == 1 else "How's Wednesday at 7?"
+        return answer | {"body": body}
+
+    monkeypatch.setattr(llm, "ask", blank_once)
+    work.replies(vault, now=NOW, read=FakePages())
+
+    assert len(answers) == 2 and answers[1].endswith(work._FILL)
+    (path,) = drafts(vault).values()
+    assert path.read_text().rstrip().endswith("How's Wednesday at 7?")
+    system = model.calls[0]["system"]
+    assert "- Never mention my health to Mom." in system
+    assert "Where something is unknown, choose what fits best" in system
+
+
 def test_the_command_line_drafts_only_new_replies_and_counts_them(
     tmp_path, model, monkeypatch, capsys
 ):

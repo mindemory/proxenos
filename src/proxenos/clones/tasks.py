@@ -39,7 +39,7 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, plans
+from proxenos import llm, plans, told
 from proxenos.clones import work
 from proxenos.config import env
 
@@ -56,7 +56,7 @@ EVERY = timedelta(hours=1)  # the soonest the sync brings the list up to date ag
 DRAFT_CHARS = 300  # of each waiting draft's text the model reads
 MAX_DRAFTS = 60  # the newest waiting drafts it weighs; older ones wait for the next run
 
-SOURCES = ("whatsapp", "slack", "email")
+SOURCES = ("whatsapp", "slack", "email", "told")
 STATUSES = ("open", "waiting", "done")
 PRIORITIES = ("high", "medium", "low")
 _CLOSING = ("done", "not_mine", "dismiss")
@@ -305,9 +305,10 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 
 def conversations(vault: Path, since: str) -> list[dict]:
     """Every conversation the user is part of with text since `since`, as {source, title,
-    messages}. Messages are oldest first, each {id, ts, sender, text}, and sender is "me" for the
-    user's own."""
-    return [*_whatsapp(vault, since), *_slack(vault, since), *_email(vault, since)]
+    messages}, and what they told Proxenos (proxenos.told). Messages are oldest first, each {id,
+    ts, sender, text}, and sender is "me" for the user's own."""
+    found = [*_whatsapp(vault, since), *_slack(vault, since), *_email(vault, since)]
+    return found + [said] if (said := told.conversation(vault, since)) else found
 
 
 def render(convos: list[dict], limit: int = MAX_CHARS) -> tuple[str, dict[str, dict], bool]:

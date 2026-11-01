@@ -47,6 +47,7 @@ _COMMON = {
     *("from", "have", "join", "lunch", "meet", "meeting", "the", "video", "visit", "with", "zoom"),
 }
 _SOURCES = {"whatsapp": "WhatsApp", "slack": "Slack", "email": "email"}
+WEEK_DAYS = 7  # of the user's calendar a draft sees, to suggest a time that's free
 PUSHED = "pushed.json"  # in clones/tasks/: each plan's event on the user's calendar, by task id
 OSA_SECONDS = 120  # for one change to the Calendar app, which can be slow on a long calendar
 # One change to the Calendar app: delete the event with the given uid, if any, then, unless the
@@ -119,6 +120,27 @@ def write(
     return len(events)
 
 
+def week(vault: Path, now: datetime | None = None, days: int = WEEK_DAYS) -> str:
+    """The user's own events from today for `days` days, one line each in local time, for a
+    draft that suggests a time; "" when there are none. An event on two calendars shows once."""
+    now = now or datetime.now(UTC)
+    today = now.astimezone().date()
+    end = today + timedelta(days=days)
+    lines = {}
+    for event in _calendar(vault, today):
+        if event["day"] >= end:
+            continue
+        when = (
+            f"{event['time']:%a %b %d %H:%M}"
+            if event["time"]
+            else f"{event['day']:%a %b %d}, all day"
+        )
+        lines[(event["day"], event["time"] or datetime.min, event["title"])] = (
+            f"- {when}: {event['title']}"
+        )
+    return "\n".join(line for _, line in sorted(lines.items(), key=lambda kv: (kv[0][0], kv[0][1])))
+
+
 def push(
     vault: Path,
     events: list[tuple[dict, datetime | date]],
@@ -138,6 +160,8 @@ def push(
         if old and old["mark"] == mark:
             continue
         stale = old["uid"] if old and old["calendar"] == calendar else ""
+        if old and not stale:  # the setting names another calendar now: leave none behind
+            _osa(run, "delete", old["calendar"], old["uid"])
         uid = _osa(run, "make", calendar, stale, *fields)
         if not uid:
             raise ValueError(f"the Calendar app made no event for {task['title']!r}")
@@ -285,7 +309,8 @@ def _calendar(vault: Path, since: date, made: set[str] = frozenset()) -> Iterato
                     continue
                 when = time.date()
             if when is not None and when >= since:
-                yield {"day": when, "time": time, "words": _words(event.get("summary"))}
+                title = " ".join(str(event.get("summary") or "busy").split())[:80]
+                yield {"day": when, "time": time, "words": _words(title), "title": title}
 
 
 def _same(task: dict, when: datetime | date, event: dict) -> bool:

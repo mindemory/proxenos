@@ -25,9 +25,10 @@ Only what the user wrote themselves, read as proxenos.chats reads it:
 A message of fewer than MIN_WORDS words ("ok", an emoji) shows little of how they write and is
 skipped, a text under LONG_MIN characters isn't longer writing, and no text is shown twice.
 
-Then what they changed. A draft they rewrote before sending says more about how they write than
-any example: fidelity keeps each measured draft beside what they sent instead
-(clones/drafts/fidelity.json), and every draft gets those whose closeness was under CHANGED,
+Then what they changed. A draft they rewrote says more about how they write than any example:
+fidelity keeps each measured draft beside what they sent instead (clones/drafts/fidelity.json),
+the page keeps each draft they edited there beside their version (an edit's before and after
+in clones/drafts/feedback.jsonl), and every draft gets those whose closeness was under CHANGED,
 newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
 write like what was sent and never like what was drafted. So a change counts from the next draft
 on, without training anything.
@@ -35,6 +36,7 @@ on, without training anything.
 
 import json
 import re
+from difflib import SequenceMatcher
 from functools import cached_property
 from pathlib import Path
 
@@ -119,14 +121,19 @@ class Writing:
     def corrections(self) -> list[dict]:
         """Drafts they changed before sending, newest sent first, as fidelity measured them:
         {source, to, draft_text, sent_text}."""
+        folder = self.vault / "clones" / "drafts"
         try:
-            path = self.vault / "clones" / "drafts" / "fidelity.json"
-            measured = json.loads(path.read_text(encoding="utf-8"))["drafts"]
+            measured = json.loads((folder / "fidelity.json").read_text(encoding="utf-8"))["drafts"]
         except (OSError, ValueError, KeyError, TypeError):
-            return []
+            measured = []
+        measured = [*_edits(folder / "feedback.jsonl"), *(m for m in measured or [] if m)]
         return [
             m
-            for m in (measured if isinstance(measured, list) else [])
+            for m in sorted(
+                (m for m in measured if isinstance(m, dict)),
+                key=lambda m: str(m.get("sent") or m.get("ts") or ""),
+                reverse=True,
+            )
             if isinstance(m, dict)
             and isinstance(m.get("closeness"), int | float)
             and m["closeness"] < CHANGED
@@ -266,6 +273,36 @@ def longer(written: Writing, first: str = "email") -> str:
     person = env("NAME", "the person")
     head = f"How {person} writes at length, their own emails and posts, newest first. {_COPY}"
     return "\n".join([head, *shown])
+
+
+def _edits(path: Path) -> list[dict]:
+    """The drafts the user rewrote on the page, as fidelity lists a draft and what was sent."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    found = []
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not (isinstance(event, dict) and event.get("action") == "edit"):
+            continue
+        before, after = _tidy(event.get("before")), _tidy(event.get("after"))
+        if before and after and before != after:
+            channel = str(event.get("channel") or "")
+            found.append(
+                {
+                    "source": _SOURCE_OF.get(channel, channel),
+                    "to": event.get("to") or "",
+                    "ts": str(event.get("ts") or ""),
+                    "closeness": round(SequenceMatcher(None, before, after).ratio(), 2),
+                    "draft_text": before,
+                    "sent_text": after,
+                }
+            )
+    return found
 
 
 def corrections(written: Writing, source: str | None, name: object = "") -> str:

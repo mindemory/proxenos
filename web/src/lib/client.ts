@@ -135,7 +135,7 @@ export const WATCH_TOAST: Record<WatchAction, string> = {
 export const DRAFT_TOAST: Record<DraftAction, string> = {
   approve: "Approved. Nothing was sent: open it when you're ready",
   discard: "Draft discarded",
-  edit: "Draft saved",
+  edit: "Saved. Later drafts learn from what you changed",
   copy: "Copied to the clipboard",
   opened: "Opened",
   sent: "Marked sent",

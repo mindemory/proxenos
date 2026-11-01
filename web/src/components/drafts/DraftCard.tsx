@@ -132,7 +132,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
           <div className="flex flex-wrap items-center gap-2">
             <ActionButton icon={Check} label={saving ? "Saving" : "Save"} tone="accent" active onClick={() => void save()} />
             <ActionButton icon={X} label="Cancel" tone="neutral" onClick={() => setEditing(false)} />
-            <span className="text-xs text-muted sm:ml-auto">Saved to the draft&apos;s file. ⌘↵ saves, Esc cancels.</span>
+            <span className="text-xs text-muted sm:ml-auto">Later drafts learn from what you change. ⌘↵ saves, Esc cancels.</span>
           </div>
         </div>
       ) : (
@@ -191,7 +191,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
               {plan && <OpenButton plan={plan} primary onOpen={() => void open(false)} />}
               <ActionButton icon={Copy} label="Copy" tone={plan ? "neutral" : "accent"} onClick={() => onCopy(d)} />
               <ActionButton icon={CheckCheck} label="I sent it" tone="ok" onClick={() => onSent(d)} />
-              <ActionButton icon={Pencil} label="Edit" tone="neutral" onClick={start} />
+              <ActionButton icon={Pencil} label="Write my own" tone="neutral" onClick={start} />
               <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
             </>
           )}

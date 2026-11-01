@@ -374,3 +374,22 @@ def test_drafts_i_changed_teach_the_next_one_with_what_i_sent(tmp_path):
     assert "Ana, quick one" in voice.examples(voice.Writing(vault), "email")
     assert "Ana, quick one" not in examples
     assert voice.corrections(voice.Writing(tmp_path / "none"), None) == ""
+
+
+def test_a_draft_i_rewrote_on_the_page_teaches_the_next_one(tmp_path):
+    vault = chat_vault(tmp_path)
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True)
+    edits = [
+        {"draft_id": "a", "action": "edit", "ts": "2026-03-09T10:00:00Z", "channel": "whatsapp",
+         "to": "Asha", "before": "Dear Asha, I hope you are well.", "after": "hey asha!! all good?"},
+        {"draft_id": "b", "action": "edit", "ts": "2026-03-09T11:00:00Z", "channel": "whatsapp",
+         "to": "Ben", "before": "Same.", "after": "Same."},  # no change: nothing to learn
+        {"draft_id": "c", "action": "copy", "ts": "2026-03-09T12:00:00Z"},
+    ]  # fmt: skip
+    (folder / "feedback.jsonl").write_text("".join(json.dumps(e) + "\n" for e in edits))
+
+    shown = voice.corrections(voice.Writing(vault), "whatsapp", "Asha")
+
+    assert "<drafted>\nDear Asha, I hope you are well.\n</drafted>" in shown
+    assert "<sent>\nhey asha!! all good?\n</sent>" in shown and "Same." not in shown
