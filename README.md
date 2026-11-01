@@ -104,7 +104,7 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
   - **forms** (`proxenos form`): the form's labels and the records memory finds for them, never a line for an SSN, an account number or a signature;
   - **calls:** on a phone call you start, what the other side says goes to the call's model to decide what the assistant says next, and the call's audio goes through Twilio, which transcribes it ([docs/calls.md](docs/calls.md)).
 
-  With a local model none of this leaves your computer, apart from a call's audio.
+  With a local model none of this leaves your computer, apart from a call's audio. Every model call leaves one line in the vault's `state/model-calls.jsonl`: when, which part of Proxenos asked, the model, whether it ran on this computer or at Anthropic, and how much went in and came back, never the words.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network.
 - **The page is local only.** It binds to 127.0.0.1 and rejects requests from other sites. The one way in from elsewhere is `proxenos phone`: your Mac's private address on your own Tailscale network, answered only for your own Tailscale login. Nothing is opened to the internet, except, if you set up calls, one port Tailscale Funnel opens for Twilio, which answers only during a call and only requests Twilio signed.
 - **Credentials** stay on your computer: in its own secure store, one item each (the macOS Keychain, Windows Credential Manager, or the Secret Service on Linux), or in `.env` (which git ignores) when you run from source with one. The page shows whether each is set, never what it is.

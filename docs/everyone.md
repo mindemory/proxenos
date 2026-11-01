@@ -74,7 +74,7 @@ Every step ends the same way: a first read in the background, its progress on th
 
 One screen with three lists, drawn from what the code does:
 - **Stays on this computer:** the vault (raw data, notes, the self-model, drafts, the memory index), with its location and size, and the secrets in the Keychain.
-- **Sent to the model** (Anthropic, under your key): what each observer and clone sends, in plain words (the list in the README's [Privacy](../README.md#privacy) section), and the last 30 days of calls: when, which clone, how many tokens. This needs `llm.py` to log one line per call.
+- **Sent to the model** (Anthropic, under your key): what each observer and clone sends, in plain words (the list in the README's [Privacy](../README.md#privacy) section), and the last 30 days of calls: when, which clone, how many tokens. *Built:* `llm.py` logs one line per call to `<vault>/state/model-calls.jsonl` (when, which part asked, the model, where it ran, characters and tokens in and out, seconds, whether it worked), never the words.
 - **Fetched from elsewhere:** the services you connected, read with your sign-in, and the pages linked in chats waiting on you (public hosts only).
 
 **Delete everything** sits at the bottom:
