@@ -4,8 +4,10 @@ branch of its own (a git worktree), to take one step of the project's work and r
 Two runners, picked by PROXENOS_STEP_RUNNER: "claude", "local", or empty for Claude Code where
 it's installed, then the local model.
 - Claude Code, headless (`claude -p`): it reads the code, runs it, changes it and runs it again,
-  with only the tools in TOOLS, inside Claude Code's sandbox. Its commands can write only in the
-  worktree and reach no network, and nothing it does can read the vault or the user's keys. It
+  with only the tools in TOOLS, inside Claude Code's sandbox, which must start or Claude Code
+  stops (failIfUnavailable) rather than run a command outside it. Its commands can write only in
+  the worktree and reach no network, and nothing it does can read the vault, the user's keys and
+  credentials, their mail and messages or their browsers' profiles (Task.hidden). It
   runs on the account Claude Code is signed in to, never on Proxenos's own API key, which is kept
   from it, within MINUTES, TURNS and a spending budget (PROXENOS_STEP_BUDGET, in dollars).
 - The local model, through llm.ask, for anyone without Claude Code. It can't run anything: it
@@ -225,15 +227,19 @@ class ClaudeCode:
 
 def _settings(task: Task) -> dict:
     """The sandbox: commands write only in the worktree and reach no network; nothing reads the
-    hidden folders, and nothing edits the data or hidden ones."""
+    hidden folders, and nothing edits the data or hidden ones. If the sandbox can't start, Claude
+    Code stops instead of running commands without it. The hidden folders are denied twice: as
+    Read rules, which bind the Read tool, and to the sandbox itself, which binds commands."""
     hidden = [f"Read({_rule(p)})" for p in task.hidden]
     kept = [f"Edit({_rule(p)})" for p in [*task.data, *task.hidden]]
     return {
         "sandbox": {
             "enabled": True,
+            "failIfUnavailable": True,
             "autoAllowBashIfSandboxed": True,
             "allowUnsandboxedCommands": False,
             "network": {"allowedDomains": []},
+            "filesystem": {"denyRead": [str(p.expanduser().resolve()) for p in task.hidden]},
         },
         "permissions": {
             "deny": [*hidden, *kept, "Bash(git push:*)", "Bash(git remote:*)", "WebFetch"],

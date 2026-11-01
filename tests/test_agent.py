@@ -84,11 +84,13 @@ def test_claude_code_works_in_its_sandbox_on_its_own_account(tmp_path, monkeypat
     assert "--strict-mcp-config" in args and "--no-session-persistence" in args
     assert "Run Python with /envs/calls/bin/python." in flag["--append-system-prompt"]
     settings = json.loads(flag["--settings"])
-    assert (
-        settings["sandbox"] | {"enabled": True, "allowUnsandboxedCommands": False}
-        == settings["sandbox"]
-    )
+    sandbox = {"enabled": True, "allowUnsandboxedCommands": False, "failIfUnavailable": True}
+    assert settings["sandbox"] | sandbox == settings["sandbox"]  # never a command outside it
     assert settings["sandbox"]["network"] == {"allowedDomains": []}
+    assert settings["sandbox"]["filesystem"]["denyRead"] == [
+        str(vault.resolve()),
+        str(secrets.resolve()),
+    ]
     deny = settings["permissions"]["deny"]
     assert f"Read(/{vault.resolve()}/**)" in deny and f"Read(/{secrets.resolve()})" in deny
     assert f"Edit(/{data.resolve()}/**)" in deny and "Bash(git push:*)" in deny

@@ -398,3 +398,36 @@ def test_the_runner_never_reads_the_vault_or_secrets(setup, monkeypatch, tmp_pat
 
     assert steps.hidden(vault)[:2] == [vault, settings]
     assert steps.worktrees() == settings.parent / "worktrees"
+
+
+def test_the_runner_never_reads_keys_mail_messages_or_browsers(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    places = [
+        ".ssh",
+        ".kube",
+        ".docker",
+        ".config/gh",
+        "Library/Messages",
+        "Library/Application Support/Google/Chrome",
+        "Library/Application Support/Firefox",
+        "Library/Safari",
+    ]
+    for place in places:
+        (home / place).mkdir(parents=True)
+    (home / ".netrc").write_text("machine example.org\n")
+    # As on Linux: Proxenos's settings, and so the steps' worktrees, are in ~/.config.
+    settings = home / ".config" / "proxenos" / "settings.json"
+    (settings.parent / "worktrees").mkdir(parents=True)
+    settings.write_text("{}")
+    monkeypatch.setattr(steps, "settings_file", lambda: settings)
+    monkeypatch.delenv("PROXENOS_WORKTREES", raising=False)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    found = steps.hidden(vault)
+
+    assert {vault, settings, home / ".netrc", *(home / p for p in places)} == set(found)
+    assert len(found) == len(set(found))
+    # ~/.config is hidden around the worktrees, so the runner can still read the one it's in.
+    assert not any(steps.worktrees().is_relative_to(p) for p in found)

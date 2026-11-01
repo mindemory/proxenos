@@ -52,9 +52,16 @@ COMMIT_BYTES = 10 * 1024 * 1024  # a file bigger than this stays out of the comm
 IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".svg"}
 MADE = IMAGES | {".pdf", ".csv", ".tsv", ".txt", ".md", ".json", ".html"}
 _JUNK = ("**/__pycache__/**", "**/*.pyc", "**/.DS_Store", "**/.ipynb_checkpoints/**")
-# What a step's runner may not read: the vault, Proxenos's own settings and secrets, and keys.
-_HIDDEN = ("~/.ssh", "~/.gnupg", "~/.aws", "~/Library/Keychains", "~/Library/Mail")
-_HIDDEN += ("~/Library/Messages",)
+# What a step's runner may not read: the vault, Proxenos's own settings and secrets (see
+# hidden), keys and other tools' credentials and config, mail and messages, and the browsers'
+# profiles, which hold cookies, saved passwords and history.
+_HIDDEN = ("~/.ssh", "~/.gnupg", "~/.aws", "~/.kube", "~/.docker", "~/.netrc", "~/.config")
+_HIDDEN += ("~/Library/Keychains", "~/Library/Mail", "~/Library/Messages", "~/Library/Cookies")
+_HIDDEN += tuple(
+    f"~/Library/Application Support/{browser}"
+    for browser in ("Google/Chrome", "Firefox", "Arc", "BraveSoftware")
+)
+_HIDDEN += ("~/Library/Safari", "~/Library/Containers/com.apple.Safari", "~/.mozilla")
 
 
 class GitError(RuntimeError):
@@ -244,11 +251,22 @@ def brief(vault: Path, project: dict, step: dict, person: str) -> str:
 
 
 def hidden(vault: Path) -> list[Path]:
-    """What a step's runner may not read."""
+    """What a step's runner may not read. A hidden folder that holds the steps' worktrees (on
+    Linux ~/.config does, beside Proxenos's settings) is hidden around them, so the runner can
+    still read the worktree it works in."""
     found = [vault, settings_file(), *(Path(p).expanduser() for p in _HIDDEN)]
     if FROM_SOURCE:
         found.append(REPO_ROOT / ".env")
-    return [p for p in found if p.exists()]
+    return list(dict.fromkeys(q for p in found if p.exists() for q in _around(p, worktrees())))
+
+
+def _around(path: Path, keep: Path) -> list[Path]:
+    """`path`, or when it holds `keep`, everything in it but the folders on the way to `keep`."""
+    if path.resolve() == keep.resolve():
+        return []
+    if not path.is_dir() or not keep.resolve().is_relative_to(path.resolve()):
+        return [path]
+    return [q for child in sorted(path.iterdir()) for q in _around(child, keep)]
 
 
 def worktrees() -> Path:
