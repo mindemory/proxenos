@@ -22,6 +22,13 @@ updates:
       interval: weekly
     cooldown:
       default-days: 5
+    ignore:
+      # TypeScript 7, the rewrite, until Next.js builds with it; and Node's types past the Node 22
+      # the page runs on, which would allow calls Node 22 doesn't have.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
