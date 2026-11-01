@@ -73,3 +73,20 @@ That distance can be measured, so it doesn't rest on impressions:
 Acting on your behalf follows the measurements: where drafts to a person or of a kind have gone
 out unchanged many times, sending them can move from your approval to a rule you set, with a log
 and a window to undo. Where they haven't, it stays a draft.
+
+## The outbox
+
+The first step from drafting to acting is the outbox ([outbox.py](../src/proxenos/outbox.py)),
+set on the Drafts page. It is off until you switch it on, and then only per app, and only for
+an app whose replies have earned it: by default at least five measured, and on average nine
+tenths of each draft still in what you sent ([fidelity.py](../src/proxenos/fidelity.py)).
+
+- **Which replies:** a draft nobody touched, to one person (never a group), with no blank left
+  and nothing it asks you, while its chat still waits on exactly the messages it answers.
+- **When:** a reply is queued at one sync and goes out at the next, so you have about fifteen
+  minutes to cancel it on the page. At most ten go out a day, or the limit you set.
+- **How:** email through the Mail app, as a reply in its thread from the account the mail came
+  to; Instagram, Messenger, X and LinkedIn, and WhatsApp where Beeper has it, through Beeper
+  Desktop. Slack has no way yet.
+- **The record:** every attempt, sent or not, is a line in `clones/outbox/log.jsonl`, and a reply
+  that goes out is marked sent, as if you'd pressed Sent. Nothing goes out from `proxenos demo`.
