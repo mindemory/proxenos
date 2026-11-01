@@ -23,7 +23,8 @@ and only changed files are read again, their old rows deleted first.
 
 `search` takes plain text: words are ANDed, "double quotes" make a phrase, a trailing * makes the
 last word a prefix. Everything is quoted before it reaches FTS5, so no input is ever read as
-query syntax. `context` returns the records around one, read from the month files.
+query syntax. `fuse` makes one list of several searches' hits (by words and by meaning) by
+reciprocal rank. `context` returns the records around one, read from the month files.
 """
 
 import json
@@ -52,6 +53,9 @@ SNIPPET_TOKENS = 32
 WEIGHTS = (0.0, 0.0, 0.0, 0.0, 2.0, 1.0, 3.0, 1.0, 0.0)
 MAX_TERMS = 16
 MAX_TERM_CHARS = 64
+# Reciprocal rank fusion's constant: Cormack, Clarke and Buettcher (SIGIR 2009) found 60 best,
+# and it damps how much a first place counts over a fifth.
+RRF_K = 60
 
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -545,6 +549,36 @@ def search(
     with closing(_connect(path)) as db:
         rows = db.execute(" ".join(sql), params).fetchall()
     return [_hit(r) for r in rows]
+
+
+def fuse(ranked: Iterable[list[dict]], limit: int | None = None, keep: int = 0) -> list[dict]:
+    """Several searches' hits as one list, best first, by reciprocal rank fusion: a hit scores
+    1 / (RRF_K + its rank) in each list it is in, summed, so one that several searches rank high
+    beats one that a single search ranks first. Ties keep the order found. A hit in more than one
+    list is the first list's dict. With `limit`, the best `limit`, though the first `keep` of
+    each list always stay, so no search is crowded out."""
+    scores: dict[str, float] = {}
+    hits: dict[str, dict] = {}
+    tops: set[str] = set()
+    for found in ranked:
+        seen: set[str] = set()
+        for hit in found:
+            if hit["id"] in seen:
+                continue  # a hit twice in one list counts once, at its best rank
+            seen.add(hit["id"])
+            scores[hit["id"]] = scores.get(hit["id"], 0.0) + 1 / (RRF_K + len(seen))
+            hits.setdefault(hit["id"], hit)
+            if len(seen) <= keep:
+                tops.add(hit["id"])
+    order = sorted(scores, key=lambda id_: -scores[id_])
+    if limit is not None:
+        chosen = set(tops)
+        for id_ in order:
+            if len(chosen) >= limit:
+                break
+            chosen.add(id_)
+        order = [id_ for id_ in order if id_ in chosen]
+    return [hits[id_] for id_ in order]
 
 
 def _hit(row: sqlite3.Row) -> dict:

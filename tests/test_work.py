@@ -701,7 +701,7 @@ def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_
         {"people": [{"name": "Asha", "aka": [], "relation": "close friend", "context": "college"}]},
     )
     memory.build(vault)
-    model.searches = ["retreat friday"]
+    model.searches = [{"words": "retreat friday"}]
 
     work.work(vault, limit=1, now=NOW, read=FakePages())
 

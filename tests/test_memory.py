@@ -581,3 +581,31 @@ def test_records_are_the_raw_records_behind_index_ids_whole(vault):
     ]  # every field, as written
     assert found["slack/acme/messages/s1"]["user_name"] == "Tobias Okafor"
     assert memory.records([], vault=vault) == {}
+
+
+def hit(n):
+    return {"id": f"r{n}", "snippet": f"from list {n}"}
+
+
+def test_fusion_puts_what_several_searches_rank_high_first():
+    first = [hit(1), hit(2), hit(3)]
+    second = [hit(4), {**hit(2), "snippet": "the second's"}, hit(5)]
+
+    fused = memory.fuse([first, second])
+
+    # r2 is second in both (2/62), beating each first place (1/61); ties stay in the order found.
+    assert [h["id"] for h in fused] == ["r2", "r1", "r4", "r3", "r5"]
+    assert fused[0]["snippet"] == "from list 2"  # the first list's dict
+    assert memory.fuse([[hit(1), hit(1), hit(2)], [hit(2)]])[0]["id"] == "r2"  # once a list
+    assert memory.fuse([]) == [] and memory.fuse([[], []]) == []
+
+
+def test_fusion_cut_short_keeps_the_best_of_each_search():
+    agreed = [hit(n) for n in range(1, 7)]
+    alone = [hit(9)]
+
+    crowded = memory.fuse([agreed, agreed, alone], limit=4)
+    kept = memory.fuse([agreed, agreed, alone], limit=4, keep=1)
+
+    assert [h["id"] for h in crowded] == ["r1", "r2", "r3", "r4"]
+    assert [h["id"] for h in kept] == ["r1", "r2", "r3", "r9"]

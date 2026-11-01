@@ -101,11 +101,13 @@ def search(
     query: str,
     limit: int = 10,
     since: str | None = None,
+    until: str | None = None,
     who: str | None = None,
     embed: Embed | None = None,
 ) -> list[dict]:
     """The units nearest in meaning to `query`, as memory.search's hits (snippet, score as
-    similarity, higher is nearer). `who` keeps units naming every word of it."""
+    similarity, higher is nearer). `who` keeps units naming every word of it; `since` and
+    `until` are dates or times, `until` a date meaning through the end of that day."""
     if not query.strip() or not path(vault).exists():
         return []
     rows, matrix = _load(path(vault))
@@ -114,10 +116,14 @@ def search(
     asked = _normalized((embed or _ollama)([_QUERY + query]))[0]
     scores = matrix @ asked
     names = (who or "").lower().split()
+    low = memory._bound(since) if since else None
+    high = memory._bound(until, end=True) if until else None
     found = []
     for i in np.argsort(-scores):
         row = rows[i]
-        if (since and row["ts"] < since) or not all(n in row["who"].lower() for n in names):
+        if (low and row["ts"] < low) or (high and row["ts"] >= high):
+            continue
+        if not all(n in row["who"].lower() for n in names):
             continue
         found.append(row | {"score": float(scores[i])})
         if len(found) >= limit:

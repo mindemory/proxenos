@@ -67,6 +67,19 @@ def test_units_are_a_chats_day_or_one_record_and_search_finds_by_meaning(tmp_pat
     assert vectors.update(vault, embed=fake_embed) == {"units_embedded": 0, "units_waiting": 0}
 
 
+def test_until_is_a_last_day_and_counts_the_whole_of_it(tmp_path):
+    vault = vault_with(tmp_path)
+    vectors.update(vault, embed=fake_embed)
+
+    def days(**bounds):
+        found = vectors.search(vault, "friday", embed=fake_embed, **bounds)
+        return sorted(h["ts"][:10] for h in found)
+
+    assert days(until="2026-10-20") == ["2026-10-09", "2026-10-20"]
+    assert days(since="2026-10-10", until="2026-10-20") == ["2026-10-20"]
+    assert days(until="not a date") == ["2026-10-09", "2026-10-20", "2026-10-21"]
+
+
 def test_a_run_stops_at_its_time_and_the_next_one_goes_on(tmp_path):
     vault = vault_with(tmp_path)
     vectors.BATCH, saved = 1, vectors.BATCH

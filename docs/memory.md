@@ -43,12 +43,23 @@ consolidated, what is indexed for the last year, what is brought into a prompt.
 For a reply today ([research.py](../src/proxenos/research.py)):
 1. the person: who they are to you, and your newest records with them on any channel;
 2. the matter: the model asks for what the reply depends on, and each question is searched by
-   meaning, then by words, anywhere and among that person's records.
+   meaning and by words, anywhere and among that person's records. When the chat points to a
+   time ("around the March conference", "last week"), the model also gives the first and last
+   day to look in, and every search keeps to them. LongMemEval (Wu and others, ICLR 2025) found
+   that this finds more for questions about time. Dates that aren't real are dropped, and two in
+   the wrong order are swapped.
+3. one list from many: the searches' lists are fused by reciprocal rank (Cormack, Clarke and
+   Buettcher, SIGIR 2009). A record scores 1 / (60 + its rank) in each list it is in, summed, so
+   one that several searches rank high comes first. Each search's best always stays in.
+4. a gate: the model marks each record found as needed or a near miss, and only the needed ones
+   reach the draft, as Engram's gate does. That stops a long prompt of near misses from drowning
+   the one letter that matters.
+
+Each reply's research leaves one line in `memory/research.jsonl`: the searches' words and days,
+each list's ids in rank order, the fused order and the ids the gate kept. Ids only, never what a
+record says. It is there to tune the searches and the gate. Past 20 MB, its older half goes.
 
 What it should add, in order:
-- **A gate.** After retrieval, the model marks each record relevant or not before drafting, and
-  only the relevant ones are kept, as Engram's gate does. That stops a long prompt of near misses
-  from drowning the one letter that matters.
 - **Salience.** Each record scored as it comes in: deadlines, money, health, promises and
   questions to you score high; routine and bulk mail low. Ties are broken by recency, with a slow
   decay, and by use: a record that went into a draft you sent counts for more next time. This is
