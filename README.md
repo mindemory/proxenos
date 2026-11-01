@@ -27,6 +27,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - a feed of new papers and news, ranked for you;
 - your open tasks, pulled from your conversations and from what you tell it, kept up through the day, with the plans among them (a lunch at 12, a call at 9) put on your own calendar, and taken off it when they're called off;
 - a journal of each day, so you never have to narrate it: what got done, where you wrote, what moved in your projects, what's waiting on others and what's next, with a few sentences on how it went;
+- a story of your life by month and day, years back: for each month, what happened, what you were working on, who you were with and how you seemed, as your own words show it, and for each day, whom you wrote to, your calendar, what you wrote down, your walks, listening and photos, and your health records by title, from everything already in the vault;
 - where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
 - the forms you're handed (a PDF application, an intake form) filled from your records, leaving the ID numbers, account numbers and signature to you;
 - advice grounded in your own patterns;
@@ -77,7 +78,7 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                                                         choices, watch, network,
                                                         recall, projects, project
                                                         steps, errands, drafts,
-                                                        journal
+                                                        journal, life
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -104,10 +105,11 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
   - **network:** the people you know by name, how you know each and what you share, and your notes' titles;
   - **watch:** the films you've logged and how you rated them;
   - **journal:** the day's lines, to write its brief: the titles of tasks closed, waiting and due, the names of the chats you wrote in and the drafts sent, what you told Proxenos that day, your projects' commit messages, the next day's calendar and care's open items;
+  - **life:** for a month's story, the observers' notes about you from that month and a digest of each of its days: the names of the people and chats you wrote to, with counts and the opening of your own words, your events, the titles of your notes and documents, your activity (walks, listening, what you watched, photos' albums and the people tagged), your health records' titles, counts of anything else, and the journal's briefs; never other people's messages, which aren't read out of memory at all;
   - **forms** (`proxenos form`): the form's labels and the records memory finds for them, never a line for an SSN, an account number or a signature;
   - **calls:** on a phone call you start, what the other side says goes to the call's model to decide what the assistant says next, and the call's audio goes through Twilio, which transcribes it ([docs/calls.md](docs/calls.md)).
 
-  Other people's words in a draft's, care's or an ask's prompt (their messages, the pages they link to, the records memory finds) go inside a tag drawn fresh for that prompt, which the model is told holds data, never instructions; your own messages stay outside it.
+  Other people's words in a draft's, care's or an ask's prompt (their messages, the pages they link to, the records memory finds) go inside a tag drawn fresh for that prompt, which the model is told holds data, never instructions; your own messages stay outside it. A month's days, whose chat names and titles others may have written, go inside one too.
 
   Before any prompt goes to a hosted model, the card and Social Security numbers, one-time codes, passwords, API keys and tokens, IBANs and bank account numbers in it are blanked (`proxenos.redact`), while dates, prices, phone numbers and the like stay. With a local model none of this leaves your computer, apart from a call's audio. Every model call leaves one line in the vault's `state/model-calls.jsonl`: when, which part of Proxenos asked, the model, whether it ran on this computer or at Anthropic, how much went in and came back and how many numbers and secrets were blanked, never the words. The page's Privacy view adds them up for the last 30 days.
 - **Links in messages** are fetched only for a chat waiting on your reply, and only from hosts on the public internet, never this computer or your local network. Each name is looked up once and the connection goes to the address that was checked, on port 80 or 443 and through no proxy, so a name can't pass the check and then point somewhere local.
@@ -218,8 +220,9 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps`, `work` or `journal` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps`, `work`, `journal` or `life` |
 | `proxenos clone journal [--date DAY]` | The day, written down (also from the page's Journal view): what got done, where you wrote, what moved in your projects, what's waiting and what's next, with a short brief. The night writes the day that just ended; `--date today` writes today so far |
+| `proxenos clone life [--month YYYY-MM] [--day YYYY-MM-DD]` | A story of your life by month and day, years back (also on the page's Life view). `--month` writes that month's story now, from the observers' notes and its days; `--day` prints a day's digest as JSON, with no model. The night writes the month that just ended, the current one once a week, and four older months with no story, newest first, so years fill in over a few weeks |
 | `proxenos clone steps --project ID` | A step of a project's own work (also from the page's Projects view): the next analysis, fix, figure or section, done on a new branch of the project's code in a worktree of its own, by Claude Code where it's installed or else the local model, and reported. Accept on the page merges it into your checkout; Discard deletes the branch. Nothing is pushed |
 | `proxenos clone choices [--force]` | The week's choices: what's worth taking on and what's worth letting go of. The night runs it once a week; `--force` runs it now |
 | `proxenos clone watch [--force]` | What to watch next: films and shows you haven't seen, picked from what you loved on Letterboxd, and the films on your watchlist that suit this week. The night runs it once a week; `--force` runs it now |

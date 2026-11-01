@@ -113,6 +113,15 @@ SENDS = (
         ),
     ),
     (
+        "Life",
+        ("life",),
+        (
+            "A month's notes about you and its days: who you wrote to and the opening of your "
+            "own words, events, notes' titles, activity, health records' titles and the "
+            "journal's briefs, never other people's messages."
+        ),
+    ),
+    (
         "Forms",
         ("forms",),
         (

@@ -42,7 +42,8 @@ from proxenos.config import vault_path
 # the week's choices (once a week) that read the tasks and ideas, and what to watch (once a
 # week), then what each of those brings to mind from memory, the projects, the errands still
 # waiting on a way to reach someone, the drafts of them all, a step of each project's own work,
-# which takes longest, and last the journal of the day that just ended, which reads them all.
+# which takes longest, the journal of the day that just ended, which reads them all, and last
+# the stories of the months, which read the journal.
 NIGHT_CLONES = (
     "tracker",
     "tasks",
@@ -57,6 +58,7 @@ NIGHT_CLONES = (
     "work",
     "steps",
     "journal",
+    "life",
 )
 
 
@@ -263,7 +265,8 @@ def _command(
         stats = actions[args.action]()
     else:
         stats = groups[args.command][1][args.name].run(vault, args)
-    print(_summary(getattr(args, "name", None) or args.command, stats))
+    if stats is not None:  # None: the clone printed its whole answer, JSON for the page
+        print(_summary(getattr(args, "name", None) or args.command, stats))
 
 
 def night(vault: Path, clones: dict[str, ModuleType]) -> bool:

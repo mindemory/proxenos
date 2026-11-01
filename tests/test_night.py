@@ -12,6 +12,7 @@ from proxenos.clones import (
     choices,
     errands,
     journal,
+    life,
     network,
     projects,
     recall,
@@ -49,6 +50,7 @@ def calls(tmp_path, monkeypatch):
         work,
         steps,
         journal,
+        life,
     ):
         name = module.__name__.rsplit(".", 1)[1]
 
@@ -105,6 +107,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "work: 1 done",
         "steps: 1 done",
         "journal: 1 done",
+        "life: 1 done",
         "voice: 3 new answers",  # trained again only when it's due
         "lessons: 2 new changed drafts",  # rules learned only once enough are new
     ]
@@ -113,6 +116,8 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     # The week's choices read the tasks and ideas, and their drafts are the work clone's.
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
     assert cli.NIGHT_CLONES.index("choices") < cli.NIGHT_CLONES.index("work")
+    # The month's story reads the journal of the day that just ended.
+    assert cli.NIGHT_CLONES.index("journal") < cli.NIGHT_CLONES.index("life")
     assert all(vault == "vault" for _, vault, _ in calls)
     args = {name: a for name, _, a in calls}
     assert args["network"] == {"people_only": False}  # the full run, ideas too
@@ -155,6 +160,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "work: 1 done",
         "steps: 1 done",
         "journal: 1 done",
+        "life: 1 done",
         "voice: 3 new answers",
         "lessons: 2 new changed drafts",
     ]
@@ -171,6 +177,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "work",
         "steps",
         "journal",
+        "life",
         "voice",
         "lessons",
     ]
