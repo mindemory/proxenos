@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a commit, not a tag a compromised repo could move; Dependabot bumps them.
 jobs:
   python:
     # Proxenos runs on macOS today and on Windows next (docs/apps.md), so its tests run on both.
@@ -20,8 +21,10 @@ jobs:
     env:
       PYTHONUTF8: "1"  # how the app and the scheduler run Python, so files read as UTF-8 on Windows too
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
@@ -48,8 +51,10 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -58,3 +63,47 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit -p .
       - run: npm run build
+
+  audit:
+    # Known advisories in what Proxenos runs on, not in its dev tools. Only high or critical ones
+    # fail it, so a moderate one waiting on a fix doesn't hold up every push.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit==2.10.1
+      # pyproject.toml's dependencies as a fresh install resolves them. It exits 1 on any finding,
+      # so the next step decides; no report at all (pip-audit itself failed) fails there too.
+      - run: pip-audit --progress-spinner off --format json --output pip-audit.json . || true
+      # pip-audit has no severity threshold: each finding's GitHub rating is read from OSV, and one
+      # without a rating counts as high, so nothing passes unread.
+      - shell: python
+        run: |
+          import json, sys, urllib.request
+          serious = set()
+          for dep in json.load(open("pip-audit.json"))["dependencies"]:
+              for vuln in dep.get("vulns", []):
+                  ids = [vuln["id"], *vuln.get("aliases", [])]
+                  ghsa = next((i for i in ids if i.startswith("GHSA-")), None)
+                  severity = "UNRATED"
+                  if ghsa:
+                      with urllib.request.urlopen(f"https://api.osv.dev/v1/vulns/{ghsa}") as r:
+                          severity = json.load(r).get("database_specific", {}).get("severity", severity)
+                  if severity not in ("LOW", "MODERATE"):
+                      serious.add(f"{dep['name']} {dep['version']}: {ghsa or vuln['id']} {severity}")
+          print("\n".join(sorted(serious)) or "No high or critical advisories")
+          if serious:
+              print("::error title=pip-audit::" + "%0A".join(sorted(serious)))
+              sys.exit(1)
+      # The page's packages, from the lockfile; this runs even when the Python audit failed.
+      - if: ${{ !cancelled() }}
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - if: ${{ !cancelled() }}
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high

@@ -1,0 +1,24 @@
+# Weekly pull requests for newer packages and actions. The cooldown leaves a release a few days to
+# be pulled or patched before it's proposed; security updates aren't held by it.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
