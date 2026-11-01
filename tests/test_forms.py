@@ -162,6 +162,13 @@ def test_the_command_fills_a_form_and_says_what_is_left(tmp_path, monkeypatch, c
     assert out.strip().endswith("form: 0 filled, 0 marked, 9 left")
 
 
+def test_only_ids_and_numbers_are_private_not_words_that_start_like_them():
+    for label in ("SSN#", "ITIN", "Bank routing number", "Card number", "PIN"):
+        assert forms._PRIVATE.search(label), label
+    for label in ("Itinerary", "Shipping address", "Einstein Hall"):
+        assert not forms._PRIVATE.search(label), label
+
+
 def test_only_what_the_records_say_is_kept():
     shown = "DOB 01/02/1990, phone 555-010-0199, an annualized salary of $60,000, Riverton"
     assert forms._grounded("01/02/1990", shown) and not forms._grounded("01/05/1990", shown)

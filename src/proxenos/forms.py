@@ -55,7 +55,7 @@ _ABOVE = 40  # points above a rule a column heading may sit
 # Never filled, never sent to the model: what only the user should write in.
 _PRIVATE = re.compile(
     r"\b(ssn|social security|soc\.? sec|passport|driver'?s? licen[cs]e|licen[cs]e (no|number|#)|"
-    r"itin|ein\b|tax ?id|taxpayer|routing|account (no|number|#)|acct|card (no|number|#)|"
+    r"itin\b|ein\b|tax ?id|taxpayer|routing|account (no|number|#)|acct|card (no|number|#)|"
     r"credit card|debit card|cvv|cvc|pin\b|password|alien|a-number|uscis)",
     re.IGNORECASE,
 )
