@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import importer, llm, observe
+from proxenos import importer, llm, observe, untrusted
 from proxenos.clones import care
 from proxenos.ingest import healthrecords
 
@@ -648,7 +648,8 @@ def test_care_keeps_every_recent_medical_record_without_scoring_and_active_ones_
     assert hypertension["current"] and not platelets["current"]
 
     # Still active, it ranks as if from today: under a cap that fits one record, it stays.
-    _, refs, cut = care.render(found, NOW, limit=len(care._entry("r00000", hypertension)) + 2)
+    one = len(care._entry("r00000", hypertension, untrusted.tag())) + 2  # a provider's words
+    _, refs, cut = care.render(found, NOW, limit=one)
     assert cut and [ref["id"] for ref in refs.values()] == [hypertension["id"]]
 
 
