@@ -50,14 +50,14 @@ interface Theme {
 }
 
 const FALLBACK: Theme = {
-  relation: { met: "#a3b1ff", know_of: "#6fd0cf", to_read: "#dba6f2" },
+  relation: { met: "#e6e6e6", know_of: "#6fd0cf", to_read: "#dba6f2" },
   cluster: CLUSTER_FALLBACK,
   edge: "#363b46",
   edgeStrong: "#4a5160",
-  accent: "#a3b1ff",
+  accent: "#e6e6e6",
   ink: "#ebe8e2",
   muted: "#9ca2ad",
-  bg: "#0e1013",
+  bg: "#111111",
   font: "system-ui, sans-serif",
 };
 

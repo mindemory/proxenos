@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // own dark, above the page rather than over its top.
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = NSColor(red: 0.055, green: 0.063, blue: 0.075, alpha: 1)
+        window.backgroundColor = NSColor(white: 0.067, alpha: 1)
         window.contentView = web
         window.setFrameAutosaveName("Proxenos")
         if window.frame.origin == .zero { window.center() }
@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         webView.loadHTMLString(
             """
-            <body style="background:#0e1013;color:#c9ccd3;font:15px -apple-system;display:grid;place-items:center;height:100vh;margin:0">
+            <body style="background:#111111;color:#cccccc;font:15px -apple-system;display:grid;place-items:center;height:100vh;margin:0">
             <div style="text-align:center">Proxenos is starting…<br><span style="color:#7d828c;font-size:13px">It runs in the background from login; this page tries again every few seconds.</span></div>
             <script>setTimeout(() => location.href = "\(home.absoluteString)", 4000)</script></body>
             """, baseURL: nil)

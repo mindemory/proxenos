@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/app",
     scope: "/",
     display: "standalone",
-    background_color: "#0e1013",
-    theme_color: "#0e1013",
+    background_color: "#111111",
+    theme_color: "#111111",
     // On a phone, the installed app is in the share sheet: what's shared to it is asked about.
     share_target: {
       action: "/share",

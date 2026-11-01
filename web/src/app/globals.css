@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Proxenos is always dark: a quiet ground for reading late, with one cool accent.
+   Proxenos is always dark: a near-black ground and neutral greys with no tint, as
+   most apps people read in all day are, for reading late.
 
-   The accent is periwinkle on purpose. Green, amber and red are reserved for
+   The accent is off-white on purpose. Green, amber and red are reserved for
    state (done, due soon, overdue; confident, unsure), so the colour that marks
    "you are here" and "this is a link" stays out of that range and never reads
    as a warning.
@@ -17,17 +18,17 @@
 :root {
   color-scheme: dark;
 
-  --c-bg: #0e1013; /* page ground */
-  --c-surface: #161920; /* cards, sidebars */
-  --c-surface-2: #1e222a; /* chips, hover, raised controls */
-  --c-surface-3: #262b34; /* a raised control under the pointer */
-  --c-ink: #ece9e3; /* body text, warm off-white: 15.7:1 on the ground */
-  --c-muted: #9ea4af; /* secondary text: 7.6:1 on the ground, 7:1 on surface, 6.4:1 on surface-2 */
-  --c-faint: #7d838f; /* tertiary labels: 5:1 on the ground, 4.6:1 on surface; never on surface-2 */
-  --c-line: #252930; /* hairlines */
-  --c-line-strong: #353b46; /* control borders */
-  --c-accent: #a3b1ff; /* periwinkle: 9:1 on the ground */
-  --c-accent-ink: #0d1020; /* text on an accent fill */
+  --c-bg: #111111; /* page ground */
+  --c-surface: #191919; /* cards, sidebars */
+  --c-surface-2: #222222; /* chips, hover, raised controls */
+  --c-surface-3: #2c2c2c; /* a raised control under the pointer */
+  --c-ink: #ececec; /* body text: 15.9:1 on the ground */
+  --c-muted: #a3a3a3; /* secondary text: 7.5:1 on the ground, 6.9:1 on surface, 6.3:1 on surface-2 */
+  --c-faint: #868686; /* tertiary labels: 5.2:1 on the ground, 4.8:1 on surface; never on surface-2 */
+  --c-line: #262626; /* hairlines */
+  --c-line-strong: #383838; /* control borders */
+  --c-accent: #e6e6e6; /* off-white: 14.6:1 on the ground */
+  --c-accent-ink: #111111; /* text on an accent fill */
 
   --c-ok-bg: #13241a;
   --c-ok-ink: #8fd9a8;
@@ -43,7 +44,7 @@
 
   /* The network graph's three relations. Distinct from the state hues above: met is the
      accent itself, known of is a cool teal, to read is a soft orchid. */
-  --c-rel-met: #a3b1ff;
+  --c-rel-met: #e6e6e6;
   --c-rel-know: #6fd0cf;
   --c-rel-read: #dba6f2;
 
@@ -55,8 +56,8 @@
   --c-cluster-2: #c98500;
   --c-cluster-3: #d55181;
   --c-cluster-4: #008300;
-  --c-cluster-other: #8b919c;
-  --c-cluster-none: #5f6672;
+  --c-cluster-other: #8f8f8f;
+  --c-cluster-none: #616161;
 }
 
 @theme {

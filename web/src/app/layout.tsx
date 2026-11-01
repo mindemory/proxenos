@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 
 // Always dark, so the browser chrome matches the ground.
 export const viewport: Viewport = {
-  themeColor: "#0e1013",
+  themeColor: "#111111",
   colorScheme: "dark",
 };
 
