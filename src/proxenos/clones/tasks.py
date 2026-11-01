@@ -54,6 +54,7 @@ CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at lea
 ADDRESS_MONTHS = 6  # newest months searched for the user's own mail addresses and Slack ids
 EVERY = timedelta(hours=1)  # the soonest the sync brings the list up to date again
 DRAFT_CHARS = 300  # of each waiting draft's text the model reads
+MAX_DRAFTS = 60  # the newest waiting drafts it weighs; older ones wait for the next run
 
 SOURCES = ("whatsapp", "slack", "email")
 STATUSES = ("open", "waiting", "done")
@@ -203,10 +204,12 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
     drafts = waiting_drafts(vault)
     # The drafts the model weighs: to someone, and not a reply that follows its own chat.
     asked = {k: d for k, d in drafts.items() if d["to"] and not d["thread"]}
+    asked = dict(sorted(asked.items(), key=lambda kv: kv[1]["created"])[-MAX_DRAFTS:])
+    listed = "\n".join(map(_draft_line, asked.values())) or "None."
 
     found = conversations(vault, _iso(now - timedelta(days=days)))
     limit = MAX_CHARS if llm.prompt_chars() is None else LOCAL_CHARS
-    text, refs, cut = render(found, llm.fit(limit))
+    text, refs, cut = render(found, llm.fit(limit, 30_000 + len(listed)))
     new, overtaken = 0, {}
     if refs:
         shown = {k: task for k, task in tasks.items() if k not in mine}
@@ -215,7 +218,7 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
                 today=now.astimezone().strftime("%A %Y-%m-%d, %H:%M (UTC%z)"),
                 current="\n".join(map(_task_line, shown.values())) or "Empty: nothing yet.",
                 closed=_closed_text({k: closed[k] for k in mine if k in closed}),
-                drafts="\n".join(map(_draft_line, asked.values())) or "None.",
+                drafts=listed,
                 days=f"{days:g}",
                 cut="(Only the newest fit; older ones were cut.)\n" if cut else "",
                 messages=text,
