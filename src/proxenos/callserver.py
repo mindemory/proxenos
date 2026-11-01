@@ -33,6 +33,7 @@ PORT = 4748
 MAX_BODY = 64 * 1024  # Twilio's form posts are a few kilobytes
 CHECK_TIMEOUT = 15  # seconds to reach this Mac at its public address before calling
 TOUCH = 60  # seconds between keeping the mark that holds other model work off fresh
+LAST_WORD = 600  # seconds past Twilio's time limit to wait for its word that the call ended
 _ENDED = {"completed", "busy", "no-answer", "failed", "canceled"}
 _STEPS = ("answer", "heard", "pending", "dialed", "whisper", "accept", "status")
 _SETTINGS = {
@@ -138,7 +139,8 @@ def place(
                 )
             except twilio.TwilioError as e:
                 raise SystemExit(f"The call didn't start: {e}") from None
-            calls.write_live(vault, call)
+            with server.lock:  # Twilio may be asking already
+                _show(vault, call)
             print(f"Calling {sheet.to}; Ctrl-C hangs up.", flush=True)
             _wait(vault, server, client, call)
     finally:
@@ -153,7 +155,7 @@ def place(
 def _wait(vault: Path, server: "_Server", client: twilio.Client, call: calls.Call) -> None:
     """Until Twilio says the call has ended, or Ctrl-C hangs up; at most a little past Twilio's
     own time limit, in case its last word never comes."""
-    deadline = time.monotonic() + twilio.TIME_LIMIT + 600
+    deadline = time.monotonic() + twilio.TIME_LIMIT + LAST_WORD
     try:
         while not server.over.wait(TOUCH):
             _keep(vault)
@@ -204,6 +206,15 @@ def _check(url: str) -> None:
     )
 
 
+def _show(vault: Path, call: calls.Call) -> None:
+    """Write where the call is for the page. Only the page reads it, so the call goes on without
+    it when it can't be written (a file in use on Windows, a full disk)."""
+    try:
+        calls.write_live(vault, call)
+    except OSError as e:
+        print(f"Couldn't update the page's view of the call: {e}", file=sys.stderr)
+
+
 def _keep(vault: Path) -> None:
     """Keep the mark that holds other model work off fresh, for a call longer than it lasts."""
     try:
@@ -233,20 +244,21 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, "text/plain", "")
 
     def do_POST(self) -> None:
+        length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY)
+        body = self.rfile.read(length)  # all of it, even to refuse it, so the answer arrives whole
         step = self._step()
         if step not in _STEPS:
             self._send(404, "text/plain", "")
             return
-        length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY)
-        fields = dict(urllib.parse.parse_qsl(self.rfile.read(length).decode(errors="replace")))
+        fields = dict(urllib.parse.parse_qsl(body.decode(errors="replace")))
         given = self.headers.get("X-Twilio-Signature", "")
         if not twilio.signed(self.server.secret, self.server.public + self.path, fields, given):
             self._send(403, "text/plain", "")
             return
         with self.server.lock:
             twiml = respond(self.server.call, step, fields)
-            calls.write_live(self.server.vault, self.server.call)
-        if self.server.call.phase == "done" and step == "status":
+            _show(self.server.vault, self.server.call)
+        if step == "status" and self.server.call.status:
             self.server.over.set()
         self._send(200, "text/xml", twiml)
 

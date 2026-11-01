@@ -315,6 +315,8 @@ def post(port, url, fields, token=TOKEN):
             return response.status, response.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, ""
+    except OSError as e:  # the server broke off: say so, rather than end Twilio's side early
+        return 0, repr(e)
 
 
 class FakeTwilio:
@@ -328,10 +330,12 @@ class FakeTwilio:
         port = self.servers[0].server_address[1]
 
         def twilio_side():
-            self.replies.append(post(port, url, {"CallSid": "CA9"}))
-            self.replies.append(post(port, url, {"CallSid": "CA9"}, token="forged"))
-            self.replies.append(post(port, url.replace("/answer", "/nope"), {}))
-            self.replies.append(post(port, status_url, {"CallStatus": "busy"}))
+            try:
+                self.replies.append(post(port, url, {"CallSid": "CA9"}))
+                self.replies.append(post(port, url, {"CallSid": "CA9"}, token="forged"))
+                self.replies.append(post(port, url.replace("/answer", "/nope"), {"x": "1"}))
+            finally:  # always: the call can't end any other way
+                self.replies.append(post(port, status_url, {"CallStatus": "busy"}))
 
         threading.Thread(target=twilio_side).start()
         return "CA9"
@@ -345,6 +349,12 @@ def test_a_call_runs_its_server_until_twilio_says_it_ended(tmp_path, settings, m
     servers = []
     made = callserver._Server
     monkeypatch.setattr(callserver, "_Server", lambda *a: servers.append(made(*a)) or servers[-1])
+    # Should Twilio's last word never come, give up in seconds, not hours.
+    monkeypatch.setattr(callserver, "TOUCH", 0.05)
+    monkeypatch.setattr(callserver, "LAST_WORD", 5)
+    monkeypatch.setattr(twilio, "TIME_LIMIT", 0)
+    # The page's copy can't be written (on Windows, a file in use): the call goes on regardless.
+    monkeypatch.setattr(calls, "write_live", lambda *a: (_ for _ in ()).throw(PermissionError(32)))
     fake = FakeTwilio(servers)
 
     said = callserver.place(tmp_path, sheet, check=False, client=fake, port=0)
