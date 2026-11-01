@@ -4,7 +4,7 @@ import json
 import subprocess
 from datetime import UTC, date, datetime
 
-from proxenos import plans
+from proxenos import outbox, plans
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 
@@ -173,6 +173,15 @@ def test_plans_go_on_my_own_calendar_and_only_its_own_events_change(tmp_path, mo
 def test_without_a_calendar_named_nothing_is_touched(tmp_path, monkeypatch):
     monkeypatch.delenv("PROXENOS_PLANS_CALENDAR", raising=False)
     plans.write(tmp_path, [task("x", "Lunch", "2026-03-11T12:00")], NOW, run=untouched)
+
+
+def test_a_made_up_vaults_plans_never_reach_my_calendar(tmp_path, monkeypatch):
+    # The demo's page, run with the user's own settings, still writes only its own file.
+    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@example.com")
+    monkeypatch.setattr(plans.sys, "platform", "darwin")
+    (tmp_path / outbox.DEMO).write_text("made up\n")
+    assert plans.write(tmp_path, [task("x", "Lunch", "2026-03-11T12:00")], NOW, run=untouched) == 1
+    assert "SUMMARY:Lunch" in (tmp_path / "clones" / "tasks" / "plans.ics").read_text()
 
 
 def untouched(*a, **kw):

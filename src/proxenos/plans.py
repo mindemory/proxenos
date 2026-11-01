@@ -21,7 +21,8 @@ through the Calendar app, which syncs them to the account like any event they ad
 event is made once, made again when the plan moves, and deleted once it's done or gone. Only the
 events it made are ever changed or deleted: their ids are kept in clones/tasks/pushed.json, and
 when the calendar is read back in, those don't count as the user's own. Off until it's set, and
-only on a Mac; macOS asks once whether Proxenos may use Calendar.
+only on a Mac; macOS asks once whether Proxenos may use Calendar. Never from a made-up vault
+(`proxenos demo`), which the page may run with the user's own settings.
 """
 
 import hashlib
@@ -112,7 +113,11 @@ def write(
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(ics(events, now), encoding="utf-8", newline="")
     tmp.replace(path)
-    if (calendar := env("PLANS_CALENDAR").strip()) and sys.platform == "darwin":
+    from proxenos import outbox  # it reads the work clone, which reads this module
+
+    # A made-up vault's plans never reach the user's own calendar, whatever the settings say.
+    calendar = "" if outbox.is_demo(vault) else env("PLANS_CALENDAR").strip()
+    if calendar and sys.platform == "darwin":
         try:
             push(vault, events, calendar, run)
         except (OSError, subprocess.SubprocessError, ValueError) as e:
