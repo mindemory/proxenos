@@ -7,6 +7,7 @@ Notes for AI coding agents (and people) working in this repo. The README says wh
 - `src/proxenos/`: the Python package and the `proxenos` command (`cli.py`).
   - `ingest/`: one module per source. Each pulls its source into the vault as monthly JSONL files, merged by id, so a re-run changes nothing.
   - `clones/`: one module per agent (tasks, care, advisor, network, recall, projects, steps, errands, work). Each reads the vault and writes its output under `vault/clones/<name>/`.
+  - `calls.py`, `callserver.py`, `twilio.py`: phone calls the user starts, through their own Twilio account.
   - `master.py`: sync, observe and the self-model. `chats.py`: conversations waiting on the user. `voice.py`: writing as the user. `fidelity.py`: how close drafts came to what was sent. `llm.py`: the model, local (Ollama) or hosted.
 - `web/`: the local page (Next.js). API routes in `web/src/app/api/` read the vault and run the `proxenos` command; views in `web/src/components/views/`.
 - `tests/`: pytest, synthetic data only.
@@ -27,7 +28,7 @@ GitHub runs the same checks on macOS and Windows for every push ([.github/workfl
 ## Rules
 
 - **No personal data in the repo, ever.** The vault lives outside it. Tests build synthetic data inside the test; `tests/conftest.py` keeps them away from real credentials and the `data/` folder. Never paste real messages, names or exports into code, tests, docs or issues.
-- **Nothing sends, posts or buys on its own.** Clones write drafts; the user sends. The one exception is the outbox the user switches on per app ([docs/memory.md](docs/memory.md)).
+- **Nothing sends, posts or buys on its own.** Clones write drafts; the user sends. The exceptions are the outbox the user switches on per app ([docs/memory.md](docs/memory.md)) and a phone call the user starts, where the assistant says it's automated, never agrees to pay, and says no number that isn't on its sheet ([docs/calls.md](docs/calls.md)).
 - **Re-runs are safe.** Ingesters merge by id (`proxenos.store.merge_monthly`).
 - **Other people's messages reach a model only where a clone needs them**, picked out in code, as the README's Privacy section lists. Keep it that way, and update that list when it changes.
 - **Files are private:** the vault's files are 0600 in 0700 folders. Tests check modes only where the platform has them (`os.name == "nt" or ...`).

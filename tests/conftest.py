@@ -17,6 +17,7 @@ _SECRET_PREFIXES = (
     "MICROSOFT_",
     "SLACK_USER_TOKEN",
     "STRAVA_",
+    "TWILIO_",
     "PROXENOS_",
     "TWIN_",
 )

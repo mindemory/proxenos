@@ -1175,3 +1175,66 @@ export interface ProjectsResponse {
   /** The last Accept, Discard or change to a queue. */
   deciding: ProjectsJob | null;
 }
+
+// ── Calls ───────────────────────────────────────────────────────────────────
+
+/** Where a call is: ringing, pressing the menu, on hold, the assistant talking, ringing you, you on the line, over. */
+export type CallPhase = "dialing" | "menu" | "waiting" | "talking" | "connecting" | "connected" | "done";
+
+export interface CallLine {
+  at: string;
+  /** "them": a person; "line": the hold's recordings; "note": what happened. */
+  who: "them" | "assistant" | "line" | "note";
+  text: string;
+}
+
+export interface CallOutcome {
+  summary: string;
+  asks: { ask: string; result: string }[];
+  rep_name: string;
+  reference: string;
+  offered: string[];
+  next: string[];
+}
+
+/** One call from a sheet: going (live) or kept after it ended. */
+export interface CallRecord {
+  started: string;
+  ended: string | null;
+  /** How Twilio said it ended: completed, busy, no-answer, failed, canceled; "" while it goes. */
+  status: string;
+  phase: CallPhase;
+  mode: "ring" | "talk";
+  /** The asks answered, by number from 1. */
+  done: number[];
+  notes: { rep_name: string; reference: string; offered: string[] };
+  transcript: CallLine[];
+  outcome: CallOutcome | null;
+}
+
+/** A call sheet, clones/calls/<id>.md: whom to call, why, and what the assistant may ask and say. */
+export interface CallSheet {
+  id: string;
+  title: string;
+  to: string;
+  number: string;
+  about: string;
+  asks: string[];
+  /** The names of the facts it may tell them; their values stay in the vault. */
+  facts: string[];
+  talk: boolean;
+  notes: string;
+  /** What's wrong with the sheet, when it can't be called from. */
+  error: string | null;
+  live: CallRecord | null;
+  /** Newest first. */
+  past: CallRecord[];
+}
+
+export interface CallsResponse {
+  now: string;
+  vault: VaultInfo;
+  /** The settings calls need that aren't set (the Twilio secrets are checked when a call starts). */
+  missing: string[];
+  sheets: CallSheet[];
+}

@@ -261,6 +261,8 @@ export function secretLabel(name: string): string {
     GOOGLE_CLIENT_ID: "Google sign-in client ID",
     GOOGLE_CLIENT_SECRET: "Google sign-in client secret",
     MICROSOFT_CLIENT_ID: "Microsoft sign-in client ID",
+    TWILIO_ACCOUNT_SID: "Twilio account SID (calls)",
+    TWILIO_AUTH_TOKEN: "Twilio auth token (calls)",
     SLACK_USER_TOKEN: "Slack token",
   };
   if (fixed[name]) return fixed[name];

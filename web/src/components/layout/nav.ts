@@ -11,6 +11,7 @@ import {
   ListTodo,
   MessageSquare,
   Network,
+  Phone,
   PenLine,
   Plug,
   Route,
@@ -33,6 +34,7 @@ export type View =
   | "advice"
   | "choices"
   | "watch"
+  | "calls"
   | "network"
   | "memory"
   | "profile"
@@ -61,6 +63,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Lightbulb, label: "Advice", id: "advice", group: "clones" },
   { icon: Compass, label: "Choices", id: "choices", group: "clones" },
   { icon: Clapperboard, label: "Watch", id: "watch", group: "clones" },
+  { icon: Phone, label: "Calls", id: "calls", group: "clones" },
   { icon: Network, label: "Network", id: "network", group: "clones" },
   { icon: Brain, label: "Memory", id: "memory", group: "you" },
   { icon: UserRound, label: "Profile", id: "profile", group: "you" },

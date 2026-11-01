@@ -16,6 +16,7 @@ import proxenos.ingest
 from proxenos import (
     ask,
     auth,
+    callserver,
     connect,
     demo,
     importer,
@@ -72,7 +73,7 @@ def main(argv: list[str] | None = None) -> None:
         prog="px" if Path(sys.argv[0]).name == "px" else "proxenos",
         description="Proxenos keeps a private model of you from your own data and works on your "
         "behalf: a research feed, tasks, advice, your network, memories and drafts. It never "
-        "sends anything by itself.",
+        "sends anything by itself, and calls only when you start the call.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     for command, (help_text, modules) in groups.items():
@@ -111,6 +112,10 @@ def main(argv: list[str] | None = None) -> None:
     trial = commands.add_parser("demo", help="write a made-up vault to try the page on")
     trial.add_argument("path", nargs="?", type=Path, help="where (default: a new temp folder)")
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
+    phoning = commands.add_parser(
+        "call", help="place a phone call that waits on hold for you, from a call sheet"
+    )
+    callserver.add_arguments(phoning)
     asking = commands.add_parser(
         "ask", help="a question or screenshots, answered as you'd think it"
     )
@@ -154,6 +159,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "phone":
         vault_path()  # loads settings
         print(phone.setup())
+        return
+    if args.command == "call":  # a call can go on while a sync runs, so it takes no lock
+        callserver.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "connect":
         print(json.dumps(connect.report(vault_path())))  # vault_path also loads settings

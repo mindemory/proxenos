@@ -51,6 +51,8 @@ SECRETS = (
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "MICROSOFT_CLIENT_ID",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
 )
 _MODEL = re.compile(r"[\w.:/-]{1,100}")
 _VOICE = re.compile(r"mlx(:\d{1,5})?|ollama:[\w.:/-]{1,100}")
