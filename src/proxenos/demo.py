@@ -8,7 +8,8 @@ walks, listening, notes and LinkedIn connections. What the model would write fro
 the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the
 week's choices, drafts and errands. Then the steps that need no model run on it as they would on
 a real vault: the memory index, the people index, today's recall, the outbox's track record and
-yesterday's journal, with the brief the model would write.
+yesterday's journal, with the brief the model would write; and a week of model calls for the
+Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
 up, phone numbers are 555-01xx (kept for fiction), and addresses and links use the reserved
@@ -143,6 +144,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         recalled = recall.recall(vault, now=c.now)
         outbox.run(vault, c.now)  # its track record for the page; a demo has no way to send
         _journal(vault, c)
+        _calls(vault, c)
     return {
         "records": indexed.get("records_total", 0),
         "people": people.get("people", 0),
@@ -2256,6 +2258,39 @@ def _errands(vault: Path, c: _Clock) -> None:
     )
     for record in [*found, sent]:
         _write_json(vault / "clones" / "errands" / f"{record['id']}.json", record)
+
+
+def _calls(vault: Path, c: _Clock) -> None:
+    """The model calls a week of nights and syncs would have logged (llm's calls log), all on
+    this computer, for the Privacy view: when, which part asked, how much went in and out."""
+    steps = [  # part, hours ago, characters in and out, seconds
+        ("observe", 30, 41_000, 2_100, 95.0),
+        ("tasks", 29, 58_000, 3_400, 160.2),
+        ("care", 29, 36_000, 5_200, 210.7),
+        ("work", 28, 22_000, 1_100, 48.3),
+        ("work", 28, 19_500, 900, 41.0),
+        ("journal", 27, 6_800, 700, 22.4),
+        ("tasks", 5, 14_000, 1_300, 51.9),
+        ("work", 5, 17_200, 850, 38.6),
+        ("ask", 2, 9_400, 600, 19.8),
+    ]
+    lines = [
+        {
+            "at": c.ago(hours),
+            "step": step,
+            "model": "ollama:gemma4:26b",
+            "where": "this computer",
+            "sent_chars": sent,
+            "images": 0,
+            "answer_chars": answer,
+            "tokens_in": sent // 3,
+            "tokens_out": answer // 3,
+            "seconds": seconds,
+            "ok": True,
+        }
+        for step, hours, sent, answer, seconds in steps
+    ]
+    work._write(vault / "state" / "model-calls.jsonl", "".join(json.dumps(x) + "\n" for x in lines))
 
 
 def _journal(vault: Path, c: _Clock) -> None:
