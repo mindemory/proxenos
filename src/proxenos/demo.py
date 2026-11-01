@@ -25,7 +25,7 @@ import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 from proxenos import memory, outbox, store
@@ -45,6 +45,7 @@ from proxenos.config import REPO_ROOT
 
 PORT = 4848  # the demo's page, so it can run beside your own on 4747
 NAME = "Joe Bloggs"
+AWAKE = (8, 21)  # local hours a plan made for later today may start in
 HOME_MAIL = "joe.bloggs@example.com"
 WORK_MAIL = "joe.bloggs@acmefurniture.example"
 # The settings a real vault's .env would hold, set while the demo is built.
@@ -180,9 +181,15 @@ class _Clock:
         return _iso(self.now - timedelta(hours=hours))
 
     def soon(self, hours: float) -> str:
-        """`hours` from now, on the next half hour: something later today."""
+        """`hours` from now, on the next half hour: something later today. One that would fall
+        at night is at ten in the morning instead, so a demo built after dark isn't up at 3 AM."""
         when = self.now + timedelta(hours=hours)
-        return _iso(when + timedelta(minutes=-when.minute % 30, seconds=-when.second))
+        when = (when + timedelta(minutes=-when.minute % 30, seconds=-when.second)).astimezone()
+        if when.hour < AWAKE[0]:
+            when = datetime.combine(when.date(), time(10)).astimezone()
+        elif when.hour >= AWAKE[1]:
+            when = datetime.combine(when.date() + timedelta(days=1), time(10)).astimezone()
+        return _iso(when)
 
     def day(self, days: int) -> str:
         return (self.local + timedelta(days=days)).date().isoformat()

@@ -108,6 +108,16 @@ def test_nothing_is_sent_from_it(vault):
     assert read(vault, "clones/outbox/state.json")["routes"] == {}
 
 
+def test_a_plan_for_later_today_never_falls_at_night():
+    def soon(hour, minute=0):
+        local = datetime(2026, 6, 10, hour, minute).astimezone()  # this computer's time zone
+        return datetime.fromisoformat(demo._Clock(local).soon(3)).astimezone()
+
+    assert soon(13, 10).replace(tzinfo=None) == datetime(2026, 6, 10, 16, 30)
+    assert soon(0, 47).replace(tzinfo=None) == datetime(2026, 6, 10, 10, 0)  # built after midnight
+    assert soon(19, 0).replace(tzinfo=None) == datetime(2026, 6, 11, 10, 0)  # built in the evening
+
+
 def test_it_never_lands_on_a_folder_that_isnt_a_demo(tmp_path):
     folder = tmp_path / "vault"
     (folder / "raw").mkdir(parents=True)

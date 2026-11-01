@@ -4,7 +4,7 @@
 # on it alone, on the demo's port (never 4747), with no way to run the proxenos command from a
 # button, and Chrome runs headless on a throwaway profile. Everything is removed again afterwards.
 # They're taken in a time zone where it's nine in the morning, whenever this runs, so the demo's
-# day reads as one (taken at midnight, its coffee "later today" would be at 2 AM).
+# day reads as one, from a morning greeting on.
 #
 # Needs the proxenos conda env, the web packages (npm --prefix web install), Google Chrome (or
 # CHROME=<its binary>) and a Python with Pillow (python3, or PYTHON=<another>) to shrink the
