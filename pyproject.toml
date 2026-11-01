@@ -15,7 +15,7 @@ dependencies = [
     "numpy>=2.5.4",
     "pdfminer.six>=20260107",  # where a flat PDF form's labels and lines sit (forms.py)
     "pypdf>=6.21.4",
-    "python-dotenv>=1.0",
+    "python-dotenv>=1.2.4",
     "tzdata; sys_platform == 'win32'",  # zoneinfo has no time zones of its own on Windows
 ]
 
