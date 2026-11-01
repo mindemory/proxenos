@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import stat
+import time
 from datetime import UTC, date, datetime
 
 import pytest
@@ -123,3 +124,32 @@ def test_the_command_reads_a_date_or_today(tmp_path, monkeypatch):
     assert days == [date(2026, 3, 9), None]
     with pytest.raises(SystemExit, match="YYYY-MM-DD"):
         journal.run(tmp_path, argparse.Namespace(date="yesterday"))
+
+
+@pytest.fixture
+def new_york(monkeypatch):
+    """This process in a time zone whose clocks go back an hour on 2026-11-01."""
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="the time zone is set through tzset")
+def test_a_day_the_clocks_change_runs_to_its_own_midnight(tmp_path, new_york):
+    vault = tmp_path / "vault"
+    msg = wa(1, "ok, see you", True) | {"ts": "2026-11-02T04:30:00Z"}  # 23:30 on Nov 1, EST
+    jsonl(vault / "raw" / "whatsapp" / "messages" / "2026-11.jsonl", [msg])
+    events = [
+        {"id": "e1", "start": "2026-11-01T22:00:00Z", "summary": "Dinner tonight"},
+        {"id": "e2", "start": "2026-11-02T15:00:00Z", "summary": "Lab meeting"},
+    ]
+    jsonl(vault / "raw" / "calendar" / "me-uni-edu" / "2026-11.jsonl", events)
+
+    lines = journal.lines(vault, date(2026, 11, 1))
+
+    assert lines["said"] == ["Wrote in WhatsApp, Asha (direct chat): 1 message"]
+    assert [line for line in lines["next"] if "Calendar" in line] == [
+        "Calendar Mon Nov 02 10:00: Lab meeting"
+    ]

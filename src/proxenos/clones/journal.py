@@ -97,7 +97,7 @@ def save(vault: Path, entry: dict) -> None:
 def lines(vault: Path, day: date) -> dict[str, list[str]]:
     """The day's lines, section by section, with no model."""
     start = datetime.combine(day, time.min).astimezone()
-    end = start + timedelta(days=1)
+    end = datetime.combine(day + timedelta(days=1), time.min).astimezone()  # 23 or 25 hours
     return {
         "done": _done(vault, start, end),
         "said": _said(vault, start, end),
