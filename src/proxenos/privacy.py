@@ -60,7 +60,8 @@ SENDS = (
         ("work", "research", "voicemodel"),
         (
             "The recent conversation in each chat waiting on your reply, what your memory holds "
-            "about that person, your rules and notes, and the coming week's calendar."
+            "about that person and the records around those it opens, your rules and notes, and "
+            "the coming week's calendar."
         ),
     ),
     (
