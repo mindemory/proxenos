@@ -98,3 +98,88 @@ Notes from [Memory is not search](https://www.engramme.com/index/memory-is-not-s
 - **Grounding and abstention.** Every recalled memory or claim links to its evidence ids, and recall may return nothing when nothing fits.
 - **Right to forget.** Add a `proxenos forget` that removes matching raw records and notes, then re-consolidates.
 - **How to judge recall:** timeliness, informativeness, abstention and non-redundancy. Score it with the same useful / not-me reactions the page already collects.
+
+## What's new, and what Proxenos takes from it (November 2026)
+
+Checked against papers, model cards, release notes and the code on November 1, 2026. Each part says what Proxenos took, what's next, and what it leaves out, with why.
+
+### Memory and retrieval
+
+The original LongMemEval is close to saturated, and vendors' scores on it can't be compared. The newer, independent work favours two things that fit Proxenos better than graph or trained memory stacks: searching the stored records themselves, and keeping track of what's true now.
+
+- **Taken:**
+  - Word and meaning searches merged by reciprocal rank fusion, so a record several searches rank high comes first ([Cormack et al., 2009](http://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf); [Bruch et al., 2023](https://arxiv.org/abs/2210.11934)).
+  - Meaning, not only words, for proactive recall.
+  - Planned searches that can carry a date range. Time-aware queries raised recall on time questions by 6.8–11.3% in [LongMemEval](https://arxiv.org/abs/2410.10813).
+  - A log of what each research run kept, to tune the merging on real decisions later.
+- **Next:**
+  - A small local reranker, [Qwen3-Reranker-0.6B](https://github.com/QwenLM/Qwen3-Embedding) (Apache-2.0, through mlx-lm). On Qwen's own table it lifts retrieval from 61.8 to 65.8.
+  - Research that opens the records it finds and reads around them. Agents searching raw records scored 69–72% against 48.5% for the best retrieval baseline in [LongMemEval-V2](https://arxiv.org/abs/2605.12493).
+  - Tasks that can be cancelled or moved, not only done. Agents fumble cancellations ([ProEvent](https://arxiv.org/abs/2607.17701)), and recording what replaced what helps ([StateMemBench](https://arxiv.org/abs/2608.19652)).
+  - Voice rules inferred from drafts the user rewrote and checked against their own sent messages ([PROSE, ICML 2025](https://arxiv.org/abs/2505.23815), which improved on [CIPHER](https://arxiv.org/abs/2404.15269)).
+  - Fidelity that scores style apart from content ([StyleDistance](https://huggingface.co/StyleDistance/styledistance)).
+- **Left out:**
+  - Graph memory servers (Graphiti/Zep, Mem0's graph): they need a database and a model call per message, and break on small local models' JSON. Proxenos borrows their ideas instead: time ranges, and invalidating rather than deleting.
+  - ColBERT-style indexes: about 19 GB for a year of messages.
+  - A vector database: brute force takes 17 ms over 200,000 units on this Mac.
+
+### Local models on a 32 GB Mac
+
+From Ollama's own log over four days:
+- **Speed:** the model reads prompts at about 240 tokens a second and writes at about 23.
+- **Where the time goes:** 56% of its busy time was reading prompts, and prompts over 20,000 tokens took over half of all model time.
+
+So what makes nights faster is sending less, not a different engine.
+
+- **Taken:**
+  - The schema goes to Ollama as `format`, which holds the model to it as it writes, thinking first or not.
+  - Every answer is still checked item by item, so one malformed item is dropped instead of crashing a clone.
+  - One line per model call in the vault (`state/model-calls.jsonl`), to find the slow steps.
+- **Next:**
+  - **Install Ollama from its own app.** Homebrew's build leaves out the grammar library, so `format` falls back to the check alone.
+  - **Stop the embedding model pushing the main model out of memory:** a smaller context for embeddings.
+  - **Send less in the longest steps,** chosen from the calls log.
+  - **Lay prompts out so their start can be reused,** with the phone call as real chat turns.
+- **Models:**
+  - Stay on `gemma4:26b`: a mixture of experts with 3.8B parameters active per token, Apache-2.0, pretrained on 140+ languages.
+  - Dense 27–31B models write at about 6 tokens a second on an M1 Pro.
+  - Qwen3.6-35B-A3B is strong but too tight in 32 GB.
+- **JAX:** not a fit here. Apple-GPU support for JAX (jax-metal) was last released in October 2024, and nothing in Proxenos is a JAX workload. numpy does the one matrix multiply in vector search, and MLX does the LoRA training and, later, audio.
+- **Voice in and out, all local, for bad days:**
+  - speech to text with mlx-whisper and whisper-large-v3-turbo (MIT; Hindi and Marathi included);
+  - speech with Kokoro-82M through mlx-audio (Apache-2.0), or [Indic Parler-TTS](https://huggingface.co/ai4bharat/indic-parler-tts) for Hindi and Marathi.
+
+### Security and privacy
+
+The consensus has moved. Filters and prompts don't reliably stop prompt injection once an attacker adapts: 12 published defenses fell, most above 90% attack success ([Nasr, Carlini et al., 2025](https://arxiv.org/abs/2510.09023)). What holds is design: no single step should have untrusted text, private data and a way to send out all at once ([Meta's Agents Rule of Two](https://ai.meta.com/blog/practical-ai-agent-security/)). In Proxenos, drafts are safe by design: a person reads them and presses send. The opt-in outbox is the one place all three meet.
+
+- **Taken:**
+  - **Outbox limits.** It never answers a first contact, and it holds back any draft carrying a link, address or number the chat didn't have. For email, it sends only when the reply would go to the sender.
+  - **Others' words marked as data.** Their messages and fetched pages go into prompts inside a boundary that's random for each call, which cut attacks from over 50% to under 2% in Microsoft's [spotlighting](https://arxiv.org/abs/2403.14720) study. It's one layer, not the gate.
+  - **Safer link fetching.** It connects to the address it checked, so DNS rebinding can't point it at this computer or the home network.
+  - **A stricter project-step sandbox.** It refuses to run when the sandbox can't start, and hides more of the home folder.
+  - **Patched dependencies.** The web framework and the PDF libraries that read forms you receive are at fixed versions.
+  - **Hardened CI.** Its actions are pinned to exact commits, and it audits dependencies.
+  - **A privacy screen.** The page shows what stays on the computer (with whether FileVault is on), what went to a model in the last 30 days and where, and what's read from elsewhere.
+- **Next:**
+  - Python dependencies locked with hashes.
+  - Numbers and secrets blanked before a hosted model sees other people's messages.
+  - Other people's words in the task and voice-model prompts marked off the same way.
+- **Left out:**
+  - **Encrypting the vault beyond FileVault.** A key kept in the Keychain can be read by any process running as the user, which is the realistic threat once FileVault is on, and a key that needs the user present would stop the nightly run.
+  - **Prompt-injection classifiers.** Llama Prompt Guard's licence isn't open, and it only catches explicit "ignore your instructions".
+- **Health data:**
+  - **The routes:** Apple Health's export (read today), SMART on FHIR patient apps against providers' certified APIs, insurers' Patient Access APIs (prior-authorization data due by January 2027 under CMS-0057-F), and TEFCA Individual Access Services.
+  - **The law:** HIPAA covers providers and insurers, not a person's own tool. A hosted Proxenos would likely fall under the FTC's Health Breach Notification Rule.
+
+### One download, for Mac and Windows
+
+The plan in [everyone.md](everyone.md) holds: an Electron shell around a bundled Python, with the page as a standalone Next.js build.
+- **Why not Tauri:** it would still need Node beside it, and adds Rust.
+- **What it costs the owner:** the Apple Developer Program ($99 a year) and Microsoft's Artifact Signing ($9.99 a month, for individuals in the US and Canada). The Microsoft Store is a free second route on Windows.
+- **Taken:** the Windows blockers in the code are cleared ([apps.md](apps.md)).
+- **Next:**
+  - The seams the shell needs: the page runs `python -m proxenos` and finds the repo from a setting.
+  - The shell itself.
+  - Unsigned builds from CI.
+  - Signing, once the accounts exist.
