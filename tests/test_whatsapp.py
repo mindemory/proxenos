@@ -193,3 +193,25 @@ def test_a_store_that_cant_be_read_says_what_to_do(tmp_path):
     finally:
         args.db.chmod(0o600)
     assert whatsapp.run(tmp_path / "vault", args)["added"] == 4
+
+
+def test_a_store_macos_holds_open_counts_as_blocked_not_a_hang(tmp_path, monkeypatch):
+    import threading
+    import time as clock
+
+    from proxenos.ingest import whatsapp
+
+    held = threading.Event()
+
+    class Held(type(tmp_path)):
+        def open(self, *args, **kwargs):  # as when macOS asks whether this may read the store
+            held.wait(5)
+            raise PermissionError
+
+    began = clock.monotonic()
+    assert whatsapp.store_problem(Held(tmp_path / "store.sqlite"), wait=0.2) == "blocked"
+    assert clock.monotonic() - began < 2
+    held.set()
+    assert whatsapp.store_problem(tmp_path / "none.sqlite") == "missing"
+    (tmp_path / "ok.sqlite").write_bytes(b"x")
+    assert whatsapp.store_problem(tmp_path / "ok.sqlite") is None

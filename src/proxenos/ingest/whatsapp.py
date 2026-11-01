@@ -19,6 +19,7 @@ links the two where it can, and a member's other jid is kept as alt_jid.
 
 import argparse
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -27,6 +28,9 @@ from proxenos.store import merge_monthly, merge_snapshot
 DEFAULT_DB = Path(
     "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
 ).expanduser()
+
+# Seconds to wait for the store to open before calling it blocked (store_problem).
+STORE_WAIT = 5.0
 
 # Core Data stores dates as seconds since 2001-01-01 UTC.
 _CORE_DATA_EPOCH = 978307200
@@ -138,17 +142,30 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
 
 
-def store_problem(db: Path = DEFAULT_DB) -> str | None:
+def store_problem(db: Path = DEFAULT_DB, wait: float = STORE_WAIT) -> str | None:
     """Why the store can't be read: "missing" (no WhatsApp for Mac signed in here) or "blocked"
-    (macOS wants Full Disk Access for whatever runs Proxenos). None when it can be read."""
-    try:
-        with db.open("rb") as f:
-            f.read(1)
-    except FileNotFoundError:
-        return "missing"
-    except OSError:
-        return "blocked"
-    return None
+    (macOS wants Full Disk Access for whatever runs Proxenos). None when it can be read.
+
+    macOS can hold the open itself while it asks whether this process may read another app's
+    data, until someone answers, which at night is never: the page's Connect and Privacy views
+    then waited out their time limits. So the open runs on a thread of its own, and one still
+    waiting after `wait` seconds counts as blocked (the thread is left to finish on its own)."""
+    found: list[str | None] = []
+
+    def look() -> None:
+        try:
+            with db.open("rb") as f:
+                f.read(1)
+            found.append(None)
+        except FileNotFoundError:
+            found.append("missing")
+        except OSError:
+            found.append("blocked")
+
+    worker = threading.Thread(target=look, daemon=True)
+    worker.start()
+    worker.join(wait)
+    return found[0] if found else "blocked"
 
 
 _PROBLEMS = {

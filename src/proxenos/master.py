@@ -55,7 +55,7 @@ SLOW = {"identity", "voice"}
 
 # Sources that sync unattended, each with what tells us it's set up.
 _UNATTENDED = [
-    (whatsapp, lambda: whatsapp.store_problem() != "missing"),  # WhatsApp for Mac signed in here
+    (whatsapp, lambda: sys.platform == "darwin"),  # WhatsApp for Mac; Windows' has no store
     (spotify, lambda: env("SPOTIFY_EXPORT")),
     (letterboxd, lambda: env("LETTERBOXD_USER")),
     (gmail, gmail.accounts),
