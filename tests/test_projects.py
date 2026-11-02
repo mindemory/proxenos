@@ -1,6 +1,7 @@
 """The project clone, with the model faked out. No model, no real data."""
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 
@@ -174,15 +175,18 @@ def test_a_project_s_status_sees_its_code_on_every_branch(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
 
-    def git(*args):
-        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    def git(*args, env=None):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, env=env)
 
     git("init", "-q", "-b", "main")
     git("config", "user.email", "tess@example.org")
     git("config", "user.name", "Tess")
     (repo / "a.py").write_text("x = 1\n")
     git("add", ".")
-    git("commit", "-q", "-m", "Start")
+    # A few seconds before the draft: two commits in one second have no order git keeps to.
+    earlier = f"{datetime.now(UTC) - timedelta(seconds=5):%Y-%m-%dT%H:%M:%S}+0000"
+    stamps = {"GIT_AUTHOR_DATE": earlier, "GIT_COMMITTER_DATE": earlier}
+    git("commit", "-q", "-m", "Start", env={**os.environ, **stamps})
     git("checkout", "-q", "-b", "draft")
     (repo / "paper.md").write_text("# The paper\n")
     git("add", ".")

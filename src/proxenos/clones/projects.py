@@ -358,7 +358,9 @@ def _code(project: dict, since: datetime) -> str:
             return ""
         return done.stdout.strip() if done.returncode == 0 else ""
 
-    after = f"--since={since:%Y-%m-%d}"
+    # The exact moment, with its offset: git reads a bare date as that day at the current time of
+    # day, local, which in an evening west of UTC leaves almost no window at all.
+    after = f"--since={since.astimezone(UTC):%Y-%m-%d %H:%M:%S} +0000"
     commits = git("log", "--all", after, "--format=%h %ad %D | %s", "--date=short", "-n", "30")
     if not commits:
         return ""
