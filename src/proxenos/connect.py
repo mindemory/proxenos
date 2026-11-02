@@ -23,9 +23,9 @@ LIVE = (
     "whatsapp",
     "slack",
     "beeper",
-    "strava",
     "bluesky",
     "mentions",
+    "strava",  # last: optional, and the least of what Proxenos reads
 )
 DOWNLOADS = (
     "linkedin",

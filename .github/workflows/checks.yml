@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Actions are pinned to a commit, not a tag a compromised repo could move; Dependabot bumps them.
+# Actions are pinned to a commit, not a tag a compromised repo could move; bump them by hand.
 jobs:
   python:
     # Proxenos runs on macOS today and on Windows next (docs/apps.md), so its tests run on both.

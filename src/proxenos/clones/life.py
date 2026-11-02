@@ -85,7 +85,9 @@ days. Only what the notes and days show; leave out what they don't rather than g
 - highlights: three to six short lines, the moments of the month most worth remembering, each \
 with its day where the days give one ("Mar 10: ...").
 No praise and no advice. Health only as the records and their own words state it: never \
-diagnose, interpret or speculate. Refer to people by name as given, and don't assume anyone's \
+diagnose, interpret or speculate. Exercise and listening (walks, runs, rides, music) are the least \
+of a month: a passing mention at most, and never a highlight unless the person's own words make \
+it one. Refer to people by name as given, and don't assume anyone's \
 pronouns."""
 
 _SCHEMA = {
