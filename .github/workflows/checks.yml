@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Actions are pinned to a commit, not a tag a compromised repo could move; bump them by hand.
+# Actions are pinned to a commit, not a tag a compromised repo could move; Dependabot bumps them.
 jobs:
   python:
     # Proxenos runs on macOS today and on Windows next (docs/apps.md), so its tests run on both.
@@ -107,3 +107,25 @@ jobs:
       - if: ${{ !cancelled() }}
         working-directory: web
         run: npm audit --omit=dev --audit-level=high
+
+  # Dependabot's minor and patch updates merge themselves once every check above passes, so the
+  # packages stay current with no one stepping in; a major update waits for a person to merge it.
+  dependabot:
+    needs: [python, web, audit]
+    if: >-
+      github.event_name == 'pull_request' && github.repository == 'mindemory/proxenos' &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+          steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --squash --delete-branch "$PR"
+        env:
+          PR: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

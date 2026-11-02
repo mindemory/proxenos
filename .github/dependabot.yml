@@ -1,0 +1,61 @@
+# Weekly pull requests for newer packages and actions. The cooldown leaves a release a few days to
+# be pulled or patched before it's proposed; security updates aren't held by it. Each ecosystem's
+# updates come as at most two pull requests a week, minor and patch ones together and major ones
+# together, rather than one per package.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+      major:
+        update-types: [major]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    ignore:
+      # TypeScript 7, the rewrite, until Next.js builds with it; and Node's types past the Node 22
+      # the page runs on, which would allow calls Node 22 doesn't have.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+      major:
+        update-types: [major]
+
+  # Electron and electron-builder, for the desktop app.
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+      major:
+        update-types: [major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+      major:
+        update-types: [major]

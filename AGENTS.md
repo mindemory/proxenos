@@ -25,6 +25,7 @@ proxenos demo                                      # a made-up vault to try the 
 ```
 
 GitHub runs the same checks on macOS and Windows for every push ([.github/workflows/checks.yml](.github/workflows/checks.yml)).
+Dependabot proposes newer packages weekly and merges its minor and patch updates itself once those checks pass, so `git pull` before pushing.
 
 ## Rules
 

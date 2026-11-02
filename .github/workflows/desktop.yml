@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
 
-# Actions are pinned to a commit, not a tag a compromised repo could move; bump them by hand.
+# Actions are pinned to a commit, not a tag a compromised repo could move; Dependabot bumps them.
 jobs:
   build:
     strategy:
