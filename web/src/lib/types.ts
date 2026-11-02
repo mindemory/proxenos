@@ -280,22 +280,29 @@ export interface LifeDay {
   journal: { brief: string; next_up: string[] } | null;
 }
 
-/** clones/life/months/YYYY-MM.json: a month's story, written by the model from the observers' notes and its days. */
+/** A day of a month's diary, in the first person. */
+export interface LifeEntry {
+  day: string; // YYYY-MM-DD, in the month
+  text: string;
+}
+
+/** clones/life/months/YYYY-MM.json: a month's diary, written by the model from its care, what the user told Proxenos, the observers' notes and its days. */
 export interface LifeStory {
   month: string;
   generated: string | null;
-  story: string; // paragraphs, separated by a blank line
+  summary: string; // a few sentences; a story written before there were entries, whole, its paragraphs separated by a blank line
+  entries: LifeEntry[] | null; // oldest first; null for a story written before there were entries, which the night writes again
   highlights: string[];
   days_with_records: number;
 }
 
-/** A month in the list: how much the vault holds from it, and the start of its story when there is one. */
+/** A month in the list: how much the vault holds from it, and the start of its diary when there is one. */
 export interface LifeMonth {
   month: string; // YYYY-MM
   days: number; // days with records
   records: number;
-  written: string | null; // when its story was written
-  opening: string; // the story's first paragraph, cut; "" when there's none
+  written: string | null; // when its diary was written
+  opening: string; // the summary's first paragraph, cut; "" when there's none
   highlights: string[];
 }
 
@@ -313,7 +320,7 @@ export interface LifeResponse {
   vault: VaultInfo;
   today: string; // YYYY-MM-DD, on this computer's clock
   months: LifeMonth[]; // newest first: every month with records or a story
-  left: number; // past months with no story that the night will write, four a night
+  left: number; // past months with no diary (or a story from before) that the night will write, four a night
   open: { month: string; story: LifeStory | null; days: LifeDay[] } | null;
   job: LifeJob | null;
   error: string | null;

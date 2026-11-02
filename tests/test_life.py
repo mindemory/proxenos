@@ -164,6 +164,7 @@ def test_a_day_is_titles_names_counts_and_only_the_user_s_own_words(vault):
         "YouTube searches: rose pruning",
         "Photos: 1, in Spring, with Asha",
     ]
+    assert found["moved"] == ["Walk", "Spotify"]  # what leads its activity
     assert found["health"] == ["Visit: Office visit", "Results (2): Hemoglobin; Glucose"]
     assert found["other"] == [
         "Heard from Asha (WhatsApp, 1); Lab Desk (Email, 1)",  # names only, never their words
@@ -209,40 +210,168 @@ def test_a_month_lists_its_days_from_one_count_of_the_whole_index(vault):
     assert counts["2026-04-02"] == {"whatsapp": 1} and counts["2026-03-10"]["notes"] == 7
 
 
-def test_a_month_s_story_reads_notes_and_days_never_anyone_else_s_words(vault, monkeypatch):
+RODE = "Rode 42 km with an average heart rate of 151."  # what Strava's details lead a model to
+
+
+@pytest.fixture
+def cared(vault):
+    """The vault with care's timeline, what the user told Proxenos, and Strava's observer."""
+    event = {"kind": "visit", "evidence": ["email/personal/e2"]}
+    timeline = [
+        event | {"date": "2026-03-12", "title": "Urgent care visit", "with": "urgent care clinic",
+                 "detail": "Seen for chest pain; an ECG was done."},
+        event | {"date": "2026-02-27", "title": "February checkup", "with": "", "detail": ""},
+        event | {"date": "2026-03-16", "kind": "result", "title": "ECG result", "with": "",
+                 "detail": "Normal sinus rhythm, as the report states."},
+    ]  # fmt: skip
+    (vault / "clones" / "care").mkdir(parents=True)
+    (vault / "clones" / "care" / "care.json").write_text(json.dumps({"timeline": timeline}))
+    jsonl(
+        vault / "state" / "told.jsonl",
+        [
+            {"at": "2026-03-14T15:00:00+00:00", "text": "I was scared before the scan", "always": False},
+            {"at": "2026-03-15T15:00:00+00:00", "text": "RULE keep replies short", "always": True},
+            {"at": "2026-04-02T15:00:00+00:00", "text": "APRIL not this month", "always": False},
+            {"at": "2026-03-17T15:00:00+00:00", "text": "GONE taken back", "always": False},
+            {"at": "2026-03-17T16:00:00+00:00", "forget": "2026-03-17T15:00:00+00:00"},
+        ],
+    )  # fmt: skip
+    (vault / "observations" / "strava").mkdir(parents=True)
+    note = "# strava, 2026-03\n\nSam rode 42.1 km at an avg HR of 151 bpm.\n"
+    (vault / "observations" / "strava" / "2026-03.md").write_text(note)
+    return vault
+
+
+def answer(prompt, *, system=None, schema=None, **kw):
+    """A model that writes about the ride Strava recorded, as a local one did."""
+    return {
+        "summary": f"March was the garden, and a scare at urgent care. {RODE}",
+        "entries": [
+            {"day": "2026-03-12", "text": "I went to urgent care with chest pain. They did an ECG."},
+            {"day": "2026-03-10", "text": "I  planned the garden with Asha. Then I went for a long ride by the river."},
+            {"day": "2026-03-10", "text": "I sent Ben the slides."},
+            {"day": "2026-02-28", "text": "OUTSIDE the month."},
+            {"day": "2026-03-32", "text": "NO such day."},
+            {"day": "2026-03-07", "text": RODE},
+            {"day": "2026-03-11", "text": "  "},
+        ],
+        "highlights": ["Mar 12: Urgent care", "Mar 7: A 42 km ride", "Mar 10: The garden plan",
+                       "2026-03-14: Scared before the scan", "Mar 16: The ECG result", "Mar 1: x", " "],
+    }  # fmt: skip
+
+
+def test_a_month_s_diary_reads_care_told_notes_and_days_never_anyone_else_s_words(
+    cared, monkeypatch
+):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     asked = []
 
     def ask(prompt, *, system=None, schema=None, **kw):
-        asked.append((prompt, system))
-        return {
-            "story": "You planned  the garden with Asha.\n\n\nYou walked most mornings.\n",
-            "highlights": [f"Mar {n}: something" for n in range(1, 9)] + ["  "],
-        }
+        asked.append((prompt, system, schema))
+        return answer(prompt)
 
     monkeypatch.setattr(llm, "ask", ask)
-    entry = life.write(vault, "2026-03", NOW)
+    entry = life.write(cared, "2026-03", NOW)
 
-    prompt, system = asked[0]
+    prompt, system, schema = asked[0]
+    assert schema is life._SCHEMA
     assert "PRIVATE-THEIRS" not in prompt and "THEIR-MAIL" not in prompt
     assert "Sam planned the spring garden with Asha." in prompt  # the observer's note
     assert 'Asha (WhatsApp, 2): "sure, I\'ll bring the soil and the seed trays"' in prompt
-    assert "Health records: Visit: Office visit" in prompt
     assert "Journal: You sent the slides." in prompt
+    # Care's timeline that month, and what the user told Proxenos: their facts, not their rules.
+    assert (
+        "- Thu Mar 12: Visit: Urgent care visit (urgent care clinic). Seen for chest pain; an ECG "
+        "was done." in prompt
+    )
+    assert "- Mon Mar 16: Result: ECG result. Normal sinus rhythm" in prompt
+    assert "February checkup" not in prompt
+    assert "- Sat Mar 14: I was scared before the scan" in prompt
+    assert "RULE" not in prompt and "APRIL" not in prompt and "GONE" not in prompt
     fence = system.split("inside <", 1)[1].split(">", 1)[0]
     assert fence.startswith("untrusted-")
-    assert prompt.index(f"<{fence}>") < prompt.index("### Tue Mar 10") < prompt.index(f"</{fence}>")
+    # The medical records' titles, which their providers wrote, and the days go inside the tag;
+    # care's timeline is the user's own record and doesn't.
+    records = prompt.index("- Tue Mar 10: Visit: Office visit; Results (2): Hemoglobin; Glucose")
+    assert prompt.index(f"<{fence}>") < records < prompt.index(f"</{fence}>")
+    assert prompt.index("Urgent care visit") < prompt.index(f"<{fence}>")
+    days = prompt.index("### Tue Mar 10")
+    assert prompt.index(f"<{fence}>", records) < days < prompt.rindex(f"</{fence}>")
+    # Walks and listening only as counts a week: no distance, time, name or artist.
+    assert "Week of Mon Mar 9: walked once; listened on 1 day" in prompt
+    for detail in ("Morning walk", "4.2", "km", "50 min", "The Ferns", "1.0 hours", "bpm"):
+        assert detail not in prompt
+    assert "Activity: YouTube: watched 1" in prompt
     assert "don't assume anyone's pronouns" in system and "never diagnose" in system
+    assert "first person" in system and "never play it down" in system
 
-    assert entry["story"] == "You planned the garden with Asha.\n\nYou walked most mornings."
-    assert entry["highlights"] == [f"Mar {n}: something" for n in range(1, 7)]
+    # Sentences about a workout go, and so do days outside the month; a day's two are one.
+    assert entry["summary"] == "March was the garden, and a scare at urgent care."
+    assert entry["entries"] == [
+        {"day": "2026-03-10", "text": "I planned the garden with Asha. I sent Ben the slides."},
+        {"day": "2026-03-12", "text": "I went to urgent care with chest pain. They did an ECG."},
+    ]
+    assert entry["highlights"] == [
+        "Mar 12: Urgent care",
+        "Mar 10: The garden plan",
+        "2026-03-14: Scared before the scan",
+        "Mar 16: The ECG result",
+        "Mar 1: x",
+    ]
     assert entry["days_with_records"] == 4
-    path = vault / "clones" / "life" / "months" / "2026-03.json"
+    path = cared / "clones" / "life" / "months" / "2026-03.json"
     assert json.loads(path.read_text()) == entry
     if os.name != "nt":
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
         for folder in (path.parent, path.parent.parent):
             assert stat.S_IMODE(folder.stat().st_mode) == 0o700
+
+
+def test_a_workout_stays_when_the_user_s_own_words_that_day_were_about_it(cared, monkeypatch):
+    monkeypatch.setattr(llm, "ask", answer)
+    with (cared / "state" / "told.jsonl").open("a") as f:
+        f.write(json.dumps({"at": "2026-03-07T20:00:00+00:00", "text": "Went for a long ride to "
+                            "clear my head", "always": False}) + "\n")  # fmt: skip
+
+    entry = life.write(cared, "2026-03", NOW)
+
+    assert {"day": "2026-03-07", "text": RODE} in entry["entries"]
+    assert "Mar 7: A 42 km ride" in entry["highlights"]
+    assert entry["summary"].endswith(RODE)
+    # Only that day's: the ride on the 10th still goes.
+    assert entry["entries"][1]["text"] == "I planned the garden with Asha. I sent Ben the slides."
+
+
+def test_what_counts_as_a_workout_is_what_strava_would_record():
+    for workout in (
+        RODE,
+        "Went for a hike up the ridge.",
+        "A 12 km run along the river.",
+        "My average pace was 5:10 min/km.",
+        "Logged it on Strava.",
+    ):
+        assert life._without_workouts(workout) == "", workout
+    for kept in (
+        "I gave Asha a ride to the clinic.",
+        "My heart rate was 120 at the emergency department.",
+        "I ran into Ben at the market.",
+        "I drove 300 km to see family.",
+    ):
+        assert life._without_workouts(kept) == kept
+
+
+def test_the_schema_holds_each_entry_to_a_day_and_its_text():
+    items = life._SCHEMA["properties"]["entries"]["items"]
+    assert items["required"] == ["day", "text"] and items["additionalProperties"] is False
+    held = llm._conform(
+        {
+            "summary": "s",
+            "entries": [{"day": "2026-03-10", "text": "t", "mood": "x"}, {"day": "2026-03-11"}],
+            "highlights": ["Mar 10: t"],
+        },
+        life._SCHEMA,
+    )
+    assert held["entries"] == [{"day": "2026-03-10", "text": "t"}]  # the one with no text goes
 
 
 def test_a_month_with_nothing_in_it_is_not_written(vault, monkeypatch):
@@ -266,14 +395,18 @@ def ledger(tmp_path, monkeypatch):
         if month in failing:
             raise llm.ModelError("the model declined")
         written.append(month)
-        life.save(vault, {"month": month, "generated": life._iso(now), "story": "s"})
+        life.save(vault, diary(month, life._iso(now)))
         return {}
 
     monkeypatch.setattr(life, "write", write)
     vault = tmp_path / "vault"
-    life.save(vault, {"month": "2026-02", "generated": "2026-02-20T09:00:00Z", "story": "s"})
-    life.save(vault, {"month": "2025-12", "generated": "2026-01-02T09:00:00Z", "story": "s"})
+    life.save(vault, diary("2026-02", "2026-02-20T09:00:00Z"))
+    life.save(vault, diary("2025-12", "2026-01-02T09:00:00Z"))
     return vault, written, failing
+
+
+def diary(month, generated):
+    return {"month": month, "generated": generated, "summary": "s", "entries": []}
 
 
 def test_the_night_writes_the_month_just_ended_this_one_then_backfills_newest_first(
@@ -311,12 +444,29 @@ def test_the_night_writes_the_month_just_ended_this_one_then_backfills_newest_fi
 def test_a_night_with_nothing_due_asks_no_model(vault, monkeypatch):
     monkeypatch.setattr(llm, "configured", lambda: True)
     monkeypatch.setattr(llm, "ask", lambda *a, **k: pytest.fail("a model call"))
-    life.save(vault, {"month": "2026-03", "generated": "2026-03-18T09:00:00Z", "story": "s"})
-    life.save(vault, {"month": "2026-02", "generated": "2026-03-01T09:00:00Z", "story": "s"})
+    life.save(vault, diary("2026-03", "2026-03-18T09:00:00Z"))
+    life.save(vault, diary("2026-02", "2026-03-01T09:00:00Z"))
 
     stats = life.night(vault, NOW)
 
     assert stats == {"months due": 0, "stories": 0, "failed": 0, "months left": 0}
+
+
+def test_a_month_written_before_there_were_entries_is_written_again(ledger, new_york):
+    vault, written, _ = ledger
+    old = {
+        "month": "2025-12",
+        "generated": "2026-01-02T09:00:00Z",
+        "story": "You",
+        "highlights": [],
+    }
+    life.save(vault, old)
+    assert life.stories(vault)["2025-12"]["story"] == "You"  # still read
+
+    life.night(vault, datetime(2026, 3, 2, 6, 30, tzinfo=UTC))
+
+    assert written == ["2026-02", "2026-03", "2026-01", "2025-12", "2025-11", "2025-10"]
+    assert life.stories(vault)["2025-12"]["entries"] == []  # in the new form
 
 
 def test_without_a_model_the_night_writes_nothing(ledger, monkeypatch):
@@ -348,7 +498,7 @@ def test_the_command_prints_a_day_or_a_month_as_json_alone(vault, monkeypatch, c
 
     monkeypatch.setattr(llm, "configured", lambda: True)
     monkeypatch.setattr(llm, "ask", declined)
-    with pytest.raises(SystemExit, match=r"no story for 2026-03 \(the model declined\)"):
+    with pytest.raises(SystemExit, match=r"no diary for 2026-03 \(the model declined\)"):
         life.run(vault, month)  # a line the page can show, not a traceback
 
 

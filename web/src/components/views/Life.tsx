@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, CalendarDays, Library, PenLine, RefreshCw } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
@@ -9,16 +9,16 @@ import { Segmented } from "@/components/layout/Segmented";
 import { ProseSkeleton } from "@/components/Skeleton";
 import { monthName, useLife } from "@/lib/client";
 import { formatDateTime, longDay, timeAgo } from "@/lib/format";
-import type { LifeDay, LifeMonth, LifeResponse } from "@/lib/types";
+import type { LifeDay, LifeEntry, LifeMonth, LifeResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Listed = "events" | "notes" | "activity" | "health" | "other";
+type Listed = "events" | "notes" | "health" | "activity" | "other";
 
 const PARTS: { key: Listed; label: string }[] = [
   { key: "events", label: "Calendar" },
   { key: "notes", label: "Wrote down" },
-  { key: "activity", label: "Activity" },
   { key: "health", label: "Health records" },
+  { key: "activity", label: "Activity" },
   { key: "other", label: "Also" },
 ];
 
@@ -49,7 +49,7 @@ function WriteButton({ month, writing, again = false, onWrite }: WriteProps) {
   );
 }
 
-/** A month in a year's list: its story's opening and highlights, or "Not written yet". */
+/** A month in a year's list: its summary's opening and highlights, or "Not written yet". */
 function MonthCard({ m, writing, onOpen, onWrite }: { m: LifeMonth; writing: string | null; onOpen: () => void; onWrite: (month: string) => void }) {
   return (
     <article className="card card-hover flex flex-col gap-3 p-4 sm:p-5">
@@ -90,8 +90,18 @@ function MonthCard({ m, writing, onOpen, onWrite }: { m: LifeMonth; writing: str
   );
 }
 
-/** One day: the journal's brief where there is one, whom you wrote to, and the rest by part. */
-function DayCard({ d, focused }: { d: LifeDay; focused: boolean }) {
+/** A line of the records: its label, then what it holds as running text, quiet. */
+function RecordLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-[7rem_1fr]">
+      <dt className="text-xs text-muted sm:pt-px">{label}</dt>
+      <dd className="break-words text-ink/70">{children}</dd>
+    </div>
+  );
+}
+
+/** One day: its diary entry where the month has one, then what the records hold from it, quietly, by part. */
+function DayCard({ d, entry, focused }: { d: LifeDay; entry: string | null; focused: boolean }) {
   const sources = Object.entries(d.sources);
   return (
     <article id={`day-${d.date}`} className={cn("card scroll-mt-4 space-y-3 p-4 sm:p-5", focused && "card-priority")}>
@@ -101,46 +111,53 @@ function DayCard({ d, focused }: { d: LifeDay; focused: boolean }) {
           <span className="num">{d.records}</span> {d.records === 1 ? "record" : "records"}
         </span>
       </div>
-      {d.journal?.brief && <p className="break-words text-sm leading-relaxed text-ink/90">{d.journal.brief}</p>}
-      {d.journal && d.journal.next_up.length > 0 && (
-        <p className="break-words text-xs text-muted">
-          <span className="eyebrow mr-1.5">Next up</span>
-          {d.journal.next_up.join(" · ")}
-        </p>
-      )}
-      {d.wrote.length > 0 && (
-        <div>
-          <p className="eyebrow mb-1">Wrote to</p>
-          <ul className="space-y-1 text-sm">
-            {d.wrote.map((w) => (
-              <li key={`${w.channel}-${w.to}`} className="break-words">
-                <span className="text-ink">{w.to}</span>
-                <span className="text-muted">
-                  {" "}
-                  · {w.channel} · <span className="num">{w.count}</span>
+      {entry && <p className="break-words font-display text-base leading-relaxed text-ink">{entry}</p>}
+      <div className={cn("space-y-2", entry && "border-t border-line pt-3")}>
+        <p className="text-xs text-muted">From the records</p>
+        <dl className="space-y-1.5 text-sm leading-relaxed">
+          {d.journal?.brief && <RecordLine label="Journal">{d.journal.brief}</RecordLine>}
+          {d.wrote.length > 0 && (
+            <RecordLine label="Wrote to">
+              {d.wrote.map((w, i) => (
+                <span key={`${w.channel}-${w.to}`}>
+                  {i > 0 && <span className="text-muted"> · </span>}
+                  {w.to}
+                  <span className="text-muted">
+                    {" "}
+                    ({w.channel}, <span className="num">{w.count}</span>)
+                  </span>
+                  {w.said && <span className="italic"> “{w.said}”</span>}
                 </span>
-                {w.said && <span className="text-ink/75"> “{w.said}”</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {PARTS.map((p) =>
-        d[p.key].length > 0 ? (
-          <div key={p.key}>
-            <p className="eyebrow mb-1">{p.label}</p>
-            <ul className="space-y-1 text-sm text-ink/90">
-              {d[p.key].map((line, i) => (
-                <li key={`${p.key}-${i}`} className="break-words">
-                  {line}
-                </li>
               ))}
-            </ul>
-          </div>
-        ) : null,
-      )}
-      {sources.length > 0 && <p className="text-xs text-muted">{sources.map(([s, n]) => `${s} ${n}`).join(" · ")}</p>}
+            </RecordLine>
+          )}
+          {PARTS.map((p) =>
+            d[p.key].length > 0 ? (
+              <RecordLine key={p.key} label={p.label}>
+                {d[p.key].join(" · ")}
+              </RecordLine>
+            ) : null,
+          )}
+        </dl>
+        {sources.length > 0 && <p className="text-xs text-muted">{sources.map(([s, n]) => `${s} ${n}`).join(" · ")}</p>}
+      </div>
     </article>
+  );
+}
+
+/** A month's diary: each entry under its day, which leads to that day's records below. */
+function Diary({ entries }: { entries: LifeEntry[] }) {
+  return (
+    <section aria-label="Diary" className="space-y-6">
+      {entries.map((e) => (
+        <div key={e.day} className="space-y-1.5">
+          <a href={`#day-${e.day}`} className="smallcaps hover:text-accent">
+            {longDay(e.day)}
+          </a>
+          <p className="break-words font-display text-lg leading-relaxed text-ink">{e.text}</p>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -153,10 +170,12 @@ interface MonthViewProps {
   onWrite: (month: string) => void;
 }
 
-/** A month opened: its whole story and highlights, then each of its days. */
+/** A month opened: its summary and diary, then each of its days. */
 function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewProps) {
   const open = data.open?.month === month ? data.open : null;
   const story = open?.story ?? null;
+  const entries = story?.entries ?? null;
+  const entryOn = new Map((entries ?? []).map((e) => [e.day, e.text]));
   return (
     <article className={cn("space-y-8 transition-opacity", !open && "opacity-50")} aria-busy={!open}>
       <header className="space-y-4">
@@ -166,7 +185,7 @@ function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewPr
         <h2 className="title-1">{monthName(month)}</h2>
         {story ? (
           <div className="space-y-4">
-            {story.story.split(/\n\s*\n/).map((p, i) => (
+            {story.summary.split(/\n\s*\n/).map((p, i) => (
               <p key={i} className="break-words font-display text-lg leading-relaxed text-ink">
                 {p}
               </p>
@@ -174,9 +193,9 @@ function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewPr
           </div>
         ) : (
           <p className="text-sm leading-relaxed text-muted">
-            Not written yet. Its story is a few paragraphs on what happened, what you worked on, who you were with and how you seemed,
-            from the observers&apos; notes about you that month and the days below. The night writes the months with no story, newest
-            first, four a night.
+            Not written yet. Its diary is a few sentences on the month and an entry, in your own voice, for each day that mattered: from
+            your care and health records, what you told Proxenos, the observers&apos; notes about you that month and the days below. The
+            night writes the months with no diary, newest first, four a night.
           </p>
         )}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted">
@@ -187,40 +206,48 @@ function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewPr
           )}
           <WriteButton month={month} writing={writing} again={!!story} onWrite={onWrite} />
         </div>
-        {story && story.highlights.length > 0 && (
-          <div className="card p-4">
-            <p className="eyebrow mb-2">Highlights</p>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
-              {story.highlights.map((h) => (
-                <li key={h} className="break-words">
-                  {h}
-                </li>
-              ))}
-            </ul>
-          </div>
+        {story && !entries && (
+          <>
+            <p className="text-xs text-muted">Written before months had diary entries: the night writes it again as a diary.</p>
+            {story.highlights.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-ink/90">
+                {story.highlights.map((h) => (
+                  <li key={h} className="break-words">
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </header>
+
+      {entries && entries.length > 0 && <Diary entries={entries} />}
 
       <section aria-label="Days" className="space-y-4">
         <div>
           <h2 className="smallcaps text-accent">Days</h2>
           <p className="text-xs text-muted">
-            What the vault holds from each day: whom you wrote to, your calendar, what you wrote down, your activity and health records, by
-            title, and the journal where it wrote the day. Nothing here is anyone else&apos;s words but their names.
+            Each day&apos;s diary entry, where the month has one, then what the vault holds from it: whom you wrote to, your calendar, what
+            you wrote down, your health records and activity, by title, and the journal where it wrote the day. Nothing here is anyone
+            else&apos;s words but their names.
           </p>
         </div>
         {open && open.days.length === 0 && <p className="text-sm text-muted">No day this month left a record.</p>}
-        {open?.days.map((d) => <DayCard key={d.date} d={d} focused={d.date === focus} />)}
+        {open?.days.map((d) => (
+          <DayCard key={d.date} d={d} entry={entryOn.get(d.date) ?? null} focused={d.date === focus} />
+        ))}
       </section>
     </article>
   );
 }
 
 /**
- * Your life by month and day, years back: a story of each month, written from the observers' notes
- * about you and its days, and each day's digest of whom you wrote to, your calendar, what you wrote
- * down, your activity and your health records. The night writes the month that just ended and fills
- * in older ones, newest first; "Write this month" writes one now.
+ * Your life by month and day, years back: a diary of each month, in your own voice, written from your
+ * care, what you told Proxenos, the observers' notes about you and its days, and under each day's
+ * entry what the records hold: whom you wrote to, your calendar, what you wrote down, your health
+ * records and your activity. The night writes the month that just ended and fills in older ones,
+ * newest first; "Write this month" writes one now.
  */
 export function Life() {
   const [month, setMonth] = useState<string | null>(null);

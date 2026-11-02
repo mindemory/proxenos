@@ -2325,94 +2325,101 @@ def _journal(vault: Path, c: _Clock) -> None:
     )
 
 
-# What the demo's records hold, as the month's story would tell it: (days from today, which
-# paragraph, a sentence of the story, a highlight or None). Each goes to the month it falls in.
+# What the demo's records hold, as the month's diary would tell it, in Joe's words: (days from
+# today, what it's about, a sentence of that day's entry, a highlight or None). Each goes to the
+# month it falls in.
 _MOMENTS = (
     (
         -60,
         "work",
-        "You applied for an operations role at Delta Freight, CV attached.",
+        "I applied for an operations role at Delta Freight, with my CV attached.",
         "Applied to Delta Freight",
     ),
     (
         -50,
         "making",
-        "You set a target for the holiday sale: six mugs, four bowls, a vase.",
+        "I set a target for the holiday sale: six mugs, four bowls and a vase.",
         "Set the sale target",
     ),
-    (-42, "making", "Weekend walks by the lake, eight or nine kilometres, held most weeks.", None),
     (
         -40,
         "work",
-        "At the supply chain meetup you met Uma Rao, who sent her slides.",
+        "At the supply chain meetup I met Uma Rao, who sent me her slides afterwards.",
         "Met Uma Rao",
     ),
-    (-37, "making", "You walked over to the community garden plot.", None),
+    (-37, "making", "I walked over to the community garden plot to see how it was doing.", None),
     (
         -30,
         "glasses",
-        "An eye exam at Cedar Eye Care found a small change in your prescription.",
+        "I had my eye exam at Cedar Eye Care. They found a small change in my prescription.",
         "Eye exam",
     ),
-    (-24, "glasses", "You chose dark green frames at Juniper Optical.", "Chose the new frames"),
+    (-24, "glasses", "I chose dark green frames at Juniper Optical.", "Chose the new frames"),
     (
         -16,
         "work",
-        "Fay Moss at Beta Corp asked about an operations lead role.",
+        "Fay Moss at Beta Corp asked whether I'd talk about an operations lead role.",
         "Beta Corp got in touch",
     ),
     (
         -15,
         "work",
-        '"It\'s a busy month," you wrote back, and asked to come back to it at its end.',
+        "I wrote back that it's a busy month and asked to come back to it at the end.",
         None,
     ),
     (
         -14,
         "making",
-        "Your bowls came through the bisque firing, ready for the blue glaze.",
+        "My bowls came through the bisque firing, ready for the blue glaze.",
         "Bowls fired",
     ),
     (
         -12,
         "glasses",
-        "You picked up the new glasses, which slipped a little at first.",
+        "I picked up the new glasses. They slipped a little at first.",
         "New glasses",
     ),
-    (-10, "people", "In the family chat you told Mei about the dark green frames.", None),
+    (-10, "people", "In the family chat I told Mei about the dark green frames.", None),
     (
         -9,
         "people",
-        "You and Cy settled the lake trip; Max will keep an eye on your plot.",
+        "Cy and I settled the lake trip, and Max will keep an eye on my plot.",
         "Lake trip settled",
     ),
     (
         -7,
         "glasses",
-        "Juniper's bill asked for $420; the plan put your share at $95.",
+        "Juniper's bill came, asking for $420. The plan's statement put my share at $95.",
         "The $420 bill",
     ),
     (
         -6,
         "people",
-        "Dee booked Mum's birthday dinner, and you said you'd bring the cake.",
+        "Dee booked Mum's birthday dinner, and I said I'd bring the cake.",
         "Dinner planned",
     ),
     (-6, "work", "Q1 budget planning took a morning with the team.", None),
     (
         -3,
         "glasses",
-        "You booked a fitting and asked Juniper to look at the bill again.",
+        "I booked a fitting and asked Juniper to look at the bill again.",
         "Booked the fitting",
     ),
 )
-_PARAGRAPHS = ("work", "glasses", "making", "people")
+# A month's summary: a sentence for each thing its moments are about, in this order.
+_SUMMARIES = {
+    "work": "Work went on, and I kept an eye out for what comes next.",
+    "glasses": "Getting new glasses took a good part of it.",
+    "making": "In the studio, the pieces for the holiday sale moved along.",
+    "people": "There was time with family and friends too.",
+}
 
 
 def _life(vault: Path, c: _Clock) -> None:
-    """The stories of the last three months as the night writes them, each with three or more
-    highlights from what the demo's records hold, and each day counted for the page. A month
-    with too little (the start of one) is left for "Write this month"."""
+    """The diaries of the last three months as the night writes them: a summary, an entry for
+    each day with a moment, and three or more highlights, from what the demo's records hold, and
+    each day counted for the page. A month with too little (the start of one) is left for "Write
+    this month"."""
     life.calendar(vault)
     this = f"{c.local:%Y-%m}"
     for back in range(3):
@@ -2420,18 +2427,19 @@ def _life(vault: Path, c: _Clock) -> None:
         moments = [m for m in _MOMENTS if c.day(m[0]).startswith(month)]
         if sum(1 for m in moments if m[3]) < 3:
             continue
-        story = [
-            " ".join(sentence for _, part, sentence, _ in moments if part == paragraph)
-            for paragraph in _PARAGRAPHS
-        ]
+        entries: dict[str, list[str]] = {}
+        for days, _, sentence, _ in moments:
+            entries.setdefault(c.day(days), []).append(sentence)
+        about = {part for _, part, _, _ in moments}
         ended = datetime.fromisoformat(f"{life._shift(month, 1)}-01T01:30:00").astimezone()
         life.save(
             vault,
             {
                 "month": month,
                 "generated": c.ago(20) if back == 0 else _iso(ended),
-                "story": "\n\n".join(p for p in story if p),
-                "highlights": [f"{c.said(days)}: {h}" for days, _, _, h in moments if h][:6],
+                "summary": " ".join(s for part, s in _SUMMARIES.items() if part in about),
+                "entries": [{"day": d, "text": " ".join(t)} for d, t in sorted(entries.items())],
+                "highlights": [f"{c.said(days)}: {h}" for days, _, _, h in moments if h][:5],
                 "days_with_records": len(life.days(vault, month)),
             },
         )

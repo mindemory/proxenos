@@ -78,9 +78,12 @@ def test_the_life_view_has_months_told_and_their_days(vault):
     stories = life.stories(vault)
     assert list(stories) == ["2026-09", "2026-10"]  # August has one moment: left to write
     for month, story in stories.items():
-        assert story["story"] and 3 <= len(story["highlights"]) <= 6
+        assert story["summary"] and 3 <= len(story["highlights"]) <= 5
+        days = [e["day"] for e in story["entries"]]
+        assert days == sorted(set(days)) and all(d.startswith(month) for d in days)
         assert story["days_with_records"] == len(life.days(vault, month)) > 0
-    assert "Juniper" in stories["2026-10"]["story"]
+    assert any("Juniper" in e["text"] for e in stories["2026-10"]["entries"])
+    assert not any(" you" in f" {e['text']}".lower() for e in stories["2026-10"]["entries"])
     assert life.months(vault, NOW.date())["2026-10"]["days"] > 10  # counted for the page
 
 

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/life: every month with records or a story, newest first, and how a month being written
- * stands; cheap enough to poll. GET /api/life?month=YYYY-MM adds that month's story and its days.
+ * stands; cheap enough to poll. GET /api/life?month=YYYY-MM adds that month's diary and its days.
  */
 export async function GET(req: Request) {
   const denied = rejectNonLocal(req);
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   return Response.json(await getLife(isMonth(month) ? month : null), { headers: NO_STORE });
 }
 
-/** POST /api/life {month: "YYYY-MM"}: write that month's story now, in the background; the page follows it through GET. */
+/** POST /api/life {month: "YYYY-MM"}: write that month's diary now, in the background; the page follows it through GET. */
 export async function POST(req: Request) {
   const parsed = await readLocalJson(req);
   if ("denied" in parsed) return parsed.denied;

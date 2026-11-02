@@ -1,7 +1,8 @@
 // Server side of the Life view. Import only from route handlers.
 //
-// The page reads clones/life/ as the life clone writes it: each month's story (months/YYYY-MM.json)
-// and how many records each day holds (calendar.json), field by field, so nothing else in them
+// The page reads clones/life/ as the life clone writes it: each month's diary (months/YYYY-MM.json:
+// a summary, entries by day and highlights, or a story from before there were entries) and how
+// many records each day holds (calendar.json), field by field, so nothing else in them
 // reaches the page. When the memory index is newer than that count, `proxenos clone life
 // --calendar` counts again first (only the month files the index read again, so it's quick). A
 // month's days come from `proxenos clone life --days YYYY-MM`: titles, names, counts and the
@@ -12,7 +13,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { lastLine, latestJob, NO_COMMAND, startJob, type Job } from "./connect";
-import type { LifeDay, LifeJob, LifeMonth, LifeResponse, LifeStory, LifeWrote } from "./types";
+import type { LifeDay, LifeEntry, LifeJob, LifeMonth, LifeResponse, LifeStory, LifeWrote } from "./types";
 import { nowIso, proxenos, readJsonFile, vaultInfo, vaultPath } from "./vault";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -22,7 +23,8 @@ const DAYS_MS = 60_000;
 const MAX_CALENDAR_BYTES = 64 * 1024 * 1024;
 const MAX_STORY_BYTES = 256 * 1024;
 const MAX_DAYS_OUTPUT = 16 * 1024 * 1024;
-const OPENING = 360; // characters of a story's first paragraph in the list
+const OPENING = 360; // characters of a summary's first paragraph in the list
+const MAX_ENTRIES = 31; // a month's diary entries, one a day at most
 // Days with records a month needs before the night writes it (the clone's MIN_DAYS); one with
 // fewer waits for "Write this month".
 const NIGHT_MIN_DAYS = 3;
@@ -97,14 +99,30 @@ async function calendar(vault: string): Promise<{ days: Record<string, number>; 
 
 // ── Stories ─────────────────────────────────────────────────────────────────
 
+/** A month's diary entries, on days of that month and oldest first; null when it has none, as a story from before entries does. */
+function toEntries(raw: unknown, month: string): LifeEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+  const entries: LifeEntry[] = [];
+  for (const item of raw.slice(0, MAX_ENTRIES)) {
+    const r = record(item);
+    const day = str(r?.day);
+    const text = str(r?.text).trim();
+    if (DAY.test(day) && day.startsWith(`${month}-`) && text) entries.push({ day, text });
+  }
+  return entries.sort((a, b) => a.day.localeCompare(b.day));
+}
+
 function toStory(raw: unknown, month: string): LifeStory | null {
   const r = record(raw);
-  const story = str(r?.story).trim();
-  if (!r || !story) return null;
+  // A story written before there were entries is read as its summary, so it shows until the night writes it again.
+  const summary = (str(r?.summary) || str(r?.story)).trim();
+  const entries = toEntries(r?.entries, month);
+  if (!r || (!summary && !entries?.length)) return null;
   return {
     month,
     generated: str(r.generated) || null,
-    story,
+    summary,
+    entries,
     highlights: strings(r.highlights, 6).map((h) => h.trim()).filter(Boolean),
     days_with_records: count(r.days_with_records),
   };
@@ -199,11 +217,11 @@ export async function getLife(month: string | null): Promise<LifeResponse> {
       const story = written.get(m);
       return {
         month: m,
-        // The story counts walks and listening too, which the index keeps a month at a time.
+        // The diary counts walks and listening too, which the index keeps a month at a time.
         days: Math.max(held.get(m)?.days ?? 0, story?.days_with_records ?? 0),
         records: held.get(m)?.records ?? 0,
         written: story?.generated ?? null,
-        opening: story ? opening(story.story) : "",
+        opening: story ? opening(story.summary) : "",
         highlights: story?.highlights.slice(0, 3) ?? [],
       };
     });
@@ -219,7 +237,8 @@ export async function getLife(month: string | null): Promise<LifeResponse> {
     vault: await vaultInfo(vault),
     today,
     months,
-    left: months.filter((m) => !m.written && m.days >= NIGHT_MIN_DAYS && m.month < today.slice(0, 7)).length,
+    // A story from before there were entries is written again too.
+    left: months.filter((m) => !written.get(m.month)?.entries && m.days >= NIGHT_MIN_DAYS && m.month < today.slice(0, 7)).length,
     open,
     job: toJob(latestJob("life")),
     error: problem,

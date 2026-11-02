@@ -11,6 +11,7 @@ Removing a note appends {at, forget: <the note's at>}, so the file only grows, a
 Every drafting prompt gets both (`prompt`): the work clone's drafts and care's messages and
 scripts. The tasks clone reads the facts as something the user said (`conversation`), so a task
 or plan they settle here closes the way one settled in a chat does, and the calendar follows.
+A month's diary (clones/life) reads the facts told that month, as what happened then.
 The notes are the user's own words, sent to the model only with the prompts above.
 """
 
