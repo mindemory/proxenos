@@ -113,6 +113,8 @@ def test_a_later_run_reads_only_whats_new(tmp_path):
 
     assert calls == ["/v1/chats?limit=200"]  # nothing active since the last run
     assert stats == {}
+    # The chat apps it has brought in stay known, for the sync that checked them.
+    assert beeper.sources(tmp_path) == ("facebook", "instagram")
 
 
 def test_linkedin_comes_in_as_a_linkedin_conversation(tmp_path):

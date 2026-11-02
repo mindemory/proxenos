@@ -166,6 +166,34 @@ def test_a_broken_source_does_not_stop_the_run(tmp_path, monkeypatch):
     assert stats["self_files_written"] == 6
 
 
+def test_sync_notes_when_each_source_was_checked_even_with_nothing_new(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    (vault / "state").mkdir(exist_ok=True)
+    (vault / "state" / "beeper.json").write_text(json.dumps({"sources": ["linkedin"]}))
+
+    def broken(vault, args):
+        raise RuntimeError("down")
+
+    def module(name, run):
+        return SimpleNamespace(__name__=f"proxenos.ingest.{name}", run=run)
+
+    monkeypatch.setattr(
+        master,
+        "_UNATTENDED",
+        [
+            (module("strava", lambda v, a: {}), lambda: True),  # nothing new, still checked
+            (module("beeper", lambda v, a: {}), lambda: True),
+            (module("gmail", broken), lambda: True),  # failed: not checked
+            (module("spotify", lambda v, a: {}), lambda: True),  # an export: vouches for nothing
+        ],
+    )
+    master.sync(vault)
+
+    checked = json.loads((vault / "state" / "checked.json").read_text())
+    assert set(checked) == {"strava", "linkedin"}
+    assert checked["strava"].endswith("Z")
+
+
 def test_spotify_and_website_sync_only_when_their_settings_are_set(monkeypatch):
     def synced():
         return {

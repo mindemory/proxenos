@@ -599,7 +599,21 @@ async function subdirs(dir: string): Promise<string[]> {
   }
 }
 
-async function sourceStatus(id: string, kind: string, dir: string): Promise<SourceStatus> {
+/**
+ * When sync last checked each raw/ folder, from state/checked.json (proxenos.master), as ms: a
+ * source checked with nothing new is as fresh as its check, not its newest record.
+ */
+async function checkedAt(vault: string): Promise<Map<string, number>> {
+  const raw = record(await readJsonFile(path.join(vault, "state", "checked.json"))) ?? {};
+  const out = new Map<string, number>();
+  for (const [kind, when] of Object.entries(raw)) {
+    const ms = typeof when === "string" ? Date.parse(when) : NaN;
+    if (Number.isFinite(ms)) out.set(kind, ms);
+  }
+  return out;
+}
+
+async function sourceStatus(id: string, kind: string, dir: string, checked = 0): Promise<SourceStatus> {
   const files = await monthFiles(dir);
   const base = { id, kind, command: `proxenos ingest ${kind}` };
   if (files.length === 0) {
@@ -608,7 +622,7 @@ async function sourceStatus(id: string, kind: string, dir: string): Promise<Sour
   const newestMonth = files.reduce((m, f) => (f.month > m ? f.month : m), "");
   const newest = files.filter((f) => f.month === newestMonth);
   const lines = (await Promise.all(newest.map((f) => countLines(f.path)))).reduce((a, b) => a + b, 0);
-  const lastSync = new Date(Math.max(...files.map((f) => f.mtimeMs))).toISOString();
+  const lastSync = new Date(Math.max(checked, ...files.map((f) => f.mtimeMs))).toISOString();
   return { ...base, lastSync, newestMonth, newestMonthLines: lines, newestMonthFiles: newest.length };
 }
 
@@ -669,7 +683,8 @@ export function getStatus(): Promise<StatusResponse> {
 async function readStatus(vault: string): Promise<StatusResponse> {
   const { dirs, missing } = await sourceDirs(path.join(vault, "raw"));
   const sources: SourceStatus[] = [];
-  for (const d of dirs) sources.push(await sourceStatus(d.id, d.kind, d.dir));
+  const checked = await checkedAt(vault);
+  for (const d of dirs) sources.push(await sourceStatus(d.id, d.kind, d.dir, checked.get(d.kind)));
 
   // Tracker: newest batch, plus totals across every month file.
   const files = await itemFiles(vault);
@@ -720,10 +735,11 @@ export function sourceSyncs(vault: string): Promise<SourceSync[]> {
 
 async function walkSourceSyncs(vault: string): Promise<SourceSync[]> {
   const { dirs } = await sourceDirs(path.join(vault, "raw"));
+  const checked = await checkedAt(vault);
   const byKind = new Map<string, number>();
   for (const d of dirs) {
     const files = await monthFiles(d.dir);
-    const newest = files.length ? Math.max(...files.map((f) => f.mtimeMs)) : 0;
+    const newest = files.length ? Math.max(checked.get(d.kind) ?? 0, ...files.map((f) => f.mtimeMs)) : 0;
     byKind.set(d.kind, Math.max(byKind.get(d.kind) ?? 0, newest));
   }
   return [...byKind].map(([kind, ms]) => ({ kind, lastSync: ms ? new Date(ms).toISOString() : null }));
@@ -1372,6 +1388,44 @@ export async function editPeople(
   }
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   await replaceFile(file, JSON.stringify(aliases, null, 2) + "\n");
+}
+
+export class ClusterNotFoundError extends Error {}
+
+/**
+ * Name a cluster as the user would: written to clusters.json as theirs ("by": "you", with the
+ * people in it now), where the next rebuild finds it and keeps it over the model's, for as long
+ * as the cluster keeps half its people. An empty name drops theirs, so the model's comes back.
+ */
+export async function renameCluster(id: number, label: string): Promise<void> {
+  const vault = vaultPath();
+  if (!(await isDir(vault))) throw new VaultMissingError(displayPath(vault));
+  const dir = path.join(vault, "clones", "network");
+  const doc = record(await readJsonFile(path.join(dir, "people.json"), MAX_PEOPLE_BYTES));
+  const core = new Set(Array.isArray(doc?.core) ? doc.core.filter((x): x is string => typeof x === "string") : []);
+  const people = (Array.isArray(doc?.people) ? doc.people : []).map(record);
+  const members = people
+    .filter((p) => p && p.cluster === id && typeof p.id === "string" && core.has(p.id))
+    .map((p) => p!.id as string)
+    .sort();
+  if (members.length === 0) throw new ClusterNotFoundError(String(id));
+
+  const file = path.join(dir, "clusters.json");
+  const old = record(await readJsonFile(file)) ?? {};
+  const these = new Set(members);
+  const overlap = (xs: string[]) => {
+    const shared = xs.filter((x) => these.has(x)).length;
+    return shared / (xs.length + members.length - shared);
+  };
+  // The user's earlier name for this circle goes; the model's stays, for when theirs is dropped.
+  const kept = (Array.isArray(old.clusters) ? old.clusters : []).map(record).filter((c) => {
+    const xs = Array.isArray(c?.members) ? c.members.filter((x): x is string => typeof x === "string") : [];
+    return c && xs.length > 0 && !(c.by === "you" && overlap(xs) >= 0.5);
+  });
+  const name = label.trim();
+  const clusters = name ? [{ label: name, members, by: "you" }, ...kept] : kept;
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await replaceFile(file, JSON.stringify({ ...old, clusters }, null, 2) + "\n");
 }
 
 const REBUILD_MS = 120_000;

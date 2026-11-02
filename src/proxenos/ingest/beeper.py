@@ -66,9 +66,21 @@ def ingest(
         stream = "dms" if source == "twitter" else "messages"  # as the X export names it
         stats.update(merge_monthly(records, vault / "raw" / source / stream))
 
+    seen = sorted(set(state.get("sources") or []) | set(streams))
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"since": _iso(now - OVERLAP)}))
+    state_path.write_text(json.dumps({"since": _iso(now - OVERLAP), "sources": seen}))
     return dict(stats)
+
+
+def sources(vault: Path) -> tuple[str, ...]:
+    """The chat apps Beeper has brought messages in from, as raw/ folder names: what a sync
+    through it vouches for (proxenos.master)."""
+    try:
+        state = json.loads((vault / _STATE).read_text())
+    except (OSError, ValueError):
+        return ()
+    found = state.get("sources") if isinstance(state, dict) else None
+    return tuple(s for s in found or [] if isinstance(s, str))
 
 
 def _chats(fetch: Fetch, since: str) -> Iterator[dict]:

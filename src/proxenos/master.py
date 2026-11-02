@@ -53,6 +53,27 @@ SELF_FILES = {
 VECTOR_SECONDS = 240  # of embedding in a sync; the rest waits for the next one
 SLOW = {"identity", "voice"}
 
+# The raw/ folders each unattended source vouches for when it syncs, so one checked with nothing
+# new shows as fresh on the page, not behind (state/checked.json). Beeper's are the chat apps it
+# has brought in before. Spotify's export is as new as the file the user downloaded: none.
+_CHECKS = {
+    "whatsapp": ("whatsapp",),
+    "letterboxd": ("letterboxd",),
+    "gmail": ("email",),
+    "microsoft": ("email", "calendar"),
+    "gcalendar": ("calendar",),
+    "applemail": ("email",),
+    "maccalendar": ("calendar",),
+    "docs": ("notes",),
+    "strava": ("strava",),
+    "slack": ("slack",),
+    "slackdump": ("slack",),
+    "website": ("website",),
+    "mentions": ("mentions",),
+    "bluesky": ("bluesky",),
+}
+CHECKED = Path("state", "checked.json")
+
 # Sources that sync unattended, each with what tells us it's set up.
 _UNATTENDED = [
     (whatsapp, lambda: sys.platform == "darwin"),  # WhatsApp for Mac; Windows' has no store
@@ -81,6 +102,27 @@ def run(vault: Path, since: str | None = None) -> dict[str, int]:
     return stats
 
 
+def _checks(vault: Path, name: str) -> tuple[str, ...]:
+    """The raw/ folders a source that just synced vouches for."""
+    if name == "beeper":
+        return beeper.sources(vault)
+    return _CHECKS.get(name, ())
+
+
+def _write_checked(vault: Path, checked: dict[str, str]) -> None:
+    """Add when each raw/ folder was last checked to state/checked.json, which the page reads."""
+    path = vault / CHECKED
+    try:
+        old = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        old = {}
+    data = (old if isinstance(old, dict) else {}) | checked
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def sync(vault: Path) -> dict[str, int]:
     """Import new downloads, refresh every set-up source and the memory built from them. None
     of that needs a model; with a key set, chats newly waiting on the user also get a reply
@@ -89,20 +131,25 @@ def sync(vault: Path) -> dict[str, int]:
     os.environ.setdefault(env_key("FULL_NAME"), env("NAME"))
     stats = {"sources_synced": 0, "sources_failed": 0}
     stats.update(importer.run(vault))
+    checked: dict[str, str] = {}
     for module, configured in _UNATTENDED:
         if not configured():
             continue
         parser = argparse.ArgumentParser()
         if hasattr(module, "add_arguments"):
             module.add_arguments(parser)
+        name = getattr(module, "__name__", "source").rsplit(".", 1)[-1]
         try:
             module.run(vault, parser.parse_args([]))
             stats["sources_synced"] += 1
+            when = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            checked |= dict.fromkeys(_checks(vault, name), when)
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one broken source must not stop the rest
             stats["sources_failed"] += 1
-            name = getattr(module, "__name__", "source").rsplit(".", 1)[-1]
             reason = str(e) if isinstance(e, SystemExit) else f"{type(e).__name__}: {e}"
             print(f"sync: {name} failed ({' '.join(reason.split())[:200]})", file=sys.stderr)
+    if checked:
+        _write_checked(vault, checked)
     # What the sources just brought in becomes searchable, then today's recall is redone from it.
     # Both are derived data: a failure here never costs the sync.
     try:
