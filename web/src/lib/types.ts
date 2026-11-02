@@ -1538,3 +1538,67 @@ export interface PrivacyResponse {
   /** Why the report couldn't be read, when it couldn't. */
   error: string | null;
 }
+
+// ── Rhythms clone: clones/rhythms/weeks.json, through `proxenos clone rhythms --json` ──
+
+/** How far back the Rhythms view looks, and how many weeks each of its periods holds. */
+export type RhythmsRange = "3m" | "1y" | "all";
+export type RhythmsResolution = "1w" | "2w" | "1m";
+
+export interface RhythmsMove {
+  count: number;
+  km: number;
+  hours: number;
+}
+
+/** One ISO week, in local time: what was listened to, how you moved, whom you wrote to. */
+export interface RhythmsWeek {
+  week: string; // "2026-W10"
+  start: string; // its Monday, YYYY-MM-DD
+  listening: {
+    hours: number; // podcasts and audiobooks too
+    spoken_hours: number;
+    plays: number;
+    artists: number;
+    top: { name: string; hours: number }[]; // up to five, most first
+    /** Hours of music by genre and by mood, from the artists' labels; "unlabelled" for the rest. */
+    genres: Record<string, number>;
+    moods: Record<string, number>;
+    top_genre: string | null;
+    top_mood: string | null;
+  };
+  movement: {
+    rides: RhythmsMove & { climb_m: number };
+    runs: RhythmsMove;
+    hikes: RhythmsMove;
+    walks: RhythmsMove;
+    other: { count: number; hours: number };
+  };
+  messages: {
+    sent: Record<string, number>; // by channel, as the page names it
+    received: Record<string, number>;
+    people: number; // people and chats written to
+  };
+  calendar: { events: number; hours: number };
+}
+
+export interface RhythmsLine {
+  kind: "listening" | "riding" | "messages" | "mood";
+  text: string;
+}
+
+export interface RhythmsResponse {
+  now: string;
+  vault: VaultInfo;
+  today: string;
+  weeks: RhythmsWeek[]; // oldest first, from the first week with a record to this one
+  /** People and chats written to in each two weeks and month, by period: weeks can't be added up for it. */
+  people: { "2w": Record<string, number>; "1m": Record<string, number> };
+  channels: string[]; // the most messages first
+  /** The share of music time whose artist has a genre and moods, and how many artists have one. */
+  coverage: { share: number; artists: number; labelled: number };
+  model: boolean;
+  /** Plain lines on each range at each resolution, written with no model. */
+  stands_out: Record<RhythmsRange, Record<RhythmsResolution, RhythmsLine[]>>;
+  error: string | null;
+}

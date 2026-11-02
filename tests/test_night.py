@@ -16,6 +16,7 @@ from proxenos.clones import (
     network,
     projects,
     recall,
+    rhythms,
     steps,
     tasks,
     tracker,
@@ -51,6 +52,7 @@ def calls(tmp_path, monkeypatch):
         steps,
         journal,
         life,
+        rhythms,
     ):
         name = module.__name__.rsplit(".", 1)[1]
 
@@ -108,6 +110,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "steps: 1 done",
         "journal: 1 done",
         "life: 1 done",
+        "rhythms: 1 done",
         "voice: 3 new answers",  # trained again only when it's due
         "lessons: 2 new changed drafts",  # rules learned only once enough are new
     ]
@@ -128,6 +131,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
     assert args["choices"] == args["watch"] == {"force": False}  # once a week
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
+    assert args["rhythms"] == {"weeks": None, "label": rhythms.LABEL, "json": False}
 
 
 def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, capsys):
@@ -161,6 +165,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "steps: 1 done",
         "journal: 1 done",
         "life: 1 done",
+        "rhythms: 1 done",
         "voice: 3 new answers",
         "lessons: 2 new changed drafts",
     ]
@@ -178,6 +183,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "steps",
         "journal",
         "life",
+        "rhythms",
         "voice",
         "lessons",
     ]

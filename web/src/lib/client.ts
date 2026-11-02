@@ -39,6 +39,7 @@ import type {
   WatchResponse,
   JournalResponse,
   LifeResponse,
+  RhythmsResponse,
 } from "./types";
 
 export const POLL_MS = 5 * 60 * 1000;
@@ -1063,4 +1064,10 @@ export function useHome() {
   );
 
   return { data, error, reload: load, actTask, reactAdvice, clearError: () => setError(null) };
+}
+
+/** The Rhythms view's weeks, counted again on the server where a month file changed. */
+export function useRhythms() {
+  const { data, error, setError } = useJson<RhythmsResponse>("/api/rhythms");
+  return { data, error, clearError: () => setError(null) };
 }

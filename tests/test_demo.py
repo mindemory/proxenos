@@ -87,6 +87,21 @@ def test_the_life_view_has_months_told_and_their_days(vault):
     assert life.months(vault, NOW.date())["2026-10"]["days"] > 10  # counted for the page
 
 
+def test_the_rhythms_view_has_months_of_weeks_to_compare(vault):
+    found = read(vault, "clones/rhythms/weeks.json")
+    weeks = found["weeks"]
+    assert len(weeks) >= 26 and weeks[-1]["start"] == "2026-10-26"
+    assert set(found["channels"]) == {"WhatsApp", "Email", "Slack"}
+    assert 0.8 < found["coverage"]["share"] < 1  # all but one artist labelled
+    assert sum(w["movement"]["rides"]["count"] for w in weeks) >= 10
+    assert all(w["listening"]["hours"] > 0 for w in weeks[1:])
+    # Summer's rides and energetic listening, then calmer weeks: something to say on each.
+    kinds = [line["kind"] for line in found["stands_out"]["1y"]["1w"]]
+    assert kinds == ["listening", "riding", "messages", "mood"]
+    shift = found["stands_out"]["3m"]["1w"][-1]["text"]
+    assert shift.startswith("Your top mood went from energetic")
+
+
 def test_everything_in_it_is_made_up(vault):
     texts = [
         p.read_text(encoding="utf-8")

@@ -28,6 +28,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - your open tasks, pulled from your conversations and from what you tell it, kept up through the day, with the plans among them (a lunch at 12, a call at 9) put on your own calendar, and taken off it when they're called off;
 - a journal of each day, so you never have to narrate it: what got done, where you wrote, what moved in your projects, what's waiting on others and what's next, with a few sentences on how it went;
 - a diary of your life by month and day, years back: for each month, a few sentences and an entry in your own voice for each day that mattered (care and medical visits, big conversations, decisions, trips, how you were doing), only as your records and words show it, and for each day, whom you wrote to, your calendar, what you wrote down, your health records by title, and your walks, listening and photos, from everything already in the vault;
+- your weeks over time, side by side, across listening, movement and messages: how much you listened and in what genre and mood, how far you rode, ran and walked, and how many messages you sent and got on each channel, a week, two weeks or a month at a time, with what stands out in plain words;
 - where your health care stands: a timeline, what's still open, what to say on the phone, and a one-page brief for your next appointment;
 - the forms you're handed (a PDF application, an intake form) filled from your records, leaving the ID numbers, account numbers and signature to you;
 - advice grounded in your own patterns;
@@ -78,7 +79,7 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                                                         choices, watch, network,
                                                         recall, projects, project
                                                         steps, errands, drafts,
-                                                        journal, life
+                                                        journal, life, rhythms
                                                                 │
                                                         local page (127.0.0.1)
 ```
@@ -106,6 +107,7 @@ More detail: [architecture](docs/architecture.md), [memory](docs/memory.md), [da
   - **watch:** the films you've logged and how you rated them;
   - **journal:** the day's lines, to write its brief: the titles of tasks closed, waiting and due, the names of the chats you wrote in and the drafts sent, what you told Proxenos that day, your projects' commit messages, the next day's calendar and care's open items;
   - **life:** for a month's diary, care's timeline events from that month (with people only by role), what you told Proxenos that month, the observers' notes about you from that month (not Strava's or Spotify's) and a digest of each of its days: the names of the people and chats you wrote to, with counts and the opening of your own words, and of those who wrote to you, your events, the titles of your notes and documents, your activity (what you watched, photos' albums and the people tagged, and walks, runs, rides and listening only as counts a week), your health records' titles, counts of anything else, and the journal's briefs; never other people's messages, which aren't read out of memory at all;
+  - **rhythms:** the names of the artists you listen to, to label each with a genre and moods; nothing else, since the weeks themselves are counted with no model;
   - **forms** (`proxenos form`): the form's labels and the records memory finds for them, never a line for an SSN, an account number or a signature;
   - **calls:** on a phone call you start, what the other side says goes to the call's model to decide what the assistant says next, and the call's audio goes through Twilio, which transcribes it ([docs/calls.md](docs/calls.md)).
 
@@ -212,7 +214,7 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos ask [QUESTION]` | Ask your twin: a question, a pasted message or screenshots (from the page's Ask view), answered from your memory the way you'd think it through, with a reply drafted when it's a message to you |
 | `proxenos phone` | Open the page to your own phone over Tailscale |
 | `proxenos call start NAME` / `stop NAME` / `list` | Place a phone call from a call sheet (also from the page's Calls view), through your own Twilio account: it waits on hold, says it's an automated assistant calling for you, and rings you when a person answers, or asks for what the sheet lists. It never agrees to pay. See [docs/calls.md](docs/calls.md) |
-| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Journal, Life, Ask, Errands, Feed, Saved, Tasks, Projects, Care, Drafts, Advice, Choices, Watch, Calls, Network, Memory, Profile, Connect, Settings, Privacy, Status), after a short setup the first time |
+| `proxenos web [--port N]` | The local page: a landing, then the app (Home, Journal, Life, Rhythms, Ask, Errands, Feed, Saved, Tasks, Projects, Care, Drafts, Advice, Choices, Watch, Calls, Network, Memory, Profile, Connect, Settings, Privacy, Status), after a short setup the first time |
 | `proxenos privacy` | What stays on this computer (the vault by folder, whether a cloud syncs it, FileVault, the secrets kept, by name), what went to a model in the last 30 days (calls by where they ran and by part, from the calls log, never the words) and what's read from elsewhere, as JSON for the page's Privacy view |
 | `proxenos demo [PATH]` | A vault of made-up records to try the page on, with no model, and the command that opens it. PATH must be new, empty or an earlier demo |
 | `proxenos form PATH` | A PDF form filled in from your records, beside it as `-filled.pdf`, with what it filled, where each answer came from and what's left for you. It never fills an SSN or another ID, an account or card number, or a signature, and keeps only answers your records show |
@@ -223,9 +225,10 @@ See [docs/data_sources.md](docs/data_sources.md) for each one's details.
 | `proxenos observe [--dry-run]` | Per-month notes on what each source says about you |
 | `proxenos master [accept]` | Sync, observe and update the self-model; `accept` applies proposed changes |
 | `proxenos index [--rebuild]` | Full-text memory index over the whole vault, no model |
-| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps`, `work`, `journal` or `life` |
+| `proxenos clone <name>` | Run one clone: `tracker`, `tasks`, `care`, `advisor`, `network`, `choices`, `watch`, `recall`, `projects`, `steps`, `work`, `journal`, `life` or `rhythms` |
 | `proxenos clone journal [--date DAY]` | The day, written down (also from the page's Journal view): what got done, where you wrote, what moved in your projects, what's waiting and what's next, with a short brief. The night writes the day that just ended; `--date today` writes today so far |
 | `proxenos clone life [--month YYYY-MM] [--day YYYY-MM-DD]` | A diary of your life by month and day, years back (also on the page's Life view). `--month` writes that month's diary now, from its care timeline, what you told Proxenos, the observers' notes and its days; `--day` prints a day's digest as JSON, with no model. The night writes the month that just ended, the current one once a week, and four older months with no diary (or a story from before there were entries), newest first, so years fill in over a few weeks |
+| `proxenos clone rhythms [--weeks N] [--label N] [--json]` | Your weeks over time (also on the page's Rhythms view), each ISO week in local time with no model: listening hours, plays, artists and the genre and mood mix, rides, runs, hikes and walks, messages sent and received by channel and how many people you wrote to, and calendar events. Only the month files that changed are counted again. `--label` asks the model for up to N more artists' genre and moods, from their names alone, the most played first (300 a night); `--json` prints the series for the page; `--weeks` keeps to the last N weeks |
 | `proxenos clone steps --project ID` | A step of a project's own work (also from the page's Projects view): the next analysis, fix, figure or section, done on a new branch of the project's code in a worktree of its own, by Claude Code where it's installed or else the local model, and reported. Accept on the page merges it into your checkout; Discard deletes the branch. Nothing is pushed |
 | `proxenos project manuscript ID [--base REV] [--head REV] [--step STEP_ID]` | A project's manuscript as JSON for the page, read with git and no model: where it is, its versions, and one version's text with its changes since another, word by word; with `--step`, every file a step changed. `--edit` saves text read from stdin on a branch of its own, as a step waiting on you |
 | `proxenos clone choices [--force]` | The week's choices: what's worth taking on and what's worth letting go of. The night runs it once a week; `--force` runs it now |

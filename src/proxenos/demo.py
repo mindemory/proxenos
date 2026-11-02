@@ -4,13 +4,14 @@ The vault is Joe Bloggs's, and he doesn't exist: an operations manager at Acme F
 to a pottery class on Thursdays, keeps a plot at the community garden and is partway through
 sorting out the bill for new glasses. What the ingesters would bring in is written to raw/ in
 their formats, dated around today: WhatsApp chats and groups, two mail accounts, two calendars,
-walks, listening, notes and LinkedIn connections. What the model would write from them is written
-the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the
-week's choices, drafts and errands. Then the steps that need no model run on it as they would on
-a real vault: the memory index, the people index, today's recall, the outbox's track record and
-yesterday's journal, with the brief the model would write; the stories of the last months, as the
-night would have written them from those months' days; and a week of model calls for the
-Privacy view, all on this computer.
+walks, listening, notes and LinkedIn connections, and, months back, everyday chatter, rides and
+listening for the Rhythms view. What the model would write from them is written the way each
+clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the week's choices,
+drafts and errands. Then the steps that need no model run on it as they would on a real vault:
+the memory index, the people index, today's recall, the outbox's track record and yesterday's
+journal, with the brief the model would write; the stories of the last months, as the night would
+have written them from those months' days; the weeks over time, with the artists' genres and
+moods the model would give; and a week of model calls for the Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
 up, phone numbers are 555-01xx (kept for fiction), and addresses and links use the reserved
@@ -21,6 +22,7 @@ again from scratch: a demo never lands on top of real data.
 
 import json
 import os
+import random
 import re
 import shlex
 import shutil
@@ -40,6 +42,7 @@ from proxenos.clones import (
     life,
     network,
     recall,
+    rhythms,
     tasks,
     tracker,
     work,
@@ -147,6 +150,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         outbox.run(vault, c.now)  # its track record for the page; a demo has no way to send
         _journal(vault, c)
         _life(vault, c)
+        _rhythms(vault, c)
         _calls(vault, c)
     return {
         "records": indexed.get("records_total", 0),
@@ -226,6 +230,12 @@ def _raw(vault: Path, c: _Clock) -> None:
     store.merge_monthly(_work_calendar(c), raw / "calendar" / "work")
     store.merge_monthly(_walks(c), raw / "strava" / "activities")
     store.merge_monthly(_plays(c), raw / "spotify" / "plays")
+    store.merge_monthly(_rides(c), raw / "strava" / "activities")
+    store.merge_monthly(_listening(c), raw / "spotify" / "plays")
+    chats, mail, posts = _chatter(c)
+    store.merge_monthly(chats, raw / "whatsapp" / "messages")
+    store.merge_monthly(mail, raw / "email" / "work")
+    store.merge_monthly(posts, raw / "slack" / "acme" / "messages")
     store.merge_monthly(_notes(c), raw / "notes" / "pages")
     store.merge_monthly(_connections(c), raw / "linkedin" / "connections")
     store.merge_monthly(_slack(c), raw / "slack" / "acme" / "messages")
@@ -807,6 +817,190 @@ def _plays(c: _Clock) -> list[dict]:
                 }
             )
     return plays
+
+
+# Joe's artists, made up, with the genre and moods the model would give each; the last has none
+# yet, as an artist the night hasn't reached. The weights are how often each comes on in the
+# summer months, when he rode most, and since.
+ARTISTS = (
+    ("The Lantern Choir", "folk/acoustic", ["calm", "nostalgic"], 1, 4),
+    ("Mara Vey", "indie", ["melancholic", "calm"], 1, 4),
+    ("Quiet Shore", "ambient", ["calm", "focused"], 0, 4),
+    ("Night Bus Orchestra", "jazz", ["calm", "romantic"], 0, 3),
+    ("Copper Hymnal", "rock", ["energetic", "intense"], 8, 1),
+    ("Pulse Atlas", "electronic", ["energetic", "focused"], 8, 1),
+    ("Juniper Static", "pop", ["upbeat"], 4, 2),
+    ("Saffron Tapes", "Bollywood/Indian film", ["romantic", "upbeat"], 3, 2),
+    ("Harbor Strings", "classical", ["calm", "focused"], 0, 2),
+    ("Velvet Tram", None, [], 1, 1),
+)
+BACK = 182  # days of rides, listening and chatter before today, for the Rhythms view
+
+
+def _summer(days: int) -> bool:
+    """Whether a day falls in the stretch, two to four months back, when Joe rode most."""
+    return 60 <= days <= 125
+
+
+def _rides(c: _Clock) -> list[dict]:
+    """Half a year of rides: most Saturdays, and some evenings, from four to two months back,
+    fewer since, and a run or a hike now and then."""
+    luck = random.Random(3)
+    found = []
+    for days in range(BACK, 20, -1):
+        weekday = (c.local - timedelta(days=days)).weekday()
+        if weekday == 5 and (_summer(days) or luck.random() < 0.35):
+            km = round(luck.uniform(28, 52) if _summer(days) else luck.uniform(18, 30), 1)
+            climb = luck.randint(150, 520)
+            found.append(_activity(c, days, 9, "Ride", "Saturday ride", km, km / 22, climb))
+        elif weekday == 2 and _summer(days) and luck.random() < 0.5:
+            km = round(luck.uniform(12, 18), 1)
+            found.append(_activity(c, days, 18, "Ride", "Evening loop", km, km / 24, 90))
+        elif weekday == 1 and luck.random() < 0.2:
+            km = round(luck.uniform(4, 7), 1)
+            found.append(_activity(c, days, 7, "Run", "Morning run", km, km / 9.5, 30))
+        elif weekday == 6 and luck.random() < 0.1:
+            found.append(_activity(c, days, 9, "Hike", "Ridge trail", 11.4, 3.6, 640))
+    return found
+
+
+def _activity(
+    c: _Clock, days: int, hour: int, sport: str, name: str, km: float, hours: float, climb: int
+) -> dict:
+    return {
+        "id": f"strava:demo-{sport.lower()}{days}",
+        "ts": c.at(-days, hour, 0),
+        "name": name,
+        "sport_type": sport,
+        "distance_m": km * 1000,
+        "moving_time_s": round(hours * 3600),
+        "elapsed_time_s": round(hours * 3600) + 600,
+        "total_elevation_gain_m": climb,
+    }
+
+
+def _listening(c: _Clock) -> list[dict]:
+    """Half a year of listening, up to yesterday: more of it at weekends, rock and
+    electronic in the summer months and quieter music since, and a podcast on Sundays."""
+    luck = random.Random(5)
+    found = []
+    for days in range(BACK, 0, -1):
+        weekday = (c.local - timedelta(days=days)).weekday()
+        weights = [a[3] if _summer(days) else a[4] for a in ARTISTS]
+        for k in range(luck.randint(12, 22) if weekday >= 5 else luck.randint(5, 14)):
+            found.append(
+                {
+                    "id": f"spotify:demo-back{days}-{k}",
+                    "ts": c.at(-days, 7 + k * 3 // 4, luck.randint(0, 59)),
+                    "kind": "track",
+                    "track": f"Track {luck.randint(1, 12)}",
+                    "artist": luck.choices(ARTISTS, weights)[0][0],
+                    "album": None,
+                    "ms_played": luck.randint(150_000, 260_000),
+                }
+            )
+        if weekday == 6:
+            found.append(
+                {
+                    "id": f"spotify:demo-kiln{days}",
+                    "ts": c.at(-days, 20, 30),
+                    "kind": "episode",
+                    "episode": "Glazes, again",
+                    "show": "Kiln Talk",
+                    "ms_played": 2_400_000,
+                }
+            )
+    return found
+
+
+# Everyday chatter, months back: (what someone says, what Joe says back). Nothing to act on, and
+# Joe has the last word in each, so none of it waits on him.
+_SMALL_TALK = (
+    ("Are you around this weekend?", "Out on the bike Saturday, free Sunday"),
+    ("Photos from the lake are up", "Love them"),
+    ("Did the bowls survive the kiln?", "All three!"),
+    ("Running ten minutes late", "No rush"),
+    ("Thursday's class is at 7 as usual", "See you there"),
+    ("How's the garden plot?", "Tomatoes everywhere"),
+)
+_REUNION = (
+    ("Which weekend works for the reunion?", "The 14th works for me"),
+    ("Who's bringing the tent?", "I'll bring ours"),
+    ("Mum wants a photo of everyone", "We'll do one by the lake"),
+)
+_WORK_TALK = (
+    ("Truck for the north route is booked", "Thanks, noted on the schedule"),
+    ("Can someone check the dock 3 count?", "On it"),
+    ("Pallets from Delta arrive at 2", "I'll be at the dock"),
+)
+
+
+def _chatter(c: _Clock) -> tuple[list[dict], list[dict], list[dict]]:
+    """Half a year of everyday WhatsApp, work mail and Slack before the weeks the rest of the demo
+    tells, so the Rhythms view has months to show: a few exchanges a day, and a busy week about
+    three months back, when the family planned a reunion."""
+    luck = random.Random(7)
+    family = (*FAMILY, "group", ["Dee Fay", "Mei Bloggs", "Leo Bloggs"])
+    chats = [
+        (JID["Cy Doe"], "Cy Doe", "direct", ["Cy Doe"]),
+        (JID["Dee Fay"], "Dee Fay", "direct", ["Dee Fay"]),
+        (*POTTERY, "group", ["Gus Hale", "Ivy Chen", "Lia Ruiz"]),
+        family,
+    ]
+    whatsapp, mail, slack = [], [], []
+    for days in range(BACK, 20, -1):
+        busy = 88 <= days <= 94
+        for k in range(luck.randint(5, 9) if busy else luck.randint(0, 3)):
+            jid, title, kind, people = family if busy else luck.choice(chats)
+            theirs, mine = luck.choice(_REUNION if busy else _SMALL_TALK)
+            for n, (who, text) in enumerate(((luck.choice(people), theirs), (None, mine))):
+                whatsapp.append(
+                    {
+                        "id": f"{jid}/DEMOBACK{days:03d}{k:02d}{n}",
+                        "ts": c.at(-days, 12 + k, 10 + 20 * n),
+                        "chat_id": jid,
+                        "chat_name": title,
+                        "chat_type": kind,
+                        "from_me": who is None,
+                        "sender_id": None if who is None else JID[who],
+                        "sender_name": who,
+                        "kind": "text",
+                        "wa_type": 0,
+                        "text": text,
+                        "caption": None,
+                    }
+                )
+        if (c.local - timedelta(days=days)).weekday() >= 5:
+            continue
+        for k in range(luck.randint(0, 3)):
+            person = luck.choice(["Ben Ode", "Eli Park", "Kai Lund", "Tom Wu"])
+            subject = f"Dispatch numbers, {c.said(-days)} ({k + 1})"
+            sent = _mail("work", 9000 + days * 10 + k, c.at(-days, 9 + k, 30), None, subject, "")
+            mail.append(sent | {"to": [ADDRESS[person]], "body_new": "The numbers are attached."})
+        for k in range(luck.randint(0, 2)):
+            theirs, mine = luck.choice(_WORK_TALK)
+            who = luck.choice(["Hana Ito", "Kai Lund", "Ben Ode"])
+            for n, (name, text) in enumerate(((who, theirs), (NAME, mine))):
+                ts = c.at(-days, 10 + 2 * k, 5 + 25 * n)
+                stamp = f"{datetime.fromisoformat(ts).timestamp():.6f}"
+                slack.append(
+                    {
+                        "id": f"{OPERATIONS[0]}/{stamp}",
+                        "ts": ts,
+                        "slack_ts": stamp,
+                        "channel_id": OPERATIONS[0],
+                        "channel_name": OPERATIONS[1],
+                        "channel_type": OPERATIONS[2],
+                        "user_id": SLACK[name],
+                        "user_name": name,
+                        "from_me": name == NAME,
+                        "text": text,
+                        "thread_ts": None,
+                        "is_reply": False,
+                        "subtype": None,
+                    }
+                )
+    return whatsapp, mail, slack
 
 
 def _notes(c: _Clock) -> list[dict]:
@@ -2443,6 +2637,25 @@ def _life(vault: Path, c: _Clock) -> None:
                 "days_with_records": len(life.days(vault, month)),
             },
         )
+
+
+def _rhythms(vault: Path, c: _Clock) -> None:
+    """The artists' genres and moods as the night labels them, all but one, then the weeks over
+    time counted from the demo's records, as the night would."""
+    rhythms._save(
+        rhythms._labels_path(vault),
+        {
+            "genres": list(rhythms.GENRES),
+            "moods": list(rhythms.MOODS),
+            "artists": {
+                name: {"genre": genre, "moods": moods, "at": c.ago(30)}
+                for name, genre, moods, *_ in ARTISTS
+                if genre
+            },
+            "unknown": {},
+        },
+    )
+    rhythms.build(vault, 0, c.now)
 
 
 def _load(path: Path) -> list[dict]:

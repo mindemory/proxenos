@@ -43,8 +43,9 @@ from proxenos.config import vault_path
 # the week's choices (once a week) that read the tasks and ideas, and what to watch (once a
 # week), then what each of those brings to mind from memory, the projects, the errands still
 # waiting on a way to reach someone, the drafts of them all, a step of each project's own work,
-# which takes longest, the journal of the day that just ended, which reads them all, and last
-# the stories of the months, which read the journal.
+# which takes longest, the journal of the day that just ended, which reads them all, the stories
+# of the months, which read the journal, and last the weeks over time, counted, with more artists
+# labelled for their genres and moods.
 NIGHT_CLONES = (
     "tracker",
     "tasks",
@@ -60,6 +61,7 @@ NIGHT_CLONES = (
     "steps",
     "journal",
     "life",
+    "rhythms",
 )
 
 

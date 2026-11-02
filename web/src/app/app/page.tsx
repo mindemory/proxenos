@@ -54,6 +54,9 @@ const Journal = dynamic(() => import("@/components/views/Journal").then((m) => m
 const Life = dynamic(() => import("@/components/views/Life").then((m) => m.Life), {
   loading: () => <ProseSkeleton label="Loading your life" />,
 });
+const Rhythms = dynamic(() => import("@/components/views/Rhythms").then((m) => m.Rhythms), {
+  loading: () => <ProseSkeleton label="Counting your weeks" />,
+});
 const Watch = dynamic(() => import("@/components/views/Watch").then((m) => m.Watch), {
   loading: () => <ProseSkeleton label="Loading picks" />,
 });
@@ -220,6 +223,8 @@ export default function AppPage() {
         return <Journal />;
       case "life":
         return <Life />;
+      case "rhythms":
+        return <Rhythms />;
       case "watch":
         return <Watch onChange={home.reload} />;
       case "calls":

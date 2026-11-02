@@ -1,5 +1,6 @@
 import {
   Activity,
+  AudioWaveform,
   Bookmark,
   Brain,
   Clapperboard,
@@ -39,6 +40,7 @@ export type View =
   | "watch"
   | "journal"
   | "life"
+  | "rhythms"
   | "calls"
   | "network"
   | "memory"
@@ -60,6 +62,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: House, label: "Home", id: "home", group: "home" },
   { icon: NotebookPen, label: "Journal", id: "journal", group: "home" },
   { icon: Library, label: "Life", id: "life", group: "home" },
+  { icon: AudioWaveform, label: "Rhythms", id: "rhythms", group: "home" },
   { icon: MessageSquare, label: "Ask", id: "ask", group: "home" },
   { icon: Route, label: "Errands", id: "errands", group: "home" },
   { icon: Rss, label: "Feed", id: "feed", group: "clones" },

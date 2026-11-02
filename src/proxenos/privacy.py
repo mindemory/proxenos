@@ -113,6 +113,11 @@ SENDS = (
         ),
     ),
     (
+        "Rhythms",
+        ("rhythms",),
+        "Only the names of the artists you listen to, to label each with a genre and moods.",
+    ),
+    (
         "Life",
         ("life",),
         (
