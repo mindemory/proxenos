@@ -6,13 +6,14 @@ import { Maximize2, Minus, Network as NetworkIcon, Plus, RefreshCw, Search, Slid
 import { Command, EmptyState } from "@/components/EmptyState";
 import type { NetworkTab } from "@/components/views/Network";
 import { plural } from "@/lib/format";
-import { clusterVar } from "@/lib/clusters";
+import { CLUSTER_LABEL_CHARS, clusterVar } from "@/lib/clusters";
 import { applyFilters, buildGraph, fold, searchNodes, type Filters } from "@/lib/graph";
 import type { ColourBy, HoverInfo } from "@/lib/graphEngine";
 import { useBox, useMedia } from "@/lib/hooks";
 import {
   GROUP_KINDS,
   RELATIONS,
+  type Cluster,
   type GroupKind,
   type NetworkResponse,
   type PeopleEdit,
@@ -35,6 +36,8 @@ interface GraphViewProps {
   /** Say who is who (aliases.json) and rebuild; and rebuild alone. */
   onEditPerson?: (action: PeopleEdit, id: string, other?: { id: string } | { name: string }) => Promise<PeopleEditResult>;
   onRefresh?: () => Promise<PeopleEditResult>;
+  /** Name a cluster as the user would, and rebuild. */
+  onRenameCluster?: (id: number, label: string) => Promise<PeopleEditResult>;
   /** A name to find, sent from the command box. A new `nonce` finds it again. */
   find?: { q: string; nonce: number } | null;
   /** Called once `find` is used, so the page can drop it and a later visit doesn't find it again. */
@@ -75,6 +78,64 @@ function Chip({
   );
 }
 
+/** Rename the one cluster shown: a button, then a one-line box; Enter saves, Escape cancels. */
+function ClusterName({
+  cluster,
+  naming,
+  setNaming,
+  onRename,
+}: {
+  cluster: Cluster | undefined;
+  naming: { id: number; text: string; saving: boolean } | null;
+  setNaming: (n: { id: number; text: string; saving: boolean } | null) => void;
+  onRename: (id: number, label: string) => Promise<PeopleEditResult>;
+}) {
+  if (!cluster) return null;
+  if (naming?.id !== cluster.id) {
+    return (
+      <button
+        onClick={() => setNaming({ id: cluster.id, text: cluster.label, saving: false })}
+        title="Name this circle the way you'd say where you know them from"
+        className="text-[13px] text-accent px-2 hover:underline underline-offset-4"
+      >
+        Rename
+      </button>
+    );
+  }
+  const save = async () => {
+    setNaming({ ...naming, saving: true });
+    await onRename(cluster.id, naming.text);
+    setNaming(null);
+  };
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+      className="inline-flex items-center gap-1.5"
+    >
+      <input
+        autoFocus
+        value={naming.text}
+        maxLength={CLUSTER_LABEL_CHARS}
+        disabled={naming.saving}
+        onChange={(e) => setNaming({ ...naming, text: e.target.value })}
+        onKeyDown={(e) => e.key === "Escape" && setNaming(null)}
+        aria-label={`A name for the ${cluster.label} cluster`}
+        placeholder="e.g. PhD lab, Boston"
+        className="w-52 rounded-full border border-line-strong bg-transparent px-3 py-1 text-[13px] text-ink outline-none focus:border-accent/60"
+      />
+      <button type="submit" disabled={naming.saving} className="text-[13px] text-accent px-1 hover:underline underline-offset-4">
+        {naming.saving ? "Saving…" : "Save"}
+      </button>
+      <button type="button" onClick={() => setNaming(null)} className="text-[13px] text-muted px-1 hover:text-ink">
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -88,7 +149,17 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
-export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, find, onFound, onTab }: GraphViewProps) {
+export function GraphView({
+  data,
+  flashId,
+  onReact,
+  onEditPerson,
+  onRefresh,
+  onRenameCluster,
+  find,
+  onFound,
+  onTab,
+}: GraphViewProps) {
   const model = useMemo(() => buildGraph(data.people, data.now), [data.people, data.now]);
   const handle = useRef<GraphHandle>(null);
   const [boxRef, box] = useBox<HTMLDivElement>();
@@ -103,6 +174,7 @@ export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, fin
   const [clusters, setClusters] = useState<ReadonlySet<number>>(new Set());
   const [colourBy, setColourBy] = useState<ColourBy>("cluster");
   const [refreshing, setRefreshing] = useState(false);
+  const [naming, setNaming] = useState<{ id: number; text: string; saving: boolean } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
@@ -428,6 +500,14 @@ export function GraphView({ data, flashId, onReact, onEditPerson, onRefresh, fin
                 <span className="max-w-[14rem] truncate">{c.label}</span> <span className="num">{c.size}</span>
               </Chip>
             ))}
+            {onRenameCluster && clusters.size === 1 && (
+              <ClusterName
+                cluster={clusterById.get([...clusters][0])}
+                naming={naming}
+                setNaming={setNaming}
+                onRename={onRenameCluster}
+              />
+            )}
             {byCluster && (
               <span className="inline-flex items-center gap-1.5 px-1 text-[13px] text-muted whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: clusterVar(null) }} />

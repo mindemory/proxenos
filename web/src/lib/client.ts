@@ -821,7 +821,28 @@ export function useNetwork(onChange?: () => void) {
     return result;
   }, [notify, reload]);
 
-  return { data, error, flashId, react, editPerson, refreshPeople, clearError: () => setError(null) };
+  /** Name a cluster as the user would (an empty name gives the model's back), then rebuild. */
+  const renameCluster = useCallback(
+    async (id: number, label: string): Promise<PeopleEditResult> => {
+      let result: PeopleEditResult;
+      try {
+        result = await postForJson<PeopleEditResult>("/api/network/cluster", { id, label });
+      } catch {
+        notify("Couldn't save that name. Nothing was changed.", "info");
+        return { ok: false, saved: false, rebuilt: false, message: "Couldn't save that." };
+      }
+      if (result.rebuilt) {
+        await reload();
+        notify(label.trim() ? "Renamed; the graph is rebuilt" : "Name dropped; the graph is rebuilt", "ok");
+      } else {
+        notify("Saved, applies on the next refresh", "info");
+      }
+      return result;
+    },
+    [notify, reload],
+  );
+
+  return { data, error, flashId, react, editPerson, refreshPeople, renameCluster, clearError: () => setError(null) };
 }
 
 export const PEOPLE_TOAST: Record<PeopleEdit, string> = {

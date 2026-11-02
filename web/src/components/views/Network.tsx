@@ -345,7 +345,7 @@ export function Network({
   onFound?: () => void;
   onTab?: (tab: NetworkTab) => void;
 }) {
-  const { data, error, flashId, react, editPerson, refreshPeople, clearError } = useNetwork(onChange);
+  const { data, error, flashId, react, editPerson, refreshPeople, renameCluster, clearError } = useNetwork(onChange);
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load the network: ${error}`} /> : <GraphSkeleton />;
@@ -363,6 +363,7 @@ export function Network({
           onReact={react}
           onEditPerson={editPerson}
           onRefresh={refreshPeople}
+          onRenameCluster={renameCluster}
           find={find}
           onFound={onFound}
           onTab={onTab}

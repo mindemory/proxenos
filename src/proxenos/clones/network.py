@@ -44,10 +44,19 @@ context), a meeting of 2 to 15 guests, the authors of one OpenAlex paper (the us
 works citing them), or an organization (at most 40 people from the index share it, since a
 company of thousands says nothing about who knows whom). The user is in all of them, so is left
 out and doesn't count towards a group's size. Each group two people share adds 1/log2(size + 1) to
-their tie, so a pair alone adds 0.63, a group of 33 0.2 and a channel of 3,000 0.09. Only the
-top 600 people (by messages and recency, as top_people picks them) are connected, listed in
-"core", and only the strongest 4,000 edges stay. Clusters are communities among them (Louvain
-on all their ties), each labelled by the group most of its people are in.
+their tie, so a pair alone adds 0.63, a group of 33 0.2 and a channel of 3,000 0.09. A group
+of more than 50 ties no one, except a WhatsApp group of up to 100, the size of a class or a
+batch (a Slack channel that big is a workspace's crowd). 600 people are connected, listed in
+"core": 450 by messages and recency, as top_people picks them, and 150 from the WhatsApp groups
+those leave out, the people of an old class, batch or flat, so the years before the recent ones
+are in the graph too (graph_people). Only the strongest
+4,000 edges stay. Clusters are communities among them (Louvain on all their ties). Each is
+named the way the user would say where they know those people from, a place, an institution or
+a stage of life ("PhD lab, Boston", "High school, Lyon"), by one model call that reads the
+self-model and each cluster's groups, organizations, years and best-known names. A rebuild keeps
+the name of a cluster with half its people the same (clones/network/clusters.json), so only new
+clusters are named; without the model a cluster is labelled by the group most of its people are
+in.
 
 Names in notes come from a strict heuristic: two to four capitalized words in a row (middle
 initials allowed), none of them a stopword (days, months, places, institutions, headings, ...)
@@ -98,6 +107,12 @@ GRAPH_PEOPLE = 600  # people the graph connects
 GRAPH_EDGES = 4000  # connections kept, strongest first
 MAX_ORG = 40  # an organization with more people in the index than this connects no one
 MAX_GROUP = 50  # nor does a chat, channel or other group of more people than this
+MAX_CHAT = 100  # except a WhatsApp group up to this size: a class, a batch, a cohort
+GRAPH_CIRCLES = 150  # of GRAPH_PEOPLE, places kept for groups the most active people leave out
+CIRCLE_PEOPLE = 8  # people such a group brings in, its most active first
+CLUSTER_NAMES = "clusters.json"
+SAME_CLUSTER = 0.5  # of everyone in either, the share two clusters have in common to be one
+CLUSTER_LABEL = 40  # characters in a cluster's name
 EDGE_CONTEXTS = 5  # shared contexts named on an edge
 MIN_EVENT, MAX_EVENT = 2, 15  # guests, the user included, at a meeting that makes a group
 CONTEXT_GROUP = 80  # a first name alone is placed only through groups this small
@@ -464,9 +479,10 @@ def build(vault: Path, people_only: bool = False, now: datetime | None = None) -
     profile = None if people_only else read_self(vault / "self")  # fail before the slow part
     book = _read_vault(vault, now)
     people, groups = book.resolve(_aliases(out / ALIASES), _load_json(out / "people.json"))
-    core = top_people(people, now, GRAPH_PEOPLE)
+    core = graph_people(people, groups, now)
     edges, kept = connections(groups, core, now)
     found, named = clusters(kept, core)
+    named = name_clusters(out, named, found, kept, core, profile)
     core_ids = {p["id"] for p in core}
     for person in people:
         if person["id"] in core_ids:
@@ -1837,12 +1853,12 @@ def connections(
 
 
 def _pairs(groups: list[dict]) -> tuple[dict[tuple[str, str], list[dict]], dict]:
-    """Every pair of members who share a group: the groups, and the tie they make. A group of
-    more than MAX_GROUP people makes none: being in one community chat of hundreds says nothing
-    about who knows whom, and its thousands of pairs would outweigh every small circle."""
+    """Every pair of members who share a group: the groups, and the tie they make. A group too
+    big to be a circle makes none: being in one community chat of hundreds says nothing about
+    who knows whom, and its thousands of pairs would outweigh every small circle."""
     shared: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for group in groups:
-        if (group.get("size") or len(group["members"])) > MAX_GROUP:
+        if _too_big(group):
             continue
         for pair in itertools.combinations(sorted(group["members"]), 2):
             shared[pair].append(group)
@@ -1854,8 +1870,8 @@ def clusters(groups: list[dict], core: list[dict]) -> tuple[dict[str, int], list
     """Communities among the people in core: Louvain on every pair that shares a group,
     weighted as edges are (all of them, not only the edges kept). Each community of MIN_CLUSTER
     or more gets an id, biggest first, and a label: the name of the group most of its people are in,
-    named groups before unnamed ones and chats and channels before email subjects, none of more
-    than MAX_GROUP people, and no label twice. People with no tie are in none."""
+    named groups before unnamed ones and chats and channels before email subjects, none too big
+    to be a circle, and no label twice. People with no tie are in none."""
     _, weight = _pairs(groups)
     community = _louvain(sorted({p["id"] for p in core}), weight)
     members: dict[str, list[str]] = defaultdict(list)
@@ -1875,7 +1891,7 @@ def clusters(groups: list[dict], core: list[dict]) -> tuple[dict[str, int], list
 def _cluster_label(people: set[str], groups: list[dict], used: set[str]) -> str | None:
     ranked = []
     for g in groups:
-        if (g.get("size") or len(g["members"])) > MAX_GROUP:
+        if _too_big(g):
             continue  # too big to say what a circle is
         inside = len(people.intersection(g["members"]))
         if inside >= 2:
@@ -1888,6 +1904,178 @@ def _cluster_label(people: set[str], groups: list[dict], used: set[str]) -> str 
             used.add(name)
             return name
     return None
+
+
+def _too_big(group: dict) -> bool:
+    """Whether a group has too many people to be a circle: more than MAX_GROUP, or MAX_CHAT for
+    a WhatsApp group, where a class or a batch of a hundred still knows each other. A Slack
+    channel that big is a conference's or a community's crowd."""
+    size = group.get("size") or len(group["members"])
+    return size > (MAX_CHAT if group["kind"] == "whatsapp_group" else MAX_GROUP)
+
+
+def name_clusters(
+    out: Path,
+    named: list[dict],
+    found: dict[str, int],
+    groups: list[dict],
+    core: list[dict],
+    profile: str | None,
+) -> list[dict]:
+    """The clusters with the names the user would give them. A cluster with at least
+    SAME_CLUSTER of its people in common with one named before keeps that name, the user's own
+    (from the page, "by": "you") before the model's; the rest are named in one model call when
+    there's a profile (none when only the index is rebuilt), and keep their group label if the
+    model is out or gives no usable name. clusters.json keeps the names given and who they went
+    to; the user's stay even while no cluster matches them, so a circle that comes back is
+    theirs again."""
+    members: dict[int, set[str]] = defaultdict(set)
+    for person, cluster in found.items():
+        members[cluster].add(person)
+    before = [
+        {"label": _label(c.get("label")), "members": set(c["members"]), "by": c.get("by")}
+        for c in _load_json(out / CLUSTER_NAMES).get("clusters") or []
+        if isinstance(c, dict) and isinstance(c.get("members"), list)
+    ]
+    yours = [b for b in before if b["label"] and b["by"] == "you"]
+    models = [b for b in before if b["label"] and b["by"] != "you"]
+    labels: dict[int, str] = {}
+    matched: dict[int, dict] = {}  # a cluster's id → the user's entry it took its name from
+    behind: list[dict] = []  # the model's names under the user's, for when theirs is dropped
+    for c in named:
+        here = members[c["id"]]
+        for pool in (yours, models):
+            best = max(pool, key=lambda b: _overlap(here, b["members"]), default=None)
+            if best and _overlap(here, best["members"]) >= SAME_CLUSTER:
+                if best["label"].casefold() not in {v.casefold() for v in labels.values()}:
+                    labels[c["id"]] = best["label"]
+                    if pool is yours:
+                        matched[c["id"]] = best
+                break
+        if c["id"] in matched:
+            model = max(models, key=lambda b: _overlap(here, b["members"]), default=None)
+            if model and _overlap(here, model["members"]) >= SAME_CLUSTER:
+                behind.append({"label": model["label"], "members": sorted(here)})
+    fresh = [c for c in named if c["id"] not in labels]
+    if fresh and profile is not None:
+        try:
+            taken = {label.casefold() for label in labels.values()}
+            taken |= {b["label"].casefold() for b in yours}
+            labels |= _ask_names(profile, fresh, members, groups, core, taken)
+        except llm.ModelError:
+            pass  # the group labels stand until the next run with a model
+    if labels or before:
+        kept = {id(b) for b in matched.values()}
+        given = [
+            {"label": labels[c["id"]], "members": sorted(members[c["id"]])}
+            | ({"by": "you"} if c["id"] in matched else {})
+            for c in named
+            if c["id"] in labels
+        ]
+        given += behind
+        given += [
+            {"label": b["label"], "members": sorted(b["members"]), "by": "you"}
+            for b in yours
+            if id(b) not in kept
+        ]
+        _write_json(out / CLUSTER_NAMES, {"clusters": given})
+    return [c | {"label": labels.get(c["id"]) or c["label"]} for c in named]
+
+
+def _overlap(a: set[str], b: set[str]) -> float:
+    return len(a & b) / len(a | b) if a or b else 0.0
+
+
+_NAMES_SYSTEM = """\
+You name the circles of people in {person}'s life. Each circle is a cluster of people who \
+share chats, channels, threads, meetings or an organization. Name each one the way {person} \
+would tell a friend where they know those people from: the place, the institution or lab, the \
+school or the stage of life, in one to four words. For example "PhD lab, Boston", "College \
+friends, Austin", "High school, Lyon", "Summer course 2024", "First job, Acme", "Flatmates, \
+Leeds". Use the self-model for the places and when things happened, and the groups, \
+organizations and years for which part of their life a circle is. Don't copy a chat's name \
+unless it already says where they're from, use no emoji, and give no two circles the same name. \
+Return every circle by its id."""
+
+_NAMES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "clusters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "integer"}, "label": _TEXT},
+                "required": ["id", "label"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["clusters"],
+    "additionalProperties": False,
+}
+
+
+def _ask_names(
+    profile: str,
+    fresh: list[dict],
+    members: dict[int, set[str]],
+    groups: list[dict],
+    core: list[dict],
+    taken: set[str],
+) -> dict[int, str]:
+    """One model call naming the clusters in fresh: each id to a name, none already taken."""
+    people = {p["id"]: p for p in core}
+    parts = [f"# Self-model\n\n{profile}", "# Circles"]
+    for c in fresh:
+        here = members[c["id"]]
+        shared = sorted(
+            ((len(here.intersection(g["members"])), g) for g in groups if not _too_big(g)),
+            key=lambda x: (-x[0], x[1]["size"], x[1]["name"]),
+        )
+        lines = [
+            f"- {_GROUP_KINDS[g['kind']][0]}: {g['name']} ({n} of them)"
+            for n, g in shared[:6]
+            if n >= 2
+        ]
+        orgs = Counter(people[p]["org"] for p in here if people.get(p, {}).get("org"))
+        years = sorted(y for p in here if (y := (people.get(p, {}).get("first_seen") or "")[:4]))
+        known = sorted(here, key=lambda p: -people.get(p, {}).get("interactions", 0))[:5]
+        text = f"## Circle {c['id']} ({len(here)} people)\n\nShared:\n" + "\n".join(lines)
+        if orgs:
+            text += "\nOrganizations: " + ", ".join(f"{o} ({n})" for o, n in orgs.most_common(4))
+        if years:
+            most = Counter(years).most_common(1)[0][0]
+            text += f"\nFirst in touch: {years[0]} to {years[-1]}, most in {most}"
+        names = [people[p]["name"] for p in known if p in people]
+        if names:
+            text += "\nMost in touch: " + ", ".join(names)
+        parts.append(text)
+    answer = llm.ask(
+        "\n\n".join(parts),
+        system=_NAMES_SYSTEM.format(person=env("NAME", "the person")),
+        schema=_NAMES_SCHEMA,
+        effort="low",
+    )
+    ids = {c["id"] for c in fresh}
+    labels: dict[int, str] = {}
+    for item in answer.get("clusters") or [] if isinstance(answer, dict) else []:
+        cid = item.get("id") if isinstance(item, dict) else None
+        label = _label(item.get("label")) if isinstance(item, dict) else ""
+        if cid in ids and cid not in labels and label and label.casefold() not in taken:
+            labels[cid] = label
+            taken.add(label.casefold())
+    return labels
+
+
+def _label(value: object) -> str:
+    """A cluster's name as the page shows it: one line of words, no emoji, CLUSTER_LABEL at most."""
+    text = "".join(c for c in str(value or "") if c.isprintable() and not _emoji(c))
+    text = " ".join(text.split()).strip(" .,;:-")
+    return text if len(text) <= CLUSTER_LABEL else ""
+
+
+def _emoji(char: str) -> bool:
+    return unicodedata.category(char) == "So" or 0x1F000 <= ord(char) <= 0x1FAFF
 
 
 def _louvain(nodes: list[str], weight: dict[tuple[str, str], float]) -> dict[str, str]:
@@ -2020,6 +2208,41 @@ def top_people(people: list[dict], now: datetime, limit: int = TOP_PEOPLE) -> li
             break
         chosen.add(p["id"])
     return [p for p in ranked if p["id"] in chosen][:limit]
+
+
+def graph_people(people: list[dict], groups: list[dict], now: datetime) -> list[dict]:
+    """The people the graph connects: GRAPH_PEOPLE - GRAPH_CIRCLES by messages and recency, as
+    top_people picks them, and GRAPH_CIRCLES from the WhatsApp groups that leaves out, so an
+    old class, batch or flat the user hardly writes in any more is still a circle. A group small
+    enough to be one with fewer than MIN_CLUSTER of its people in brings in up to CIRCLE_PEOPLE
+    more, its most active first; bigger groups first, since a whole batch says more about a
+    stage of life than a chat of three. Places no group needs go to the next most active."""
+    circles = min(GRAPH_CIRCLES, GRAPH_PEOPLE)
+    core = top_people(people, now, GRAPH_PEOPLE - circles)
+    chosen = {p["id"] for p in core}
+    by_id = {p["id"]: p for p in people}
+    chats = [
+        g
+        for g in groups
+        if g["kind"] == "whatsapp_group"
+        and not _too_big(g)
+        and len(chosen.intersection(g["members"])) < MIN_CLUSTER
+    ]
+    chats.sort(key=lambda g: (-(g.get("size") or len(g["members"])), g["name"], g["id"]))
+    extra: list[dict] = []
+    for g in chats:
+        left = sorted(
+            (by_id[m] for m in g["members"] if m in by_id and m not in chosen),
+            key=lambda p: (-p["interactions"], p["id"]),
+        )
+        for p in left[: min(CIRCLE_PEOPLE, circles - len(extra))]:
+            chosen.add(p["id"])
+            extra.append(p)
+        if len(extra) >= circles:
+            break
+    spare = GRAPH_PEOPLE - len(core) - len(extra)
+    rest = [p for p in top_people(people, now, GRAPH_PEOPLE) if p["id"] not in chosen][:spare]
+    return core + extra + rest
 
 
 def _score(person: dict, now: datetime) -> float:

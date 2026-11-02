@@ -5,6 +5,9 @@
 
 export const CLUSTER_HUES = 4;
 
+/** The longest name a cluster takes, as clones/network/clusters.json keeps it. */
+export const CLUSTER_LABEL_CHARS = 40;
+
 export type ClusterSlot = 1 | 2 | 3 | 4 | "other" | "none";
 
 export function clusterSlot(id: number | null | undefined): ClusterSlot {

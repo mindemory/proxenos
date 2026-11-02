@@ -1046,6 +1046,7 @@ def test_mail_to_many_people_is_no_context(tmp_path, monkeypatch):
 def test_only_the_top_people_are_connected(tmp_path, monkeypatch):
     vault = connected_vault(tmp_path, monkeypatch)
     monkeypatch.setattr(network, "GRAPH_PEOPLE", 4)
+    monkeypatch.setattr(network, "GRAPH_CIRCLES", 0)  # no places kept for left-out chats
     network.build(vault, people_only=True, now=NOW)
 
     data, _, edges = connections_of(vault)
@@ -1474,3 +1475,129 @@ def test_a_group_of_hundreds_ties_no_one_and_names_no_cluster():
 
     assert found["l0"] != found["f0"]  # the big group didn't make one circle of both
     assert {c["label"] for c in named} == {"Lab", "Flat"}
+
+
+def test_a_class_sized_group_is_a_circle_but_not_a_thread_or_channel_that_size():
+    chat = {"kind": "whatsapp_group", "members": [], "size": 100}
+    assert not network._too_big(chat)
+    assert network._too_big(chat | {"size": 101})
+    assert network._too_big({"kind": "email_thread", "members": [], "size": 51})
+    assert network._too_big({"kind": "slack_channel", "members": [], "size": 51})  # a crowd
+
+
+def test_the_graph_keeps_places_for_an_old_batch(monkeypatch):
+    monkeypatch.setattr(network, "GRAPH_PEOPLE", 6)
+    monkeypatch.setattr(network, "GRAPH_CIRCLES", 3)
+    monkeypatch.setattr(network, "CIRCLE_PEOPLE", 2)
+
+    def person(pid, n, when):
+        return {"id": pid, "name": pid, "relation": "met", "interactions": n, "last_seen": when}
+
+    def chat(name, members, size, kind="whatsapp_group"):
+        return {"id": name, "kind": kind, "name": name, "members": set(members), "size": size}
+
+    recent = [person(f"r{i}", 50, "2026-03-01T00:00:00Z") for i in range(5)]
+    batch = [person(f"b{i}", i + 1, "2016-05-01T00:00:00Z") for i in range(4)]
+    crowd = [person(f"c{i}", 9, "2015-01-01T00:00:00Z") for i in range(2)]
+    groups = [
+        chat("Batch of 2016", [p["id"] for p in batch], 90),  # a batch is still a circle
+        chat("City chat", [p["id"] for p in crowd], 300),  # too big to be one
+        chat("Old thread", [p["id"] for p in crowd], 3, kind="email_thread"),  # not a chat
+    ]
+
+    core = network.graph_people(recent + batch + crowd, groups, NOW)
+
+    # The three most active, the batch's two most active, and the place left to the next.
+    assert [p["id"] for p in core] == ["r0", "r1", "r2", "b3", "b2", "r3"]
+
+
+def test_clusters_get_the_names_the_user_would_give_and_keep_them(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    out = tmp_path / "network"
+
+    def person(pid, org=None):
+        return {
+            "id": pid,
+            "name": f"Person {pid.upper()}",
+            "org": org,
+            "first_seen": "2021-09-01T00:00:00Z",
+            "interactions": 3,
+        }
+
+    core = [person(p, "spiral.test") for p in "abc"] + [person(p) for p in "def"]
+    groups = [
+        {"id": "g1", "kind": "slack_channel", "name": "lab #random", "members": ["a", "b", "c"]},
+        {"id": "g2", "kind": "whatsapp_group", "name": "Flat 4B", "members": ["d", "e", "f"]},
+    ]
+    groups = [g | {"size": 3} for g in groups]
+    named = [{"id": 1, "label": "lab #random", "size": 3}, {"id": 2, "label": "Flat 4B", "size": 3}]
+    found = dict.fromkeys("abc", 1) | dict.fromkeys("def", 2)
+    calls = []
+
+    def fake_ask(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return {
+            "clusters": [
+                {"id": 1, "label": " PhD lab, Boston 🧪 "},
+                {"id": 2, "label": "phd lab, boston"},  # the same name twice
+                {"id": 9, "label": "No such circle"},
+            ]
+        }
+
+    monkeypatch.setattr(llm, "ask", fake_ask)
+    first = network.name_clusters(out, named, found, groups, core, "Studies spiral codes.")
+
+    assert [c["label"] for c in first] == ["PhD lab, Boston", "Flat 4B"]
+    ((prompt, kwargs),) = calls
+    assert kwargs["schema"] == network._NAMES_SCHEMA and "Tess" in kwargs["system"]
+    assert "Studies spiral codes." in prompt
+    assert "## Circle 1 (3 people)" in prompt and "- Slack: lab #random (3 of them)" in prompt
+    assert "Organizations: spiral.test (3)" in prompt
+    assert "First in touch: 2021 to 2021, most in 2021" in prompt
+
+    # Rebuilding only the index: two of cluster 1's three are still in it, so it keeps its
+    # name without the model, and cluster 2, never named, keeps its group's.
+    monkeypatch.setattr(llm, "ask", no_model)
+    core.append(person("x"))
+    found = dict.fromkeys("abx", 1) | dict.fromkeys("def", 2)
+    again = network.name_clusters(out, named, found, groups, core, None)
+    assert [c["label"] for c in again] == ["PhD lab, Boston", "Flat 4B"]
+
+    # A new circle while the model is out keeps its group's label.
+    def down(*args, **kwargs):
+        raise llm.ModelError("no model")
+
+    monkeypatch.setattr(llm, "ask", down)
+    core += [person("u"), person("v"), person("w")]
+    found = dict.fromkeys("uvw", 1) | dict.fromkeys("def", 2)
+    later = network.name_clusters(out, named, found, groups, core, "Studies spiral codes.")
+    assert [c["label"] for c in later] == ["lab #random", "Flat 4B"]
+
+
+def test_a_name_the_user_gives_a_cluster_beats_the_model_and_stays(tmp_path, monkeypatch):
+    out = tmp_path / "network"
+    out.mkdir()
+    names = {
+        "clusters": [
+            {"label": "Old flat", "members": ["d", "e", "f"], "by": "you"},
+            {"label": "Model's name", "members": ["d", "e", "f"]},
+            {"label": "Choir", "members": ["p", "q", "r"], "by": "you"},  # not around now
+        ]
+    }
+    (out / "clusters.json").write_text(json.dumps(names), encoding="utf-8")
+    named = [{"id": 1, "label": "Flat 4B", "size": 3}]
+    found = dict.fromkeys("def", 1)
+    monkeypatch.setattr(llm, "ask", no_model)
+
+    (cluster,) = network.name_clusters(out, named, found, [], [], "A profile.")
+
+    assert cluster["label"] == "Old flat"
+    saved = json.loads((out / "clusters.json").read_text(encoding="utf-8"))["clusters"]
+    assert {"label": "Old flat", "members": ["d", "e", "f"], "by": "you"} in saved
+    assert {"label": "Choir", "members": ["p", "q", "r"], "by": "you"} in saved
+    # The model's name stays behind the user's, so dropping theirs brings it back.
+    assert {"label": "Model's name", "members": ["d", "e", "f"]} in saved
+    saved = [c for c in saved if c.get("by") != "you"]
+    (out / "clusters.json").write_text(json.dumps({"clusters": saved}), encoding="utf-8")
+    (cluster,) = network.name_clusters(out, named, found, [], [], None)
+    assert cluster["label"] == "Model's name"
