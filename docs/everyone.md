@@ -85,7 +85,7 @@ Every step ends the same way: a first read in the background, its progress on th
 
 ## Easier to read and to hear
 
-*Built.* Proxenos is for people getting through the health care system, often while unwell, and some of them find reading hard: low vision, dyslexia, low health literacy, or fatigue and dizziness from an illness. What helps, and what was picked by its evidence:
+*Built.* Proxenos is for people getting through the health care system, often while unwell, and some of them find reading hard: low vision, dyslexia, low health literacy, or the tiredness that comes with an illness or its treatment. What helps, and what was picked by its evidence:
 
 - **Size first.** The best evidence for reading on screen is for bigger text: in Rello and colleagues' studies of readers with dyslexia ([W4A 2013](https://doi.org/10.1145/2461121.2461125), and again at CHI 2016), font size improved reading and comprehension and line spacing didn't. So the size setting goes up to 150%, where body text is 24 px, the size of large print.
 - **Spacing as an option, letters with words.** Wider letter spacing helped children with dyslexia read ([Zorzi et al., 2012](https://doi.org/10.1073/pnas.1205566109)), but only when word spacing widens with it; alone it slows them ([Galliussi et al., 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7188700/)). Line height of at least 1.5 is what WCAG 2.2's [text spacing](https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html) criterion and the [British Dyslexia Association](https://www.bdadyslexia.org.uk)'s Dyslexia Friendly Style Guide ask for.

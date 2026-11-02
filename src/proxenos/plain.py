@@ -1,7 +1,7 @@
 """Plain language, asked of every clone that writes something for the user to read.
 
-Proxenos was built first for people getting through the health care system, often while unwell,
-tired or dizzy, and some of them find reading hard: low vision, dyslexia, low health literacy.
+Proxenos was built first for people getting through the health care system, often while unwell
+or tired, and some of them find reading hard: low vision, dyslexia, low health literacy.
 So what a clone writes for the user to read (care's summary, timeline and open items, the
 journal's brief, the advisor's suggestions) is asked for in plain language, as health
 communicators write it:
