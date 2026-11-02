@@ -44,6 +44,8 @@ def mail(n, ts, me, subject, body, to):
 @pytest.fixture
 def new_york(monkeypatch):
     """This process, and SQLite in it, on New York time: on 2026-03-10 that's UTC-4."""
+    if not hasattr(time, "tzset"):
+        pytest.skip("the time zone is set through tzset, which Windows doesn't have")
     monkeypatch.setenv("TZ", "America/New_York")
     time.tzset()
     yield
