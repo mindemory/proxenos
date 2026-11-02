@@ -39,7 +39,7 @@ function PersonRow({ p, now }: { p: Person; now: string }) {
         {p.interactions > 0 && (
           <span className="text-right flex-shrink-0 leading-tight" title={`${p.interactions} interactions`}>
             <span className="num text-sm text-ink block">{p.interactions.toLocaleString()}</span>
-            <span className="text-[11px] text-muted">interactions</span>
+            <span className="text-[0.6875rem] text-muted">interactions</span>
           </span>
         )}
       </div>
@@ -120,7 +120,7 @@ function People({ data }: { data: NetworkResponse }) {
               onClick={() => toggle(r)}
               aria-pressed={on}
               className={cn(
-                "rounded-full border px-3 py-1 text-[13px] transition-colors whitespace-nowrap",
+                "rounded-full border px-3 py-1 text-[0.8125rem] transition-colors whitespace-nowrap",
                 on ? "border-accent/40 bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-ink",
               )}
             >
@@ -215,7 +215,7 @@ function Projects({ data, flashId, onReact }: { data: NetworkResponse; flashId: 
           >
             <div>
               <h3 className="font-display text-2xl leading-snug text-ink break-words">{p.title}</h3>
-              {p.pitch && <p className="text-[15px] text-ink/90 leading-relaxed mt-1.5 break-words">{p.pitch}</p>}
+              {p.pitch && <p className="text-[0.9375rem] text-ink/90 leading-relaxed mt-1.5 break-words">{p.pitch}</p>}
             </div>
             {p.why_you && (
               <div>

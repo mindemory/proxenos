@@ -5,6 +5,7 @@ import { Check, CheckCheck, ChevronDown, Copy, MessagesSquare, Pencil, RotateCcw
 
 import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
+import { Listen } from "@/components/reading/Listen";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Draft, DraftOpen } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -78,11 +79,10 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
       <div className="flex flex-wrap items-center gap-1.5">
         <KindBadge kind={d.kind} />
         <ChannelBadge channel={d.channel} />
-        {sent && (
-          <span className="ml-auto">
-            <SentBadge />
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1.5 empty:hidden">
+          {!editing && <Listen id={`draft:${d.id}`} text={d.body} what={d.title} />}
+          {sent && <SentBadge />}
+        </span>
       </div>
 
       <div className="min-w-0">

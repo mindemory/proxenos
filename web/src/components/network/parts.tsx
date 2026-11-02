@@ -48,7 +48,7 @@ export function Label({ children }: { children: React.ReactNode }) {
 export function Citation({ label, children, small = false }: { label: string; children: React.ReactNode; small?: boolean }) {
   return (
     <div className={small ? "rounded-xl border border-accent/25 bg-accent/[0.06] p-3" : "rounded-xl border border-accent/25 bg-accent/[0.06] p-4"}>
-      <div className="text-[11px] leading-4 font-medium uppercase tracking-[0.08em] text-accent mb-1.5">{label}</div>
+      <div className="text-[0.6875rem] leading-4 font-medium uppercase tracking-[0.08em] text-accent mb-1.5">{label}</div>
       <p className={small ? "font-display text-base leading-snug text-ink break-words" : "font-display text-lg leading-snug text-ink break-words"}>
         {children}
       </p>

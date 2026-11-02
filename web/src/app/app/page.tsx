@@ -22,6 +22,7 @@ import {
 import { Home } from "@/components/views/Home";
 import type { MemoryIntent } from "@/components/views/Memory";
 import { prefetch, useHome, useItems } from "@/lib/client";
+import { scrollBehavior } from "@/lib/reading";
 import type { ThinkStart } from "@/lib/types";
 
 // Home and the feed come with the page; every other view loads the first time it's opened,
@@ -207,7 +208,7 @@ export default function AppPage() {
   const showNew = () => {
     feed.showPending();
     setView("feed");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
   };
 
   const refresh = () => {

@@ -10,6 +10,7 @@ import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
 import { groupDrafts, isNote, isStale, STALE_DAYS } from "@/lib/drafts";
+import { scrollBehavior } from "@/lib/reading";
 import type { Draft, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ export function Drafts({
     if (!focusId || !focusStatus) return;
     // After the tab it's on has rendered.
     const timer = window.setTimeout(
-      () => document.getElementById(`draft-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById(`draft-${focusId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);

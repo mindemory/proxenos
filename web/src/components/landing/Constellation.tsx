@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import type { SummaryResponse } from "@/lib/types";
+import { lessMotion } from "@/lib/reading";
 
 type Shape = SummaryResponse["constellation"];
 
@@ -23,6 +24,7 @@ export function Constellation({ shape }: { shape: Shape | null }) {
     if (!canvas || !ctx || !shape || shape.nodes.length === 0) return;
 
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const calm = () => still.matches || lessMotion();
     const nodes = shape.nodes;
     const edges = shape.edges.filter(([a, b]) => nodes[a] && nodes[b]);
     // Each point's own sway: a phase and a speed from its index, so the motion never syncs up.
@@ -102,13 +104,13 @@ export function Constellation({ shape }: { shape: Shape | null }) {
 
     const start = () => {
       cancelAnimationFrame(frame);
-      if (still.matches) draw(0, false);
+      if (calm()) draw(0, false);
       else frame = requestAnimationFrame(loop);
     };
 
     const onResize = () => {
       resize();
-      if (still.matches) draw(0, false);
+      if (calm()) draw(0, false);
     };
     const onPointer = (e: PointerEvent) => {
       pointer = { x: e.clientX / Math.max(width, 1) - 0.5, y: e.clientY / Math.max(height, 1) - 0.5 };

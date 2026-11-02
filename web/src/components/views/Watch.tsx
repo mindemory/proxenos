@@ -49,7 +49,7 @@ function PickCard({ p, now, flash, onReact }: PickCardProps) {
             href={l.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"
+            className="inline-flex items-center gap-1 text-[0.8125rem] text-muted hover:text-ink"
           >
             {l.label} <ArrowUpRight size={13} />
           </a>

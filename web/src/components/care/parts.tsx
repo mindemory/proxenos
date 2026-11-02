@@ -28,6 +28,7 @@ import {
 
 import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
+import { Listen } from "@/components/reading/Listen";
 import { SourceIcon, sourceMeta } from "@/components/SourceBadge";
 import { useToast } from "@/components/Toasts";
 import { careDue, careStatus, copyText } from "@/lib/careClient";
@@ -88,7 +89,7 @@ export const CARE_ACTION_META: Record<CareAction, { label: string; icon: LucideI
 
 const TONE_TEXT = { bad: "text-bad-ink", warn: "text-warn-ink", muted: "text-muted" } as const;
 
-const PILL = "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] leading-4";
+const PILL = "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[0.6875rem] leading-4";
 
 /** The section label the views use: an eyebrow, a hint, and a count. */
 export function SectionHeader({ title, count, hint }: { title: string; count?: number; hint?: string }) {
@@ -198,16 +199,27 @@ export function CareItemRow({
         {scripts > 0 && <span>{scripts === 1 ? "A script below" : `${scripts} scripts below`}</span>}
       </div>
       <Evidence ids={i.evidence} cited={cited} now={now} onOpen={onOpen} />
-      {onAct && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(Object.keys(CARE_ACTION_META) as CareAction[]).map((a) => {
+      {/* Hidden when empty: a done item has no marks, and Listen shows only where speech works. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
+        {onAct &&
+          (Object.keys(CARE_ACTION_META) as CareAction[]).map((a) => {
             const m = CARE_ACTION_META[a];
             return <ActionButton key={a} icon={m.icon} label={m.label} tone={m.tone} active={i.action === a} onClick={() => onAct(i, a)} />;
           })}
-        </div>
-      )}
+        <Listen id={`care-item:${i.id}`} text={careItemSpoken(i, place, due?.text ?? null)} what={i.title} className="sm:ml-auto" />
+      </div>
     </li>
   );
+}
+
+/** An item as it's read aloud: what kind it is, what it is, the next step, and when it's due. */
+function careItemSpoken(i: CareItemView, place: ReturnType<typeof careStatus>, due: string | null): string {
+  const parts = [`${ITEM_KIND_LABEL[i.kind]}: ${i.title}.`];
+  if (i.next_step && place !== "done") parts.push(`Next: ${i.next_step.trim().replace(/([^.!?])$/, "$1.")}`);
+  if (due) parts.push(`${due.replace(" · ", ", ")}.`);
+  if (place === "waiting") parts.push("Waiting.");
+  if (place === "done") parts.push("Done.");
+  return parts.join(" ");
 }
 
 /** The story so far, oldest first, with a marker where today falls. */

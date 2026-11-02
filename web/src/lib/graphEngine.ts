@@ -16,6 +16,7 @@ import {
   type Visibility,
 } from "./graph";
 import { CLUSTER_FALLBACK, clusterSlot, type ClusterSlot } from "./clusters";
+import { lessMotion } from "./reading";
 import type { Relation } from "./types";
 
 export type ColourBy = "cluster" | "relation";
@@ -96,8 +97,6 @@ function alpha(hex: string, a: number): string {
 
 const ALL: Filters = { relations: new Set(), kinds: new Set(), clusters: new Set(), hideUnconnected: false };
 
-const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 export class GraphEngine {
   private ctx: CanvasRenderingContext2D;
   private sim: Simulation;
@@ -143,7 +142,7 @@ export class GraphEngine {
     this.sim = new Simulation(model.nodes, model.edges);
 
     // Most of the movement is done before the first frame; the rest plays out on screen.
-    const settleNow = reducedMotion();
+    const settleNow = lessMotion();
     const warm = settleNow ? 360 : (opts.warm ?? Math.min(120, Math.round(24000 / Math.max(model.nodes.length, 1)) + 30));
     for (let i = 0; i < warm && !(settleNow && this.sim.settled); i++) this.sim.tick();
 
@@ -252,7 +251,7 @@ export class GraphEngine {
   }
 
   private moveTo(to: View) {
-    if (reducedMotion()) {
+    if (lessMotion()) {
       this.view = to;
       this.anim = null;
     } else {

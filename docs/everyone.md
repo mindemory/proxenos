@@ -1,6 +1,6 @@
 # Proxenos for everyone
 
-Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. Four pieces are built: the Connect page, setup with settings and the Keychain in place of `.env`, the privacy screen, apart from Delete everything, and a first, unsigned desktop app (see [the end](#built-so-far)). For Windows and Android, see [apps.md](apps.md).
+Today Proxenos needs a terminal, conda, Node and a hand-edited `.env`. Track 2 of the [roadmap](roadmap.md) removes all four. This is the plan for its first three steps: one download, connecting instead of configuring, and a clear privacy screen. Four pieces are built: the Connect page, setup with settings and the Keychain in place of `.env`, the privacy screen, apart from Delete everything, and a first, unsigned desktop app (see [the end](#built-so-far)). So is a page that's [easier to read and to hear](#easier-to-read-and-to-hear), for people who find reading hard. For Windows and Android, see [apps.md](apps.md).
 
 ## One download: a menu-bar app
 
@@ -82,6 +82,29 @@ Every step ends the same way: a first read in the background, its progress on th
 - You type `delete` to confirm. It's permanent: nothing goes to the Trash.
 - It says what it can't reach: your accounts' own data (your mail stays in Gmail), what was already sent to Anthropic (their retention applies), and backups of the vault, Time Machine included.
 - Afterwards the app is back at first-run setup. `proxenos forget` does the same from a terminal.
+
+## Easier to read and to hear
+
+*Built.* Proxenos is for people getting through the health care system, often while unwell, and some of them find reading hard: low vision, dyslexia, low health literacy, or fatigue and dizziness from an illness. What helps, and what was picked by its evidence:
+
+- **Size first.** The best evidence for reading on screen is for bigger text: in Rello and colleagues' studies of readers with dyslexia ([W4A 2013](https://doi.org/10.1145/2461121.2461125), and again at CHI 2016), font size improved reading and comprehension and line spacing didn't. So the size setting goes up to 150%, where body text is 24 px, the size of large print.
+- **Spacing as an option, letters with words.** Wider letter spacing helped children with dyslexia read ([Zorzi et al., 2012](https://doi.org/10.1073/pnas.1205566109)), but only when word spacing widens with it; alone it slows them ([Galliussi et al., 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7188700/)). Line height of at least 1.5 is what WCAG 2.2's [text spacing](https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html) criterion and the [British Dyslexia Association](https://www.bdadyslexia.org.uk)'s Dyslexia Friendly Style Guide ask for.
+- **A typeface for telling letters apart: Atkinson Hyperlegible Next.** The Braille Institute made Atkinson Hyperlegible for low vision, drawing the letters and numbers people mix up (I, l and 1; O and 0; B and 8) to look different, from work with its low-vision readers. Atkinson Hyperlegible Next (February 2025) is its successor, with seven weights, italics, many more languages and a mono version, which the page uses for numbers and dates. Its case rests on design for character recognition rather than a published trial, which is why it's an option, not the default. Both are OFL.
+- **Not Lexend or OpenDyslexic.** Lexend's claims rest on a small study by its own creator, with no independent replication found. OpenDyslexic showed no gain in reading speed or accuracy in controlled studies ([Wery and Diliberto, 2017](https://pmc.ncbi.nlm.nih.gov/articles/PMC5629233/); Rello and Baeza-Yates, ASSETS 2013), and nor did Dyslexie, another font made for dyslexia (Kuster et al., 2018).
+- **A light theme, and more contrast in both.** The BDA guide asks for dark text on a light, not white, ground, and some readers with low vision read better on dark: both are offered, dark stays the default. Every text colour reaches WCAG 2.2 AA (4.5:1) on the grounds it's used on, in all four sets, and more contrast also takes borders and hairlines to 3:1 (`tests/test_contrast.py` checks them).
+- **Plain language from the model.** Care's summary, timeline and open items, the journal's brief and the advisor's suggestions are asked for the most important thing first, short sentences and common words at about a sixth-grade level, and each medical term explained the first time (`proxenos.plain`), after the CDC's [Clear Communication Index](https://www.cdc.gov/ccindex/), AHRQ's [Health Literacy Universal Precautions Toolkit](https://www.ahrq.gov/health-literacy/improve/precautions/index.html) and the Federal Plain Language Guidelines ([as reposted](https://centerforplainlanguage.org/learning-training/tools-training/) since plainlanguage.gov went in 2025). It still restates the records and never diagnoses or advises. The visit brief keeps results and medicines in the records' own words, for the clinician.
+- **Listening.** Listen reads aloud with the browser's own speech (`speechSynthesis`), only with voices the browser marks as on this device, so nothing is sent anywhere.
+
+What each setting does. They're in Settings, Reading, and behind Aa at the top of every view, kept in this browser's local storage (`proxenos.reading`), so each device keeps its own. A script in `<head>` applies them as attributes on `<html>` before the page paints, and `globals.css` turns those into its variables; with none set, the page looks exactly as it did.
+- **Text size:** Default, Large (125%) or Larger (150%): the root size, which the type scale and the spacing around it follow, so nothing clips. Breakpoints and hairlines stay, so it reflows rather than zooms.
+- **Typeface:** Default (Geist, Newsreader for headings) or Hyperlegible (Atkinson Hyperlegible Next for both, and its Mono for numbers). The wordmark stays. The fonts come with the page and load only when picked.
+- **Spacing:** Normal or Relaxed: line height 1.65 to 1.8 for running text, a little more for headings, letters 0.03 em and words 0.12 em further apart.
+- **Theme:** Dark (the default), Light (near-black on a soft off-white), or Match device. The landing's night sky stays dark.
+- **More contrast:** black and white, brighter state colours, and borders and hairlines at 3:1, in either theme. On by itself when the device asks for more contrast.
+- **Less motion:** nothing slides, fades, shimmers or scrolls smoothly, the graph settles at once and the landing's sky stands still. On by itself when the device asks for reduced motion, as before.
+- **Listen:** on Home's greeting (the day in brief: events with their times, what's due with the most pressing by name, and drafts to send), Care's summary and each care item, and each draft's text. Play, then Pause, Resume and Stop; resuming starts again from the sentence it was on. It stops when its view closes, and doesn't show where the browser has no voice on the device. Settings, Listening sets the **reading speed** (0.6 to 1.4 times) and the **voice** (this device's own by default, or any other voice on it), with a sentence to try them on.
+
+The page's lint also runs every recommended rule of `eslint-plugin-jsx-a11y`.
 
 ## Order of work
 

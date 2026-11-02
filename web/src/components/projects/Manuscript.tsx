@@ -55,7 +55,7 @@ export function Changes({ ops, kind, onlyChanges }: { ops: DiffOp[]; kind: FileC
     <div
       className={cn(
         "whitespace-pre-wrap break-words text-ink",
-        kind === "code" ? "font-mono text-xs leading-relaxed" : "font-display text-[16px] leading-relaxed sm:text-[17px]",
+        kind === "code" ? "font-mono text-xs leading-relaxed" : "font-display text-[1rem] leading-relaxed sm:text-[1.0625rem]",
       )}
     >
       {ops.map((o, i) =>
@@ -149,7 +149,7 @@ export function AskBox({ label, placeholder, stepping, deciding, onAsk }: AskPro
         rows={2}
         aria-label={label}
         placeholder={placeholder}
-        className="w-full resize-y rounded-xl border border-line-strong bg-transparent p-3 text-[15px] leading-relaxed text-ink placeholder:text-faint focus:border-accent/40 focus:outline-none"
+        className="w-full resize-y rounded-xl border border-line-strong bg-transparent p-3 text-[0.9375rem] leading-relaxed text-ink placeholder:text-faint focus:border-accent/40 focus:outline-none"
       />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <ActionButton icon={ListPlus} label="Queue it" tone="neutral" disabled={!ready || deciding} onClick={() => void send(false)} />
@@ -323,7 +323,7 @@ export function ManuscriptPanel({ project, again, stepping, deciding, onAsk, onS
             onChange={(e) => setEditing(e.target.value)}
             aria-label={`Edit ${found.path}`}
             spellCheck
-            className="h-[60vh] w-full resize-y rounded-xl border border-line-strong bg-surface p-3 font-mono text-[13px] leading-relaxed text-ink focus:border-accent/40 focus:outline-none"
+            className="h-[60vh] w-full resize-y rounded-xl border border-line-strong bg-surface p-3 font-mono text-[0.8125rem] leading-relaxed text-ink focus:border-accent/40 focus:outline-none"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted">

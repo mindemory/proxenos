@@ -18,7 +18,7 @@ interface MobileNavProps {
   onRefresh: () => void;
 }
 
-const TAB = "relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] tracking-tight transition-colors";
+const TAB = "relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[0.6875rem] tracking-tight transition-colors";
 
 /** Bottom tab bar below the md breakpoint: four views and "More", a sheet with the rest. */
 export function MobileNav({ onNavigate, currentView, hasNew = false, counts = {}, onRefresh }: MobileNavProps) {
@@ -55,7 +55,7 @@ export function MobileNav({ onNavigate, currentView, hasNew = false, counts = {}
         <item.icon size={21} strokeWidth={2} />
         <span className="max-w-full truncate">{item.label}</span>
         {count ? (
-          <span className="num absolute top-0.5 right-[18%] min-w-[16px] rounded-full bg-accent px-1 text-center text-[10px] font-medium leading-4 text-accent-ink">
+          <span className="num absolute top-0.5 right-[18%] min-w-[16px] rounded-full bg-accent px-1 text-center text-[0.625rem] font-medium leading-4 text-accent-ink">
             {count > 99 ? "99+" : count}
           </span>
         ) : null}
@@ -117,7 +117,7 @@ export function MobileNav({ onNavigate, currentView, hasNew = false, counts = {}
                       <item.icon size={22} strokeWidth={2} className={active ? "text-accent" : "text-muted"} />
                       {item.label}
                       {count ? (
-                        <span className="num absolute top-2 right-2 min-w-[18px] rounded-full bg-accent px-1 text-center text-[10px] font-medium leading-[18px] text-accent-ink">
+                        <span className="num absolute top-2 right-2 min-w-[18px] rounded-full bg-accent px-1 text-center text-[0.625rem] font-medium leading-[1.125rem] text-accent-ink">
                           {count}
                         </span>
                       ) : item.id === "feed" && hasNew ? (

@@ -77,7 +77,7 @@ export function Landing() {
   const missing = data && !data.vault.exists;
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-bg">
+    <main className="dark-ground relative isolate flex min-h-dvh flex-col overflow-hidden bg-bg">
       <Constellation shape={data?.constellation ?? null} />
       {/* A pool of shade behind the words, so the sky never competes with them. */}
       <div

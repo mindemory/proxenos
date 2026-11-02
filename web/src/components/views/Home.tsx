@@ -34,6 +34,7 @@ import { Bone, HomeSkeleton } from "@/components/Skeleton";
 import { SourceBadge, SourceChip, SourceIcon, sourceMeta } from "@/components/SourceBadge";
 import { TaskRow } from "@/components/tasks/TaskRow";
 import { NowNote } from "@/components/home/NowNote";
+import { Listen } from "@/components/reading/Listen";
 import { ToldNotes } from "@/components/home/ToldNotes";
 import { careDue, careStatus, firstSentence, mostUrgent, yourMoves } from "@/lib/careClient";
 import { sendFeedback, useJson, type useHome } from "@/lib/client";
@@ -187,6 +188,37 @@ function count(n: number, one: string, many: string, none: string): string {
   return n === 0 ? none : `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
+/**
+ * The day as Listen reads it: the greeting, today's events with their times, what's due with the
+ * most pressing few by name, and the drafts to send. What the greeting says, and a little more,
+ * for someone who'd rather hear it.
+ */
+function spokenDay(data: HomeResponse, briefing: BriefingResponse | null): string {
+  const today = localDay(data.now);
+  const open = data.tasks.actionable.filter((t) => t.action === null);
+  const due = open.filter((t) => (daysLeft(t, today) ?? 1) <= 0).length;
+  const said = [`${greeting(data.now)}${data.name ? `, ${data.name}` : ""}. It's ${longDay(data.now)}.`];
+  if (briefing) {
+    const events = eventsToday(briefing.agenda.events, data.now);
+    said.push(
+      events.length === 0
+        ? "Nothing is on your calendar today."
+        : `You have ${count(events.length, "event", "events", "")} today: ${events
+            .slice(0, 6)
+            .map((e) => (e.all_day ? `${e.title}, all day` : `${e.title}, at ${eventTime(e)}`))
+            .join("; ")}.`,
+    );
+  }
+  if (data.tasks.exists) {
+    said.push(due === 0 ? "No tasks are due today." : `${count(due, "task is", "tasks are", "")} due or overdue.`);
+    const top = byUrgency(open, data.now).slice(0, 3);
+    if (top.length) said.push(`${top.length === 1 ? "The one most pressing" : "The most pressing"}: ${top.map((t) => t.title).join("; ")}.`);
+  }
+  const drafts = data.drafts.awaiting;
+  said.push(drafts === 0 ? "No drafts are waiting to be sent." : `${count(drafts, "draft is", "drafts are", "")} waiting for you to send.`);
+  return said.join(" ");
+}
+
 function Greeting({
   data,
   briefing,
@@ -237,8 +269,9 @@ function Greeting({
           "Here is where things stand."
         )}
       </p>
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <ActionButton icon={MessagesSquare} label="Think something through" tone="accent" onClick={() => onThink(null)} />
+        <Listen id="home-briefing" text={spokenDay(data, briefing.data)} what="today, in brief" />
       </div>
       <NowNote />
       <ToldNotes now={data.now} />
@@ -615,30 +648,34 @@ function ActivityCard({ briefing, onNavigate }: { briefing: Briefing; onNavigate
               And {joinAnd(a.series.slice(rows.length).map((s) => sourceMeta(s.source).label))}.
             </Meta>
           )}
-          <table className="sr-only">
-            <caption>Records per source over the last 30 days</caption>
-            <thead>
-              <tr>
-                <th scope="col">Source</th>
-                <th scope="col">Total</th>
-                <th scope="col">Busiest day</th>
-              </tr>
-            </thead>
-            <tbody>
-              {a.series.map((s) => {
-                const i = s.counts.indexOf(Math.max(...s.counts));
-                return (
-                  <tr key={s.source}>
-                    <th scope="row">{sourceMeta(s.source).label}</th>
-                    <td>{s.total}</td>
-                    <td>
-                      {shortDate(a.days[i])}: {s.counts[i]}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* In a box of its own: a table keeps its own width under sr-only, and at larger text
+              it would widen a phone's page. */}
+          <div className="sr-only">
+            <table>
+              <caption>Records per source over the last 30 days</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col">Total</th>
+                  <th scope="col">Busiest day</th>
+                </tr>
+              </thead>
+              <tbody>
+                {a.series.map((s) => {
+                  const i = s.counts.indexOf(Math.max(...s.counts));
+                  return (
+                    <tr key={s.source}>
+                      <th scope="row">{sourceMeta(s.source).label}</th>
+                      <td>{s.total}</td>
+                      <td>
+                        {shortDate(a.days[i])}: {s.counts[i]}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </Card>

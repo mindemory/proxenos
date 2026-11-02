@@ -10,6 +10,7 @@ import { Bone } from "@/components/Skeleton";
 import { MyTurn, ProxenosTurn, Waiting } from "@/components/think/Turn";
 import { useThink } from "@/lib/client";
 import { formatDateTime, timeAgo } from "@/lib/format";
+import { scrollBehavior } from "@/lib/reading";
 import {
   THINK_MAX_TEXT,
   type ThinkContext,
@@ -81,7 +82,7 @@ function Composer({
         rows={Math.min(12, Math.max(3, text.split("\n").length + 1))}
         spellCheck
         placeholder={placeholder}
-        className="w-full resize-y rounded-xl border border-line-strong bg-bg p-3 font-sans text-base leading-relaxed text-ink sm:text-[15px]"
+        className="w-full resize-y rounded-xl border border-line-strong bg-bg p-3 font-sans text-base leading-relaxed text-ink sm:text-[0.9375rem]"
       />
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <p className="min-w-0 text-xs text-muted">
@@ -191,8 +192,7 @@ export function Think({ intent, onConsumed, onAsk, onMemory }: ThinkProps) {
   const answered = data?.thread?.messages.length ?? 0;
   useEffect(() => {
     if (!thinking && answered === 0) return;
-    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    end.current?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "end" });
+    end.current?.scrollIntoView({ behavior: scrollBehavior(), block: "end" });
   }, [thinking, answered]);
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
@@ -231,7 +231,7 @@ export function Think({ intent, onConsumed, onAsk, onMemory }: ThinkProps) {
     <aside
       aria-label="Threads"
       className={cn(
-        "border-line p-3 md:block md:w-72 md:flex-shrink-0 md:border-r md:min-h-[calc(100dvh-7.25rem)] lg:w-80",
+        "w-full min-w-0 border-line p-3 md:block md:w-72 md:flex-shrink-0 md:border-r md:min-h-[calc(100dvh-7.25rem)] lg:w-80",
         reading ? "hidden" : "block",
       )}
     >

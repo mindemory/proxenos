@@ -91,9 +91,13 @@ export function sourceStyle(kind: string): CSSProperties {
 
 /** A source's icon, in its colour unless `plain`. */
 export function SourceIcon({ kind, size = 12, plain = false }: { kind: string; size?: number; plain?: boolean }) {
-  const { icon: Icon, color } = sourceMeta(kind);
+  const { icon: Icon } = sourceMeta(kind);
   return (
-    <span className="inline-flex flex-shrink-0" style={plain ? undefined : { color }} aria-hidden="true">
+    <span
+      className={plain ? "inline-flex flex-shrink-0" : "src-tone inline-flex flex-shrink-0"}
+      style={plain ? undefined : sourceStyle(kind)}
+      aria-hidden="true"
+    >
       <Icon size={size} strokeWidth={2} />
     </span>
   );
@@ -104,7 +108,7 @@ export function SourceChip({ kind, size = 28 }: { kind: string; size?: number })
   return (
     <span
       style={sourceStyle(kind)}
-      className="inline-flex flex-shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_oklab,var(--src)_28%,transparent)] bg-[color-mix(in_oklab,var(--src)_12%,transparent)] text-[var(--src)]"
+      className="src-tone inline-flex flex-shrink-0 items-center justify-center rounded-lg border border-[color-mix(in_oklab,var(--src)_28%,transparent)] bg-[color-mix(in_oklab,var(--src)_12%,transparent)]"
       aria-hidden="true"
     >
       <span className="flex items-center justify-center" style={{ width: size, height: size }}>
@@ -122,7 +126,7 @@ export function SourceBadge({ kind, label }: { kind: string; label?: string }) {
       style={sourceStyle(kind)}
       className="inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-[color-mix(in_oklab,var(--src)_26%,transparent)] bg-[color-mix(in_oklab,var(--src)_10%,transparent)] px-1.5 py-0.5 text-xs text-ink/90"
     >
-      <span className="text-[var(--src)]">
+      <span className="src-tone">
         <meta.icon size={12} strokeWidth={2.25} aria-hidden="true" />
       </span>
       {label ?? meta.label}

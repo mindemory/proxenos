@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { type CSSProperties, useId, useRef, useState } from "react";
 
 import { shortDate } from "@/lib/format";
 
@@ -48,7 +48,8 @@ export function Sparkline({ values, days, color, unit = "records", height = 36, 
   };
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    // The line and dot are drawn in currentColor, the source's colour (src-tone).
+    <div className="src-tone relative w-full" style={{ height, "--src": color } as CSSProperties}>
       <svg
         ref={box}
         viewBox={`0 0 ${W} ${height}`}
@@ -61,8 +62,8 @@ export function Sparkline({ values, days, color, unit = "records", height = 36, 
       >
         <defs>
           <linearGradient id={gradient} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
           </linearGradient>
         </defs>
         <line x1="0" x2={W} y1={height - 0.5} y2={height - 0.5} stroke="var(--c-line)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -70,7 +71,7 @@ export function Sparkline({ values, days, color, unit = "records", height = 36, 
         <path
           d={line}
           fill="none"
-          stroke={color}
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -90,7 +91,7 @@ export function Sparkline({ values, days, color, unit = "records", height = 36, 
         )}
       </svg>
       {/* Dots are HTML so they stay round while the svg stretches. */}
-      <Dot left={(x(shown ?? last) / W) * 100} top={y(values[shown ?? last])} color={color} ring={shown === null} />
+      <Dot left={(x(shown ?? last) / W) * 100} top={y(values[shown ?? last])} ring={shown === null} />
       {shown !== null && (
         <div
           role="presentation"
@@ -105,7 +106,7 @@ export function Sparkline({ values, days, color, unit = "records", height = 36, 
   );
 }
 
-function Dot({ left, top, color, ring }: { left: number; top: number; color: string; ring: boolean }) {
+function Dot({ left, top, ring }: { left: number; top: number; ring: boolean }) {
   return (
     <span
       aria-hidden="true"
@@ -113,8 +114,8 @@ function Dot({ left, top, color, ring }: { left: number; top: number; color: str
       style={{
         left: `${left}%`,
         top,
-        background: color,
-        boxShadow: ring ? "0 0 0 2px var(--c-surface)" : `0 0 0 2px var(--c-surface), 0 0 0 4px color-mix(in oklab, ${color} 35%, transparent)`,
+        background: "currentColor",
+        boxShadow: ring ? "0 0 0 2px var(--c-surface)" : "0 0 0 2px var(--c-surface), 0 0 0 4px color-mix(in oklab, currentColor 35%, transparent)",
       }}
     />
   );

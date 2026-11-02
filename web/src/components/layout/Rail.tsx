@@ -70,7 +70,7 @@ function RailButton({
         </span>
         {count ? (
           <span
-            className="num absolute -top-1 -right-1 min-w-[16px] rounded-full bg-accent px-1 text-center text-[10px] font-medium leading-4 text-accent-ink xl:static xl:min-w-[20px] xl:px-1.5 xl:text-[11px] xl:leading-5"
+            className="num absolute -top-1 -right-1 min-w-[16px] rounded-full bg-accent px-1 text-center text-[0.625rem] font-medium leading-4 text-accent-ink xl:static xl:min-w-[20px] xl:px-1.5 xl:text-[0.6875rem] xl:leading-5"
             aria-hidden="true"
           >
             {count > 99 ? "99+" : count}

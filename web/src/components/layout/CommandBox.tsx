@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Brain, CornerDownLeft, DoorOpen, LoaderCircle, RefreshCw, Search, Users } from "lucide-react";
 
@@ -80,7 +80,7 @@ function Highlight({ text, words }: { text: string; words: string[] }) {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="num inline-flex min-w-[1.375rem] items-center justify-center rounded-md border border-line-strong bg-surface-2 px-1 py-px text-[11px] text-muted">
+    <kbd className="num inline-flex min-w-[1.375rem] items-center justify-center rounded-md border border-line-strong bg-surface-2 px-1 py-px text-[0.6875rem] text-muted">
       {children}
     </kbd>
   );
@@ -357,8 +357,9 @@ export function CommandBox({ onNavigate, onFind, onNetworkTab, onMemory, onRefre
                         className={cn(
                           "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border",
                           selected ? "border-accent/30 bg-accent/10" : "border-line bg-bg/40",
+                          c.tint && "src-tone",
                         )}
-                        style={c.tint ? { color: c.tint } : undefined}
+                        style={c.tint ? ({ "--src": c.tint } as CSSProperties) : undefined}
                       >
                         <c.icon size={15} className={c.tint ? undefined : selected ? "text-accent" : "text-muted"} aria-hidden="true" />
                       </span>

@@ -113,7 +113,7 @@ function NumberField({
       autoComplete="off"
       spellCheck={false}
       aria-label={label}
-      className="num w-12 rounded-lg border border-line-strong bg-bg px-1 py-1 text-center text-[16px] text-ink focus:border-accent/60 focus:outline-none disabled:opacity-60 sm:text-sm"
+      className="num w-12 rounded-lg border border-line-strong bg-bg px-1 py-1 text-center text-[1rem] text-ink focus:border-accent/60 focus:outline-none disabled:opacity-60 sm:text-sm"
     />
   );
 }

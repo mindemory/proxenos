@@ -11,6 +11,7 @@ import { Bone } from "@/components/Skeleton";
 import type { Attachment } from "@/lib/askImages";
 import { useAsk } from "@/lib/askClient";
 import { errandFromAsk } from "@/lib/errandsClient";
+import { scrollBehavior } from "@/lib/reading";
 
 // What was being written when the view was left, so coming back to it doesn't lose it; and what
 // was last sent, to give back if that ask ends without an answer (a model that fell over, or a
@@ -66,8 +67,7 @@ export function Ask({ onNavigate, prefill, onPrefilled }: AskProps) {
   // A new answer comes into view: the question is above it, the thinking was in this spot.
   useEffect(() => {
     if (!flashId) return;
-    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.getElementById(`ask-${flashId}`)?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+    document.getElementById(`ask-${flashId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   }, [flashId]);
 
   const submit = async () => {

@@ -6,9 +6,11 @@ import { ChevronRight, HeartPulse, Info } from "lucide-react";
 import { CareItemRow, ScriptCard, SectionHeader, Timeline, VisitBrief, type OpenRecord } from "@/components/care/parts";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
+import { Listen } from "@/components/reading/Listen";
 import { ProseSkeleton } from "@/components/Skeleton";
 import { CARE_GROUPS, careStatus, groupCare, useCare } from "@/lib/careClient";
 import { formatDateTime, timeAgo } from "@/lib/format";
+import { scrollBehavior } from "@/lib/reading";
 import { cn } from "@/lib/utils";
 
 type CareTab = "overview" | "brief";
@@ -44,7 +46,7 @@ export function Care({ onChange, onMemory, focus, onFocused }: CareProps) {
     if (!focusId || !found) return;
     // After its group has rendered.
     const timer = window.setTimeout(
-      () => document.getElementById(`care-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById(`care-${focusId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);
@@ -109,9 +111,12 @@ export function Care({ onChange, onMemory, focus, onFocused }: CareProps) {
         <>
           {data.summary && (
             <section aria-labelledby="care-status" className="border-b border-line px-4 py-5 sm:px-6">
-              <h2 id="care-status" className="smallcaps mb-2">
-                Where things stand
-              </h2>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 id="care-status" className="smallcaps">
+                  Where things stand
+                </h2>
+                <Listen id="care-summary" text={data.summary} what="where things stand" />
+              </div>
               <p className="text-[1.0625rem] leading-relaxed text-ink">{data.summary}</p>
               <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-muted">
                 <Info size={13} className="mt-0.5 flex-shrink-0" aria-hidden="true" />

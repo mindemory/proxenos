@@ -47,7 +47,7 @@ export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true
         <h3 className={cn("font-medium leading-snug break-words min-w-0", done ? "text-muted" : "text-ink")}>{t.title}</h3>
         <span
           className={cn(
-            "text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-md border whitespace-nowrap flex-shrink-0",
+            "text-[0.65625rem] uppercase tracking-wider px-1.5 py-0.5 rounded-md border whitespace-nowrap flex-shrink-0",
             PRIORITY_STYLE[t.priority],
           )}
           title={`${t.priority} priority`}

@@ -14,7 +14,8 @@ If you add code or data from another project, keep its licence and copyright not
 | [Lucide](https://github.com/lucide-icons/lucide) | ISC | Icons |
 | [clsx](https://github.com/lukeed/clsx), [tailwind-merge](https://github.com/dcastil/tailwind-merge) | MIT | Class names |
 | [node-qrcode](https://github.com/soldair/node-qrcode) | MIT | The QR code that opens the page on a phone |
-| [TypeScript](https://github.com/microsoft/TypeScript), [ESLint](https://github.com/eslint/eslint) | Apache-2.0, MIT | Checks |
+| [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next) and [Atkinson Hyperlegible Mono](https://github.com/googlefonts/atkinson-hyperlegible-next-mono), from the Braille Institute: Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors | SIL Open Font License 1.1 | The Hyperlegible typeface in Settings, Reading, served with the page through `next/font` and never fetched from Google by the browser |
+| [TypeScript](https://github.com/microsoft/TypeScript), [ESLint](https://github.com/eslint/eslint), [eslint-plugin-jsx-a11y](https://github.com/jsx-eslint/eslint-plugin-jsx-a11y) | Apache-2.0, MIT, MIT | Checks, the page's accessibility rules among them |
 
 ## The Python package
 

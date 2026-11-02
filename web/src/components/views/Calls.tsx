@@ -31,7 +31,7 @@ function Transcript({ lines, now }: { lines: CallLine[]; now: string }) {
         <li key={`${l.at}-${i}`} className={cn("break-words", l.who === "note" || l.who === "line" ? "text-muted" : "text-ink/90")}>
           {WHO[l.who] && <span className="eyebrow mr-1.5">{WHO[l.who]}</span>}
           {l.who === "note" ? <em>{l.text}</em> : l.text}
-          <span className="num ml-2 text-[11px] text-muted" title={formatDateTime(l.at)}>
+          <span className="num ml-2 text-[0.6875rem] text-muted" title={formatDateTime(l.at)}>
             {timeAgo(l.at, now)}
           </span>
         </li>

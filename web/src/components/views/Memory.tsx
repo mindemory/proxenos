@@ -101,7 +101,7 @@ export function Memory({ initial, onConsumed }: MemoryProps) {
               spellCheck={false}
               // eslint-disable-next-line jsx-a11y/no-autofocus -- the view is this search box, opened by the reader
               autoFocus={!initial?.id}
-              className={cn(FIELD, "h-11 w-full rounded-xl pl-10 text-[15px]")}
+              className={cn(FIELD, "h-11 w-full rounded-xl pl-10 text-[0.9375rem]")}
             />
           </form>
 

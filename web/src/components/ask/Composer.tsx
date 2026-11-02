@@ -118,7 +118,7 @@ export function Composer({ text, onText, shots, onShots, sending, onSend, deep, 
         rows={Math.min(14, Math.max(4, text.split("\n").length + 1))}
         spellCheck
         placeholder="Ask anything, or paste a message…"
-        className="w-full resize-y rounded-xl border border-line-strong bg-bg p-3 font-sans text-base leading-relaxed text-ink sm:text-[15px]"
+        className="w-full resize-y rounded-xl border border-line-strong bg-bg p-3 font-sans text-base leading-relaxed text-ink sm:text-[0.9375rem]"
       />
 
       {(shots.length > 0 || processing > 0) && (

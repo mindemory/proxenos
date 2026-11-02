@@ -1,6 +1,7 @@
 import { Lightbulb, ListTodo, PenLine, RefreshCw, type LucideIcon } from "lucide-react";
 
 import { Logo, Wordmark } from "@/components/Logo";
+import { ReadingButton } from "@/components/reading/ReadingButton";
 import type { useHome } from "@/lib/client";
 import { formatDateTime, freshness, freshnessLine, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -64,7 +65,7 @@ function Count({
 
 /**
  * The top bar: the name wherever the rail doesn't show it (the mark too on a phone, which has no
- * rail), the command box, the open counts, and when things last synced.
+ * rail), the command box, the open counts, when things last synced, and Aa for reading.
  */
 export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onMemory, onRefresh }: TopBarProps) {
   const sync = syncState(home);
@@ -76,7 +77,7 @@ export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetwork
         aria-label="Proxenos, home"
       >
         <Logo size={26} className="text-accent md:hidden" />
-        <Wordmark className="text-[1.45rem]" />
+        <Wordmark className="topbar-name text-[1.45rem]" />
       </button>
 
       <CommandBox onNavigate={onNavigate} onFind={onFind} onNetworkTab={onNetworkTab} onMemory={onMemory} onRefresh={onRefresh} />
@@ -97,6 +98,8 @@ export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetwork
           <span className={cn("h-2 w-2 rounded-full", sync.dot)} aria-hidden="true" />
           <span className="num hidden md:inline whitespace-nowrap">{sync.text}</span>
         </button>
+
+        <ReadingButton onSettings={() => onNavigate("settings")} />
 
         <button
           onClick={onRefresh}

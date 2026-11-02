@@ -57,7 +57,7 @@ export function Errands() {
           }}
           rows={3}
           placeholder="What should get done? “Reach Ana Lee at Acme Labs about the open role, by email, with my CV.”"
-          className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-ink placeholder:text-faint focus:outline-none"
+          className="w-full resize-none bg-transparent text-[0.9375rem] leading-relaxed text-ink placeholder:text-faint focus:outline-none"
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted">

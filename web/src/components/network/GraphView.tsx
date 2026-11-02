@@ -69,7 +69,7 @@ function Chip({
       aria-pressed={on}
       title={title}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] transition-colors whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.8125rem] transition-colors whitespace-nowrap",
         on ? "border-accent/40 bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-ink",
       )}
     >
@@ -96,7 +96,7 @@ function ClusterName({
       <button
         onClick={() => setNaming({ id: cluster.id, text: cluster.label, saving: false })}
         title="Name this circle the way you'd say where you know them from"
-        className="text-[13px] text-accent px-2 hover:underline underline-offset-4"
+        className="text-[0.8125rem] text-accent px-2 hover:underline underline-offset-4"
       >
         Rename
       </button>
@@ -125,12 +125,12 @@ function ClusterName({
         onKeyDown={(e) => e.key === "Escape" && setNaming(null)}
         aria-label={`A name for the ${cluster.label} cluster`}
         placeholder="e.g. PhD lab, Boston"
-        className="w-52 rounded-full border border-line-strong bg-transparent px-3 py-1 text-[13px] text-ink outline-none focus:border-accent/60"
+        className="w-52 rounded-full border border-line-strong bg-transparent px-3 py-1 text-[0.8125rem] text-ink outline-none focus:border-accent/60"
       />
-      <button type="submit" disabled={naming.saving} className="text-[13px] text-accent px-1 hover:underline underline-offset-4">
+      <button type="submit" disabled={naming.saving} className="text-[0.8125rem] text-accent px-1 hover:underline underline-offset-4">
         {naming.saving ? "Saving…" : "Save"}
       </button>
-      <button type="button" onClick={() => setNaming(null)} className="text-[13px] text-muted px-1 hover:text-ink">
+      <button type="button" onClick={() => setNaming(null)} className="text-[0.8125rem] text-muted px-1 hover:text-ink">
         Cancel
       </button>
     </form>
@@ -416,7 +416,7 @@ export function GraphView({
             onClick={() => setFiltersOpen((v) => !v)}
             aria-expanded={filtersOpen}
             className={cn(
-              "sm:hidden inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px]",
+              "sm:hidden inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8125rem]",
               filtered ? "border-accent/40 text-accent" : "border-line-strong text-muted",
             )}
           >
@@ -435,7 +435,7 @@ export function GraphView({
               disabled={refreshing}
               aria-label="Rebuild the people index"
               title="Rebuild the people index with every saved change"
-              className="ml-auto lg:ml-0 inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5 text-[13px] text-muted hover:text-ink disabled:opacity-60"
+              className="ml-auto lg:ml-0 inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5 text-[0.8125rem] text-muted hover:text-ink disabled:opacity-60"
             >
               <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
               <span className="hidden sm:inline">{refreshing ? "Rebuilding…" : "Refresh"}</span>
@@ -466,7 +466,7 @@ export function GraphView({
             Hide unconnected
           </Chip>
           {filtered && (
-            <button onClick={clearFilters} className="text-[13px] text-accent px-2 hover:underline underline-offset-4">
+            <button onClick={clearFilters} className="text-[0.8125rem] text-accent px-2 hover:underline underline-offset-4">
               Clear
             </button>
           )}
@@ -474,7 +474,7 @@ export function GraphView({
 
         {clusterList.length > 0 && (
           <div className={cn("flex-wrap items-center gap-1.5", filtersOpen ? "flex" : "hidden sm:flex")}>
-            <div role="group" aria-label="Colour people by" className="inline-flex rounded-full border border-line-strong p-0.5 text-[13px]">
+            <div role="group" aria-label="Colour people by" className="inline-flex rounded-full border border-line-strong p-0.5 text-[0.8125rem]">
               {(["cluster", "relation"] as const).map((c) => (
                 <button
                   key={c}
@@ -510,7 +510,7 @@ export function GraphView({
               />
             )}
             {byCluster && (
-              <span className="inline-flex items-center gap-1.5 px-1 text-[13px] text-muted whitespace-nowrap">
+              <span className="inline-flex items-center gap-1.5 px-1 text-[0.8125rem] text-muted whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: clusterVar(null) }} />
                 no cluster · ring: relation
               </span>

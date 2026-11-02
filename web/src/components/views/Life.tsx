@@ -9,6 +9,7 @@ import { Segmented } from "@/components/layout/Segmented";
 import { ProseSkeleton } from "@/components/Skeleton";
 import { monthName, useLife } from "@/lib/client";
 import { formatDateTime, longDay, timeAgo } from "@/lib/format";
+import { scrollBehavior } from "@/lib/reading";
 import type { LifeDay, LifeEntry, LifeMonth, LifeResponse, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -277,7 +278,7 @@ export function Life({ onThink }: { onThink?: (start: ThinkStart) => void } = {}
   useEffect(() => {
     if (!focus || !focusShown) return;
     const timer = window.setTimeout(
-      () => document.getElementById(`day-${focus}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById(`day-${focus}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);

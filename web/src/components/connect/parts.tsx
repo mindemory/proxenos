@@ -168,7 +168,7 @@ export function SourceRow({ s, now }: { s: ConnectSource; now: string }) {
     <div className="flex items-start gap-3.5 px-4 py-3.5">
       <Chip id={s.id} />
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="min-w-0 truncate font-medium text-ink">
             {copy.label}
             {s.detail && <span className="num ml-2 text-xs font-normal text-muted">{s.detail}</span>}

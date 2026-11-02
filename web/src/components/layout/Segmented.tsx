@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** A pill-shaped switch between a view's tabs. */
+/** A pill-shaped switch between a view's tabs. Too wide for its place (larger text on a phone), it scrolls within itself. */
 export function Segmented<T extends string>({
   tabs,
   value,
@@ -13,7 +13,7 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex min-w-0 bg-surface border border-line p-1 rounded-full">
+    <div role="group" aria-label={label} className="flex min-w-0 max-w-full overflow-x-auto bg-surface border border-line p-1 rounded-full">
       {tabs.map((t) => (
         <button
           key={t.id}

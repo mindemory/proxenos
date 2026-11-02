@@ -12,6 +12,7 @@ import { StepCard } from "@/components/projects/StepCard";
 import { Bone } from "@/components/Skeleton";
 import { timeAgo } from "@/lib/format";
 import { useProjects } from "@/lib/projectsClient";
+import { scrollBehavior } from "@/lib/reading";
 import { STEP_MAX_TEXT, type ManuscriptEdit, type ProjectsResponse, type StepAsk, type ThinkStart, type WorkProject } from "@/lib/types";
 
 // What was being written in each project's queue box when the view was left.
@@ -153,7 +154,7 @@ function ProjectSection({
             rows={2}
             aria-label={`A step for ${project.name}`}
             placeholder="A step for it to take, in your words: “Redo figure 3 with medians, not means.” Or leave it to pick the next one."
-            className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-ink placeholder:text-faint focus:outline-none"
+            className="w-full resize-none bg-transparent text-[0.9375rem] leading-relaxed text-ink placeholder:text-faint focus:outline-none"
           />
           {project.queue.length > 0 && (
             <ol className="space-y-1.5 border-l-2 border-line-strong pl-3">
@@ -260,7 +261,7 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
     if (!focusId || !found) return;
     // After the projects have rendered.
     const timer = window.setTimeout(
-      () => document.getElementById(`project-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById(`project-${focusId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);

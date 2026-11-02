@@ -32,7 +32,7 @@ export function OpenButton({ plan, primary, onOpen }: OpenButtonProps) {
       onClick={onOpen}
       title={plan.hint}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] leading-none transition-colors whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8125rem] leading-none transition-colors whitespace-nowrap",
         primary
           ? "border-accent bg-accent text-accent-ink font-medium hover:bg-accent/85"
           : "border-line-strong text-muted hover:text-ink hover:bg-surface-2",

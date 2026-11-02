@@ -90,7 +90,7 @@ export function ToldNotes({ now }: { now: string }) {
         <ul className="mt-3 space-y-1.5">
           {notes.map((n) => (
             <li key={n.at} className="flex items-start gap-2 text-sm text-ink/90">
-              <span className="mt-0.5 shrink-0 rounded-md border border-line-strong px-1.5 text-[10.5px] uppercase tracking-wider text-muted">
+              <span className="mt-0.5 shrink-0 rounded-md border border-line-strong px-1.5 text-[0.65625rem] uppercase tracking-wider text-muted">
                 {n.always ? "Rule" : shortDate(n.at, now)}
               </span>
               <span className="min-w-0 flex-1 break-words">{n.text}</span>

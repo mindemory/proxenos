@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { PrimaryButton, StatePill } from "@/components/connect/parts";
 import { ErrorBanner } from "@/components/EmptyState";
+import { ReadingControls, VoiceControls } from "@/components/reading/ReadingControls";
 import {
   type Apply,
   CloudWarning,
@@ -69,14 +70,48 @@ function FromShell({ values }: { values: SettingValue[] }) {
   );
 }
 
+/** How this device shows the page and reads it aloud: kept in this browser, so it's there before anything else loads. */
+function ReadingGroup() {
+  return (
+    <>
+      <Group
+        kicker="Reading"
+        title="Easier to read"
+        note="Kept on this device, in this browser. Aa at the top of every view changes these too."
+      >
+        <div className="card p-4 sm:p-5">
+          <ReadingControls />
+        </div>
+      </Group>
+      <Group
+        kicker="Listening"
+        title="Read aloud"
+        note="Listen on Home, Care and Drafts reads with a voice on this device. Nothing is sent anywhere to do it."
+      >
+        <div className="card p-4 sm:p-5">
+          <VoiceControls />
+        </div>
+      </Group>
+    </>
+  );
+}
+
 /** Your settings, the model, the keys and sign-ins (whether each is set, never what it is), and the folders read on every sync. */
 export function Settings() {
   const { status, error, reload, apply } = useSetup();
-  if (!status) return error ? <ErrorBanner message={`Couldn't read the settings: ${error}`} /> : <StatusSkeleton />;
+  if (!status) {
+    return (
+      <div className="space-y-8 p-4 pb-24 sm:p-6 md:pb-20">
+        <ReadingGroup />
+        {error ? <ErrorBanner message={`Couldn't read the settings: ${error}`} /> : <StatusSkeleton />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 p-4 pb-24 sm:p-6 md:pb-20">
       {error && <ErrorBanner message={error} />}
+      <ReadingGroup />
       <section className="card flex items-start gap-3 p-5 sm:p-6">
         <div className="rounded-full bg-accent/10 p-2.5 text-accent">
           <SlidersHorizontal size={17} />
@@ -221,17 +256,17 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
     <div className="space-y-3 px-4 py-3.5">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <div className="font-medium text-ink">{secretLabel(s.name)}</div>
-          <div className="num text-xs text-faint">{s.name}</div>
+          <div className="break-words font-medium text-ink">{secretLabel(s.name)}</div>
+          <div className="num break-all text-xs text-faint">{s.name}</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <StatePill on={s.set} label={s.set ? `Set ${originLabel(s.from, store)}` : "Not set"} />
           {mode === "idle" && (
             <>
               <button
                 type="button"
                 onClick={() => setMode("replace")}
-                className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-[13px] text-muted transition-colors hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-[0.8125rem] text-muted transition-colors hover:text-ink"
               >
                 <KeyRound size={13} aria-hidden="true" />
                 {s.set ? "Replace" : "Add"}
@@ -291,11 +326,11 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
             type="button"
             disabled={busy}
             onClick={() => run({ forget: s.name }).then(done)}
-            className="rounded-full bg-bad-ink px-3 py-1 text-[13px] font-medium text-bg disabled:opacity-50"
+            className="rounded-full bg-bad-ink px-3 py-1 text-[0.8125rem] font-medium text-bg disabled:opacity-50"
           >
             Remove
           </button>
-          <button type="button" onClick={() => setMode("idle")} className="text-[13px] text-bad-ink/80 hover:text-bad-ink">
+          <button type="button" onClick={() => setMode("idle")} className="text-[0.8125rem] text-bad-ink/80 hover:text-bad-ink">
             Keep
           </button>
         </div>

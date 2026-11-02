@@ -22,7 +22,7 @@ function CardHead({ s, pill }: { s: ConnectSource; pill: React.ReactNode }) {
     <div className="flex items-start gap-3.5">
       <Chip id={s.id} />
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <h3 className="font-medium text-ink">{copyFor(s.id).label}</h3>
           {pill}
         </div>
@@ -203,7 +203,7 @@ function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { c
                 <button
                   onClick={() => signIn(a.name, a.address)}
                   disabled={busy || noClient}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-[13px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1 text-[0.8125rem] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <RefreshCw size={13} aria-hidden="true" />
                   Sign in again
@@ -216,7 +216,7 @@ function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { c
 
       <form onSubmit={submit} className="space-y-2.5">
         <p className="smallcaps text-faint">{s.accounts.length ? "Add an account" : "Sign in"}</p>
-        <div className="grid gap-2.5 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] sm:items-end">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] sm:items-end">
           <label className="block space-y-1">
             <span className="text-xs text-muted">Short name</span>
             <input
@@ -254,7 +254,7 @@ function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { c
       </form>
 
       {noClient && (
-        <p className="rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
+        <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
           {copy.noClient}
         </p>
       )}
@@ -326,7 +326,7 @@ export function WhatsAppCard({
       </div>
 
       {s.problem === "blocked" && (
-        <p className="rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
+        <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
           macOS is keeping Proxenos out of WhatsApp&apos;s store. In System Settings, Privacy &amp; Security, Full Disk
           Access, allow the app that runs Proxenos (Terminal, if you started it there), then read again.{" "}
           <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
@@ -555,7 +555,7 @@ export function PhoneCard({ phone }: { phone: PhoneInfo }) {
           <Smartphone size={18} />
         </span>
         <div className="min-w-0 flex-1 pt-0.5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <h3 className="font-medium text-ink">Your phone</h3>
             <StatePill on={!!address} label={address ? "Ready" : "Not set up"} />
           </div>

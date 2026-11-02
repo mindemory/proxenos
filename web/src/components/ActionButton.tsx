@@ -38,7 +38,7 @@ export function ActionButton({ icon: Icon, label, tone, active = false, fillWhen
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] leading-none transition-colors whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8125rem] leading-none transition-colors whitespace-nowrap",
         "disabled:cursor-not-allowed disabled:opacity-50",
         active ? ACTIVE[tone] : cn("border-line-strong text-muted", HOVER[tone]),
       )}

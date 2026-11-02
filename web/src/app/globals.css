@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Proxenos is always dark: a near-black ground and neutral greys with no tint, as
-   most apps people read in all day are, for reading late.
+   Proxenos is dark unless the reader picks otherwise: a near-black ground and
+   neutral greys with no tint, as most apps people read in all day are, for
+   reading late. A light theme, and more contrast in either, are picked per
+   device in Settings, Reading (see "Reading" further down).
 
    The accent is off-white on purpose. Green, amber and red are reserved for
    state (done, due soon, overdue; confident, unsure), so the colour that marks
@@ -15,7 +17,9 @@
    keeps it that way.
 --------------------------------------------------------------------------- */
 
-:root {
+/* .dark-ground keeps a part dark in either theme: the landing's night sky. */
+:root,
+.dark-ground {
   color-scheme: dark;
 
   --c-bg: #111111; /* page ground */
@@ -58,6 +62,131 @@
   --c-cluster-4: #008300;
   --c-cluster-other: #8f8f8f;
   --c-cluster-none: #616161;
+}
+
+/* Light: dark text on a soft off-white rather than pure white, as the British Dyslexia
+   Association's style guide asks. Every text colour reaches AA on the grounds it's used on, and
+   control borders 3:1 (tests/test_contrast.py checks all four sets). */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --c-bg: #f4f2ed;
+  --c-surface: #fbfaf7;
+  --c-surface-2: #e9e6df;
+  --c-surface-3: #dfdbd3;
+  --c-ink: #1b1a18; /* 15.5:1 on the ground */
+  --c-muted: #504c46; /* 7.6:1 on the ground, 6.8:1 on surface-2 */
+  --c-faint: #67635b; /* 5.3:1 on the ground; never on surface-2 */
+  --c-line: #dcd8cf;
+  --c-line-strong: #8e897f; /* 3.2:1 on the ground */
+  --c-accent: #22211e;
+  --c-accent-ink: #fbfaf7;
+
+  --c-ok-bg: #e2f0e6;
+  --c-ok-ink: #1c6636;
+  --c-ok-line: #8fc4a0;
+
+  --c-warn-bg: #f6ecd3;
+  --c-warn-ink: #7a5200;
+  --c-warn-line: #d9b766;
+
+  --c-bad-bg: #f8e3e1;
+  --c-bad-ink: #a12d27;
+  --c-bad-line: #e0a19b;
+
+  --c-rel-met: #22211e;
+  --c-rel-know: #0e7473;
+  --c-rel-read: #8b43b3;
+
+  --c-cluster-1: #2a68c0;
+  --c-cluster-2: #9a6500;
+  --c-cluster-3: #bd3a6b;
+  --c-cluster-4: #2a7a1d;
+  --c-cluster-other: #77736b;
+  --c-cluster-none: #8a857c;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.07);
+  --shadow-raise: 0 14px 32px -14px rgb(0 0 0 / 0.22), 0 3px 8px -3px rgb(0 0 0 / 0.1);
+}
+
+/* More contrast, dark: black and white, brighter state colours, and hairlines and control
+   borders at 3:1 or more. Also on whenever the device asks for more contrast. */
+:root[data-contrast="more"]:not([data-theme="light"]),
+:root[data-contrast="more"] .dark-ground {
+  --c-bg: #000000;
+  --c-surface: #0a0a0a;
+  --c-surface-2: #1a1a1a;
+  --c-surface-3: #262626;
+  --c-ink: #ffffff;
+  --c-muted: #e2e2e2;
+  --c-faint: #cfcfcf;
+  --c-line: #6e6e6e;
+  --c-line-strong: #a0a0a0;
+  --c-accent: #ffffff;
+  --c-accent-ink: #000000;
+
+  --c-ok-bg: #03200f;
+  --c-ok-ink: #a8f2c1;
+  --c-ok-line: #4fae73;
+
+  --c-warn-bg: #271d00;
+  --c-warn-ink: #ffdc8f;
+  --c-warn-line: #b38b2e;
+
+  --c-bad-bg: #2c0b0c;
+  --c-bad-ink: #ffbdb8;
+  --c-bad-line: #c0504d;
+
+  --c-rel-met: #ffffff;
+  --c-rel-know: #7ee6e5;
+  --c-rel-read: #e6b8fb;
+
+  --c-cluster-1: #5aa2ff;
+  --c-cluster-2: #e6a100;
+  --c-cluster-3: #f06a9c;
+  --c-cluster-4: #2fb12f;
+  --c-cluster-other: #b0b0b0;
+  --c-cluster-none: #8a8a8a;
+}
+
+/* More contrast, light: black on white. */
+:root[data-theme="light"][data-contrast="more"] {
+  --c-bg: #ffffff;
+  --c-surface: #ffffff;
+  --c-surface-2: #ebebeb;
+  --c-surface-3: #dedede;
+  --c-ink: #000000;
+  --c-muted: #262626;
+  --c-faint: #383838;
+  --c-line: #8a8a8a;
+  --c-line-strong: #595959;
+  --c-accent: #000000;
+  --c-accent-ink: #ffffff;
+
+  --c-ok-bg: #e3f3e8;
+  --c-ok-ink: #0a4d24;
+  --c-ok-line: #2f7d4c;
+
+  --c-warn-bg: #fcefcd;
+  --c-warn-ink: #563900;
+  --c-warn-line: #9a6b00;
+
+  --c-bad-bg: #fce2df;
+  --c-bad-ink: #821a14;
+  --c-bad-line: #b4413a;
+
+  --c-rel-met: #000000;
+  --c-rel-know: #005f5e;
+  --c-rel-read: #6d2a91;
+
+  --c-cluster-1: #1d55a8;
+  --c-cluster-2: #7a5000;
+  --c-cluster-3: #a3214f;
+  --c-cluster-4: #1f6514;
+  --c-cluster-other: #555555;
+  --c-cluster-none: #6e6e6e;
+
+  --shadow-card: none;
 }
 
 @theme {
@@ -173,6 +302,94 @@
   color: var(--c-muted);
 }
 
+/* ---------------------------------------------------------------------------
+   Reading. What the reader picks in Settings, Reading, per device, set as
+   attributes on <html> by lib/reading.ts. With none set the page is as
+   designed above.
+     data-text      large, larger: the root size, which the rem type scale and
+                    the spacing around it follow; breakpoints and hairlines stay
+     data-face      hyperlegible: Atkinson Hyperlegible Next for body and
+                    headings, and its Mono for numbers; the wordmark stays
+     data-spacing   relaxed: more room between lines, and a little between
+                    letters and words
+     data-theme     light (the token sets above)
+     data-contrast  more (the token sets above)
+     data-motion    less: as prefers-reduced-motion, whatever the device says
+--------------------------------------------------------------------------- */
+
+:root[data-text="large"] {
+  font-size: 125%;
+}
+
+:root[data-text="larger"] {
+  font-size: 150%;
+}
+
+/* A phone's top bar can't fit the name beside its controls at the larger size; the mark stays. */
+@media (max-width: 639px) {
+  :root[data-text="larger"] .topbar-name {
+    display: none;
+  }
+}
+
+:root[data-face="hyperlegible"] {
+  --font-geist: var(--font-atkinson);
+  --font-newsreader: var(--font-atkinson);
+  --font-geist-mono: var(--font-atkinson-mono);
+}
+
+/* Line height 1.5 or more for running text, as WCAG 1.4.12 and the BDA guide ask, and letter
+   spacing only with word spacing to match, since wider letters alone slow reading. */
+:root[data-spacing="relaxed"] {
+  --leading-tight: 1.4;
+  --leading-snug: 1.55;
+  --leading-normal: 1.65;
+  --leading-relaxed: 1.8;
+  --text-xs--line-height: 1.65;
+  --text-sm--line-height: 1.7;
+  --text-base--line-height: 1.7;
+  --text-lg--line-height: 1.65;
+  --text-xl--line-height: 1.55;
+  --text-2xl--line-height: 1.45;
+}
+
+:root[data-spacing="relaxed"] body {
+  letter-spacing: 0.03em;
+  word-spacing: 0.12em;
+}
+
+:root[data-spacing="relaxed"] :is(.title-1, .title-2) {
+  line-height: 1.3;
+}
+
+:root[data-spacing="relaxed"] :is(.title-3, .lede) {
+  line-height: 1.6;
+}
+
+:root[data-motion="less"] *,
+:root[data-motion="less"] *::before,
+:root[data-motion="less"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-motion="less"] :is(.card-hover, .tile-hover):hover {
+  transform: none;
+}
+
+/* Each source's colour is drawn for a dark ground; on a light one it's taken down far enough
+   for its icon and line to stand out. */
+:root[data-theme="light"] .src-tone {
+  color: color-mix(in oklab, var(--src) 55%, #000);
+}
+
+:root[data-theme="light"][data-contrast="more"] .src-tone {
+  color: color-mix(in oklab, var(--src) 42%, #000);
+}
+
 html,
 body {
   background: var(--c-bg);
@@ -251,6 +468,11 @@ body {
   .tile-hover:hover {
     border-color: var(--c-line-strong);
     background: var(--c-surface-2);
+  }
+
+  /* A source's own colour (--src, from sourceStyle), for its icon or its line in a chart. */
+  .src-tone {
+    color: var(--src);
   }
 
   /* Skeleton blocks shimmer while a view loads. */

@@ -94,7 +94,7 @@ function WhoIsThis({
         ? `${p.name} is not ${otherName}.`
         : `Hide ${p.name} from the graph and the list.`;
 
-  const button = "inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] text-ink/90 hover:bg-surface-2 disabled:opacity-50";
+  const button = "inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[0.8125rem] text-ink/90 hover:bg-surface-2 disabled:opacity-50";
   return (
     <Section title="Who is this">
       {mode === null ? (
@@ -168,12 +168,12 @@ function WhoIsThis({
               <button
                 onClick={save}
                 disabled={busy}
-                className="rounded-lg bg-accent px-3 py-1 text-[13px] font-medium text-accent-ink disabled:opacity-60"
+                className="rounded-lg bg-accent px-3 py-1 text-[0.8125rem] font-medium text-accent-ink disabled:opacity-60"
               >
                 {busy ? "Saving and rebuilding…" : "Save"}
               </button>
             )}
-            <button onClick={reset} disabled={busy} className="text-[13px] text-muted hover:text-ink px-1">
+            <button onClick={reset} disabled={busy} className="text-[0.8125rem] text-muted hover:text-ink px-1">
               Cancel
             </button>
           </div>

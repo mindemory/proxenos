@@ -148,7 +148,7 @@ export function ChoiceCard({ side, c, now, onReact, onDraft, onErrand, onMemory,
         <div className="space-y-3 rounded-xl border border-accent/25 bg-accent/[0.06] p-4">
           <div>
             <div className="smallcaps mb-1.5 text-accent">{step.kind === "errand" ? "First step, as an errand" : "First step"}</div>
-            <p className="break-words text-[15px] leading-relaxed text-ink">{step.what}</p>
+            <p className="break-words text-[0.9375rem] leading-relaxed text-ink">{step.what}</p>
             {step.to && <p className="mt-1 text-xs text-muted">To {step.to}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -162,7 +162,7 @@ export function ChoiceCard({ side, c, now, onReact, onDraft, onErrand, onMemory,
                 href={takeOn.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"
+                className="inline-flex items-center gap-1 text-[0.8125rem] text-muted hover:text-ink"
               >
                 Open the page <ArrowUpRight size={13} />
               </a>
@@ -175,7 +175,7 @@ export function ChoiceCard({ side, c, now, onReact, onDraft, onErrand, onMemory,
         <div className="space-y-3 rounded-xl border border-line-strong bg-surface-2/60 p-4">
           <div>
             <div className="smallcaps mb-1.5">An answer to send</div>
-            <p className="break-words text-[15px] leading-relaxed text-ink">{skip.decline.what}</p>
+            <p className="break-words text-[0.9375rem] leading-relaxed text-ink">{skip.decline.what}</p>
             {skip.decline.to && <p className="mt-1 text-xs text-muted">To {skip.decline.to}</p>}
           </div>
           <DraftLink draft={c.draft} onDraft={onDraft} />
