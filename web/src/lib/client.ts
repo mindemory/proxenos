@@ -38,6 +38,7 @@ import type {
   WatchPick,
   WatchResponse,
   JournalResponse,
+  LifeResponse,
 } from "./types";
 
 export const POLL_MS = 5 * 60 * 1000;
@@ -448,6 +449,81 @@ export function useJournal(date: string | null) {
     }
   }, [setData, setError]);
   return { data, error, writing, writeToday, clearError: () => setError(null) };
+}
+
+const LIFE_POLL_MS = 4000;
+
+/** "March 2026" from "2026-03". */
+export function monthName(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+/**
+ * The Life view's months, and one month's story and days (null: the list alone), and writing a
+ * month on demand. A story takes minutes on a local model, so while one is being written the list
+ * is checked every few seconds (the list alone: no month's days are read again), and the month
+ * shown is read again once it's done.
+ */
+export function useLife(month: string | null) {
+  const url = month ? `/api/life?month=${encodeURIComponent(month)}` : "/api/life";
+  const { data, error, setData, setError } = useJson<LifeResponse>(url);
+  const notify = useToast();
+  // The month the page asked for and when, so its own job can be told from an earlier one: in
+  // state to keep checking while it's written, and in a ref for the checks themselves.
+  const [waiting, setWaiting] = useState<{ month: string; since: number } | null>(null);
+  const waitingRef = useRef(waiting);
+  const track = useCallback((next: { month: string; since: number } | null) => {
+    waitingRef.current = next;
+    setWaiting(next);
+  }, []);
+
+  const absorb = useCallback(
+    (list: LifeResponse) => {
+      setData((d) => (d ? { ...d, now: list.now, months: list.months, left: list.left, job: list.job } : d));
+      const w = waitingRef.current;
+      const job = list.job;
+      if (!w || !job || Date.parse(job.started) < w.since - 2000 || job.state === "running") return;
+      track(null);
+      if (job.state === "done") {
+        notify(`Wrote ${monthName(w.month)}`, "ok");
+        getJson<LifeResponse>(url).then(setData, () => undefined);
+      } else setError(job.message || "It stopped before it finished.");
+    },
+    [notify, setData, setError, track, url],
+  );
+
+  const running = data?.job?.state === "running" || waiting !== null;
+  useEffect(() => {
+    if (!running) return;
+    const check = () => getJson<LifeResponse>("/api/life").then(absorb, () => undefined);
+    const timer = window.setInterval(check, LIFE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [running, absorb]);
+
+  const write = useCallback(
+    async (which: string) => {
+      const since = Date.now();
+      try {
+        const res = await fetch("/api/life", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ month: which }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? `returned ${res.status}`);
+      } catch (e) {
+        setError(`Couldn't start writing ${monthName(which)}: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      setError(null);
+      track({ month: which, since });
+      getJson<LifeResponse>("/api/life").then(absorb, () => undefined);
+    },
+    [absorb, setError, track],
+  );
+
+  return { data, error, write, clearError: () => setError(null) };
 }
 
 /** What stays here, what went to a model in the last 30 days, and what's read from elsewhere. Read-only. */

@@ -8,7 +8,8 @@ walks, listening, notes and LinkedIn connections. What the model would write fro
 the way each clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the
 week's choices, drafts and errands. Then the steps that need no model run on it as they would on
 a real vault: the memory index, the people index, today's recall, the outbox's track record and
-yesterday's journal, with the brief the model would write; and a week of model calls for the
+yesterday's journal, with the brief the model would write; the stories of the last months, as the
+night would have written them from those months' days; and a week of model calls for the
 Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
@@ -36,6 +37,7 @@ from proxenos.clones import (
     choices,
     errands,
     journal,
+    life,
     network,
     recall,
     tasks,
@@ -144,6 +146,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         recalled = recall.recall(vault, now=c.now)
         outbox.run(vault, c.now)  # its track record for the page; a demo has no way to send
         _journal(vault, c)
+        _life(vault, c)
         _calls(vault, c)
     return {
         "records": indexed.get("records_total", 0),
@@ -2270,6 +2273,7 @@ def _calls(vault: Path, c: _Clock) -> None:
         ("work", 28, 22_000, 1_100, 48.3),
         ("work", 28, 19_500, 900, 41.0),
         ("journal", 27, 6_800, 700, 22.4),
+        ("life", 27, 31_000, 2_300, 141.6),
         ("tasks", 5, 14_000, 1_300, 51.9),
         ("work", 5, 17_200, 850, 38.6),
         ("ask", 2, 9_400, 600, 19.8),
@@ -2319,6 +2323,118 @@ def _journal(vault: Path, c: _Clock) -> None:
             "sections": lines,
         },
     )
+
+
+# What the demo's records hold, as the month's story would tell it: (days from today, which
+# paragraph, a sentence of the story, a highlight or None). Each goes to the month it falls in.
+_MOMENTS = (
+    (
+        -60,
+        "work",
+        "You applied for an operations role at Delta Freight, CV attached.",
+        "Applied to Delta Freight",
+    ),
+    (
+        -50,
+        "making",
+        "You set a target for the holiday sale: six mugs, four bowls, a vase.",
+        "Set the sale target",
+    ),
+    (-42, "making", "Weekend walks by the lake, eight or nine kilometres, held most weeks.", None),
+    (
+        -40,
+        "work",
+        "At the supply chain meetup you met Uma Rao, who sent her slides.",
+        "Met Uma Rao",
+    ),
+    (-37, "making", "You walked over to the community garden plot.", None),
+    (
+        -30,
+        "glasses",
+        "An eye exam at Cedar Eye Care found a small change in your prescription.",
+        "Eye exam",
+    ),
+    (-24, "glasses", "You chose dark green frames at Juniper Optical.", "Chose the new frames"),
+    (
+        -16,
+        "work",
+        "Fay Moss at Beta Corp asked about an operations lead role.",
+        "Beta Corp got in touch",
+    ),
+    (
+        -15,
+        "work",
+        '"It\'s a busy month," you wrote back, and asked to come back to it at its end.',
+        None,
+    ),
+    (
+        -14,
+        "making",
+        "Your bowls came through the bisque firing, ready for the blue glaze.",
+        "Bowls fired",
+    ),
+    (
+        -12,
+        "glasses",
+        "You picked up the new glasses, which slipped a little at first.",
+        "New glasses",
+    ),
+    (-10, "people", "In the family chat you told Mei about the dark green frames.", None),
+    (
+        -9,
+        "people",
+        "You and Cy settled the lake trip; Max will keep an eye on your plot.",
+        "Lake trip settled",
+    ),
+    (
+        -7,
+        "glasses",
+        "Juniper's bill asked for $420; the plan put your share at $95.",
+        "The $420 bill",
+    ),
+    (
+        -6,
+        "people",
+        "Dee booked Mum's birthday dinner, and you said you'd bring the cake.",
+        "Dinner planned",
+    ),
+    (-6, "work", "Q1 budget planning took a morning with the team.", None),
+    (
+        -3,
+        "glasses",
+        "You booked a fitting and asked Juniper to look at the bill again.",
+        "Booked the fitting",
+    ),
+)
+_PARAGRAPHS = ("work", "glasses", "making", "people")
+
+
+def _life(vault: Path, c: _Clock) -> None:
+    """The stories of the last three months as the night writes them, each with three or more
+    highlights from what the demo's records hold, and each day counted for the page. A month
+    with too little (the start of one) is left for "Write this month"."""
+    life.calendar(vault)
+    this = f"{c.local:%Y-%m}"
+    for back in range(3):
+        month = life._shift(this, -back)
+        moments = [m for m in _MOMENTS if c.day(m[0]).startswith(month)]
+        if sum(1 for m in moments if m[3]) < 3:
+            continue
+        story = [
+            " ".join(sentence for _, part, sentence, _ in moments if part == paragraph)
+            for paragraph in _PARAGRAPHS
+        ]
+        ended = datetime.fromisoformat(f"{life._shift(month, 1)}-01T01:30:00").astimezone()
+        life.save(
+            vault,
+            {
+                "month": month,
+                "generated": c.ago(20) if back == 0 else _iso(ended),
+                "story": "\n\n".join(p for p in story if p),
+                "highlights": [f"{c.said(days)}: {h}" for days, _, _, h in moments if h][:6],
+                "days_with_records": len(life.days(vault, month)),
+            },
+        )
 
 
 def _load(path: Path) -> list[dict]:

@@ -258,6 +258,67 @@ export interface JournalResponse {
   entry: JournalEntry | null;
 }
 
+/** Whom the user wrote to on a day, where, how many times, and the opening of their longest message there. */
+export interface LifeWrote {
+  to: string;
+  channel: string;
+  count: number;
+  said: string;
+}
+
+/** One local day of the Life view: what the vault holds from it, by titles, names and counts, and its journal's brief. */
+export interface LifeDay {
+  date: string; // YYYY-MM-DD
+  records: number;
+  sources: Record<string, number>; // records by source, as the page names them
+  wrote: LifeWrote[];
+  events: string[];
+  notes: string[];
+  activity: string[];
+  health: string[];
+  other: string[];
+  journal: { brief: string; next_up: string[] } | null;
+}
+
+/** clones/life/months/YYYY-MM.json: a month's story, written by the model from the observers' notes and its days. */
+export interface LifeStory {
+  month: string;
+  generated: string | null;
+  story: string; // paragraphs, separated by a blank line
+  highlights: string[];
+  days_with_records: number;
+}
+
+/** A month in the list: how much the vault holds from it, and the start of its story when there is one. */
+export interface LifeMonth {
+  month: string; // YYYY-MM
+  days: number; // days with records
+  records: number;
+  written: string | null; // when its story was written
+  opening: string; // the story's first paragraph, cut; "" when there's none
+  highlights: string[];
+}
+
+/** The page's "Write this month": `proxenos clone life --month`, one at a time. */
+export interface LifeJob {
+  state: "running" | "done" | "failed" | "stopped";
+  message: string;
+  month: string | null;
+  started: string;
+  finished: string | null;
+}
+
+export interface LifeResponse {
+  now: string;
+  vault: VaultInfo;
+  today: string; // YYYY-MM-DD, on this computer's clock
+  months: LifeMonth[]; // newest first: every month with records or a story
+  left: number; // past months with no story that the night will write, four a night
+  open: { month: string; story: LifeStory | null; days: LifeDay[] } | null;
+  job: LifeJob | null;
+  error: string | null;
+}
+
 export interface WatchResponse {
   now: string;
   vault: VaultInfo;
@@ -857,9 +918,9 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
 
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
- * project's step, and a decision on one (Accept, Discard, or a change to the queue).
+ * project's step, a decision on one (Accept, Discard, or a change to the queue), and a month's story.
  */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide";
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life";
 
 export interface ConnectJob {
   kind: ConnectJobKind;

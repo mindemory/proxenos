@@ -7,6 +7,7 @@ import {
   FolderGit2,
   HeartPulse,
   House,
+  Library,
   Lightbulb,
   ListTodo,
   NotebookPen,
@@ -37,6 +38,7 @@ export type View =
   | "choices"
   | "watch"
   | "journal"
+  | "life"
   | "calls"
   | "network"
   | "memory"
@@ -57,6 +59,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { icon: House, label: "Home", id: "home", group: "home" },
   { icon: NotebookPen, label: "Journal", id: "journal", group: "home" },
+  { icon: Library, label: "Life", id: "life", group: "home" },
   { icon: MessageSquare, label: "Ask", id: "ask", group: "home" },
   { icon: Route, label: "Errands", id: "errands", group: "home" },
   { icon: Rss, label: "Feed", id: "feed", group: "clones" },

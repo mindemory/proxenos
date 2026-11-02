@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from proxenos import cli, demo, memory, outbox, webapp
-from proxenos.clones import errands, work
+from proxenos.clones import errands, life, work
 
 NOW = datetime(2026, 10, 29, 13, 0, tzinfo=UTC)
 
@@ -72,6 +72,16 @@ def test_every_view_has_something_current_to_show(vault):
     assert "Joe Bloggs" not in {p["name"] for p in people}  # the owner is never one of his people
     assert (vault / "self/identity.md").exists()
     assert (vault / "tracker/items/2026-10.jsonl").exists()
+
+
+def test_the_life_view_has_months_told_and_their_days(vault):
+    stories = life.stories(vault)
+    assert list(stories) == ["2026-09", "2026-10"]  # August has one moment: left to write
+    for month, story in stories.items():
+        assert story["story"] and 3 <= len(story["highlights"]) <= 6
+        assert story["days_with_records"] == len(life.days(vault, month)) > 0
+    assert "Juniper" in stories["2026-10"]["story"]
+    assert life.months(vault, NOW.date())["2026-10"]["days"] > 10  # counted for the page
 
 
 def test_everything_in_it_is_made_up(vault):

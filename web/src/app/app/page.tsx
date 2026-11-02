@@ -51,6 +51,9 @@ const Choices = dynamic(() => import("@/components/views/Choices").then((m) => m
 const Journal = dynamic(() => import("@/components/views/Journal").then((m) => m.Journal), {
   loading: () => <ProseSkeleton label="Loading the journal" />,
 });
+const Life = dynamic(() => import("@/components/views/Life").then((m) => m.Life), {
+  loading: () => <ProseSkeleton label="Loading your life" />,
+});
 const Watch = dynamic(() => import("@/components/views/Watch").then((m) => m.Watch), {
   loading: () => <ProseSkeleton label="Loading picks" />,
 });
@@ -85,6 +88,7 @@ const COLUMN_VIEWS: readonly View[] = [
   "choices",
   "watch",
   "journal",
+  "life",
   "calls",
   "profile",
   "connect",
@@ -214,6 +218,8 @@ export default function AppPage() {
         return <Choices onChange={home.reload} onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
       case "journal":
         return <Journal />;
+      case "life":
+        return <Life />;
       case "watch":
         return <Watch onChange={home.reload} />;
       case "calls":
