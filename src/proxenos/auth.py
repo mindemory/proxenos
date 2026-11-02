@@ -7,6 +7,11 @@ into the secure store (the macOS Keychain, or Windows Credential Manager or the 
 code for a refresh token and saves it. The Strava ingester notices the new value and switches
 to it.
 
+`proxenos auth spotify` signs in to Spotify through the person's own app (SPOTIFY_CLIENT_ID,
+from developer.spotify.com, with http://127.0.0.1:8723/callback as its redirect URI): PKCE, so no
+secret, and only the recently-played scope. It saves SPOTIFY_REFRESH_TOKEN, and every sync then
+reads the latest plays.
+
 `proxenos auth gmail NAME ADDRESS` does the same with Google for a Gmail account that can't make
 app passwords: it needs a Google Cloud "Desktop app" OAuth client (GOOGLE_CLIENT_ID and
 GOOGLE_CLIENT_SECRET, in .env or the page's Settings), asks for mail access (IMAP needs the full
@@ -64,6 +69,7 @@ from proxenos.ingest import gcalendar as gcalendar_api
 from proxenos.ingest import microsoft as microsoft_api
 from proxenos.ingest import slack as slack_api
 from proxenos.ingest import slackdump as slack_archives
+from proxenos.ingest import spotify as spotify_api
 
 PORT = 8723
 SLACK_FIRST_DAYS = 30  # how far back a workspace's first archive goes
@@ -147,6 +153,48 @@ def strava(
     )
     where = save_secret("STRAVA_REFRESH_TOKEN", token["refresh_token"])
     return f"saved a new STRAVA_REFRESH_TOKEN in {where}; now run `proxenos ingest strava --full`"
+
+
+def spotify(
+    port: int = PORT,
+    open_browser: Callable[[str], object] = webbrowser.open,
+    post: Callable[[str, dict], dict] | None = None,
+) -> str:
+    client_id = os.environ.get(spotify_api.CLIENT)
+    redirect = f"http://127.0.0.1:{port}/callback"
+    if not client_id:
+        raise SystemExit(
+            f"Set {spotify_api.CLIENT} first: the Client ID of your own app at "
+            f"developer.spotify.com (Dashboard, Create app, Web API), with {redirect} as its "
+            "redirect URI."
+        )
+    print("Opening Spotify in your browser. Agree to let Proxenos see what you've played.")
+    code, verifier = _consent(
+        spotify_api.AUTHORIZE,
+        {"client_id": client_id, "response_type": "code", "scope": spotify_api.SCOPE},
+        redirect,
+        port,
+        open_browser,
+        "Spotify",
+    )
+    form = {
+        "client_id": client_id,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect,
+        "code_verifier": verifier,
+    }
+    try:
+        token = (post or _post)(spotify_api.TOKEN_URL, form)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(
+            f"Spotify refused the sign-in (HTTP {e.code}). Check that the app's redirect URI is "
+            f"exactly {redirect}."
+        ) from None
+    if not token.get("refresh_token"):
+        raise SystemExit("Spotify gave no refresh token. Run again and agree on its page.")
+    where = save_secret(spotify_api.REFRESH, token["refresh_token"])
+    return f"saved {spotify_api.REFRESH} in {where}; `proxenos sync` now reads your latest plays"
 
 
 def gmail(

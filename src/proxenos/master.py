@@ -55,7 +55,8 @@ SLOW = {"identity", "voice"}
 
 # The raw/ folders each unattended source vouches for when it syncs, so one checked with nothing
 # new shows as fresh on the page, not behind (state/checked.json). Beeper's are the chat apps it
-# has brought in before. Spotify's export is as new as the file the user downloaded: none.
+# has brought in before. Spotify's export is as new as the file the user downloaded, so it
+# vouches only once its plays come in live.
 _CHECKS = {
     "whatsapp": ("whatsapp",),
     "letterboxd": ("letterboxd",),
@@ -77,7 +78,7 @@ CHECKED = Path("state", "checked.json")
 # Sources that sync unattended, each with what tells us it's set up.
 _UNATTENDED = [
     (whatsapp, lambda: sys.platform == "darwin"),  # WhatsApp for Mac; Windows' has no store
-    (spotify, lambda: env("SPOTIFY_EXPORT")),
+    (spotify, lambda: env("SPOTIFY_EXPORT") or spotify.live()),
     (letterboxd, lambda: env("LETTERBOXD_USER")),
     (gmail, gmail.accounts),
     (microsoft, microsoft.accounts),
@@ -106,6 +107,8 @@ def _checks(vault: Path, name: str) -> tuple[str, ...]:
     """The raw/ folders a source that just synced vouches for."""
     if name == "beeper":
         return beeper.sources(vault)
+    if name == "spotify":
+        return ("spotify",) if spotify.live(vault) else ()
     return _CHECKS.get(name, ())
 
 

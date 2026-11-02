@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from proxenos.config import env
-from proxenos.ingest import gcalendar, gmail, microsoft, slack, slackdump, whatsapp
+from proxenos.ingest import gcalendar, gmail, microsoft, slack, slackdump, spotify, whatsapp
 
 # How each source gets in, in the order the page lists them.
 LIVE = (
@@ -107,7 +107,7 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         "strava": bool(os.environ.get("STRAVA_CLIENT_ID") and strava_token),
         "bluesky": bool(env("BLUESKY_HANDLE")),
         "mentions": bool(env("FULL_NAME") or env("NAME")),
-        "spotify": bool(env("SPOTIFY_EXPORT")),
+        "spotify": bool(env("SPOTIFY_EXPORT")) or spotify.live(vault),
         "website": bool(env("WEBSITE_REPO")),
     }
     # What stops the page's button from working, if anything.

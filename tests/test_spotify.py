@@ -2,6 +2,9 @@
 
 import argparse
 import json
+import os
+import stat
+import urllib.parse
 
 import pytest
 
@@ -181,3 +184,84 @@ def test_without_an_export_argument_the_setting_names_the_folder(tmp_path, monke
 def test_with_neither_an_argument_nor_the_setting_it_names_the_setting(tmp_path):
     with pytest.raises(SystemExit, match="PROXENOS_SPOTIFY_EXPORT"):
         spotify.ingest(tmp_path / "vault")
+
+
+def played(at, n, kind="track"):
+    track = {
+        "type": kind,
+        "name": f"Live {n}",
+        "uri": f"spotify:{kind}:live{n}",
+        "duration_ms": 180_000,
+        "artists": [{"name": "Artist L"}],
+        "album": {"name": "Album L"},
+    }
+    return {"played_at": at, "track": track}
+
+
+class FakeSpotify:
+    """The token endpoint, which rotates the refresh token once, and recently played."""
+
+    def __init__(self, items):
+        self.items, self.refreshed = items, []
+
+    def __call__(self, request):
+        if request.full_url == spotify.TOKEN_URL:
+            form = dict(urllib.parse.parse_qsl(request.data.decode()))
+            self.refreshed.append(form["refresh_token"])
+            assert form["client_id"] == "client" and "client_secret" not in form
+            return {"access_token": "access", "refresh_token": "rotated"}
+        assert request.full_url == spotify.RECENT
+        assert request.headers["Authorization"] == "Bearer access"
+        return {"items": self.items}
+
+
+@pytest.fixture
+def signed_in(monkeypatch):
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "client")
+    monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "first")
+
+
+def test_live_plays_come_in_as_play_records_and_the_newest_token_is_kept(tmp_path, signed_in):
+    vault = tmp_path / "vault"
+    api = FakeSpotify([played("2025-04-02T10:00:00.123Z", 1), played("2025-04-02T10:03:00Z", 2)])
+
+    first = spotify.ingest_recent(vault, api)
+    again = spotify.ingest_recent(vault, api)
+
+    assert first["added"] == 2 and again["added"] == 0  # the same 50 again change nothing
+    assert api.refreshed == ["first", "rotated"]  # the rotated token is the one used next
+    state = vault / "state" / "spotify_token.json"
+    assert json.loads(state.read_text())["refresh_token"] == "rotated"
+    assert os.name == "nt" or stat.S_IMODE(state.stat().st_mode) == 0o600
+    rows = [json.loads(line) for line in (vault / "raw/spotify/plays/2025-04.jsonl").open()]
+    assert rows[0]["id"] == "2025-04-02T10:00:00Z/spotify:track:live1"
+    assert (rows[0]["track"], rows[0]["artist"], rows[0]["ms_played"]) == (
+        "Live 1",
+        "Artist L",
+        180_000,
+    )
+    assert rows[0]["source"] == "api" and spotify.live(vault)
+
+
+def test_an_export_replaces_the_live_plays_it_covers(tmp_path, signed_in):
+    vault = tmp_path / "vault"
+    before, after = played("2025-02-02T09:00:00Z", 1), played("2025-04-05T09:00:00Z", 2)
+    spotify.ingest_recent(vault, FakeSpotify([before, after]))
+
+    stats = spotify.ingest(vault, make_export(tmp_path / "export", AUDIO, VIDEO))
+
+    assert stats["live_replaced"] == 1  # the export runs to Feb 3, so April's play stays
+    plays = vault / "raw" / "spotify" / "plays"
+    kept = [json.loads(line) for f in sorted(plays.glob("*.jsonl")) for line in f.open()]
+    assert [r["id"] for r in kept if r.get("source") == "api"] == [
+        "2025-04-05T09:00:00Z/spotify:track:live2"
+    ]
+
+
+def test_a_sync_signed_in_with_no_export_reads_only_the_live_plays(
+    tmp_path, signed_in, monkeypatch
+):
+    monkeypatch.delenv("PROXENOS_SPOTIFY_EXPORT", raising=False)
+    monkeypatch.setattr(spotify, "ingest_recent", lambda v, fetch=spotify._fetch_json: {"added": 1})
+    stats = spotify.run(tmp_path, argparse.Namespace(export=None))
+    assert stats == {"live_added": 1}

@@ -41,7 +41,8 @@ KEYCHAIN = "keychain"  # the settings file's list of the secrets in the secure s
 # The secrets: a model key, sign-ins' tokens, and the apps you sign in through.
 SECRET = re.compile(
     r"ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?"
-    r"|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)"
+    r"|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)"
+    r"|GOOGLE_CLIENT_(ID|SECRET)"
     r"|GCALENDAR_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)"
 )
 _MAX_VALUE = 4096

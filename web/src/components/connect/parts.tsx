@@ -70,7 +70,11 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
     how: "An mbox file, from Takeout's Mail or your mail client:",
     command: "proxenos ingest email --account NAME --mbox PATH",
   },
-  spotify: { label: "Spotify", how: "Account, Privacy settings, Extended streaming history. It can take up to 30 days." },
+  spotify: {
+    label: "Spotify",
+    how: "Live: make an app at developer.spotify.com (Web API, redirect URI http://127.0.0.1:8723/callback), put its Client ID in Settings as SPOTIFY_CLIENT_ID, and sign in once. Each sync then reads your latest plays. Your whole history: Account, Privacy settings, Extended streaming history, which can take up to 30 days.",
+    command: "proxenos auth spotify",
+  },
   letterboxd: { label: "Letterboxd", how: "Settings, Data, Export your data." },
   notes: {
     label: "Notes and PDFs",

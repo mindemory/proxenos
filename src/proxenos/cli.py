@@ -160,7 +160,16 @@ def main(argv: list[str] | None = None) -> None:
     )
     sign_in.add_argument(
         "service",
-        choices=["strava", "slack", "slackdump", "gmail", "gcalendar", "microsoft", "beeper"],
+        choices=[
+            "strava",
+            "spotify",
+            "slack",
+            "slackdump",
+            "gmail",
+            "gcalendar",
+            "microsoft",
+            "beeper",
+        ],
     )
     sign_in.add_argument(
         "account",
@@ -228,6 +237,8 @@ def main(argv: list[str] | None = None) -> None:
             if len(args.account) != 2:
                 raise SystemExit(f"usage: proxenos auth {args.service} NAME ADDRESS")
             print(getattr(auth, args.service)(*args.account))
+        elif args.service == "spotify":
+            print(auth.spotify())
         else:
             print(auth.strava())
         return

@@ -390,3 +390,32 @@ def test_microsoft_sign_in_needs_its_client_and_a_fair_name(monkeypatch):
     with pytest.raises(SystemExit, match="isn't an email address"):
         auth.microsoft("work", "joe@work.example\nX=1", free_port(), opened.append, None)
     assert not opened
+
+
+def test_spotify_sign_in_uses_pkce_on_the_loopback_address_and_saves_the_token(dotenv, monkeypatch):
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "spotify-client")
+    dotenv.write_text("")
+    asked, sent = {}, {}
+
+    def post(url, form):
+        sent.update(form, url=url)
+        return {"access_token": "BQ-access", "refresh_token": "AQ-refresh"}
+
+    said = auth.spotify(free_port(), browser(asked), post)
+
+    assert asked["url"].startswith("https://accounts.spotify.com/authorize?")
+    assert asked["scope"] == "user-read-recently-played"
+    assert asked["redirect_uri"].startswith("http://127.0.0.1:")
+    assert asked["redirect_uri"].endswith("/callback")
+    digest = hashlib.sha256(sent["code_verifier"].encode()).digest()
+    assert base64.urlsafe_b64encode(digest).decode().rstrip("=") == asked["code_challenge"]
+    assert sent["url"] == "https://accounts.spotify.com/api/token" and "client_secret" not in sent
+    assert sent["redirect_uri"] == asked["redirect_uri"] and sent["code"] == "abc"
+    assert dotenv.read_text() == "SPOTIFY_REFRESH_TOKEN=AQ-refresh\n"
+    assert said.startswith("saved SPOTIFY_REFRESH_TOKEN in .env")
+
+
+def test_spotify_sign_in_needs_the_apps_client_id(monkeypatch):
+    monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
+    with pytest.raises(SystemExit, match="SPOTIFY_CLIENT_ID first"):
+        auth.spotify(free_port(), browser({}), None)

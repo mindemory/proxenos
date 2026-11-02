@@ -11,7 +11,7 @@ instead, merged by id the same way. It isn't a month file, so the observers neve
 import json
 import os
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 
@@ -38,6 +38,21 @@ def merge_monthly(records: Iterable[dict], directory: Path) -> dict[str, int]:
             _write(path, sorted(merged.values(), key=lambda r: (r["ts"], r["id"])))
             stats["months_written"] += 1
     return stats
+
+
+def drop_monthly(directory: Path, drop: Callable[[dict], bool], until: str = "9999") -> int:
+    """Take the records `drop` picks out of directory's month files, those up to the month of
+    `until` only, as when a fuller source replaces them. How many went."""
+    dropped = 0
+    for path in sorted(directory.glob("*.jsonl")) if directory.is_dir() else []:
+        if path.name[:7] > until[:7]:
+            continue
+        records = _load(path)
+        kept = [r for r in records.values() if not drop(r)]
+        if len(kept) < len(records):
+            dropped += len(records) - len(kept)
+            _write(path, sorted(kept, key=lambda r: (r["ts"], r["id"])))
+    return dropped
 
 
 SNAPSHOT = "snapshot.jsonl"

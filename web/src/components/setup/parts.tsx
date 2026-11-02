@@ -258,6 +258,8 @@ export function secretLabel(name: string): string {
     STRAVA_REFRESH_TOKEN: "Strava sign-in",
     STRAVA_CLIENT_ID: "Strava app ID",
     STRAVA_CLIENT_SECRET: "Strava app secret",
+    SPOTIFY_CLIENT_ID: "Spotify app ID",
+    SPOTIFY_REFRESH_TOKEN: "Spotify sign-in",
     GOOGLE_CLIENT_ID: "Google sign-in client ID",
     GOOGLE_CLIENT_SECRET: "Google sign-in client secret",
     MICROSOFT_CLIENT_ID: "Microsoft sign-in client ID",
