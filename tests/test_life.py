@@ -350,3 +350,15 @@ def test_the_command_prints_a_day_or_a_month_as_json_alone(vault, monkeypatch, c
     monkeypatch.setattr(llm, "ask", declined)
     with pytest.raises(SystemExit, match=r"no story for 2026-03 \(the model declined\)"):
         life.run(vault, month)  # a line the page can show, not a traceback
+
+
+def test_a_backfill_now_writes_every_month_waiting_newest_first(ledger, new_york):
+    vault, written, _ = ledger
+    stats = life.night(vault, datetime(2026, 3, 2, 6, 30, tzinfo=UTC), backfill=None)
+
+    assert written == ["2026-02", "2026-03", "2026-01", "2025-11", "2025-10", "2025-09"] + [
+        "2025-08",
+        "2025-07",
+        "2025-06",
+    ]
+    assert stats["months left"] == 0  # never January 2025's single day

@@ -538,9 +538,11 @@ def _render(d: dict) -> str:
 # The night
 
 
-def night(vault: Path, now: datetime | None = None) -> dict[str, int]:
-    """The month that just ended, the current one once a week, then up to BACKFILL older ones
-    with no story, newest first. Counts of what it did."""
+def night(
+    vault: Path, now: datetime | None = None, backfill: int | None = BACKFILL
+) -> dict[str, int]:
+    """The month that just ended, the current one once a week, then up to `backfill` older ones
+    with no story (every one, with None), newest first. Counts of what it did."""
     now = now or datetime.now(UTC)
     this = f"{now.astimezone():%Y-%m}"
     last = _shift(this, -1)
@@ -559,7 +561,7 @@ def night(vault: Path, now: datetime | None = None) -> dict[str, int]:
     waiting = [m for m in sorted(have, reverse=True) if m < last and m not in written]
     retry = now - timedelta(days=RETRY_DAYS)
     older = [m for m in waiting if not _since({"generated": failed.get(m)}, retry)]
-    due += older[:BACKFILL]
+    due += older if backfill is None else older[:backfill]
     stats = {"months due": len(due), "stories": 0, "failed": 0}
     if due and not llm.configured():
         stats["no model"] = 1
@@ -715,6 +717,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--calendar", action="store_true", help="count each day's records again; no model"
     )
+    parser.add_argument(
+        "--backfill",
+        type=int,
+        metavar="N",
+        help="write up to N older months with no story now, newest first; 0 for every one",
+    )
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
@@ -744,4 +752,6 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
         if entry is None:
             raise SystemExit(f"life: the vault holds nothing from {month}")
         return {"stories": 1, "days with records": entry["days_with_records"]}
+    if args.backfill is not None:
+        return night(vault, backfill=args.backfill or None)
     return night(vault)
