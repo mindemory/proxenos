@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import llm, voice
+from proxenos import llm, plain, voice
 from proxenos.clones import care, work
 
 NOW = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
@@ -649,6 +649,32 @@ def test_one_high_effort_call_with_the_schema_and_the_self_model(tmp_path, model
         "new": 2,
         "scripts": 2,
     }
+
+
+def test_what_the_user_reads_is_asked_for_in_plain_language_and_still_no_advice(tmp_path, model):
+    vault = make_vault(tmp_path)
+    model.make = full_answer
+    care.care(vault, now=NOW)
+
+    [call] = model.calls
+    system = call["system"]
+    asked = plain.rules(
+        "Sam Rivera", "the summary, the timeline and the open items, which Sam Rivera reads,"
+    )
+    assert asked in system
+    assert "The most important thing first." in system
+    assert "about a sixth-grade reading level" in system
+    assert (
+        "The first time a medical, insurance or billing term comes up, say what it means" in system
+    )
+    assert "never what it means for Sam Rivera: no reading of a result" in system
+    # The rules it had hold as they were: the records restated, nothing diagnosed or advised.
+    assert "State only what the records say. Never diagnose" in system
+    assert "never suggest a cause or a treatment" in system
+    # The brief is for a clinician: plain lines, but the records' own words for results.
+    assert "each result, medicine and medical term in the records' own words" in system
+    # Scripts are the user's own words, so they're written as the user writes, after the ask.
+    assert system.index(asked) < system.index("The scripts go out as Sam Rivera's own words.")
 
 
 def test_the_answer_is_checked_scrubbed_and_given_stable_ids(tmp_path, model):

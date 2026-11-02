@@ -3,8 +3,9 @@
 Each run gives the model the whole self-model, the last three months of observer notes, the
 task list, and summaries of the user's Strava training and Spotify listening worked out here,
 and asks for five to eight changes to how they spend time, work, train, sleep, handle tasks,
-decide and communicate. Each one names the pattern it starts from and cites its evidence. A run
-lands in clones/advisor/<date>.json, and a second run on the same day replaces it.
+decide and communicate. Each one names the pattern it starts from and cites its evidence, in
+plain language (proxenos.plain). A run lands in clones/advisor/<date>.json, and a second run on
+the same day replaces it.
 
 The page marks suggestions useful, not me, or doing in clones/advisor/feedback.jsonl. Later
 runs never bring back what the user marked not me, and follow up on what they said they're
@@ -20,7 +21,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm
+from proxenos import llm, plain
 from proxenos.config import env
 
 MONTHS = 3
@@ -135,9 +136,12 @@ def advise(vault: Path, months: int = MONTHS, now: datetime | None = None) -> di
         )
     parts.append(f"# Earlier advice and how they took it\n\n{history}")
 
+    person = env("NAME", "the person")
     answer = llm.ask(
         "\n\n".join(parts),
-        system=_SYSTEM.format(person=env("NAME", "the person")),
+        system=_SYSTEM.format(person=person)
+        + "\n\n"
+        + plain.rules(person, "each pattern, suggestion and why"),
         schema=_schema(sources),
         effort="high",
     )

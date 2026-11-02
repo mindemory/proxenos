@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from proxenos import llm
+from proxenos import llm, plain
 from proxenos.clones import journal
 
 NOW = datetime(2026, 3, 10, 20, 0, tzinfo=UTC)
@@ -78,9 +78,11 @@ def test_the_day_is_written_from_what_the_vault_already_holds(tmp_path, monkeypa
     vault = make_vault(tmp_path)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     asked = []
+    systems = []
 
     def ask(prompt, *, system=None, schema=None, **kw):
         asked.append(prompt)
+        systems.append(system)
         return {
             "brief": "You sent the slides.  Tomorrow is the lab meeting.",
             "next_up": ["Pay the clinic"] * 4,
@@ -105,6 +107,9 @@ def test_the_day_is_written_from_what_the_vault_already_holds(tmp_path, monkeypa
     assert "Drafts to send: 1, the newest: Ask the clinic for the bill" in nxt
     assert entry["brief"] == "You sent the slides. Tomorrow is the lab meeting."
     assert entry["next_up"] == ["Pay the clinic"] * 3
+    # A brief for the user to read, so in plain language, after what it may and may not say.
+    assert systems[0].endswith(plain.rules("the person", "the brief and next_up"))
+    assert "no praise, no advice beyond what they show" in systems[0]
     assert "## done\n- Done: Send Asha the slides" in asked[0]
     assert stats["briefs"] == 1 and stats["done lines"] == 2
 

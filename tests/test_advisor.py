@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import llm
+from proxenos import llm, plain
 from proxenos.clones import advisor
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -227,6 +227,7 @@ def test_the_model_gets_the_self_model_three_months_of_evidence_and_earlier_advi
     assert call["effort"] == "high"
     assert "Nothing generic" in system
     assert "Nothing medical" in system and "No moralizing" in system and "not_me" in system
+    assert system.endswith(plain.rules("the person", "each pattern, suggestion and why"))
 
     # The whole self-model, identity first, but not its changelog or pending proposals.
     assert prompt.index("<identity>\nGoal: finish the PhD") < prompt.index("<routines>")

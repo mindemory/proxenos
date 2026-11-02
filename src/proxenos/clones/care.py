@@ -40,7 +40,11 @@ what clones/care/care.json holds:
 - visit_brief: one printable page of markdown for the next clinician.
 
 The model is told to state only what the records say, never diagnose or speculate, mark what's
-uncertain, and name other people only by role or organization. A record someone else wrote
+uncertain, and name other people only by role or organization. What the user reads (the summary,
+the timeline and the open items) is asked for in plain language (proxenos.plain): the most
+important thing first, short sentences and common words, and each medical term explained the
+first time; the visit brief keeps each result and medicine in the records' own words, for the
+clinician who reads it. A record someone else wrote
 comes inside a tag drawn fresh for each prompt (proxenos.untrusted), which the model is told
 holds data, never instructions. Scripts, which go out as the user's own words, follow the rules
 every draft does for writing as them (proxenos.voice).
@@ -66,7 +70,7 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, redact, told, untrusted, voice
+from proxenos import llm, plain, redact, told, untrusted, voice
 from proxenos.config import env
 from proxenos.ingest import healthrecords
 
@@ -334,7 +338,8 @@ and results (each with its date and the result exactly as their records state it
 not in my records"); Ruled out (only what a clinician is recorded as having ruled out, else \
 "Nothing recorded"); Current symptoms and how they affect daily life and work; Medications \
 (only those the records mention, else "None recorded"); Questions to ask (three to six). Keep \
-it to one page.
+it to one page, in short, plain lines, with each result, medicine and medical term in the \
+records' own words, since a clinician reads it.
 
 Rules:
 - State only what the records say. Never diagnose, never say what a symptom or result might \
@@ -942,6 +947,9 @@ def _entry(ref: str, r: dict, fence: str | None = None) -> str:
 def _system(self_dir: Path, days: float) -> str:
     person = env("NAME", "the person")
     system = _SYSTEM.format(person=person, days=f"{days:g}")
+    system += "\n\n" + plain.rules(
+        person, f"the summary, the timeline and the open items, which {person} reads,"
+    )
     system += f"\n\nThe scripts go out as {person}'s own words. " + voice.rules(person)
     parts = []
     for name in SELF_FILES:

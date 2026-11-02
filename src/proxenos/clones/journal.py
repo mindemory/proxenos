@@ -12,7 +12,8 @@ sources already hold, reading nothing new:
 - next: the next day's calendar, open tasks due within two days or marked high, the drafts
   waiting to be sent, and care's open items.
 Then one model call writes the brief, a few sentences on how the day went and what matters next,
-and the three things to do next, from those lines alone. Without a model, or when the call
+and the three things to do next, from those lines alone, in plain language (proxenos.plain).
+Without a model, or when the call
 fails, the entry keeps its lists and has no brief.
 
 The night job (01:30) writes the day that just ended: a run before DAY_STARTS is yesterday's.
@@ -26,7 +27,7 @@ import subprocess
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
-from proxenos import llm, plans, told
+from proxenos import llm, plain, plans, told
 from proxenos.clones import tasks, work
 from proxenos.config import env
 
@@ -72,7 +73,9 @@ def write(vault: Path, day: date | None = None, now: datetime | None = None) -> 
         try:
             answer = llm.ask(
                 f"The day: {day:%A %Y-%m-%d}.\n\n{listed}",
-                system=_SYSTEM.format(person=person),
+                system=_SYSTEM.format(person=person)
+                + "\n\n"
+                + plain.rules(person, "the brief and next_up"),
                 schema=_SCHEMA,
             )
             entry["brief"] = " ".join(str(answer.get("brief") or "").split())
