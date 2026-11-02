@@ -5,7 +5,7 @@ month years ago can be read like a page of a diary rather than searched for reco
 
 - A day (`day`, `days`, no model) is a digest of what the memory index (proxenos.memory) holds
   from that local day: who the user wrote to and where, with counts and the opening of their own
-  words; calendar events; the notes and documents they wrote; activity (walks, runs and rides,
+  words, and who wrote to them, by name; calendar events; the notes and documents they wrote; activity (walks, runs and rides,
   listening, what they watched, photos); health records dated that day, by title only; and
   anything else, counted by source. Other people's messages are never read out of the index, only
   the names of the chats they're in. A day the journal wrote (clones/journal/<date>.json) brings
@@ -26,6 +26,7 @@ asks no model.
 
 import argparse
 import json
+import os
 import re
 import time
 from collections import Counter, defaultdict
@@ -130,6 +131,8 @@ def calendar(vault: Path) -> dict[str, dict[str, int]]:
         }
         stale = {rel for rel, at in files.items() if (counted.get(rel) or {}).get("at") != at}
         if not stale and counted.keys() == files.keys() and isinstance(kept.get("days"), dict):
+            if kept_at.stat().st_mtime_ns < path.stat().st_mtime_ns:
+                os.utime(kept_at)  # still current: the page goes by which file is newer
             return kept["days"]
         counted = {rel: c for rel, c in counted.items() if rel in files and rel not in stale}
         for rel in stale:
@@ -313,6 +316,7 @@ def _digest(
     watched, searched, films = [], [], []
     photos, albums, people, sites = 0, Counter(), Counter(), Counter()
     other: Counter = Counter()
+    heard: Counter = Counter()  # whose messages came in, by name and where: never their words
     sources: Counter = Counter({"Calendar": len(events)} if events else {})
     for row in rows:
         source, kind = row["source"], row["stream"].rsplit("/", 1)[-1]
@@ -349,6 +353,8 @@ def _digest(
                 said = _opening(row["text"], SAID)
                 if len(said) > len(chat["said"]):
                     chat["said"] = said  # the longest says the most
+            else:
+                heard[(_from(row, me), _label(source))] += 1
         elif kind in ("posts", "comments") and row["from_me"] != 0:
             other[f"Posted on {_label(source)}"] += 1
         else:
@@ -379,12 +385,25 @@ def _digest(
         "other": [f"{what}: {n}" for what, n in other.most_common(LISTED)],
         "journal": None,
     }
+    if heard:
+        names = [f"{who} ({where}, {n})" for (who, where), n in heard.most_common(TOLD)]
+        more = len(heard) - TOLD
+        found["other"][:0] = [
+            "Heard from " + "; ".join(names) + (f"; {more} more" if more > 0 else "")
+        ]
     if journal and (journal.get("brief") or journal.get("next_up")):
         found["journal"] = {
             "brief": " ".join(str(journal.get("brief") or "").split()),
             "next_up": [" ".join(str(n).split()) for n in journal.get("next_up") or []][:3],
         }
     return found
+
+
+def _from(row: dict, me: set[str]) -> str:
+    """Where a message to the user came from: its chat or channel, else its sender, the first
+    name the index keeps for it."""
+    names = [n for n in row["who"].split(", ") if n and n.casefold() not in me]
+    return row["where_"] or (names[0] if names else "someone")
 
 
 def _to(row: dict, me: set[str]) -> str:
@@ -716,7 +735,10 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
         month = _month(args.month)
         if not llm.configured():
             raise SystemExit("life: no model is set up; pick one in Settings")
-        entry = write(vault, month)
+        try:
+            entry = write(vault, month)
+        except (llm.ModelError, ValueError) as e:
+            raise SystemExit(f"life: no story for {month} ({' '.join(str(e).split())[:300]})")
         if entry is None:
             raise SystemExit(f"life: the vault holds nothing from {month}")
         return {"stories": 1, "days with records": entry["days_with_records"]}

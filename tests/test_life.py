@@ -163,11 +163,15 @@ def test_a_day_is_titles_names_counts_and_only_the_user_s_own_words(vault):
         "Photos: 1, in Spring, with Asha",
     ]
     assert found["health"] == ["Visit: Office visit", "Results (2): Hemoglobin; Glucose"]
-    assert found["other"] == ["LinkedIn connections: 1"]
+    assert found["other"] == [
+        "Heard from Asha (WhatsApp, 1); Lab Desk (Email, 1)",  # names only, never their words
+        "LinkedIn connections: 1",
+    ]
     assert found["journal"] == {"brief": "You sent the slides.", "next_up": ["Water beds"] * 3}
     assert found["sources"]["WhatsApp"] == 4 and found["sources"]["Email"] == 2
     shown = json.dumps(found)
     assert "PRIVATE-THEIRS" not in shown and "THEIR-MAIL" not in shown
+    assert "Your results" not in shown  # the subject someone else gave their mail
     assert "Bo's birthday" not in shown and "Called off" not in shown
     # The all-day event runs on into the 11th; a day with nothing is empty, not missing.
     assert life.day(vault, date(2026, 3, 11))["events"] == ["All day: Spring break"]
@@ -332,6 +336,15 @@ def test_the_command_prints_a_day_or_a_month_as_json_alone(vault, monkeypatch, c
     args = argparse.Namespace(day=None, days=None, calendar=False, month="2026-3")
     with pytest.raises(SystemExit, match="YYYY-MM"):
         life.run(vault, args)
+    month = argparse.Namespace(**{**vars(args), "month": "2026-03"})
     monkeypatch.setattr(llm, "configured", lambda: False)
     with pytest.raises(SystemExit, match="no model"):
-        life.run(vault, argparse.Namespace(**{**vars(args), "month": "2026-03"}))
+        life.run(vault, month)
+
+    def declined(*a, **k):
+        raise llm.ModelError("the model\ndeclined")
+
+    monkeypatch.setattr(llm, "configured", lambda: True)
+    monkeypatch.setattr(llm, "ask", declined)
+    with pytest.raises(SystemExit, match=r"no story for 2026-03 \(the model declined\)"):
+        life.run(vault, month)  # a line the page can show, not a traceback
