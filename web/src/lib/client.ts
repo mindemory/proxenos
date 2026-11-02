@@ -40,6 +40,9 @@ import type {
   JournalResponse,
   LifeResponse,
   RhythmsResponse,
+  ThinkJobResponse,
+  ThinkResponse,
+  ThinkStart,
 } from "./types";
 
 export const POLL_MS = 5 * 60 * 1000;
@@ -525,6 +528,170 @@ export function useLife(month: string | null) {
   );
 
   return { data, error, write, clearError: () => setError(null) };
+}
+
+const THINK_POLL_MS = 4000;
+
+/** A message the Think view sent and is waiting on the answer to. */
+export interface ThinkPending {
+  /** The thread it went to; null for a new one. */
+  thread: string | null;
+  /** What was sent; "" when an answer is asked for again, or for a think started elsewhere. */
+  text: string;
+  /** When it was sent, in ms since 1970. */
+  since: number;
+}
+
+/**
+ * The Think view's threads, the one open, and sending a message. A local model can take minutes,
+ * so while one is thought through the view checks the job every few seconds (the job alone, which
+ * runs no command) and reads the thread once it's over; a think already running when the view
+ * opens, from another tab or device, is followed the same way. `onEnd` is told when the message
+ * waited on is over: true when it reached its thread.
+ */
+export function useThink(onEnd?: (kept: boolean) => void) {
+  const [data, setData] = useState<ThinkResponse | null>(() => (shown.get("/api/think") as ThinkResponse | undefined) ?? null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<ThinkPending | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const notify = useToast();
+  const pendingRef = useRef<ThinkPending | null>(null);
+  const openRef = useRef<string | null>(null);
+  const onEndRef = useRef(onEnd);
+  useEffect(() => {
+    onEndRef.current = onEnd;
+  });
+
+  const track = useCallback((next: ThinkPending | null) => {
+    pendingRef.current = next;
+    setPending(next);
+    if (!next) setStopping(false);
+  }, []);
+
+  /** Read the threads, and thread `id` whole. Null when it couldn't, or another was opened meanwhile. */
+  const load = useCallback(
+    (id: string | null): Promise<ThinkResponse | null> =>
+      getJson<ThinkResponse>(id ? `/api/think?id=${encodeURIComponent(id)}` : "/api/think").then(
+        (d) => {
+          if (openRef.current !== id) return null;
+          if (!id) shown.set("/api/think", d);
+          setData(d);
+          setError(d.error);
+          if (!pendingRef.current && d.job?.state === "running") {
+            // One already going, from another tab or device: follow it.
+            track({ thread: d.job.thread, text: "", since: Date.parse(d.job.started) || Date.now() });
+          }
+          return d;
+        },
+        (e: unknown) => {
+          setError(e instanceof Error ? e.message : String(e));
+          return null;
+        },
+      ),
+    [track],
+  );
+
+  useEffect(() => {
+    void load(null);
+  }, [load]);
+
+  /** Open a thread, or with null, a new one. */
+  const select = useCallback(
+    (id: string | null) => {
+      openRef.current = id;
+      setOpen(id);
+      setData((d) => (d ? { ...d, thread: null } : d));
+      void load(id);
+    },
+    [load],
+  );
+
+  /** Take in how the job stands, and once it's over, open the thread it answered. */
+  const absorb = useCallback(
+    (r: ThinkJobResponse) => {
+      const waiting = pendingRef.current;
+      const job = r.job;
+      if (!waiting || job?.state === "running") return;
+      track(null);
+      const reached = job?.state === "done";
+      if (job?.state === "failed") setError(job.message || "It stopped before it finished.");
+      onEndRef.current?.(reached);
+      // The thread answered opens, unless another was opened meanwhile, which is read again.
+      const id = openRef.current === waiting.thread ? (job?.thread ?? waiting.thread) : openRef.current;
+      openRef.current = id;
+      setOpen(id);
+      void load(id).then((d) => {
+        if (d?.thread?.status === "done") notify("Proxenos answered", "ok");
+      });
+    },
+    [load, notify, track],
+  );
+
+  const waiting = pending !== null;
+  useEffect(() => {
+    if (!waiting) return;
+    const check = () => {
+      getJson<ThinkJobResponse>("/api/think?job=1").then(absorb, () => {
+        // A missed check is made again on the next tick.
+      });
+    };
+    const timer = window.setInterval(check, THINK_POLL_MS);
+    // A phone that was asleep checks as soon as it's looked at again.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [waiting, absorb]);
+
+  const post = useCallback(
+    async (body: object, waiting: ThinkPending): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/think", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const answer = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 409) throw new Error(answer.error ?? "Proxenos is still thinking something else through.");
+        if (!res.ok) throw new Error(answer.error ?? `The server answered ${res.status}.`);
+        setError(null);
+        track(waiting);
+        return true;
+      } catch (e) {
+        setError(e instanceof TypeError ? "Couldn't reach Proxenos. Is your Mac awake?" : e instanceof Error ? e.message : String(e));
+        return false;
+      }
+    },
+    [track],
+  );
+
+  /** Send a message to a thread, or to a new one, which may start from something on another view. */
+  const send = useCallback(
+    (text: string, thread: string | null, start: ThinkStart | null) =>
+      post(
+        { text, thread, context: start && !thread ? { kind: start.kind, id: start.id } : null },
+        { thread, text, since: Date.now() },
+      ),
+    [post],
+  );
+
+  /** Ask for a thread's last answer again, after it failed. */
+  const again = useCallback((thread: string) => post({ text: "", thread }, { thread, text: "", since: Date.now() }), [post]);
+
+  /** Stop the think that's running. */
+  const stop = useCallback(() => {
+    setStopping(true);
+    fetch("/api/think/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() =>
+      setStopping(false),
+    );
+  }, []);
+
+  return { data, open, select, error, clearError: () => setError(null), pending, stopping, send, again, stop };
 }
 
 /** What stays here, what went to a model in the last 30 days, and what's read from elsewhere. Read-only. */

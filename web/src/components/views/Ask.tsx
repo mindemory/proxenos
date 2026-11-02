@@ -22,9 +22,16 @@ interface Draft {
 let kept: Draft = { text: "", shots: [] };
 let lastSent: Draft = { text: "", shots: [] };
 
+interface AskProps {
+  onNavigate: (view: View) => void;
+  /** What another view put in the box to ask, such as a message to draft from Think. Taken on mount. */
+  prefill?: string | null;
+  onPrefilled?: () => void;
+}
+
 /** Ask the twin anything, or paste a message it should reply to: it answers from your memory, the way you'd think it through. */
-export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
-  const [text, setText] = useState(kept.text);
+export function Ask({ onNavigate, prefill, onPrefilled }: AskProps) {
+  const [text, setText] = useState(prefill || kept.text);
   const [shots, setShots] = useState<Attachment[]>(kept.shots);
   const [sending, setSending] = useState(false);
   const [deep, setDeep] = useState(false);
@@ -51,6 +58,10 @@ export function Ask({ onNavigate }: { onNavigate: (view: View) => void }) {
   useEffect(() => {
     kept = { text, shots };
   }, [text, shots]);
+
+  useEffect(() => {
+    if (prefill) onPrefilled?.();
+  }, [prefill, onPrefilled]);
 
   // A new answer comes into view: the question is above it, the thinking was in this spot.
   useEffect(() => {

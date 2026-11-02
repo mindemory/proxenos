@@ -96,6 +96,15 @@ SENDS = (
     ),
     ("Ask", ("ask",), "What you type or paste, its screenshots, and the records memory finds."),
     (
+        "Think",
+        ("think",),
+        (
+            "What you write in a thread and what it started from (a draft, a project, a day), "
+            "your self-model and what you've told Proxenos, the journal's last few briefs, and "
+            "the records memory finds."
+        ),
+    ),
+    (
         "Network",
         ("network",),
         (

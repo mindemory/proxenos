@@ -11,8 +11,8 @@
 // The Ask page's `proxenos ask` runs through the same jobs, as the kind "ask": one at a time,
 // its question on stdin, its last line the id of the ask. connectJobs() leaves it out; askJobs()
 // reports them. So do the Errands page's errands ("errand") and their Sends and Drops ("send"),
-// the Projects page's steps ("step") and the decisions on them ("decide"), and the Life page's
-// months written on demand ("life").
+// the Projects page's steps ("step") and the decisions on them ("decide"), the Life page's
+// months written on demand ("life"), and the Think page's turns ("think").
 
 import type { ChildProcess } from "node:child_process";
 
@@ -51,6 +51,7 @@ const JOB_MS: Record<JobKind, number> = {
   step: STEP_MS,
   decide: 2 * 60_000,
   life: 20 * 60_000,
+  think: ASK_MS,
 };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;

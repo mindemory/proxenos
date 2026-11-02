@@ -8,7 +8,7 @@ import { ActionButton } from "@/components/ActionButton";
 import { QuestionText, ShotCount } from "./parts";
 
 /** How long it's been going, ticking every second: "48s", "3m 05s". */
-function Elapsed({ since }: { since: number | null }) {
+export function Elapsed({ since }: { since: number | null }) {
   const [now, setNow] = useState(() => Date.now());
   const [began] = useState(() => Date.now());
   useEffect(() => {

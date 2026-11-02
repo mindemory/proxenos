@@ -10,7 +10,7 @@ import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
 import { groupDrafts, isNote, isStale, STALE_DAYS } from "@/lib/drafts";
-import type { Draft } from "@/lib/types";
+import type { Draft, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,7 +18,18 @@ import { cn } from "@/lib/utils";
  * `focus` is a draft opened from another view (the home page). The view takes it on mount and
  * clears it, then shows that draft on its tab, whole, and scrolls to it once the list is there.
  */
-export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; focus?: string | null; onFocused?: () => void }) {
+export function Drafts({
+  onChange,
+  focus,
+  onFocused,
+  onThink,
+}: {
+  onChange?: () => void;
+  focus?: string | null;
+  onFocused?: () => void;
+  /** Think a draft through with Proxenos, in a new thread that starts from it. */
+  onThink?: (start: ThinkStart) => void;
+}) {
   const { data, error, flashId, discard, sent: markSent, keep, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
   const [showNotes, setShowNotes] = useState<boolean | null>(null);
@@ -74,6 +85,16 @@ export function Drafts({ onChange, focus, onFocused }: { onChange?: () => void; 
       onEdit={edit}
       onKeep={keep}
       focused={d.id === focusId}
+      onThink={
+        onThink &&
+        ((x) =>
+          onThink({
+            kind: "draft",
+            id: x.id,
+            label: `Draft: ${x.title}`,
+            text: x.to ? `Help me think this message to ${x.to} through before I send it.` : "Help me think this through before I send it.",
+          }))
+      }
     />
   );
 

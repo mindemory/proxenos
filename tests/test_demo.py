@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import cli, demo, memory, outbox, webapp
+from proxenos import cli, demo, memory, outbox, think, webapp
 from proxenos.clones import errands, life, work
 
 NOW = datetime(2026, 10, 29, 13, 0, tzinfo=UTC)
@@ -64,6 +64,14 @@ def test_every_view_has_something_current_to_show(vault):
     assert fay["messages"][0]["address"] == "fay.moss@betacorp.example"
     assert fay["steps"][-1]["title"] == "Stopped one tap short"
     assert fay["summary"] == errands.summary(fay)
+
+    (listed_thread,) = think.threads(vault)
+    thread = think.show(vault, listed_thread["id"])
+    assert listed_thread["turns"] == 2 and thread["status"] == "done"
+    # What matters in it opens real records.
+    answers = [m for m in thread["messages"] if m["role"] == "proxenos"]
+    ids = [x["record"] for m in answers for x in m["parts"]["matters"] if x["record"]]
+    assert ids and memory.records(ids, vault=vault).keys() == set(ids)
 
     events = read(vault, "clones/recall/today.json")["events"]
     assert "Glasses fitting" in [e["title"] for e in events]

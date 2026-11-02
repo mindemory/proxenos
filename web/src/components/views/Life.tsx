@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, Library, PenLine, RefreshCw } from "lucide-react";
+import { ArrowLeft, CalendarDays, Library, MessagesSquare, PenLine, RefreshCw } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
@@ -9,7 +9,7 @@ import { Segmented } from "@/components/layout/Segmented";
 import { ProseSkeleton } from "@/components/Skeleton";
 import { monthName, useLife } from "@/lib/client";
 import { formatDateTime, longDay, timeAgo } from "@/lib/format";
-import type { LifeDay, LifeEntry, LifeMonth, LifeResponse } from "@/lib/types";
+import type { LifeDay, LifeEntry, LifeMonth, LifeResponse, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Listed = "events" | "notes" | "health" | "activity" | "other";
@@ -101,7 +101,7 @@ function RecordLine({ label, children }: { label: string; children: ReactNode })
 }
 
 /** One day: its diary entry where the month has one, then what the records hold from it, quietly, by part. */
-function DayCard({ d, entry, focused }: { d: LifeDay; entry: string | null; focused: boolean }) {
+function DayCard({ d, entry, focused, onThink }: { d: LifeDay; entry: string | null; focused: boolean; onThink?: () => void }) {
   const sources = Object.entries(d.sources);
   return (
     <article id={`day-${d.date}`} className={cn("card scroll-mt-4 space-y-3 p-4 sm:p-5", focused && "card-priority")}>
@@ -141,6 +141,7 @@ function DayCard({ d, entry, focused }: { d: LifeDay; entry: string | null; focu
         </dl>
         {sources.length > 0 && <p className="text-xs text-muted">{sources.map(([s, n]) => `${s} ${n}`).join(" · ")}</p>}
       </div>
+      {onThink && <ActionButton icon={MessagesSquare} label="Think about this day" tone="neutral" onClick={onThink} />}
     </article>
   );
 }
@@ -168,10 +169,11 @@ interface MonthViewProps {
   writing: string | null;
   onBack: () => void;
   onWrite: (month: string) => void;
+  onThink?: (start: ThinkStart) => void;
 }
 
 /** A month opened: its summary and diary, then each of its days. */
-function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewProps) {
+function MonthView({ data, month, focus, writing, onBack, onWrite, onThink }: MonthViewProps) {
   const open = data.open?.month === month ? data.open : null;
   const story = open?.story ?? null;
   const entries = story?.entries ?? null;
@@ -235,7 +237,22 @@ function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewPr
         </div>
         {open && open.days.length === 0 && <p className="text-sm text-muted">No day this month left a record.</p>}
         {open?.days.map((d) => (
-          <DayCard key={d.date} d={d} entry={entryOn.get(d.date) ?? null} focused={d.date === focus} />
+          <DayCard
+            key={d.date}
+            d={d}
+            entry={entryOn.get(d.date) ?? null}
+            focused={d.date === focus}
+            onThink={
+              onThink &&
+              (() =>
+                onThink({
+                  kind: "day",
+                  id: d.date,
+                  label: `Day: ${longDay(d.date)}`,
+                  text: `Help me think about ${longDay(d.date)}.`,
+                }))
+            }
+          />
         ))}
       </section>
     </article>
@@ -249,7 +266,7 @@ function MonthView({ data, month, focus, writing, onBack, onWrite }: MonthViewPr
  * records and your activity. The night writes the month that just ended and fills in older ones,
  * newest first; "Write this month" writes one now.
  */
-export function Life() {
+export function Life({ onThink }: { onThink?: (start: ThinkStart) => void } = {}) {
   const [month, setMonth] = useState<string | null>(null);
   const [year, setYear] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -381,6 +398,7 @@ export function Life() {
               setFocus(null);
             }}
             onWrite={write}
+            onThink={onThink}
           />
         ) : (
           <div className="grid items-start gap-4 sm:grid-cols-2">

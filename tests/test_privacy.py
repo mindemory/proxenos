@@ -252,7 +252,7 @@ def test_each_part_says_what_it_sends_and_every_step_is_one_parts(home):
     sends = privacy.report(home / "vault", NOW)["sent"]["sends"]
     steps = [step for part in sends for step in part["steps"]]
     assert len(steps) == len(set(steps))
-    assert {"observe", "work", "care", "tasks", "ask", "calls"} <= set(steps)
+    assert {"observe", "work", "care", "tasks", "ask", "think", "calls"} <= set(steps)
     assert all(part["part"] and part["sends"].endswith(".") for part in sends)
 
 

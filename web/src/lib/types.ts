@@ -925,9 +925,10 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
 
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
- * project's step, a decision on one (Accept, Discard, or a change to the queue), and a month's story.
+ * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, and a thought
+ * being thought through.
  */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life";
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -1087,6 +1088,112 @@ export interface AskResponse {
   /** The newest asks, newest first. */
   asks: AskEntry[];
   job: AskJob | null;
+}
+
+// ── Think ───────────────────────────────────────────────────────────────────
+//
+// A conversation with Proxenos about anything, from `proxenos think`, which keeps each thread in
+// clones/think/<id>.json. A thread can start from something on another view: a draft, a project,
+// a day, a person, or a note of the reader's own.
+
+export const THINK_MAX_TEXT = 8000;
+export const THINK_KINDS = ["draft", "project", "day", "person", "free"] as const;
+export type ThinkKind = (typeof THINK_KINDS)[number];
+export type ThinkStatus = "working" | "done" | "failed";
+
+/** One thing the reader's own goals, notes or records say bears on it, and where it says so. */
+export interface ThinkMatter {
+  text: string;
+  /** "self" (a part of the self-model), "told" (a note), "record", "journal" or "context". */
+  source: string;
+  /** "From your goals and values", "From your email, 2026-10-17". */
+  label: string;
+  /** A record's memory id, to open it; "" for anything else. */
+  record: string;
+}
+
+/** An optional next step. `draftTo` names whom, when it's a message to draft. */
+export interface ThinkStep {
+  text: string;
+  draftTo: string;
+}
+
+export interface ThinkMessage {
+  role: "me" | "proxenos";
+  at: string;
+  text: string;
+  /** Proxenos's turns only. */
+  matters: ThinkMatter[];
+  questions: string[];
+  next: ThinkStep[];
+}
+
+/** What a thread started from, as it shows at the thread's top. */
+export interface ThinkContext {
+  kind: ThinkKind;
+  id: string;
+  title: string;
+  text: string;
+}
+
+export interface ThinkThread {
+  id: string;
+  title: string;
+  created: string;
+  updated: string;
+  status: ThinkStatus;
+  error: string | null;
+  context: ThinkContext | null;
+  messages: ThinkMessage[];
+}
+
+/** A thread as the list shows it. */
+export interface ThinkSummary {
+  id: string;
+  title: string;
+  updated: string;
+  status: ThinkStatus;
+  /** What it started from, or "" for nothing. */
+  kind: ThinkKind | "";
+  turns: number;
+  last: string;
+}
+
+/** The server's one `proxenos think` at a time. */
+export interface ThinkJob {
+  state: "running" | "done" | "failed" | "stopped";
+  message: string;
+  started: string;
+  finished: string | null;
+  /** The thread it went on with, or, once a new one is done, the thread it started. */
+  thread: string | null;
+}
+
+export interface ThinkResponse {
+  now: string;
+  vault: VaultInfo;
+  threads: ThinkSummary[];
+  /** The thread asked for with ?id=, when there is one. */
+  thread: ThinkThread | null;
+  job: ThinkJob | null;
+  /** Why the threads couldn't be read, when they couldn't. */
+  error: string | null;
+}
+
+/** GET /api/think?job=1: the job alone, to poll. */
+export interface ThinkJobResponse {
+  now: string;
+  job: ThinkJob | null;
+}
+
+/** What another view hands Think to start a new thread from. */
+export interface ThinkStart {
+  kind: ThinkKind;
+  id: string;
+  /** Shown above the composer: "Draft: Reply to Ana". */
+  label: string;
+  /** The first message, written for the reader to change. */
+  text: string;
 }
 
 // ── Errands ─────────────────────────────────────────────────────────────────

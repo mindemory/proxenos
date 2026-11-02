@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ListPlus, Play, ScrollText, X } from "lucide-react";
+import { ListPlus, MessagesSquare, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
@@ -12,7 +12,7 @@ import { StepCard } from "@/components/projects/StepCard";
 import { Bone } from "@/components/Skeleton";
 import { timeAgo } from "@/lib/format";
 import { useProjects } from "@/lib/projectsClient";
-import { STEP_MAX_TEXT, type ManuscriptEdit, type ProjectsResponse, type StepAsk, type WorkProject } from "@/lib/types";
+import { STEP_MAX_TEXT, type ManuscriptEdit, type ProjectsResponse, type StepAsk, type ThinkStart, type WorkProject } from "@/lib/types";
 
 // What was being written in each project's queue box when the view was left.
 const kept = new Map<string, string>();
@@ -32,6 +32,8 @@ interface SectionProps {
   /** Ask for a step that says more than its words: queue it, or take it now. */
   onAsk: (text: string, now: boolean, ask: StepAsk) => Promise<boolean>;
   onSaveEdit: (edit: ManuscriptEdit) => Promise<boolean>;
+  /** Think the project through with Proxenos, in a new thread that starts from it. */
+  onThink?: () => void;
 }
 
 // Which projects' manuscripts were open when the view was left.
@@ -50,6 +52,7 @@ function ProjectSection({
   onDiscard,
   onAsk,
   onSaveEdit,
+  onThink,
 }: SectionProps) {
   const [text, setText] = useState(kept.get(project.id) ?? "");
   const [queueing, setQueueing] = useState(false);
@@ -113,6 +116,12 @@ function ProjectSection({
         <Fold label={`Where it stands${project.statusDate ? `, ${project.statusDate}` : ""}`} start>
           <Markdown source={project.status} compact />
         </Fold>
+      )}
+
+      {onThink && (
+        <div>
+          <ActionButton icon={MessagesSquare} label="Think it through" tone="neutral" onClick={onThink} />
+        </div>
       )}
 
       {project.repo &&
@@ -231,7 +240,7 @@ function ProjectSection({
  * work on a branch of the project's own code and comes back with what it did and what it shows,
  * for the user to accept, which merges it, or discard.
  */
-export function Projects() {
+export function Projects({ onThink }: { onThink?: (start: ThinkStart) => void } = {}) {
   const { data, error, clearError, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
@@ -274,6 +283,16 @@ export function Projects() {
             onDiscard={(id) => void discard(id)}
             onAsk={(text, now, ask) => (now ? takeAsked(p.id, text, ask) : queue(p.id, text, ask))}
             onSaveEdit={(edit) => saveEdit(p.id, edit)}
+            onThink={
+              onThink &&
+              (() =>
+                onThink({
+                  kind: "project",
+                  id: p.id,
+                  label: `Project: ${p.name}`,
+                  text: `Help me think through where ${p.name} stands and what to do next.`,
+                }))
+            }
           />
         ))
       )}

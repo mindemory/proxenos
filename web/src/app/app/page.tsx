@@ -22,11 +22,15 @@ import {
 import { Home } from "@/components/views/Home";
 import type { MemoryIntent } from "@/components/views/Memory";
 import { prefetch, useHome, useItems } from "@/lib/client";
+import type { ThinkStart } from "@/lib/types";
 
 // Home and the feed come with the page; every other view loads the first time it's opened,
 // with its own skeleton meanwhile, so the app's first paint carries only what it shows.
 const Ask = dynamic(() => import("@/components/views/Ask").then((m) => m.Ask), {
   loading: () => <ProseSkeleton label="Loading ask" />,
+});
+const Think = dynamic(() => import("@/components/views/Think").then((m) => m.Think), {
+  loading: () => <ProseSkeleton label="Loading think" />,
 });
 const Errands = dynamic(() => import("@/components/views/Errands").then((m) => m.Errands), {
   loading: () => <ProseSkeleton label="Loading errands" />,
@@ -120,6 +124,12 @@ export default function AppPage() {
   // A care item the home page wants the care view to open, the same way.
   const [careIntent, setCareIntent] = useState<string | null>(null);
   const careConsumed = useCallback(() => setCareIntent(null), []);
+  // A new thread another view wants Think to start, with what it starts from, the same way.
+  const [thinkIntent, setThinkIntent] = useState<{ start: ThinkStart | null } | null>(null);
+  const thinkConsumed = useCallback(() => setThinkIntent(null), []);
+  // A message Think wants drafted, put in Ask's box, the same way.
+  const [askIntent, setAskIntent] = useState<string | null>(null);
+  const askConsumed = useCallback(() => setAskIntent(null), []);
   // Bumped by Refresh: remounting the view makes it fetch again.
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -177,6 +187,16 @@ export default function AppPage() {
     navigate("care");
   };
 
+  const openThink = (start: ThinkStart | null) => {
+    setThinkIntent({ start });
+    navigate("think");
+  };
+
+  const openAsk = (text: string) => {
+    setAskIntent(text);
+    navigate("ask");
+  };
+
   const showNew = () => {
     feed.showPending();
     setView("feed");
@@ -200,9 +220,11 @@ export default function AppPage() {
   const renderView = () => {
     switch (view) {
       case "home":
-        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} onCare={openCare} />;
+        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} onCare={openCare} onThink={openThink} />;
       case "ask":
-        return <Ask onNavigate={navigate} />;
+        return <Ask onNavigate={navigate} prefill={askIntent} onPrefilled={askConsumed} />;
+      case "think":
+        return <Think intent={thinkIntent} onConsumed={thinkConsumed} onAsk={openAsk} onMemory={openMemory} />;
       case "errands":
         return <Errands />;
       case "saved":
@@ -210,11 +232,11 @@ export default function AppPage() {
       case "tasks":
         return <Tasks onChange={home.reload} />;
       case "projects":
-        return <Projects />;
+        return <Projects onThink={openThink} />;
       case "care":
         return <Care onChange={home.reload} onMemory={openMemory} focus={careIntent} onFocused={careConsumed} />;
       case "drafts":
-        return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} />;
+        return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} onThink={openThink} />;
       case "advice":
         return <Advice onChange={home.reload} />;
       case "choices":
@@ -222,7 +244,7 @@ export default function AppPage() {
       case "journal":
         return <Journal />;
       case "life":
-        return <Life />;
+        return <Life onThink={openThink} />;
       case "rhythms":
         return <Rhythms />;
       case "watch":

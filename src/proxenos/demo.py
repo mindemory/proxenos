@@ -7,11 +7,12 @@ their formats, dated around today: WhatsApp chats and groups, two mail accounts,
 walks, listening, notes and LinkedIn connections, and, months back, everyday chatter, rides and
 listening for the Rhythms view. What the model would write from them is written the way each
 clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the week's choices,
-drafts and errands. Then the steps that need no model run on it as they would on a real vault:
-the memory index, the people index, today's recall, the outbox's track record and yesterday's
-journal, with the brief the model would write; the stories of the last months, as the night would
-have written them from those months' days; the weeks over time, with the artists' genres and
-moods the model would give; and a week of model calls for the Privacy view, all on this computer.
+drafts, errands and a thread on the Think view. Then the steps that need no model run on it as
+they would on a real vault: the memory index, the people index, today's recall, the outbox's
+track record and yesterday's journal, with the brief the model would write; the stories of the
+last months, as the night would have written them from those months' days; the weeks over time,
+with the artists' genres and moods the model would give; and a week of model calls for the
+Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
 up, phone numbers are 555-01xx (kept for fiction), and addresses and links use the reserved
@@ -32,7 +33,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
-from proxenos import memory, outbox, store
+from proxenos import memory, outbox, store, think
 from proxenos.clones import (
     advisor,
     care,
@@ -151,6 +152,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         _journal(vault, c)
         _life(vault, c)
         _rhythms(vault, c)
+        _think(vault, c)
         _calls(vault, c)
     return {
         "records": indexed.get("records_total", 0),
@@ -2237,6 +2239,148 @@ def _choices(vault: Path, c: _Clock) -> None:
         work._write(folder / f"{draft['id']}.md", work.render(draft))
 
 
+def _think(vault: Path, c: _Clock) -> None:
+    """A thread on the Think view as think.py saves it: Joe weighing the role at Beta Corp over
+    two turns, with the answers the model would give, each citing his self-model, his journal
+    and his mail."""
+    mail = {m["subject"]: m for m in _home_mail(c)}
+
+    def record(subject: str) -> dict:
+        m = mail[subject]
+        label = f"From your email, {m['ts'][:10]}"
+        return {"source": "record", "label": label, "record": f"email/{m['account']}/{m['id']}"}
+
+    goals = {"source": "self", "label": "From your goals and values", "record": ""}
+    asked = {"source": "self", "label": "From your open questions", "record": ""}
+    day = {"source": "journal", "label": f"From your journal, {c.day(-1)}", "record": ""}
+
+    def matter(text: str, ref: str, source: dict) -> dict:
+        return {"text": text, "ref": ref, **source}
+
+    def step(text: str, to: str = "") -> dict:
+        return {"text": text, "draft_to": to}
+
+    first = (
+        "Your own notes ask the same thing: whether the Beta Corp role is something you want, or "
+        "flattering timing. Fay wrote because your talk on getting holiday orders out on time "
+        "came up twice in one week, so what drew her is the part of your work you already tell "
+        "stories about.\n\n"
+        "What your records don't say is how you feel about leaving Acme, or what you'd want a "
+        "lead role to change. They do show what a move would land on: the oak delay, Ben's "
+        "delivery dates for the holiday catalog, and December shifts you think need one more "
+        "person. You told Fay you'd come back to her at the end of the month, so no answer is "
+        "due yet.\n\n"
+        "You decide by writing things down first, then asking one person you trust. That fits "
+        "here: what a yes would give you that Acme doesn't, in your words, and then one "
+        "conversation."
+    )
+    second = (
+        "That's a reason about timing more than about the role. \"Getting the dates right before "
+        "they're promised\" is one of the things you hold to, and the holiday orders are the "
+        "dates you've promised this year.\n\n"
+        "Both can be true: you could want the role and still not want to start it in December. "
+        "Your records don't show whether Beta Corp has a start date in mind; Fay hasn't said. "
+        "Only she can tell you, and it turns the question from yes or no into when.\n\n"
+        "Your journal has Ben's delivery dates for the holiday catalog next. However this goes, "
+        "that's the work in front of you this week."
+    )
+    messages = [
+        {
+            "role": "me",
+            "at": c.ago(5),
+            "text": "Fay at Beta Corp wants to talk about the operations lead role. Is it "
+            "something I actually want, or is it just nice to be asked?",
+        },
+        {
+            "role": "proxenos",
+            "at": c.ago(4.95),
+            "text": first,
+            "parts": {
+                "matters": [
+                    matter(
+                        "You decide by writing things down first, then asking one person you "
+                        "trust.",
+                        "self/identity",
+                        goals,
+                    ),
+                    matter(
+                        "Your open question: is the role something you want, or flattering timing?",
+                        "self/open_questions",
+                        asked,
+                    ),
+                    matter(
+                        "Fay heard about your talk on holiday orders twice in one week.",
+                        "r1",
+                        record("Operations lead role at Beta Corp"),
+                    ),
+                    matter(
+                        "You told Fay you'd come back to her at the end of the month.",
+                        "r2",
+                        record("Re: Operations lead role at Beta Corp"),
+                    ),
+                ],
+                "questions": [
+                    "What would a lead role give you that Acme doesn't, in your own words?",
+                    "Is it the role you want, or a break from the December rush?",
+                    "Ask Wes Tran: what is the operations team at Beta Corp like from inside?",
+                ],
+                "next": [
+                    step("Write down what a yes would change in your first three months"),
+                    step("Ask Wes Tran what it's like on Beta Corp's operations team", "Wes Tran"),
+                ],
+            },
+        },
+        {
+            "role": "me",
+            "at": c.ago(4.6),
+            "text": "Honestly the December rush is what worries me. I don't want to leave Ben "
+            "and Kai in the middle of it.",
+        },
+        {
+            "role": "proxenos",
+            "at": c.ago(4.55),
+            "text": second,
+            "parts": {
+                "matters": [
+                    matter(
+                        "You value getting the dates right before they're promised.",
+                        "self/identity",
+                        goals,
+                    ),
+                    matter(
+                        "Next in your journal: Ben's delivery dates for the holiday catalog.",
+                        "j1",
+                        day,
+                    ),
+                ],
+                "questions": [
+                    "Would a start in the new year change how the role looks to you?",
+                    "Ask Fay: when would the role start, and is there room on timing?",
+                ],
+                "next": [
+                    step("Ask Fay when the role would start", "Fay Moss"),
+                    step("Send Ben the delivery dates for the holiday catalog first"),
+                ],
+            },
+        },
+    ]
+    started = datetime.fromisoformat(messages[0]["at"])
+    thread_id = f"think-{started:%Y%m%dT%H%M%SZ}"
+    _write_json(
+        vault / "clones" / "think" / f"{thread_id}.json",
+        {
+            "id": thread_id,
+            "title": think._title(messages[0]["text"]),
+            "created": messages[0]["at"],
+            "updated": messages[-1]["at"],
+            "status": "done",
+            "error": None,
+            "context": None,
+            "messages": messages,
+        },
+    )
+
+
 def _errands(vault: Path, c: _Clock) -> None:
     def errand(start_hours: float, goal: str, steps: list[tuple[str, str]], **fields) -> dict:
         """An errand as errands.py saves it: carried as far as it went, a step every few
@@ -2470,6 +2614,8 @@ def _calls(vault: Path, c: _Clock) -> None:
         ("life", 27, 31_000, 2_300, 141.6),
         ("tasks", 5, 14_000, 1_300, 51.9),
         ("work", 5, 17_200, 850, 38.6),
+        ("think", 5, 12_000, 1_500, 64.0),
+        ("think", 5, 13_500, 1_300, 58.2),
         ("ask", 2, 9_400, 600, 19.8),
     ]
     lines = [

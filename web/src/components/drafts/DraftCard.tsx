@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, CheckCheck, ChevronDown, Copy, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Copy, MessagesSquare, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
@@ -33,9 +33,11 @@ interface DraftCardProps {
   onKeep: (d: Draft) => void;
   /** The draft someone opened from another view (the home page): shown whole and highlighted. */
   focused?: boolean;
+  /** Think it through with Proxenos before sending it. */
+  onThink?: (d: Draft) => void;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, focused }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, focused, onThink }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -192,6 +194,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
               <ActionButton icon={Copy} label="Copy" tone={plan ? "neutral" : "accent"} onClick={() => onCopy(d)} />
               <ActionButton icon={CheckCheck} label="I sent it" tone="ok" onClick={() => onSent(d)} />
               <ActionButton icon={Pencil} label="Write my own" tone="neutral" onClick={start} />
+              {onThink && <ActionButton icon={MessagesSquare} label="Think it through" tone="neutral" onClick={() => onThink(d)} />}
               <ActionButton icon={Trash2} label="Discard" tone="bad" onClick={() => onDiscard(d)} />
             </>
           )}

@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   Lightbulb,
   ListTodo,
+  MessagesSquare,
   Network as NetworkIcon,
   PenLine,
   Radar,
@@ -17,6 +18,7 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { ActionButton } from "@/components/ActionButton";
 import { SuggestionCard } from "@/components/advice/SuggestionCard";
 import { ReviewBar } from "@/components/charts/ReviewBar";
 import { Sparkline } from "@/components/charts/Sparkline";
@@ -61,6 +63,7 @@ import type {
   RecallKind,
   RecallResponse,
   RecallTrigger,
+  ThinkStart,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +79,8 @@ interface HomeProps {
   onDraft: (id: string) => void;
   /** Open the care view on one item. */
   onCare: (id: string) => void;
+  /** Open Think on a new thread. */
+  onThink: (start: ThinkStart | null) => void;
 }
 
 // ── Layout pieces ───────────────────────────────────────────────────────────
@@ -180,7 +185,12 @@ function count(n: number, one: string, many: string, none: string): string {
   return n === 0 ? none : `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
-function Greeting({ data, briefing, onNavigate }: { data: HomeResponse; briefing: Briefing; onNavigate: (v: View) => void }) {
+function Greeting({
+  data,
+  briefing,
+  onNavigate,
+  onThink,
+}: { data: HomeResponse; briefing: Briefing; onNavigate: (v: View) => void } & Pick<HomeProps, "onThink">) {
   const today = localDay(data.now);
   const open = data.tasks.actionable.filter((t) => t.action === null);
   const due = open.filter((t) => (daysLeft(t, today) ?? 1) <= 0).length;
@@ -225,6 +235,9 @@ function Greeting({ data, briefing, onNavigate }: { data: HomeResponse; briefing
           "Here is where things stand."
         )}
       </p>
+      <div className="mt-4">
+        <ActionButton icon={MessagesSquare} label="Think something through" tone="accent" onClick={() => onThink(null)} />
+      </div>
       <NowNote />
       <ToldNotes now={data.now} />
     </header>
@@ -990,7 +1003,7 @@ function ProjectsCard({ onNavigate }: Pick<HomeProps, "onNavigate">) {
 
 // ── The briefing ────────────────────────────────────────────────────────────
 
-export function Home({ home, onNavigate, onMemory, onDraft, onCare }: HomeProps) {
+export function Home({ home, onNavigate, onMemory, onDraft, onCare, onThink }: HomeProps) {
   const { data, error, clearError } = home;
   const briefing = useJson<BriefingResponse>("/api/briefing");
 
@@ -1003,7 +1016,7 @@ export function Home({ home, onNavigate, onMemory, onDraft, onCare }: HomeProps)
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 pb-28 pt-7 sm:px-6 md:pb-14 lg:px-8">
       {error && <ErrorBanner message={error} onDismiss={clearError} />}
-      <Greeting data={data} briefing={briefing} onNavigate={onNavigate} />
+      <Greeting data={data} briefing={briefing} onNavigate={onNavigate} onThink={onThink} />
 
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />

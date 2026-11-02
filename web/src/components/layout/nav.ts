@@ -13,6 +13,7 @@ import {
   ListTodo,
   NotebookPen,
   MessageSquare,
+  MessagesSquare,
   Network,
   Phone,
   PenLine,
@@ -28,6 +29,7 @@ import {
 export type View =
   | "home"
   | "ask"
+  | "think"
   | "errands"
   | "feed"
   | "saved"
@@ -64,6 +66,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Library, label: "Life", id: "life", group: "home" },
   { icon: AudioWaveform, label: "Rhythms", id: "rhythms", group: "home" },
   { icon: MessageSquare, label: "Ask", id: "ask", group: "home" },
+  { icon: MessagesSquare, label: "Think", id: "think", group: "home" },
   { icon: Route, label: "Errands", id: "errands", group: "home" },
   { icon: Rss, label: "Feed", id: "feed", group: "clones" },
   { icon: Bookmark, label: "Saved", id: "saved", group: "clones" },

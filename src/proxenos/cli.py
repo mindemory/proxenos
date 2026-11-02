@@ -31,6 +31,7 @@ from proxenos import (
     privacy,
     schedule,
     setup,
+    think,
     vectors,
     voice,
     voicemodel,
@@ -130,6 +131,10 @@ def main(argv: list[str] | None = None) -> None:
         "ask", help="a question or screenshots, answered as you'd think it"
     )
     ask.add_arguments(asking)
+    thinking = commands.add_parser(
+        "think", help="think anything through with Proxenos, from your own goals and records"
+    )
+    think.add_arguments(thinking)
     tune = commands.add_parser(
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
@@ -173,6 +178,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "ask":
         ask.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "think":
+        think.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "voice":
         voicemodel.run(vault_path(), args)  # vault_path also loads settings
