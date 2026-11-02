@@ -120,6 +120,8 @@ export default function AppPage() {
   const memoryConsumed = useCallback(() => setMemoryIntent(null), []);
   // A draft the home page wants the drafts view to open, taken and cleared the same way.
   const [draftIntent, setDraftIntent] = useState<string | null>(null);
+  const [projectIntent, setProjectIntent] = useState<string | null>(null);
+  const projectConsumed = useCallback(() => setProjectIntent(null), []);
   const draftConsumed = useCallback(() => setDraftIntent(null), []);
   // A care item the home page wants the care view to open, the same way.
   const [careIntent, setCareIntent] = useState<string | null>(null);
@@ -182,6 +184,11 @@ export default function AppPage() {
     navigate("drafts");
   };
 
+  const openProject = (id: string) => {
+    setProjectIntent(id);
+    navigate("projects");
+  };
+
   const openCare = (id: string) => {
     setCareIntent(id);
     navigate("care");
@@ -220,7 +227,7 @@ export default function AppPage() {
   const renderView = () => {
     switch (view) {
       case "home":
-        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} onCare={openCare} onThink={openThink} />;
+        return <Home home={home} onNavigate={navigate} onMemory={openMemory} onDraft={openDraft} onCare={openCare} onProject={openProject} onThink={openThink} />;
       case "ask":
         return <Ask onNavigate={navigate} prefill={askIntent} onPrefilled={askConsumed} />;
       case "think":
@@ -232,7 +239,7 @@ export default function AppPage() {
       case "tasks":
         return <Tasks onChange={home.reload} />;
       case "projects":
-        return <Projects onThink={openThink} />;
+        return <Projects onThink={openThink} focus={projectIntent} onFocused={projectConsumed} />;
       case "care":
         return <Care onChange={home.reload} onMemory={openMemory} focus={careIntent} onFocused={careConsumed} />;
       case "drafts":

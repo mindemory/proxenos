@@ -79,6 +79,8 @@ interface HomeProps {
   onDraft: (id: string) => void;
   /** Open the care view on one item. */
   onCare: (id: string) => void;
+  /** Open the projects view on one project. */
+  onProject?: (id: string) => void;
   /** Open Think on a new thread. */
   onThink: (start: ThinkStart | null) => void;
 }
@@ -943,7 +945,7 @@ function standing(status: string): { lead: string; open: string[] } {
   return { lead: said(lead.replace(/^- /, "")), open };
 }
 
-function ProjectsCard({ onNavigate }: Pick<HomeProps, "onNavigate">) {
+function ProjectsCard({ onNavigate, onProject }: Pick<HomeProps, "onNavigate" | "onProject">) {
   const { data, error } = useJson<ProjectsResponse>("/api/projects");
   const projects = data?.projects.filter((p) => !p.paused) ?? [];
   const waiting = projects.reduce((n, p) => n + p.steps.filter((s) => s.status === "ready").length, 0);
@@ -971,7 +973,7 @@ function ProjectsCard({ onNavigate }: Pick<HomeProps, "onNavigate">) {
             return (
               <button
                 key={p.id}
-                onClick={() => onNavigate("projects")}
+                onClick={() => (onProject ? onProject(p.id) : onNavigate("projects"))}
                 className="tile tile-hover flex h-full w-full flex-col items-stretch justify-start px-3.5 py-3 text-left"
               >
                 <span className="title-3 block break-words">{p.name}</span>
@@ -1003,7 +1005,7 @@ function ProjectsCard({ onNavigate }: Pick<HomeProps, "onNavigate">) {
 
 // ── The briefing ────────────────────────────────────────────────────────────
 
-export function Home({ home, onNavigate, onMemory, onDraft, onCare, onThink }: HomeProps) {
+export function Home({ home, onNavigate, onMemory, onDraft, onCare, onProject, onThink }: HomeProps) {
   const { data, error, clearError } = home;
   const briefing = useJson<BriefingResponse>("/api/briefing");
 
@@ -1020,7 +1022,7 @@ export function Home({ home, onNavigate, onMemory, onDraft, onCare, onThink }: H
 
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
-        <ProjectsCard onNavigate={onNavigate} />
+        <ProjectsCard onNavigate={onNavigate} onProject={onProject} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
         <CareCard onNavigate={onNavigate} onCare={onCare} />
       </Section>

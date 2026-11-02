@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ListPlus, MessagesSquare, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
@@ -81,7 +81,7 @@ function ProjectSection({
   };
 
   return (
-    <section aria-label={project.name} className="space-y-4">
+    <section id={`project-${project.id}`} aria-label={project.name} className="scroll-mt-4 space-y-4">
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <h2 className="title-2 text-xl">{project.name}</h2>
@@ -240,8 +240,31 @@ function ProjectSection({
  * work on a branch of the project's own code and comes back with what it did and what it shows,
  * for the user to accept, which merges it, or discard.
  */
-export function Projects({ onThink }: { onThink?: (start: ThinkStart) => void } = {}) {
+interface ProjectsProps {
+  onThink?: (start: ThinkStart) => void;
+  /** A project to open on, by id, as Home's project tiles ask. */
+  focus?: string | null;
+  onFocused?: () => void;
+}
+
+export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
   const { data, error, clearError, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
+  const [focusId] = useState(focus ?? null);
+
+  useEffect(() => {
+    if (focus) onFocused?.();
+  }, [focus, onFocused]);
+
+  const found = data?.projects.some((p) => p.id === focusId) ?? false;
+  useEffect(() => {
+    if (!focusId || !found) return;
+    // After the projects have rendered.
+    const timer = window.setTimeout(
+      () => document.getElementById(`project-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [focusId, found]);
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
 
