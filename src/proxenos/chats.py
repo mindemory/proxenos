@@ -217,15 +217,15 @@ def _first(
     if any(m["in_reply_to"] and m["in_reply_to"] not in ids for m in theirs):
         return False
     text = " ".join(m["text"] for m in theirs)
-    return bool(names & set(_WORD.findall(text.casefold()))) and _asks(text)
+    return bool(names & set(_WORD.findall(text.casefold()))) and asks(text)
 
 
 def _automatic(text: str) -> bool:
     """An auto-reply, or a receipt that asks nothing."""
-    return bool(_AUTO_REPLY.search(text)) or (bool(_RECEIPT.search(text)) and not _asks(text))
+    return bool(_AUTO_REPLY.search(text)) or (bool(_RECEIPT.search(text)) and not asks(text))
 
 
-def _asks(text: str) -> bool:
+def asks(text: str) -> bool:
     """Whether a text asks something: a question mark outside its links, or a request."""
     for link in links.find(text):
         text = text.replace(link, " ")

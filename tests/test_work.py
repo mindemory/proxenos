@@ -578,6 +578,13 @@ def test_a_reply_nobody_needs_is_filed_away_with_why_and_not_drafted_again(
     tmp_path, model, monkeypatch
 ):
     vault = chat_vault(tmp_path)
+    write_jsonl(  # Asha's last words ask nothing
+        vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            wa("asha", "Asha", "2026-03-01T09:00:00Z", "okiees see you thurs", mine=True),
+            wa("asha", "Asha", "2026-03-09T10:00:00Z", "thanks so much, see you then!"),
+        ],
+    )
 
     def no_reply(prompt, **kw):
         answer = model(prompt, **kw)
@@ -595,6 +602,30 @@ def test_a_reply_nobody_needs_is_filed_away_with_why_and_not_drafted_again(
     fields = front(path)
     assert (fields["status"], fields["overtaken"]) == ("overtaken", "Asha only said thanks.")
     assert "found" not in fields and fields["thread"]
+
+
+def test_a_question_waiting_is_answered_even_when_the_model_says_no_reply_is_needed(
+    tmp_path, model, monkeypatch
+):
+    vault = chat_vault(tmp_path)  # Asha asks whether they're coming Friday
+    asked = []
+
+    def unneeded_once(prompt, **kw):
+        answer = model(prompt, **kw)
+        if "keep" in answer or "searches" in answer:
+            return answer
+        asked.append(prompt)
+        if len(asked) == 1:
+            return answer | {"needed": False, "body": "", "found": "Asha is just chatting."}
+        return answer
+
+    monkeypatch.setattr(llm, "ask", unneeded_once)
+    stats = work.replies(vault, now=NOW, read=FakePages())
+
+    assert stats["drafts_written"] == 1 and "replies_not_needed" not in stats
+    assert len(asked) == 2 and asked[1].endswith(work._ASKED)
+    (path,) = drafts(vault).values()
+    assert front(path)["status"] == "draft"
 
 
 def test_a_draft_with_a_blank_is_written_again_and_rules_and_the_week_are_shown(

@@ -118,6 +118,10 @@ _FILL = (
     "\n\nYour draft left a blank in [brackets]. Write it again, ready to send: fill each blank "
     "with what fits best from what you were given, and say what you chose in asks."
 )
+_ASKED = (
+    "\n\nThe messages waiting ask a question or make a request, so they need an answer: write "
+    "the reply, however short, with needed true."
+)
 
 _SYSTEM = """\
 You draft work for {person}, written as {person}, for them to read before anything goes \
@@ -143,9 +147,10 @@ plain sentences (a deadline and how far off it is, what was already done, what w
 - asks: for a reply, each choice you made for {person} that they may want to change, as a \
 short question, at most three. [] when there is nothing to ask.
 - needed: for a reply, false when the conversation needs no answer from {person}: it ends on \
-thanks, an acknowledgement, a goodbye or a notice, or what it asks is already settled. Then \
-leave body "" and say why in found, in one sentence. true otherwise, and for anything that \
-isn't a reply.
+thanks, an acknowledgement, a goodbye or an automated notice, or what it asks is already \
+settled. Then leave body "" and say why in found, in one sentence. true otherwise: someone \
+asking how {person} is, wishing them well, sharing their own news, proposing a time or asking \
+anything gets an answer, however short. true too for anything that isn't a reply.
 
 Rules:
 - Write as {person} would, from their voice and interests below. Never say it was drafted \
@@ -262,7 +267,10 @@ def work(
             answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
             if _BLANK.search(str(answer.get("body") or "")):  # once more, with nothing to fill
                 answer = llm.ask(prompt + _FILL, system=system, schema=_SCHEMA, effort="medium")
-            if chat and answer.get("needed") is False:
+            if chat and answer.get("needed") is False and _asked(chat):
+                # A question or a request waiting always gets an answer, whatever the model said.
+                answer = llm.ask(prompt + _ASKED, system=system, schema=_SCHEMA, effort="medium")
+            if chat and answer.get("needed") is False and not _asked(chat):
                 # No answer needed: filed as overtaken, with why, so it's never drafted again
                 # and the page can still bring it back.
                 why = _one_line(answer.get("found")) or "No reply needed."
@@ -556,6 +564,11 @@ def right_now(vault: Path, now: datetime | None = None) -> dict | None:
     if not text or (now or datetime.now(UTC)) - at > timedelta(hours=NOW_HOURS):
         return None
     return {"text": text[:NOW_CHARS], "at": _iso(at)}
+
+
+def _asked(chat: dict) -> bool:
+    """Whether the messages waiting on the user ask them something: a question or a request."""
+    return any(chats.asks(m["text"]) for m in chat.get("waiting", []) if not m.get("mine"))
 
 
 def reply_key(chat: dict) -> str:
