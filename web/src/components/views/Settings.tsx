@@ -266,6 +266,7 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
               onChange={(e) => setValue(e.target.value)}
               placeholder={s.set ? "The new value" : "Paste it here"}
               aria-label={`New ${secretLabel(s.name)}`}
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- shown by the reader's own Replace, so focus follows it
               autoFocus
               className={inputClass}
               {...NOT_A_LOGIN}

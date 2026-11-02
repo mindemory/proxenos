@@ -116,6 +116,7 @@ function ClusterName({
       className="inline-flex items-center gap-1.5"
     >
       <input
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- shown by the reader's own Rename, so focus follows it
         autoFocus
         value={naming.text}
         maxLength={CLUSTER_LABEL_CHARS}

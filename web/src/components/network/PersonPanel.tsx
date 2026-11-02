@@ -127,6 +127,7 @@ function WhoIsThis({
                 <span className="sr-only">Find the other person</span>
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                 <input
+                  // eslint-disable-next-line jsx-a11y/no-autofocus -- shown by the reader's own pick of what to fix, so focus follows it
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}

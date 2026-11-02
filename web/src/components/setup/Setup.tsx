@@ -109,7 +109,6 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ana"
                 maxLength={100}
-                autoFocus
                 className={inputClass}
                 {...NOT_A_LOGIN}
               />

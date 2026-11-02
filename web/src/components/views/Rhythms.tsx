@@ -344,6 +344,7 @@ export function Rhythms() {
                 picked={shown}
                 max={row.max}
                 format={row.format}
+                name={(i) => capital(ps[i].label)}
                 onHover={setHover}
                 onPick={(i) => setPick({ key: filterKey, i })}
               />

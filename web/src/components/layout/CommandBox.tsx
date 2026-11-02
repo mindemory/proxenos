@@ -337,6 +337,9 @@ export function CommandBox({ onNavigate, onFind, onNetworkTab, onMemory, onRefre
                         {c.section}
                       </span>
                     )}
+                    {/* The box keeps focus and moves through the options with the arrow keys
+                        (aria-activedescendant), so an option takes clicks, never focus or keys. */}
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */}
                     <div
                       id={`cmd-${c.id}`}
                       role="option"

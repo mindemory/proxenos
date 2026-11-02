@@ -99,6 +99,7 @@ export function Memory({ initial, onConsumed }: MemoryProps) {
               aria-label="Search your memory"
               autoComplete="off"
               spellCheck={false}
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- the view is this search box, opened by the reader
               autoFocus={!initial?.id}
               className={cn(FIELD, "h-11 w-full rounded-xl pl-10 text-[15px]")}
             />

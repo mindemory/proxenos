@@ -14,6 +14,8 @@ interface ColumnsProps {
   max?: number;
   /** The top tick's text: "12 h". */
   format: (v: number) => string;
+  /** A period's name, for a screen reader: "the week of 3 November". */
+  name?: (i: number) => string;
   height?: number;
 }
 
@@ -42,7 +44,7 @@ function column(x: number, w: number, base: number, h: number): string {
  * at full strength and the rest stepped back; the whole slot is the hit target, and the arrow
  * keys move along. Hand-drawn SVG, measured to its box so the rounded tops stay round.
  */
-export function Columns({ values, label, picked, onHover, onPick, max, format, height = 56 }: ColumnsProps) {
+export function Columns({ values, label, picked, onHover, onPick, max, format, name, height = 56 }: ColumnsProps) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -64,13 +66,19 @@ export function Columns({ values, label, picked, onHover, onPick, max, format, h
     if (!rect || !n) return null;
     return Math.max(0, Math.min(n - 1, Math.floor(((clientX - rect.left) / rect.width) * n)));
   };
+  // A slider over the periods to a screen reader: the arrow keys move it, and it says where it is.
+  const now = picked !== null && picked < n ? picked : n - 1;
 
   return (
     <div className="flex items-stretch gap-2">
       <div
         ref={box}
-        role="img"
+        role="slider"
         aria-label={label}
+        aria-valuemin={1}
+        aria-valuemax={Math.max(n, 1)}
+        aria-valuenow={now + 1}
+        aria-valuetext={n ? `${name ? `${name(now)}: ` : ""}${format(values[now])}` : "No data"}
         tabIndex={0}
         className="relative min-w-0 flex-1 cursor-crosshair rounded-sm"
         style={{ height }}
