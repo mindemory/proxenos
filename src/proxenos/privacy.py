@@ -93,6 +93,15 @@ SENDS = (
         ),
     ),
     (
+        "Jobs",
+        ("jobs",),
+        (
+            "Job leads, recruiters' and founders' messages to you among them, your self-model, "
+            "your CVs, the people you know at each company, and your earlier messages with the "
+            "person a first step goes to."
+        ),
+    ),
+    (
         "Projects",
         ("projects", "steps", "agent"),
         (

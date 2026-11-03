@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from proxenos import cli, demo, memory, outbox, think, webapp
-from proxenos.clones import errands, life, work
+from proxenos.clones import errands, jobs, life, work
 
 NOW = datetime(2026, 10, 29, 13, 0, tzinfo=UTC)
 
@@ -57,6 +57,15 @@ def test_every_view_has_something_current_to_show(vault):
     assert ids and memory.records(ids, vault=vault).keys() == set(ids)
     named = {i["draft_id"] for i in chosen["take_on"] + chosen["skip"] if i["draft_id"]}
     assert named and named <= {f["id"] for f in fronts if f["for"] == "choice"}
+
+    leads = read(vault, "clones/jobs/jobs.json")["jobs"]
+    assert [j["verdict"] for j in leads] == ["apply", "apply", "maybe", "skip"]
+    # Each lead from the demo's mail opens a real record, and each first step's draft was written.
+    ids = [s["id"] for j in leads for s in j["sources"] if s["id"]]
+    assert ids and memory.records(ids, vault=vault).keys() == set(ids)
+    named = {j["draft_id"] for j in leads if j["draft_id"]}
+    assert named and named == {f["id"] for f in fronts if f["for"] == "jobs"}
+    assert any(j["suggested"] for j in leads)
 
     listed = errands.listed(vault)
     assert {e["status"] for e in listed} == {"ready", "sent"}
@@ -109,6 +118,20 @@ def test_the_rhythms_view_has_months_of_weeks_to_compare(vault):
     assert kinds == ["listening", "riding", "messages", "mood"]
     shift = found["stands_out"]["3m"]["1w"][-1]["text"]
     assert shift.startswith("Your top mood went from energetic")
+
+
+def test_the_jobs_clone_reads_the_demo_as_it_wrote_it(vault):
+    """A run with no model to ask changes none of the demo's jobs: they're in the clone's shape."""
+    before = read(vault, "clones/jobs/jobs.json")
+
+    def model(prompt, **kw):
+        raise RuntimeError("no model in the demo")
+
+    stats = jobs.sift(vault, NOW, model=model, find=lambda person: [])
+
+    after = read(vault, "clones/jobs/jobs.json")
+    assert after["jobs"] == before["jobs"]
+    assert stats["jobs_judged"] == stats["drafts_written"] == stats["suggested_applied"] - 1 == 0
 
 
 def test_everything_in_it_is_made_up(vault):

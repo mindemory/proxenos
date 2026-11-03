@@ -46,12 +46,13 @@ NIGHT_WAIT = 3600  # seconds a night waits for a running sync before it gives up
 
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
 # their health care stands, and advice that read the fresh self-model, the people index and ideas,
-# the week's choices (once a week) that read the tasks and ideas, and what to watch (once a
-# week), then what each of those brings to mind from memory, the projects, the errands still
-# waiting on a way to reach someone, the drafts of them all, a step of each project's own work,
-# which takes longest, the journal of the day that just ended, which reads them all, the stories
-# of the months, which read the journal, and last the weeks over time, counted, with more artists
-# labelled and looked up for their genres and moods, and the month cards due.
+# the week's choices (once a week) that read the tasks and ideas, the job leads, which read the
+# people index and the openings kept from Ask, and what to watch (once a week), then what each of
+# those brings to mind from memory, the projects, the errands still waiting on a way to reach
+# someone, the drafts of them all, a step of each project's own work, which takes longest, the
+# journal of the day that just ended, which reads them all, the stories of the months, which read
+# the journal, and last the weeks over time, counted, with more artists labelled and looked up for
+# their genres and moods, and the month cards due.
 NIGHT_CLONES = (
     "tracker",
     "tasks",
@@ -59,6 +60,7 @@ NIGHT_CLONES = (
     "advisor",
     "network",
     "choices",
+    "jobs",
     "watch",
     "recall",
     "projects",

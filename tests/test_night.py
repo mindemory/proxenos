@@ -11,6 +11,7 @@ from proxenos.clones import (
     care,
     choices,
     errands,
+    jobs,
     journal,
     life,
     network,
@@ -44,6 +45,7 @@ def calls(tmp_path, monkeypatch):
         advisor,
         network,
         choices,
+        jobs,
         watch,
         recall,
         projects,
@@ -102,6 +104,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "advisor: 1 done",
         "network: 1 done",
         "choices: 1 done",
+        "jobs: 1 done",
         "watch: 1 done",
         "recall: 1 done",
         "projects: 1 done",
@@ -119,6 +122,8 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     # The week's choices read the tasks and ideas, and their drafts are the work clone's.
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
     assert cli.NIGHT_CLONES.index("choices") < cli.NIGHT_CLONES.index("work")
+    # The job leads read the people index and the openings kept from Ask.
+    assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("jobs")
     # The month's story reads the journal of the day that just ended.
     assert cli.NIGHT_CLONES.index("journal") < cli.NIGHT_CLONES.index("life")
     assert all(vault == "vault" for _, vault, _ in calls)
@@ -130,6 +135,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["recall"] == {"people": recall.PEOPLE}
     assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
     assert args["choices"] == args["watch"] == {"force": False}  # once a week
+    assert args["jobs"] == {"days": None}  # since the last run
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
     assert args["rhythms"] == {
         "weeks": None,
@@ -163,6 +169,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "advisor: failed (KeyError: 'tasks')",
         "network: 1 done",
         "choices: 1 done",
+        "jobs: 1 done",
         "watch: 1 done",
         "recall: 1 done",
         "projects: 1 done",
@@ -181,6 +188,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "care",
         "network",
         "choices",
+        "jobs",
         "watch",
         "recall",
         "projects",

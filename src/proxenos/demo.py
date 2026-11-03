@@ -7,11 +7,11 @@ their formats, dated around today: WhatsApp chats and groups, two mail accounts,
 walks, listening, notes and LinkedIn connections, and, months back, everyday chatter, rides and
 listening for the Rhythms view. What the model would write from them is written the way each
 clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the week's choices,
-drafts, errands and a thread on the Think view. Then the steps that need no model run on it as
-they would on a real vault: the memory index, the people index, today's recall, the outbox's
-track record and yesterday's journal, with the brief the model would write; the stories of the
-last months, as the night would have written them from those months' days; the weeks over time,
-with the artists' genres and moods the model would give; and a week of model calls for the
+job leads, drafts, errands and a thread on the Think view. Then the steps that need no model run
+on it as they would on a real vault: the memory index, the people index, today's recall, the
+outbox's track record and yesterday's journal, with the brief the model would write; the stories
+of the last months, as the night would have written them from those months' days; the weeks over
+time, with the artists' genres and moods the model would give; and a week of model calls for the
 Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
@@ -39,6 +39,7 @@ from proxenos.clones import (
     care,
     choices,
     errands,
+    jobs,
     journal,
     life,
     network,
@@ -145,6 +146,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         _ideas(vault, c)
         _drafts(vault, c)
         _choices(vault, c)
+        _jobs(vault, c)
         _errands(vault, c)
         indexed = memory.build(vault)
         people = network.build(vault, people_only=True, now=c.now)
@@ -2238,6 +2240,231 @@ def _choices(vault: Path, c: _Clock) -> None:
             "body": body,
         }
         work._write(folder / f"{draft['id']}.md", work.render(draft))
+
+
+def _jobs(vault: Path, c: _Clock) -> None:
+    """The job leads as the jobs clone writes them: Fay Moss's message about Beta Corp's lead
+    role, from the demo's mail, a founder's on Work at a Startup and two LinkedIn alerts, each
+    judged as the model would, with the first steps drafted. Joe's application to Delta Freight,
+    in his sent mail, is the suggestion that he applied, as the clone finds it with no model."""
+    mail = {m["subject"]: m for m in _home_mail(c)}
+    fay, sent = (
+        mail["Operations lead role at Beta Corp"],
+        mail["Application: Senior Operations Manager"],
+    )
+    resume = {"name": "Joe_Bloggs_CV.pdf", "kind": "résumé", "made": c.at(-150, 9, 0)}
+    alert = "Your job alert for operations manager"
+
+    def source(kind: str, ts: str, label: str, key: str = "", record: str = "") -> dict:
+        return {
+            "key": key or f"demo/{label}",
+            "source": kind,
+            "ts": ts,
+            "label": label,
+            "id": record,
+        }
+
+    def known(name: str, how: str, channel: str = "linkedin") -> dict:
+        return {"name": name, "how": how, "channel": channel, "role": "known"}
+
+    found = []
+
+    def job(company: str, role: str, sources: list[dict], **fields) -> dict:
+        made = jobs._blank(jobs.job_id(company, role), min(s["ts"] for s in sources))
+        made |= {"company": company, "role": role, "sources": sources}
+        made |= {"last_seen": max(s["ts"] for s in sources), "judged": c.ago(20)}
+        made |= {"judged_sources": len(sources), "drafted": c.ago(20)} | fields
+        found.append(made)
+        return made
+
+    key = f"email/personal/{fay['id']}"
+    beta = job(
+        "Beta Corp",
+        "Operations Lead",
+        [
+            source(
+                "recruiter",
+                fay["ts"],
+                f"Email from Fay Moss, {fay['ts'][:10]}: {fay['subject']}",
+                key,
+                key,
+            )
+        ],
+        contact={
+            "name": "Fay Moss",
+            "channel": "email",
+            "who": "leads hiring for Beta Corp's operations team",
+            "address": ADDRESS["Fay Moss"],
+        },
+        verdict="apply",
+        why=(
+            "It's the next step up from running Acme's warehouse and deliveries, and Beta Corp "
+            "came to you because of your holiday-orders talk: the work you most want to be known "
+            "for."
+        ),
+        rests_on=["self/identity", "self/interests"],
+        route={
+            "kind": "reply",
+            "why": "Fay wrote to you, and you said you'd come back at the month's end.",
+        },
+        cv=resume | {"why": "It leads with the operations work the role asks for."},
+        people=[
+            {
+                "name": "Fay Moss",
+                "how": "leads hiring for Beta Corp's operations team",
+                "channel": "email",
+                "role": "contact",
+            },
+            known("Wes Tran", "LinkedIn connection, Head of Operations at Beta Corp"),
+        ],
+        step={"kind": "reply", "to": "Fay Moss", "channel": "email"},
+        errand="Reach Fay Moss at Beta Corp about the Operations Lead role, by email, with my CV",
+    )
+    pallet = job(
+        "Pallet & Pine",
+        "Head of Operations",
+        [
+            source(
+                "workatastartup",
+                c.at(-4, 19, 10),
+                f"Work at a Startup from Rosa Quint, {c.day(-4)}: Rosa Quint from Pallet & Pine "
+                "sent you a message",
+            )
+        ],
+        place="Remote, US",
+        mode="remote",
+        pay="$120k to $140k and equity",
+        reply_link="https://example.org/workatastartup/messages/demo",
+        contact={
+            "name": "Rosa Quint",
+            "channel": "workatastartup",
+            "who": "founder of Pallet & Pine",
+            "address": "",
+        },
+        verdict="maybe",
+        why=(
+            "Building operations from nothing would stretch you, but a ten-person startup is a "
+            "bigger change than the step up you've said you want next."
+        ),
+        rests_on=["self/identity"],
+        route={
+            "kind": "reply",
+            "why": "Rosa wrote to you on the site; answering there is quickest.",
+        },
+        cv=resume | {"why": "The only one you have."},
+        people=[
+            {
+                "name": "Rosa Quint",
+                "how": "founder of Pallet & Pine",
+                "channel": "workatastartup",
+                "role": "contact",
+            }
+        ],
+        step={"kind": "reply", "to": "Rosa Quint", "channel": "other"},
+    )
+    job(
+        "Delta Freight",
+        "Senior Operations Manager",
+        [
+            source(
+                "linkedin",
+                c.at(-63, 8, 0),
+                f"LinkedIn from LinkedIn Job Alerts, {c.day(-63)}: {alert}",
+            )
+        ],
+        place="Leeds",
+        mode="on-site",
+        link="https://example.org/deltafreight/careers/senior-operations-manager",
+        contact={
+            "name": "Delta Freight's hiring team",
+            "channel": "email",
+            "who": "the careers page's address",
+            "address": sent["to"][0],
+        },
+        verdict="apply",
+        why="It's the role you've been growing into, at a company your suppliers already trust.",
+        rests_on=["self/identity"],
+        route={"kind": "apply", "why": "The careers page takes applications by email."},
+        cv=resume | {"why": "It leads with suppliers and deliveries."},
+        people=[known("Raj Mehta", "LinkedIn connection, Logistics Director at Delta Freight")],
+        suggested={
+            "status": "applied",
+            "why": f"You wrote to {sent['to'][0]} on {sent['ts'][:10]} (“{sent['subject']}”).",
+            "ts": sent["ts"],
+        },
+    )
+    job(
+        "Delta Freight",
+        "Logistics Coordinator",
+        [
+            source(
+                "linkedin",
+                c.at(-6, 8, 0),
+                f"LinkedIn from LinkedIn Job Alerts, {c.day(-6)}: {alert}",
+            )
+        ],
+        place="Leeds",
+        mode="hybrid",
+        link="https://example.org/deltafreight/careers/logistics-coordinator",
+        verdict="skip",
+        why="A step back from running operations, which you do now.",
+        rests_on=["self/identity"],
+        route={"kind": "apply", "why": ""},
+        people=[known("Raj Mehta", "LinkedIn connection, Logistics Director at Delta Freight")],
+    )
+    for item in (beta, pallet):
+        item["draft_id"] = f"job-{item['id']}"
+    drafts = [
+        (
+            beta,
+            "Reply to Fay Moss about the Operations Lead role",
+            "email",
+            (
+                "Subject: Re: Operations lead role at Beta Corp\n\nHi Fay,\n\nThe busy month "
+                "is nearly behind me, and I'd like that chat about the lead role. Would next "
+                "Tuesday or Wednesday afternoon work? I've attached my CV.\n\nJoe"
+            ),
+        ),
+        (
+            pallet,
+            "Reply to Rosa Quint on Work at a Startup",
+            "other",
+            (
+                "Hi Rosa, thanks for reaching out. Pallet & Pine's delivery problem sounds a lot "
+                "like the holiday peak I run at Acme. I'm not looking to move yet, but I'd be glad "
+                "to hear more: is a call next week possible?"
+            ),
+        ),
+    ]
+    folder = vault / "clones" / "drafts"
+    for item, title, channel, body in drafts:
+        draft = {
+            "id": item["draft_id"],
+            "title": title,
+            "kind": "email" if channel == "email" else "reply",
+            "for": "jobs",
+            "channel": channel,
+            "to": item["step"]["to"],
+            "created": c.ago(20),
+            "status": "draft",
+            "found": item["why"],
+            "asks": [],
+            "body": body,
+        }
+        work._write(folder / f"{draft['id']}.md", work.render(draft))
+    found.sort(
+        key=lambda j: (["apply", "maybe", "skip"].index(j["verdict"]), j["deadline"] or "9999")
+    )
+    _write_json(
+        vault / "clones" / "jobs" / "jobs.json",
+        {
+            "generated": c.ago(20),
+            "since": c.ago(24 * 90),
+            "cvs": [{k: resume[k] for k in ("name", "kind", "made")} | {"where": "~/Documents"}],
+            "jobs": found,
+            "read": {key: fay["ts"]},
+        },
+    )
 
 
 def _think(vault: Path, c: _Clock) -> None:
