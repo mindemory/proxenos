@@ -352,6 +352,19 @@ def test_each_call_leaves_a_line_in_the_log_and_never_the_words(monkeypatch, tmp
     assert llm.calls(tmp_path, since="2999-01-01") == []
 
 
+def test_a_local_answer_with_latex_left_unescaped_is_read_as_meant(monkeypatch):
+    schema = {"type": "object", "properties": {"find": {"type": "string"}}, "required": ["find"]}
+    # A backslash left single, a line break left raw, beside escapes written right.
+    slipped = '{"find": "\\section{Results}\n\\usepackage{x} \\\\cite{a} caf\\u00e9"}'
+    sent = local(monkeypatch, slipped)
+
+    assert llm.ask("hi", schema=schema) == {
+        "find": "\\section{Results}\n\\usepackage{x} \\cite{a} café"
+    }
+    assert len(sent) == 1  # read the first time, not asked again
+    assert llm._object('{"find": "\\\\section"}', schema) == {"find": "\\section"}
+
+
 def test_a_schema_holds_the_local_model_as_it_writes_where_ollama_can(monkeypatch):
     import io
     import json

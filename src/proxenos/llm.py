@@ -400,21 +400,29 @@ def _served_body(
     }
 
 
+# A backslash that starts one of JSON's escapes, or one on its own, as LaTeX's \section is.
+_ESCAPE = re.compile(r'\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|\\')
+
+
 def _object(text: str, schema: dict) -> dict | None:
     """The first JSON object in a local model's answer that fits the schema, held to it the way
     a hosted model's answer is (`_conform`). A model may echo the schema before its answer,
-    whose own parts can have the same keys, or wrap the answer in a code fence."""
-    decoder = json.JSONDecoder()
-    start = text.find("{")
-    while start != -1:
-        try:
-            found, _ = decoder.raw_decode(text, start)
-        except ValueError:
-            start = text.find("{", start + 1)
-            continue
-        if isinstance(found, dict) and (held := _conform(found, schema)) is not _UNFIT:
-            return held
-        start = text.find("{", start + 1)  # inside it: the answer may be nested in the echo
+    whose own parts can have the same keys, or wrap the answer in a code fence. One held to no
+    grammar can also slip as it writes: a line break left raw in a string, or a backslash left
+    single, as LaTeX's \\section easily is. When nothing fits, the answer is read again forgiving
+    both, a single backslash standing for itself."""
+    forgiven = _ESCAPE.sub(lambda m: m[0] if len(m[0]) > 1 else "\\\\", text)
+    for decoder, said in ((json.JSONDecoder(), text), (json.JSONDecoder(strict=False), forgiven)):
+        start = said.find("{")
+        while start != -1:
+            try:
+                found, _ = decoder.raw_decode(said, start)
+            except ValueError:
+                start = said.find("{", start + 1)
+                continue
+            if isinstance(found, dict) and (held := _conform(found, schema)) is not _UNFIT:
+                return held
+            start = said.find("{", start + 1)  # inside it: the answer may be nested in the echo
     return None
 
 
