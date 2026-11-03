@@ -145,6 +145,7 @@ def setup(tmp_path, monkeypatch):
     git(repo, "init", "-q", "-b", "main")
     git(repo, "config", "user.name", "Joe")
     git(repo, "config", "user.email", "joe@example.org")
+    git(repo, "config", "core.autocrlf", "false")  # keep line ends as written, as on a Mac
     commit(repo, {"analysis.py": "print('mean')\n"}, "Start", 1)
     git(repo, "checkout", "-q", "-b", "paper-storyline")
     commit(repo, {"docs/paper/paper.md": PAPER}, "Draft the paper", 2)
