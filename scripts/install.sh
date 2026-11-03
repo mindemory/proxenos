@@ -1,5 +1,5 @@
 #!/bin/bash
-# Set Proxenos up on a Mac in one command, from a fresh clone: what the README's Quick start does
+# Set Proxenos up on a Mac in one command, from a fresh clone: what docs/guide.md's setup does
 # by hand. It installs what's missing with Homebrew (Node, Ollama, and Miniforge when there's no
 # conda), creates the `proxenos` conda env and installs the package into it, installs the page's
 # packages, starts Ollama and pulls a local model that fits this Mac's memory. Running it again

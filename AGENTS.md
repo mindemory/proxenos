@@ -12,7 +12,7 @@ Notes for AI coding agents (and people) working in this repo. The README says wh
 - `web/`: the local page (Next.js). API routes in `web/src/app/api/` read the vault and run the `proxenos` command; views in `web/src/components/views/`.
 - `desktop/`: the desktop app, Electron around the page and a bundled Python, built unsigned by `desktop/build.sh` ([docs/everyone.md](docs/everyone.md#the-desktop-app)).
 - `tests/`: pytest, synthetic data only.
-- `docs/`: architecture, memory, data sources, roadmap, the plan for everyone ([docs/everyone.md](docs/everyone.md)).
+- `docs/`: what the README points to (the guide, every command, privacy in full, how it compares), then architecture, memory, data sources, roadmap, the plan for everyone ([docs/everyone.md](docs/everyone.md)).
 - `scripts/`: installers for the Mac (launchd jobs, the app), and the README's screenshots.
 
 ## Commands
@@ -32,7 +32,7 @@ Dependabot proposes newer packages weekly and merges its minor and patch updates
 - **No personal data in the repo, ever.** The vault lives outside it. Tests build synthetic data inside the test; `tests/conftest.py` keeps them away from real credentials and the `data/` folder. Never paste real messages, names or exports into code, tests, docs or issues.
 - **Nothing sends, posts or buys on its own.** Clones write drafts; the user sends. The exceptions are the outbox the user switches on per app ([docs/memory.md](docs/memory.md)) and a phone call the user starts, where the assistant says it's automated, never agrees to pay, and says no number that isn't on its sheet ([docs/calls.md](docs/calls.md)).
 - **Re-runs are safe.** Ingesters merge by id (`proxenos.store.merge_monthly`).
-- **Other people's messages reach a model only where a clone needs them**, picked out in code, as the README's Privacy section lists. Keep it that way, and update that list when it changes, and `privacy.SENDS` with it: the page's Privacy view shows that copy.
+- **Other people's messages reach a model only where a clone needs them**, picked out in code, as [docs/privacy.md](docs/privacy.md) lists. Keep it that way, and update that list when it changes, and `privacy.SENDS` with it: the page's Privacy view shows that copy.
 - **Files are private:** the vault's files are 0600 in 0700 folders. Tests check modes only where the platform has them (`os.name == "nt" or ...`).
 - **Match the surrounding code:** small modules, a docstring that says why, stdlib first, the same comment density and naming as the file you're in. Ruff's line length is 100.
 - **Credit what you borrow.** Code or data from another project keeps its licence and copyright notice and goes in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md). Prefer permissive licences.

@@ -27,7 +27,7 @@ Everyone taking part agrees to the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Setup
 
-See the Quick start in the [README](README.md). The `dev` extra installs pytest and ruff.
+See Get started in the [README](README.md#get-started), and every step by hand in [the guide](docs/guide.md#install-from-source). The `dev` extra installs pytest and ruff.
 
 ## Ground rules
 

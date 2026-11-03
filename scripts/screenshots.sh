@@ -1,5 +1,5 @@
 #!/bin/bash
-# Retake the README's pictures (docs/images): Home, Care, Errands, Drafts, Tasks, Journal, Projects &
+# Retake the pictures in docs/images: Home, Care, Errands, Drafts, Tasks, Journal, Projects &
 # papers, Life, Rhythms and Jobs at desktop and phone width. They show only the made-up vault
 # `proxenos demo` writes: the page runs on it alone, on the demo's port (never 4747), with the
 # proxenos command only for what Rhythms and Life read (counts and days, which call no model and

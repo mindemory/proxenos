@@ -52,7 +52,7 @@ KINDS = {
     "steps": ("step to review", "steps to review"),
     "tasks": ("task due soon", "tasks due soon"),
 }
-# What a notice carries, for the README's Privacy list and the page's Privacy view.
+# What a notice carries, for docs/privacy.md and the page's Privacy view.
 SENDS = (
     "How many drafts, care items, project steps and tasks due soon wait on you, and nothing "
     "else: never a name, a message's words, a subject or a health detail. The server gets the "

@@ -30,9 +30,9 @@ _TEXT = ("at", "step", "model")
 _COUNTS = ("sent_chars", "images", "redacted", "answer_chars", "tokens_in", "tokens_out")
 _TEXT_CHARS = 80
 
-# What each part of Proxenos sends a model, in plain words: the README's Privacy list, with the
+# What each part of Proxenos sends a model, in plain words: docs/privacy.md's list, with the
 # steps (as llm's log names them) whose calls each covers, so the page can name a row of the log.
-# When what a part sends changes, change it here and in the README together.
+# When what a part sends changes, change it here and in docs/privacy.md together.
 SENDS = (
     ("Observers", ("observe",), "Only your side of conversations, never other people's messages."),
     ("Self-model", ("master",), "The observers' notes about you and your reactions on the page."),

@@ -6,12 +6,16 @@ Proxenos gathers a person's messages, email, calendar, notes and documents into 
 
 ## Start here
 
-- [README](https://github.com/mindemory/proxenos/blob/main/README.md): what it is, pictures, privacy, quick start, sources and commands
+- [README](https://github.com/mindemory/proxenos/blob/main/README.md): what it is, the download, getting started, how it works, privacy
 - [AGENTS.md](https://github.com/mindemory/proxenos/blob/main/AGENTS.md): the repo map, checks and rules for changing it
 - [CONTRIBUTING.md](https://github.com/mindemory/proxenos/blob/main/CONTRIBUTING.md): how to help, good first contributions, adding a source or a clone
 
 ## Docs
 
+- [Guide](https://github.com/mindemory/proxenos/blob/main/docs/guide.md): what each part does, pictures, setup by hand, sources, projects and papers, keeping it running
+- [Commands](https://github.com/mindemory/proxenos/blob/main/docs/commands.md): every `proxenos` command
+- [Privacy](https://github.com/mindemory/proxenos/blob/main/docs/privacy.md): what stays on the computer, what each part sends a model, what goes elsewhere
+- [How Proxenos compares](https://github.com/mindemory/proxenos/blob/main/docs/compare.md): the table of similar tools, and what they do better
 - [Architecture](https://github.com/mindemory/proxenos/blob/main/docs/architecture.md): ingesters, observers, the self-model and the clones
 - [Memory](https://github.com/mindemory/proxenos/blob/main/docs/memory.md): search, recall, drafts, how close drafts came to what was sent, the outbox
 - [Data sources](https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md): every source, what it reads and what reaches a model
