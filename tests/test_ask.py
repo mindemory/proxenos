@@ -285,6 +285,13 @@ def test_openings_are_listed_apply_first_and_their_first_steps_drafted(tmp_path,
             "to": "Rui Matos",
             "channel": "linkedin",
             "body": "Hi Rui, saw your post about the postdoc.",
+            # No records of Rui: the draft asks whether they've talked somewhere else.
+            "asks": [
+                (
+                    "Proxenos found no earlier messages with Rui Matos. If you've talked before, "
+                    "have this note pick up from there."
+                )
+            ],
         },
     }
     assert workshop["deadline"] == "" and workshop["link"] == ""
@@ -443,3 +450,39 @@ def test_a_local_answer_with_nothing_drafted_keeps_its_openings():
     held = llm._object(f"```json\n{text}\n```", ask._QUICK_SCHEMA)
     assert held is not None
     assert held["openings"][0]["title"] == "Research Engineer"
+
+
+class FollowsOn(Openings):
+    """Openings, then a note that follows on from the earlier chat when asked for one."""
+
+    def __call__(self, prompt, **kw):
+        if "subject" in kw["schema"]["properties"] and "openings" not in kw["schema"]["properties"]:
+            self.calls.append({"prompt": prompt, **kw})
+            return {
+                "channel": "email",
+                "to": "rui@northfield.example",
+                "subject": "My CV, as you asked",
+                "body": "Hi Rui, sorry for the delay. My CV is attached.",
+            }
+        return super().__call__(prompt, **kw)
+
+
+def test_a_note_to_someone_already_written_with_follows_on_from_that_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_NAME", "Tess")
+    history = "Their newest records with Rui Matos elsewhere: Rui: email me your CV, please."
+    monkeypatch.setattr(
+        ask.research, "person", lambda vault, name, me: history if name == "Rui Matos" else ""
+    )
+    model = FollowsOn()
+
+    result = ask.ask(tmp_path, "", [PNG], NOW, model)
+
+    follow = model.calls[-1]
+    assert history in follow["prompt"] and "untrusted-" in follow["prompt"]
+    assert "Hi Rui, saw your post about the postdoc." in follow["prompt"]  # what it replaces
+    draft = result["openings"][0]["draft"]
+    assert draft["channel"] == "email" and draft["to"] == "rui@northfield.example"
+    assert draft["body"].startswith("Subject: My CV, as you asked\n\nHi Rui, sorry")
+    assert draft["asks"] == ["It follows on from your earlier messages with Rui Matos."]
+    saved = (tmp_path / "clones" / "drafts" / f"{draft['id']}.md").read_text()
+    assert "kind: email" in saved and "follows on from your earlier messages" in saved

@@ -31,7 +31,11 @@ X), either answer also lists them, one item each, apply first: what and who, the
 link, a verdict (apply, maybe or skip) and why, from the self-model and memory. One to apply for,
 or maybe, also has its first step drafted in the user's voice, as a reply is: a short note to
 whoever posted it when the post invites messages, else the opening of a cover letter, or a plan
-for a call for papers. Nothing is applied for, sent or submitted. An answer with none has no
+for a call for papers. A note to someone the user has written with before follows on from
+that conversation instead (one more model call, with their newest records with that person),
+so a post from someone who already asked for a CV by email gets that email; with no records of
+them, the draft asks whether they've talked elsewhere. Nothing is applied for, sent or
+submitted. An answer with none has no
 `openings` at all, as before. Keeping one (`--keep`, the page's Keep) adds it to the openings
 the week's choices weigh (proxenos.clones.choices.keep), once however often it's kept.
 
@@ -66,6 +70,7 @@ QUICK_HITS = 6  # records a quick answer reads
 QUICK_TOKENS = 2000  # the most a quick answer writes, besides its openings
 OPENINGS = 12  # openings one answer lists
 OPENING_TOKENS = 400  # the most one opening's item and first step take
+FOLLOW_TOKENS = 600  # the most a note that follows on from an earlier chat takes
 OPENING_KINDS = ("job", "postdoc", "residency", "fellowship", "scholar_program", "cfp", "workshop")
 VERDICTS = ("apply", "maybe", "skip")  # in the order they're listed
 MODES = ("on-site", "remote", "hybrid")
@@ -226,6 +231,7 @@ def ask(
             }
             _save_draft(vault, ask_id, result, now)
         if openings := _openings(answer, ask_id):
+            _follow_on(vault, openings, model, now)
             result["openings"] = openings
             _save_openings(vault, result, now)
     except Exception as e:  # noqa: BLE001 - the page shows why it failed, rather than spinning
@@ -283,6 +289,27 @@ def _quick(
         effort="low",
         max_tokens=QUICK_TOKENS + OPENING_TOKENS * OPENINGS,
     )
+
+
+_FOLLOW_ON = """\
+{person} has written with {to} before: their records with {to} are inside the tag below. Write \
+the first step on this opening as the next message in that conversation, in {person}'s voice: \
+pick up from the newest exchange, and never introduce {person} as if they hadn't met. When {to} \
+asked for something (a CV, an email, a time to talk), do it, on the channel they named: \
+channel email, with `to` the address they gave, and a subject. Never invent an address, a date \
+or what was said. Nothing is sent: this is a draft."""
+
+_FOLLOW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "channel": {"type": "string", "enum": _CHANNELS},
+        "to": {"type": "string"},
+        "subject": {"type": "string"},
+        "body": {"type": "string"},
+    },
+    "required": ["channel", "to", "subject", "body"],
+    "additionalProperties": False,
+}
 
 
 def _quick_system(vault: Path, now: datetime) -> str:
@@ -460,6 +487,58 @@ def _web(link: object) -> str:
     return text if re.match(r"https?://", text, re.IGNORECASE) else f"https://{text}"
 
 
+def _follow_on(
+    vault: Path, openings: list[dict], model: Callable[..., object], now: datetime
+) -> None:
+    """A first step that's a note to someone the user has written with before follows on from
+    that conversation, with one more model call: a post can be from someone who already asked
+    for a CV by email. With no records of them, the draft asks the user instead, since a chat
+    can have happened where the records don't reach."""
+    person = env("NAME", "the person")
+    for opening in openings:
+        draft = opening["draft"]
+        if not draft or draft["step"] != "message" or not draft["to"]:
+            continue
+        to = draft["to"]
+        if not (about := research.person(vault, to, person)):
+            draft["asks"] = [
+                (
+                    f"Proxenos found no earlier messages with {to}. If you've talked before, "
+                    "have this note pick up from there."
+                )
+            ]
+            continue
+        fence = untrusted.tag()
+        prompt = "\n\n".join(
+            part
+            for part in (
+                f"The opening: {opening['title']}, {opening['org']}. Why: {opening['why']}",
+                f"The first step drafted without that conversation:\n{draft['body']}",
+                untrusted.wrap(about, fence),
+                voice.examples(voice.Writing(vault), None, name=to),
+                f"Today is {now.astimezone():%A %Y-%m-%d}. "
+                + _FOLLOW_ON.format(person=person, to=to),
+            )
+            if part
+        )
+        system = _QUICK_SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
+        try:
+            answer = model(
+                prompt, system=system, schema=_FOLLOW_SCHEMA, effort="low", max_tokens=FOLLOW_TOKENS
+            )
+        except llm.ModelError:
+            draft["asks"] = [f"You've written with {to} before: have this note pick up from there."]
+            continue
+        if not (body := str(answer.get("body") or "").strip()):
+            continue
+        channel = answer.get("channel") if answer.get("channel") in work.CHANNELS else "other"
+        subject = work._one_line(answer.get("subject"))
+        if channel == "email" and subject:
+            body = f"Subject: {subject}\n\n{body}"
+        draft |= {"channel": channel, "to": work._one_line(answer.get("to")) or to, "body": body}
+        draft["asks"] = [f"It follows on from your earlier messages with {to}."]
+
+
 def _save_openings(vault: Path, result: dict, now: datetime) -> None:
     """Each opening's first step as a draft for: ask, beside the ask's own."""
     for opening in result["openings"]:
@@ -485,7 +564,7 @@ def _save_openings(vault: Path, result: dict, now: datetime) -> None:
                     "created": _iso(now),
                     "status": "draft",
                     "found": opening["why"],
-                    "asks": [],
+                    "asks": draft.get("asks") or [],
                     "body": draft["body"],
                 }
             ),
