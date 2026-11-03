@@ -14,8 +14,10 @@ change, which queues a step that starts from the manuscript's branch (proxenos.c
 Or they edit the text, which is committed on a new branch, proxenos/<project>-edit-<when>, made
 from the manuscript's branch in a worktree that's removed again, and waits on them as a step:
 Accept merges it, Discard deletes it. What co-authors change in its Google Doc comes back the
-same way (proxenos.paperdoc). Every version is read from git at its commit, so the user's
-checkout, its index and its working tree are never read or touched, and nothing is pushed.
+same way (proxenos.paperdoc), as does what the user changes in its copy in their Drive folder
+(proxenos.clones.folders), each with only the paragraphs changed there changed (`rebuild`).
+Every version is read from git at its commit, so the user's checkout, its index and its working
+tree are never read or touched, and nothing is pushed.
 """
 
 import argparse
@@ -42,6 +44,13 @@ _NAMES = {"paper.md", "manuscript.md", "main.tex", "paper.tex", "manuscript.tex"
 _FOLDERS = {"paper", "manuscript"}
 _WORDS = re.compile(r"\w+|\s+|[^\w\s]")
 _BREAK = re.compile(r"(\n[ \t]*\n\s*)")  # between paragraphs
+_ENDS_PARAGRAPH = re.compile(r"\n[ \t]*\n\s*\Z")
+# Where an edit's text was brought back from, when not the page: as its step and commit name the
+# place, and as its report names the manuscript's copy there.
+BROUGHT_FROM = {
+    "gdocs": ("its Google Doc", "{path}'s Google Doc"),
+    "folder": ("your Drive folder", "{path}'s copy in your Drive folder"),
+}
 _REV = re.compile(r"(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}")
 _FORMAT = "%x00%H%x01%ct%x01%an%x01%s"  # not whitespace, which output is stripped of
 
@@ -327,13 +336,17 @@ def _count(ops: list[dict], op: str, prose: bool) -> int:
 
 
 def edit(
-    vault: Path, project: dict, request: dict, now: datetime | None = None, docs: bool = False
+    vault: Path, project: dict, request: dict, now: datetime | None = None, source: str = ""
 ) -> dict:
     """The user's own text for the manuscript, {path, branch, from, text}, committed on a new
     branch from `from` (the version they edited, on the manuscript's branch) in a worktree
-    that's removed again, and saved as a step waiting on them. With `docs`, the text is what
-    changed in its Google Doc, and the step says so. The step."""
+    that's removed again, and saved as a step waiting on them. With a `source` (BROUGHT_FROM),
+    the text is what changed in its Google Doc ("gdocs") or in its copy in the user's Drive
+    folder ("folder"), and the step says so. The step."""
     now = now or datetime.now(UTC)
+    if source and source not in BROUGHT_FROM:
+        raise ValueError(f"manuscript: no edit comes from {source!r}")
+    came = BROUGHT_FROM.get(source)
     path, branch = str(request.get("path") or ""), str(request.get("branch") or "")
     text = request.get("text")
     if not steps.in_repo(path) or not steps.BRANCH.fullmatch(branch):
@@ -378,7 +391,7 @@ def edit(
             raise SystemExit(f"manuscript: {path} isn't a file in the repository")
         target.write_bytes(new.encode("utf-8"))
         steps._git(worktree, "add", "--", path)
-        said = f"Bring in what changed in its Google Doc to {path}." if docs else f"Edit {path}."
+        said = f"Bring in what changed in {came[0]} to {path}." if came else f"Edit {path}."
         steps._git(worktree, *steps.who(worktree), "commit", "-q", "--no-verify", "-m", said)
         files = steps._changed_files(worktree, start)
         head = steps._git(worktree, "rev-parse", "HEAD")
@@ -405,10 +418,10 @@ def edit(
         "branch": branched,
         "head": head,
         "manuscript": {"path": path, "branch": branch},
-        "step": f"What changed in its Google Doc, for {path}" if docs else f"Your edit to {path}",
+        "step": f"What changed in {came[0]}, for {path}" if came else f"Your edit to {path}",
         "why": "",
-        "did": f"Brought back what changed in {path}'s Google Doc: {counts}."
-        if docs
+        "did": f"Brought back what changed in {came[1].format(path=path)}: {counts}."
+        if came
         else f"You edited {path} on the page: {counts}.",
         "found": "",
         "couldnt": "",
@@ -427,6 +440,78 @@ def edit(
     steps._note(vault, step, "Committed", f"On {branched}: {path}.")
     steps._note(vault, step, "Waiting on you", steps.summary(step))
     return step
+
+
+# Bringing back what changed in a copy of it elsewhere: its Google Doc (proxenos.paperdoc), or
+# the Word file in the user's Drive folder (proxenos.clones.folders).
+
+
+def rebuild(original: str, baseline: str, now: str) -> str:
+    """The manuscript with only the paragraphs changed in its copy changed: `original` is its
+    text, `baseline` the copy's text as first read back, before anyone changed it, `now` the
+    copy's text as it is. Paragraphs that stayed keep the original's bytes; the rest are the
+    copy's. When the original and the baseline don't split into as many paragraphs, the
+    conversion changed the text's shape and there's no pairing to trust, so `now` whole."""
+    mine = _paragraphs(original)
+    was = _paragraphs(baseline)
+    if len(mine) != len(was):
+        return now
+    came = _paragraphs(now)
+    pieces: list[str] = []
+    keys = [p.strip() for p in was], [p.strip() for p in came]
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, *keys, autojunk=False).get_opcodes():
+        pieces += mine[i1:i2] if tag == "equal" else came[j1:j2]
+    return _join(pieces, original[len(original.rstrip()) :])
+
+
+def _join(pieces: list[str], ending: str) -> str:
+    """Paragraphs as one text: each but the last ending with a blank line, so two never run
+    together where one moved, and the last ending as the manuscript did."""
+    out = []
+    for i, piece in enumerate(pieces):
+        if i == len(pieces) - 1:
+            piece = piece.rstrip() + ending
+        elif not _ENDS_PARAGRAPH.search(piece):
+            piece = piece.rstrip("\n") + "\n\n"
+        out.append(piece)
+    return "".join(out)
+
+
+def pull_start(vault: Path, repo: Path, record: dict) -> str | None:
+    """Where a pull from a copy starts in git: the commit its baseline's text was read from
+    (the record's "from"). The last pull's step (its "step", and that step's "head"), once it's
+    been decided, is let go of, and moves the start on to its head when it was accepted and
+    merged. None while it still waits on the user, when there's nothing to pull onto yet."""
+    if record.get("step"):
+        try:
+            step = steps.load(vault, record["step"])
+        except SystemExit:
+            step = {}
+        if step.get("status") in ("ready", "working"):
+            return None
+        head, tip = str(record.get("head") or ""), _tip(repo, record["branch"])
+        if step.get("status") == "accepted" and head and tip and _merged(repo, head, tip):
+            record["from"] = head
+        record |= {"step": None, "head": None}
+    return record["from"]
+
+
+def _merged(repo: Path, commit: str, tip: str) -> bool:
+    return steps._git_run(repo, "merge-base", "--is-ancestor", commit, tip).returncode == 0
+
+
+def text_at(repo: Path, commit: str, path: str) -> str:
+    """The manuscript's text at that commit, with Windows line ends as \\n."""
+    data = _blob(repo, commit, path) if commit else None
+    if data is None or b"\0" in data:
+        raise SystemExit(f"manuscript: {path} isn't a text file at {commit[:7] or 'its branch'}")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise SystemExit(f"manuscript: {path} isn't UTF-8, so it can't be read here") from None
+    if len(text) > MAX_CHARS:
+        raise SystemExit(f"manuscript: {path} is too long to bring changes back to here")
+    return text.replace("\r\n", "\n")
 
 
 # git, read only.

@@ -302,7 +302,7 @@ def test_latex_goes_up_and_comes_back_as_plain_text(setup):
 def test_only_the_paragraphs_changed_in_docs_change(setup):
     baseline = as_docs_writes_it(PAPER, "text/markdown")
     # Nothing changed: the manuscript as it was, to the byte.
-    assert paperdoc.rebuild(PAPER, baseline, baseline) == PAPER
+    assert manuscript.rebuild(PAPER, baseline, baseline) == PAPER
 
     # One edited, one added after it, one deleted: the others keep their Markdown.
     now = (
@@ -311,7 +311,7 @@ def test_only_the_paragraphs_changed_in_docs_change(setup):
         .rstrip("\n")
         + "\n"
     )
-    rebuilt = paperdoc.rebuild(PAPER, baseline, now)
+    rebuilt = manuscript.rebuild(PAPER, baseline, now)
     assert rebuilt == (
         "# Birdsong at dawn\n\n"
         "Birds sing *loudly* at dawn [@smith2020].\n\n"
@@ -322,24 +322,24 @@ def test_only_the_paragraphs_changed_in_docs_change(setup):
 
     # A paragraph added at the end doesn't run into the one that was last.
     added = baseline + "\nAnd the owls.\n"
-    assert paperdoc.rebuild(PAPER, baseline, added) == PAPER + "\nAnd the owls.\n"
+    assert manuscript.rebuild(PAPER, baseline, added) == PAPER + "\nAnd the owls.\n"
     # One added at the start keeps the rest.
     first = "A note first.\n\n" + baseline
-    assert paperdoc.rebuild(PAPER, baseline, first) == "A note first.\n\n" + PAPER
+    assert manuscript.rebuild(PAPER, baseline, first) == "A note first.\n\n" + PAPER
     # An edited paragraph comes back as Docs writes it; its neighbours as the manuscript does.
     edited = baseline.replace("_loudly_ at dawn", "_softly_ at dawn")
-    assert paperdoc.rebuild(PAPER, baseline, edited) == PAPER.replace(
+    assert manuscript.rebuild(PAPER, baseline, edited) == PAPER.replace(
         "Birds sing *loudly* at dawn [@smith2020].",
         "Birds sing _softly_ at dawn \\[@smith2020].",
     )
     # Everything deleted is an empty manuscript.
-    assert paperdoc.rebuild(PAPER, baseline, "") == ""
+    assert manuscript.rebuild(PAPER, baseline, "") == ""
 
     # When Docs split the text into another number of paragraphs, there's no pairing to trust,
     # so the doc comes back whole.
     reshaped = baseline.replace("* wrens\n* robins", "* wrens\n\n* robins")
     changed = reshaped.replace("Methods follow.", "Methods follow, in short.")
-    assert paperdoc.rebuild(PAPER, reshaped, changed) == changed
+    assert manuscript.rebuild(PAPER, reshaped, changed) == changed
 
 
 def test_bringing_back_nothing_changed_makes_no_step(setup):

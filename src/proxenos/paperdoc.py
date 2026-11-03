@@ -9,9 +9,10 @@ changed it. A project has one doc: opening it again gives its link, unless a fre
 for, which leaves the old one in the Drive.
 
 Bring back its changes exports the Doc again. The same as the baseline: nothing changed. Else the
-manuscript is rebuilt so that only the paragraphs changed in Docs change in git. The text the
-baseline came from, the baseline and the new export are each split into paragraphs, as
-manuscript.diff splits them. When the text and the baseline have as many, they pair one to one,
+manuscript is rebuilt so that only the paragraphs changed in Docs change in git
+(manuscript.rebuild, which the Drive folder's copy shares). The text the baseline came from, the
+baseline and the new export are each split into paragraphs, as manuscript.diff splits them.
+When the text and the baseline have as many, they pair one to one,
 and the baseline's paragraphs are matched against the new export's: those that stayed keep the
 manuscript's own Markdown or LaTeX byte for byte, and only those edited, added or deleted in Docs
 take the Doc's text. When the counts differ, the conversion changed the text's shape and there's
@@ -31,9 +32,7 @@ comments.json.
 
 import argparse
 import json
-import re
 from datetime import UTC, datetime
-from difflib import SequenceMatcher
 from pathlib import Path, PurePosixPath
 
 from proxenos import gdocs, manuscript
@@ -42,7 +41,6 @@ from proxenos.clones import steps, work
 ACTIONS = ("show", "open", "fresh", "pull", "comments")
 # What the page is shown of the record.
 SHOWN = ("link", "title", "account", "address", "path", "branch", "commit", "at", "pulled", "step")
-_ENDS_PARAGRAPH = re.compile(r"\n[ \t]*\n\s*\Z")
 
 
 # Making it.
@@ -73,7 +71,7 @@ def open_doc(
         raise SystemExit("gdocs: this project has no manuscript to open in Google Docs")
     repo = steps._repo(project)
     tip = manuscript._tip(repo, found["branch"])
-    text = _text_at(repo, tip, found["path"])
+    text = manuscript.text_at(repo, tip, found["path"])
     name, address = _account(account or (doc or {}).get("account"))
     token = _token(name, fetch)
     mime = gdocs.mime_for(found["path"])
@@ -125,15 +123,15 @@ def pull(
     doc["pulled"] = steps._iso(now)
     answer = {"changed": False, "step": None, "said": "Nothing has changed in the doc."}
     if now_text != baseline:
-        original = _text_at(repo, start, doc["path"])
-        text = rebuild(original, baseline, now_text)
+        original = manuscript.text_at(repo, start, doc["path"])
+        text = manuscript.rebuild(original, baseline, now_text)
         if original.endswith("\n") and not text.endswith("\n"):
             text += "\n"  # as an edit would end it
         if text == original:
             answer["said"] = "Only how Docs writes it changed, so there's nothing to bring back."
         else:
             request = {"path": doc["path"], "branch": doc["branch"], "from": start, "text": text}
-            step = manuscript.edit(vault, project, request, now, docs=True)
+            step = manuscript.edit(vault, project, request, now, source="gdocs")
             _save(vault, pid, "baseline.txt", now_text)
             doc |= {"step": step["id"], "head": step["head"]}
             answer = {"changed": True, "step": step["id"], "said": step["summary"]}
@@ -141,58 +139,16 @@ def pull(
     return status(vault, project) | answer
 
 
-def rebuild(original: str, baseline: str, now: str) -> str:
-    """The manuscript with only the paragraphs changed in Docs changed: `original` is its text,
-    `baseline` the Doc's export of it, `now` the Doc's export as it is. Paragraphs that stayed
-    keep the original's bytes; the rest are the Doc's. When the original and the baseline don't
-    split into as many paragraphs, `now` whole."""
-    mine = manuscript._paragraphs(original)
-    was = manuscript._paragraphs(baseline)
-    if len(mine) != len(was):
-        return now
-    came = manuscript._paragraphs(now)
-    pieces: list[str] = []
-    keys = [p.strip() for p in was], [p.strip() for p in came]
-    for tag, i1, i2, j1, j2 in SequenceMatcher(None, *keys, autojunk=False).get_opcodes():
-        pieces += mine[i1:i2] if tag == "equal" else came[j1:j2]
-    return _join(pieces, original[len(original.rstrip()) :])
-
-
-def _join(pieces: list[str], ending: str) -> str:
-    """Paragraphs as one text: each but the last ending with a blank line, so two never run
-    together where one moved, and the last ending as the manuscript did."""
-    out = []
-    for i, piece in enumerate(pieces):
-        if i == len(pieces) - 1:
-            piece = piece.rstrip() + ending
-        elif not _ENDS_PARAGRAPH.search(piece):
-            piece = piece.rstrip("\n") + "\n\n"
-        out.append(piece)
-    return "".join(out)
-
-
 def _start(vault: Path, repo: Path, doc: dict) -> str:
-    """Where this pull starts in git: the commit the baseline's text was read from. The last
-    pull's step, once it's been decided, moves it on when it was accepted."""
-    if doc.get("step"):
-        try:
-            step = steps.load(vault, doc["step"])
-        except SystemExit:
-            step = {}
-        if step.get("status") in ("ready", "working"):
-            raise SystemExit(
-                f"gdocs: what was brought back last time still waits on you ({doc['step']}): "
-                "accept or discard it first"
-            )
-        head, tip = str(doc.get("head") or ""), manuscript._tip(repo, doc["branch"])
-        if step.get("status") == "accepted" and head and tip and _merged(repo, head, tip):
-            doc["from"] = head
-        doc |= {"step": None, "head": None}
-    return doc["from"]
-
-
-def _merged(repo: Path, commit: str, tip: str) -> bool:
-    return steps._git_run(repo, "merge-base", "--is-ancestor", commit, tip).returncode == 0
+    """Where this pull starts in git: the commit the baseline's text was read from, moved on
+    once the last pull's step was accepted (manuscript.pull_start). Refused while it waits."""
+    start = manuscript.pull_start(vault, repo, doc)
+    if start is None:
+        raise SystemExit(
+            f"gdocs: what was brought back last time still waits on you ({doc['step']}): "
+            "accept or discard it first"
+        )
+    return start
 
 
 # Its comments.
@@ -304,20 +260,6 @@ def _token(name: str, fetch: gdocs.Fetch | None, address: str = "") -> str:
         )
     address, refresh = signed[name]
     return gdocs.access_token(name, address, refresh, fetch)
-
-
-def _text_at(repo: Path, commit: str, path: str) -> str:
-    """The manuscript's text at that commit, with Windows line ends as \\n."""
-    data = manuscript._blob(repo, commit, path) if commit else None
-    if data is None or b"\0" in data:
-        raise SystemExit(f"gdocs: {path} isn't a text file at {commit[:7] or 'its branch'}")
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise SystemExit(f"gdocs: {path} isn't UTF-8, so it can't go to Google Docs") from None
-    if len(text) > manuscript.MAX_CHARS:
-        raise SystemExit(f"gdocs: {path} is too long to bring back from Google Docs here")
-    return text.replace("\r\n", "\n")
 
 
 # The command.
