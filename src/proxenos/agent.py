@@ -11,8 +11,10 @@ it's installed, then the local model.
   runs on the account Claude Code is signed in to, never on Proxenos's own API key, which is kept
   from it, within MINUTES, TURNS and a spending budget (PROXENOS_STEP_BUDGET, in dollars).
 - The local model, through llm.ask, for anyone without Claude Code. It can't run anything: it
-  reads a few of the project's files and writes (a script, a fix, a section as markdown), and
-  its report says plainly that nothing was run.
+  reads a few of the project's files, a long document only by the sections the step needs, and
+  writes a new or short file whole and changes a longer one by edits, each replacing text found
+  in it exactly once, so its answer stays short enough for a local model to write. Its report
+  says plainly that nothing was run, and names any edit it couldn't make.
 
 Each takes a Task and returns the report REPORT describes. Neither commits, merges or pushes;
 proxenos.clones.steps does what comes after.
@@ -20,6 +22,7 @@ proxenos.clones.steps does what comes after.
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -27,6 +30,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 from proxenos import llm
 from proxenos.config import env
@@ -43,10 +47,16 @@ _CLAUDE_PLACES += ("~/.claude/local/claude",)
 _KEEP_ENV = ("HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "SHELL", "TERM")
 _SYSTEM_PATH = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin")
 LISTED = 400  # of the repository's files, the local model reads the names of
-READ_FILES = 6  # the local model reads at most these in full
-FILE_CHARS = 12_000
-WRITE_FILES = 3
+READ_FILES = 6  # the local model reads at most these
+FILE_CHARS = 12_000  # a file this long or shorter is read whole, a longer one in part
+READ_CHARS = 72_000  # read in all, or less where a local model has no room for it
+OUTLINED = 12  # long documents whose sections the local model sees as it picks the step
+OUTLINE_CHARS = 8_000
+EDIT_OVER = 4_000  # a file longer than this is changed by edits, not written whole
+WRITE_FILES = 3  # written whole
 WRITE_CHARS = 60_000
+EDITS = 40
+ANSWER_TOKENS = 16_000  # the local model's answer, its thinking too: within llm.fit's quarter
 
 REPORT = {
     "type": "object",
@@ -344,12 +354,14 @@ LOCAL_LIMITS = (
 
 _PICK = """\
 You are {person}'s digital twin, working on one of their research projects while they're away. \
-You can read a few of the project's files and write up to {files} files: a new script, a fix \
-to one, or a section of the paper as markdown. You can't run anything. Pick the one step that \
-helps most and that writing alone can finish, and the files to read for it.
+You can read a few of the project's files and change some: write a new script, fix one, or \
+draft or revise a section of the paper. You can't run anything. Pick the one step that helps \
+most and that writing alone can finish, and the files to read for it.
 
 Return the step in one line, why it's the one in a sentence or two, and up to {read} files to \
-read, by their paths in the list."""
+read, by their paths in the list. A file over {chars} characters is read in part: for a long \
+document listed with its sections, name in sections the ones the step needs, each by the \
+document's path and the heading as listed."""
 
 _PICK_SCHEMA = {
     "type": "object",
@@ -357,6 +369,15 @@ _PICK_SCHEMA = {
         "step": {"type": "string"},
         "why": {"type": "string"},
         "read": {"type": "array", "items": {"type": "string"}},
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}, "heading": {"type": "string"}},
+                "required": ["path", "heading"],
+                "additionalProperties": False,
+            },
+        },
     },
     "required": ["step", "why", "read"],
     "additionalProperties": False,
@@ -364,18 +385,27 @@ _PICK_SCHEMA = {
 
 _WRITE = """\
 You are {person}'s digital twin, taking one step of a research project's work: the step below. \
-You have the files it needs. Write what the step needs, as whole files: at most {files}, each \
-with its path in the repository and its full new content (a changed file in full, never a \
-diff). Keep to the project's own style. You can't run anything, so claim no result, number or \
-figure: say what to run to check it.
+You have the files it needs, or the parts of them it needs. Change them in the project's own \
+style:
+- A new file, or one of {edit_over} characters or fewer, can be written whole: its path in the \
+repository and its full new content. At most {files} files whole.
+- Any longer file, and any file shown only in part, is changed by edits, never written whole. \
+An edit is the file's path; find, text copied exactly from the file, a line or a few, enough \
+that it appears in the file only once; and replace, the text to put in its place. Edits apply \
+in order, and one whose find isn't in the file exactly once isn't made.
+In the JSON, write each backslash twice: LaTeX's \\section is "\\\\section".
+You can't run anything, so claim no result, number or figure: say what to run to check it.
 
 Return:
-- files: the files, each {{path, content}}.
-- did: what you wrote and why, in short markdown.
+- files: the files written whole, each {{path, content}}; [] when none.
+- edits: the edits, each {{path, find, replace}}; [] when none.
+- did: what you changed and why, in short markdown.
 - couldnt: what's left unchecked or undone; "" when nothing.
 - next: the step after this one, in a sentence or two.
 - commit: a commit message for it, one plain sentence."""
 
+# Neither files nor edits is required, so an answer with either alone fits, as answers did
+# before there were edits.
 _WRITE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -388,12 +418,25 @@ _WRITE_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "edits": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "find": {"type": "string"},
+                    "replace": {"type": "string"},
+                },
+                "required": ["path", "find", "replace"],
+                "additionalProperties": False,
+            },
+        },
         "did": {"type": "string"},
         "couldnt": {"type": "string"},
         "next": {"type": "string"},
         "commit": {"type": "string"},
     },
-    "required": ["files", "did", "couldnt", "next", "commit"],
+    "required": ["did", "couldnt", "next", "commit"],
     "additionalProperties": False,
 }
 
@@ -409,9 +452,14 @@ class Local:
         if self.model is llm.ask and not llm.configured():
             raise AgentUnavailable("no model is set up (PROXENOS_MODEL, or an API key)")
         files = _tracked(task.folder)
+        listing = "\n\nThe files in the repository:\n" + "\n".join(files[:LISTED])
+        if outlines := _outlines(task.folder, files):
+            listing += (
+                f"\n\nThe long documents, by section, with lengths in characters:\n{outlines}"
+            )
         pick = self.model(
-            task.brief + "\n\nThe files in the repository:\n" + "\n".join(files[:LISTED]),
-            system=_PICK.format(person=task.person, files=WRITE_FILES, read=READ_FILES),
+            task.brief + listing,
+            system=_PICK.format(person=task.person, read=READ_FILES, chars=FILE_CHARS),
             schema=_PICK_SCHEMA,
             effort="medium",
             max_tokens=2000,
@@ -419,44 +467,152 @@ class Local:
         step = _text(pick.get("step"))
         if not step:
             raise AgentError("the local model picked no step")
+        wanted: dict[str, list[str]] = {}
+        for s in [s for s in pick.get("sections") or [] if isinstance(s, dict)]:
+            wanted.setdefault(str(s.get("path") or ""), []).append(str(s.get("heading") or ""))
         listed = set(files)
-        read = [p for p in pick.get("read") or [] if isinstance(p, str) and p in listed]
-        shown = []
-        for rel in read[:READ_FILES]:
-            try:
-                text = (task.folder / rel).read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            shown.append(f'<file path="{rel}">\n{text[:FILE_CHARS]}\n</file>')
+        read = [p for p in pick.get("read") or [] if isinstance(p, str)]
+        read = [p for p in dict.fromkeys([*read, *wanted]) if p in listed][:READ_FILES]
+        system = _WRITE.format(person=task.person, files=WRITE_FILES, edit_over=EDIT_OVER)
+        # Room for the files beside the rest of the prompt, so a local model's prompt and its
+        # answer of ANSWER_TOKENS fit its context together (llm.fit leaves it a quarter).
+        overhead = len(task.brief) + len(step) + len(system) + len(json.dumps(_WRITE_SCHEMA))
+        shown, whole = _read(task.folder, read, wanted, step, llm.fit(READ_CHARS, overhead + 2000))
         answer = self.model(
             "\n\n".join([task.brief, f"The step: {step}", *shown]),
-            system=_WRITE.format(person=task.person, files=WRITE_FILES),
+            system=system,
             schema=_WRITE_SCHEMA,
             effort="high",
-            max_tokens=16000,
+            max_tokens=ANSWER_TOKENS,
         )
-        written = []
-        for f in [f for f in answer.get("files") or [] if isinstance(f, dict)][:WRITE_FILES]:
-            path = inside(task.folder, str(f.get("path") or ""))
-            content = str(f.get("content") or "")
-            if path is None or not content.strip() or len(content) > WRITE_CHARS:
-                continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content if content.endswith("\n") else content + "\n", "utf-8")
-            written.append(str(path.relative_to(task.folder.resolve())))
+        changed, made, refused = _apply(task.folder, answer, whole)
         couldnt = _text(answer.get("couldnt"))
+        not_applied = f"Not applied: {'; '.join(refused)}." if refused else ""
         return {
             "step": step,
             "why": _text(pick.get("why")),
             "did": str(answer.get("did") or "").strip()
-            or (f"Wrote {', '.join(written)}." if written else "Wrote nothing."),
+            or (f"Changed {', '.join(changed)}." if changed else "Changed nothing."),
             "found": "",
             "figures": [],
-            "couldnt": f"{LOCAL_LIMITS} {couldnt}".strip(),
+            "couldnt": " ".join(filter(None, (LOCAL_LIMITS, not_applied, couldnt))),
             "next": _text(answer.get("next")),
             "commit": _text(answer.get("commit")),
-            "meta": {"files_read": len(shown)},
+            "meta": {"files_read": len(shown), "edits": made, "not_applied": len(refused)},
         }
+
+
+def _read(
+    folder: Path, read: list[str], wanted: dict[str, list[str]], step: str, room: int
+) -> tuple[list[str], set[Path]]:
+    """The files to show the model, in `room` characters all told, and those shown whole, the
+    only ones it may write whole. A short file is shown whole; a long document by the sections
+    asked for, else the ones the step names; anything else long by its start."""
+    shown: list[str] = []
+    whole: set[Path] = set()
+    for rel in read:
+        path = inside(folder, rel)
+        if path is None or room <= 0:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if len(text) <= min(FILE_CHARS, room):
+            shown.append(f'<file path="{rel}">\n{text}\n</file>')
+            whole.add(path)
+            room -= len(text)
+            continue
+        chosen = _chosen(sections(text, rel), wanted.get(rel, []), step)
+        spans = [(s.start, s.end) for s in chosen] or [(0, len(text))]
+        part = _part(text, spans, room if chosen else min(room, FILE_CHARS))
+        told = f"part of its {len(text):,} characters; change it by edits"
+        shown.append(f'<file path="{rel}" shown="{told}">\n{part}\n</file>')
+        room -= len(part)
+    return shown, whole
+
+
+def _apply(folder: Path, answer: dict, whole: set[Path]) -> tuple[list[str], int, list[str]]:
+    """The answer's files and edits, made in the worktree: the files changed, how many edits were
+    made, and what wasn't done and why, a phrase each. A file is written whole only when it's
+    new or was read whole, so nothing it didn't read is lost, and an edit is made only where
+    its text to find is in the file exactly once, so it can't land in the wrong place."""
+    root = folder.resolve()
+    changed: list[str] = []
+    refused: list[str] = []
+    written = 0
+    for f in [f for f in answer.get("files") or [] if isinstance(f, dict)]:
+        rel, content = str(f.get("path") or ""), _unslipped(str(f.get("content") or ""))
+        path = inside(folder, rel)
+        if not content.strip():
+            continue
+        if path is None:
+            refused.append(f"{_code(rel)}, outside the files it may change")
+        elif len(content) > WRITE_CHARS:
+            refused.append(f"{_code(rel)} in full, past {WRITE_CHARS:,} characters")
+        elif path.exists() and path not in whole:
+            refused.append(f"{_code(rel)} in full, as it was read in part or not at all")
+        elif written >= WRITE_FILES:
+            refused.append(f"{_code(rel)}, past the {WRITE_FILES} files written whole")
+        else:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content if content.endswith("\n") else content + "\n", "utf-8")
+            except OSError:
+                refused.append(f"{_code(rel)}, which couldn't be written")
+                continue
+            written += 1
+            changed.append(path.relative_to(root).as_posix())
+    edits = [
+        e
+        for e in answer.get("edits") or []
+        if isinstance(e, dict)
+        and isinstance(e.get("find"), str)
+        and isinstance(e.get("replace"), str)
+    ]
+    if len(edits) > EDITS:
+        refused.append(f"{len(edits) - EDITS} edits past the {EDITS} a step makes")
+    by_file: dict[str, list[dict]] = {}
+    for e in edits[:EDITS]:
+        by_file.setdefault(str(e.get("path") or ""), []).append(e)
+    made = 0
+    for rel, these in by_file.items():
+        path = inside(folder, rel)
+        try:
+            was = path.read_bytes().decode("utf-8") if path and path.is_file() else None
+        except (OSError, UnicodeDecodeError):
+            was = None
+        if path is None or was is None:
+            many = "an edit" if len(these) == 1 else f"{len(these)} edits"
+            refused.append(f"{many} to {_code(rel)}, not a text file in the repository")
+            continue
+        # Matched with plain line ends, and written back with the file's own.
+        text = before = was.replace("\r\n", "\n")
+        for e in these:
+            find, replace = (_unslipped(e[k]).replace("\r\n", "\n") for k in ("find", "replace"))
+            at = text.find(find) if find else -1
+            if at != -1 and text.rfind(find) == at:
+                text = text[:at] + replace + text[at + len(find) :]
+                made += 1
+                continue
+            why = "is in it more than once" if at != -1 else "isn't in it"
+            what = f"whose text to find, {_code(find)}, {why}" if find else "with nothing to find"
+            refused.append(f"an edit to {_code(rel)} {what}")
+        if text != before:
+            path.write_bytes((text.replace("\n", "\r\n") if "\r\n" in was else text).encode())
+            if (name := path.relative_to(root).as_posix()) not in changed:
+                changed.append(name)
+    return changed, made, refused
+
+
+# A backslash left single before b, f or r is a JSON escape all the same, so LaTeX's \begin,
+# \frac and \ref come back as a control character and letters, which no text file has.
+_SLIPPED = re.compile(r"[\x08\x0c\r](?=[A-Za-z])")
+
+
+def _unslipped(text: str) -> str:
+    """The text with each such control character the backslash and letter it was."""
+    return _SLIPPED.sub(lambda m: "\\" + {"\x08": "b", "\x0c": "f", "\r": "r"}[m[0]], text)
 
 
 def inside(folder: Path, rel: str) -> Path | None:
@@ -478,6 +634,144 @@ def _tracked(folder: Path) -> list[str]:
     return [line for line in done.stdout.splitlines() if line.strip()]
 
 
+# Long documents, by section.
+
+START = "(before the first heading)"
+_TEX = {".tex", ".ltx"}
+_MARKDOWN = {".md", ".markdown", ".rmd", ".qmd"}
+_LATEX_HEADING = re.compile(
+    r"^[ \t]*\\(part|chapter|section|subsection|subsubsection|paragraph)\*?[ \t]*"
+    r"(?:\[[^\]\n]*\][ \t]*)?\{",
+    re.MULTILINE,
+)
+_LATEX_LEVELS = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
+_LATEX_LEVELS["paragraph"] = 5
+_ABSTRACT = re.compile(r"^[ \t]*\\begin\{abstract\}", re.MULTILINE)
+_MARKDOWN_HEADING = re.compile(r"(#{1,6})[ \t]+(.+?)[ \t#]*$")
+
+
+class Section(NamedTuple):
+    title: str
+    level: int  # 2 for LaTeX's \section, 3 for \subsection; in Markdown, the number of #s
+    start: int
+    end: int  # where the next heading at its level or above starts, so it holds its subsections
+
+
+def sections(text: str, path: str) -> list[Section]:
+    """A LaTeX or Markdown document's sections, by heading, in order, with what comes before the
+    first heading as START; none for another kind of file, or one without headings."""
+    heads = _headings(text, Path(path).suffix.lower())
+    if not heads:
+        return []
+    top = min(level for _, level, _ in heads)
+    found = [Section(START, top, 0, heads[0][0])] if text[: heads[0][0]].strip() else []
+    for i, (at, level, title) in enumerate(heads):
+        end = next((a for a, lv, _ in heads[i + 1 :] if lv <= level), len(text))
+        found.append(Section(title, level, at, end))
+    return found
+
+
+def _headings(text: str, suffix: str) -> list[tuple[int, int, str]]:
+    """Where each heading starts, its level and its title: LaTeX's sectioning commands and its
+    abstract, or Markdown's # lines outside fenced code."""
+    if suffix in _TEX:
+        found = [
+            (m.start(), _LATEX_LEVELS[m[1]], _braced(text, m.end()))
+            for m in _LATEX_HEADING.finditer(text)
+        ]
+        found += [
+            (m.start(), _LATEX_LEVELS["section"], "Abstract") for m in _ABSTRACT.finditer(text)
+        ]
+        return sorted(found)
+    if suffix not in _MARKDOWN:
+        return []
+    found, at, fenced = [], 0, False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        elif not fenced and (m := _MARKDOWN_HEADING.match(line)):
+            found.append((at, len(m[1]), m[2].strip()))
+        at += len(line)
+    return found
+
+
+def _braced(text: str, at: int) -> str:
+    """The title in the braces opened just before `at`, as a LaTeX heading has it."""
+    depth = 1
+    for end in range(at, min(len(text), at + 300)):
+        depth += {"{": 1, "}": -1}.get(text[end], 0)
+        if not depth:
+            return " ".join(text[at:end].split())
+    return " ".join(text[at : at + 80].split())
+
+
+def _outlines(folder: Path, files: list[str]) -> str:
+    """The sections of the repository's longest documents, the longest first, each section with
+    its length, so the model can name the ones a step needs."""
+    found = []
+    for rel in files:
+        path = inside(folder, rel)
+        if path is None or path.suffix.lower() not in _TEX | _MARKDOWN:
+            continue
+        try:
+            if path.stat().st_size <= FILE_CHARS:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if len(text) > FILE_CHARS and (parts := sections(text, rel)):
+            found.append((len(text), rel, parts))
+    told = []
+    for length, rel, parts in sorted(found, key=lambda f: (-f[0], f[1]))[:OUTLINED]:
+        top = min(s.level for s in parts)
+        lines = [f"{'  ' * (s.level - top)}- {s.title} ({s.end - s.start:,})" for s in parts]
+        told.append("\n".join([f"{rel} ({length:,}):", *lines]))
+    outline = "\n\n".join(told)
+    return outline if len(outline) <= OUTLINE_CHARS else outline[:OUTLINE_CHARS].rsplit("\n", 1)[0]
+
+
+def _chosen(found: list[Section], headings: list[str], step: str) -> list[Section]:
+    """The sections asked for, by heading, else those whose heading the step names."""
+    asked = {_key(h) for h in headings} - {""}
+    if chosen := [s for s in found if _key(s.title) in asked]:
+        return chosen
+    named = f" {_key(step)} "
+    return [
+        s for s in found if s.title != START and _key(s.title) and f" {_key(s.title)} " in named
+    ]
+
+
+def _key(heading: str) -> str:
+    """A heading as compared: its words in lower case, without a length after it, as the
+    outline gives one."""
+    return " ".join(re.findall(r"\w+", re.sub(r"\([\d,]+\)\s*$", "", heading).lower()))
+
+
+def _part(text: str, spans: list[tuple[int, int]], room: int) -> str:
+    """The spans of a text in order, those that overlap merged, in at most `room` characters cut
+    at a line's end, with each stretch left out marked by its length."""
+    merged: list[list[int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    out, at = [], 0
+    for start, end in merged:
+        if room <= 0:
+            break
+        if end - start > room:
+            end = text.rfind("\n", start, start + room) + 1 or start + room
+        if start > at:
+            out.append(f"\n[{start - at:,} characters not shown]\n\n")
+        out.append(text[start:end])
+        room -= end - start
+        at = end
+    if at < len(text):
+        out.append(f"\n[{len(text) - at:,} characters not shown]\n")
+    return "".join(out)
+
+
 # Small helpers.
 
 
@@ -495,3 +789,11 @@ def _last(text: str) -> str:
 
 def _text(value: object) -> str:
     return " ".join(str(value or "").split())
+
+
+def _code(text: str, chars: int = 60) -> str:
+    """Text a model gave, in short, as inline code in a report."""
+    said = _text(text).replace("`", "'")
+    if not said:
+        return '""'
+    return f"`{said[:chars]}…`" if len(said) > chars else f"`{said}`"

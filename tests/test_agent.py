@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import agent
+from proxenos import agent, llm
 
 REPORT = {
     "step": "Count the notes per species",
@@ -225,3 +225,211 @@ def test_a_path_from_a_model_stays_in_the_folder(tmp_path):
     assert agent.inside(tmp_path, "a/b.md") == tmp_path.resolve() / "a" / "b.md"
     for bad in ("", ".", "../x", "a/../../x", "/etc/x", ".git/config", ".proxenos/out/x"):
         assert agent.inside(tmp_path, bad) is None
+
+
+# The local model on a long document: it reads the sections a step needs and changes it by edits.
+
+
+def paper() -> str:
+    """A made-up LaTeX paper of about 64,000 characters, in four sections of numbered lines."""
+    parts = ["\\documentclass{article}\n\\begin{document}\n"]
+    parts.append("\\begin{abstract}\nCalls rise at dusk.\n\\end{abstract}\n")
+    for name in ("Introduction", "Methods", "Results", "Discussion"):
+        parts.append(f"\\section{{{name}}}\n\\label{{sec:{name.lower()}}}\n")
+        if name == "Methods":
+            parts.append("\\subsection{Recordings}\n")
+        parts += [f"{name} line {i}: the squirrels call.\n" for i in range(400)]
+    return "".join([*parts, "\\end{document}\n"])
+
+
+def repo(t, files):
+    subprocess.run(["git", "init", "-q", str(t.folder)], check=True)
+    for rel, text in files.items():
+        (t.folder / rel).parent.mkdir(parents=True, exist_ok=True)
+        (t.folder / rel).write_bytes(text.encode())
+    subprocess.run(["git", "-C", str(t.folder), "add", "."], check=True)
+
+
+class Held:
+    """The local model, faked: it answers the pick and then the write, each held to its schema
+    as a local model's answer is, and keeps what it was asked."""
+
+    def __init__(self, pick, write):
+        self.answers = [pick, write]
+        self.calls = []
+
+    def __call__(self, prompt, *, system=None, schema=None, **kw):
+        self.calls.append({"prompt": prompt, "system": system, **kw})
+        answer = llm._object(json.dumps(self.answers[len(self.calls) - 1]), schema)
+        assert answer is not None, "the answer doesn't fit the schema"
+        return answer
+
+
+def write(**kw):
+    said = {"did": "Tightened it.", "couldnt": "", "next": "Read it.", "commit": "Tighten it."}
+    return said | kw
+
+
+def test_a_long_document_is_read_by_the_sections_asked_for_and_changed_by_edits(tmp_path):
+    t = task(tmp_path)
+    text = paper()
+    repo(t, {"paper/main.tex": text, "count.py": "print(1)\n"})
+    pick = {
+        "step": "Tighten the discussion",
+        "why": "It runs long.",
+        "read": ["paper/main.tex"],
+        "sections": [{"path": "paper/main.tex", "heading": "Discussion"}],
+    }
+    find = "Discussion line 7: the squirrels call.\n"
+    edit = {"path": "paper/main.tex", "find": find, "replace": "Discussion line 7, tightened.\n"}
+    model = Held(pick, write(edits=[edit]))
+
+    report = agent.Local(model)(t)
+
+    # It saw the paper's outline when it picked, each section with its length.
+    outline = model.calls[0]["prompt"]
+    assert f"paper/main.tex ({len(text):,}):" in outline
+    assert "\n- Discussion (" in outline and "\n  - Recordings (" in outline
+    # It read the Discussion alone, the rest marked as not shown.
+    shown = model.calls[1]["prompt"]
+    assert "Discussion line 399" in shown and "Methods line 5:" not in shown
+    assert "characters not shown]" in shown and len(shown) < 20_000
+    assert model.calls[1]["max_tokens"] == agent.ANSWER_TOKENS
+    # One line changed, and nothing else.
+    assert (t.folder / "paper/main.tex").read_text() == text.replace(
+        find, "Discussion line 7, tightened.\n"
+    )
+    assert report["couldnt"] == agent.LOCAL_LIMITS
+    assert report["meta"] == {"files_read": 1, "edits": 1, "not_applied": 0}
+
+
+def test_an_edit_whose_text_to_find_isnt_there_exactly_once_isnt_made(tmp_path):
+    t = task(tmp_path)
+    text = paper()
+    repo(t, {"paper/main.tex": text})
+    # No section asked for: those the step names are read.
+    pick = {"step": "Rename the results section", "why": "Clearer.", "read": ["paper/main.tex"]}
+    edits = [
+        {"path": "paper/main.tex", "find": "the squirrels call.", "replace": "they call."},
+        {"path": "paper/main.tex", "find": "\\label{sec:results}", "replace": "\\label{sec:found}"},
+        {"path": "paper/main.tex", "find": "a line it made up", "replace": "x"},
+        {"path": "paper/missing.tex", "find": "x", "replace": "y"},
+    ]
+    model = Held(pick, write(edits=edits, couldnt="Check the cross-references."))
+
+    report = agent.Local(model)(t)
+
+    assert "Results line 0:" in model.calls[1]["prompt"]
+    after = (t.folder / "paper/main.tex").read_text()
+    assert after == text.replace("\\label{sec:results}", "\\label{sec:found}")
+    assert report["couldnt"].startswith(agent.LOCAL_LIMITS + " Not applied: ")
+    assert report["couldnt"].endswith("Check the cross-references.")
+    once = "an edit to `paper/main.tex` whose text to find, `the squirrels call.`, is in it more"
+    assert once + " than once" in report["couldnt"]
+    assert "`a line it made up`, isn't in it" in report["couldnt"]
+    assert "an edit to `paper/missing.tex`, not a text file in the repository" in report["couldnt"]
+    assert report["meta"]["edits"] == 1 and report["meta"]["not_applied"] == 3
+
+
+def test_new_files_and_edits_together_and_no_part_read_file_is_written_whole(tmp_path):
+    t = task(tmp_path)
+    text = paper()
+    notes = "# Notes\r\n\r\n- todo: methods\r\n- todo: figures\r\n"
+    repo(t, {"paper/main.tex": text, "notes.md": notes, "count.py": "print(1)\n"})
+    pick = {
+        "step": "Describe the recordings",
+        "why": "Reviewers asked.",
+        "read": ["notes.md"],
+        "sections": [{"path": "paper/main.tex", "heading": "Methods (16,000)"}],
+    }
+    added = "\\subsection{Recordings}\nWe recorded at dawn and dusk.\n"
+    # \begin and \frac with their backslashes left single, which JSON reads as control characters.
+    slipped = {"find": "\begin{abstract}\n", "replace": "\begin{abstract}\n\frac{1}{2} call.\n"}
+    answer = write(
+        files=[
+            {"path": "scripts/plot_calls.py", "content": "import sys\nprint(sys.argv)"},
+            {"path": "paper/main.tex", "content": "\\documentclass{article}\n"},
+            {"path": "count.py", "content": "print(2)\n"},
+        ],
+        edits=[
+            {"path": "paper/main.tex", "find": "\\subsection{Recordings}\n", "replace": added},
+            {"path": "notes.md", "find": "- todo: methods\n", "replace": "- done: methods\n"},
+            {"path": "paper/main.tex", **slipped},
+        ],
+    )
+    model = Held(pick, answer)
+
+    report = agent.Local(model)(t)
+
+    # The section asked for came with its subsection, and the file it named was read too.
+    assert "Recordings}\nMethods line 0:" in model.calls[1]["prompt"]
+    assert (t.folder / "scripts/plot_calls.py").read_text() == "import sys\nprint(sys.argv)\n"
+    assert (t.folder / "paper/main.tex").read_text() == text.replace(
+        "\\subsection{Recordings}\n", added
+    ).replace("\\begin{abstract}\n", "\\begin{abstract}\n\\frac{1}{2} call.\n")
+    # The notes keep their own line ends.
+    assert (t.folder / "notes.md").read_bytes() == notes.replace(
+        "todo: methods", "done: methods"
+    ).encode()
+    assert (t.folder / "count.py").read_text() == "print(1)\n"  # never read, so never replaced
+    assert "`paper/main.tex` in full, as it was read in part or not at all" in report["couldnt"]
+    assert "`count.py` in full" in report["couldnt"]
+    assert report["meta"] == {"files_read": 2, "edits": 3, "not_applied": 2}
+
+
+def test_an_answer_of_whole_files_alone_is_still_taken(tmp_path):
+    t = task(tmp_path)
+    repo(t, {"count.py": "print(len(notes))\n"})
+    pick = {"step": "Count by species", "why": "Table 1.", "read": ["count.py"]}
+    answer = {  # as answers were before there were edits
+        "files": [
+            {"path": "count.py", "content": "print(len(set(notes)))"},
+            {"path": "docs/methods.md", "content": "# Methods\n"},
+        ],
+        "did": "Changed `count.py`.",
+        "couldnt": "",
+        "next": "Run it.",
+        "commit": "Count by species.",
+    }
+    model = Held(pick, answer)
+
+    report = agent.Local(model)(t)
+
+    assert (t.folder / "count.py").read_text() == "print(len(set(notes)))\n"
+    assert (t.folder / "docs/methods.md").read_text() == "# Methods\n"
+    assert report["couldnt"] == agent.LOCAL_LIMITS and report["commit"] == "Count by species."
+
+
+def test_a_local_models_prompt_and_answer_fit_its_context_whatever_the_files(tmp_path, monkeypatch):
+    assert agent.ANSWER_TOKENS <= llm.LOCAL_CONTEXT // 4  # the room llm.fit leaves the answer
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    t = task(tmp_path)
+    t.brief = "The project: Calls. " + "Where it stands. " * 6000  # about 100,000 characters
+    long = {f"paper/part{i}.tex": paper() for i in range(4)}
+    repo(t, long | {"paper/main.tex": paper()})
+    pick = {
+        "step": "Revise the paper",
+        "why": "It's due.",
+        "read": ["paper/main.tex", *long],
+        "sections": [
+            {"path": p, "heading": h}
+            for p in ["paper/main.tex", *long]
+            for h in ("Introduction", "Methods", "Results", "Discussion")
+        ],
+    }
+    answers = iter([pick, write(edits=[])])
+    sent = []
+
+    def chat(model, body, answer_room):
+        sent.append((body, answer_room))
+        return json.dumps(next(answers))
+
+    monkeypatch.setattr(llm, "_chat", chat)
+
+    agent.Local(llm.ask)(t)  # the real llm.ask, which refuses a prompt past the context
+
+    body, answer_room = sent[1]
+    assert answer_room == agent.ANSWER_TOKENS == body["options"]["num_predict"]
+    said = sum(len(m["content"]) for m in body["messages"])
+    assert said // 3 <= llm.LOCAL_CONTEXT - answer_room
+    assert said > 140_000  # the files filled what room there was
