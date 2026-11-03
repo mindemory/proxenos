@@ -543,3 +543,35 @@ def test_links_are_drive_addresses_only_once_drive_has_synced_the_files(tmp_path
         "manuscript": "https://drive.google.com/file/d/1AbC_d-EfGhIjKlMnOp/view",
         "pdf": "",  # none written
     }
+
+
+def test_the_word_files_are_in_arial_with_black_headings(tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    made = io.BytesIO()
+    with zipfile.ZipFile(made, "w") as z:
+        z.writestr(
+            "word/theme/theme1.xml",
+            '<a:latin typeface="Aptos Display"/><a:latin typeface="Aptos"/>',
+        )
+        z.writestr("word/styles.xml", '<w:color w:val="0F4761"/><w:color w:val="595959"/>')
+        z.writestr("word/document.xml", "<w:document/>")
+    asked = []
+
+    def run(cmd, **kw):
+        asked.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=made.getvalue(), stderr=b"")
+
+    monkeypatch.setattr(folders, "pandoc", lambda: "pandoc")
+    monkeypatch.setattr(folders.subprocess, "run", run)
+    monkeypatch.setattr(folders.tempfile, "gettempdir", lambda: str(tmp_path))
+    reference = folders._reference()
+    with zipfile.ZipFile(reference) as z:
+        assert z.read("word/theme/theme1.xml").decode().count('typeface="Arial"') == 2
+        assert (
+            z.read("word/styles.xml").decode()
+            == '<w:color w:val="000000"/><w:color w:val="595959"/>'
+        )
+        assert z.read("word/document.xml") == b"<w:document/>"
+    assert folders._reference() == reference and len(asked) == 1  # made once

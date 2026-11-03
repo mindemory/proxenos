@@ -51,6 +51,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import zipfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -277,7 +278,7 @@ def _write_paper(
     repo, tip, path, kind = paper["repo"], paper["tip"], paper["path"], paper["kind"]
     target = where / f"{where.name} - manuscript.docx"
     listed = _paper_files(repo, tip, path)
-    source = _digest(kind, path, *(" ".join(f) for f in listed))
+    source = _digest(LOOK, kind, path, *(" ".join(f) for f in listed))
     found = _found(target, files.get(target.name), source)
     if found == "theirs" and how in ("waiting", "held"):
         stats["kept_as_edited"] += 1
@@ -398,7 +399,7 @@ def _set_aside(target: Path, now: datetime) -> Path:
 def _write_note(target: Path, files: dict, text: str, now: datetime, stats: Counter) -> None:
     """One of Proxenos's notes as a Word file, written again when what it comes from changed,
     unless the user changed it: then it stays as they left it."""
-    source = _digest(text)
+    source = _digest(LOOK, text)
     found = _found(target, files.get(target.name), source)
     if found == "theirs":
         stats["kept_as_edited"] += 1
@@ -529,11 +530,57 @@ def to_docx(source: Path, out: Path, kind: str) -> None:
     folder, so what it includes and shows is found. LaTeX's citations and references are written
     out from the .bib files beside it and those it names."""
     args = ["-f", kind, "-t", "docx", "-o", str(out)]
+    if reference := _reference():
+        args.append(f"--reference-doc={reference}")
     if kind == "latex":
         args.append("--citeproc")
         for bib in sorted(source.parent.glob("*.bib")):
             args += ["--bibliography", bib.name]
     _pandoc(*args, source.name, cwd=source.parent)
+
+
+# The Word files' look: FONT throughout, which Word, Google Docs and Drive's viewer all have
+# (pandoc's own template uses Aptos, which Drive shows as another font), and headings in black.
+# Bump LOOK when it changes, and each file still as Proxenos wrote it is written again.
+FONT = "Arial"
+LOOK = "arial-black-1"
+_COLOURED = re.compile(r'(<w:color w:val=")(0F4761|365F91|4F81BD|1F3763|2F5496)(")')
+
+
+def _reference() -> Path | None:
+    """pandoc's own Word template in FONT with black headings, made once and kept beside the
+    system's temporary files (it holds no one's data). None when it can't be made: pandoc's
+    own look then."""
+    made = Path(tempfile.gettempdir()) / f"proxenos-reference-{LOOK}.docx"
+    if made.exists():
+        return made
+    command = pandoc()
+    if not command:
+        return None
+    try:
+        original = subprocess.run(
+            [command, "--print-default-data-file", "reference.docx"],
+            capture_output=True,
+            check=True,
+            timeout=60,
+        ).stdout
+        out = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(original)) as src, zipfile.ZipFile(out, "w") as dst:
+            for item in src.infolist():
+                data = src.read(item.filename)
+                if item.filename == "word/theme/theme1.xml":
+                    data = re.sub(
+                        rb'<a:latin typeface="[^"]*"', f'<a:latin typeface="{FONT}"'.encode(), data
+                    )
+                elif item.filename == "word/styles.xml":
+                    data = _COLOURED.sub(r"\g<1>000000\g<3>", data.decode("utf-8")).encode("utf-8")
+                dst.writestr(item, data)
+        part = made.with_suffix(".part")
+        part.write_bytes(out.getvalue())
+        part.replace(made)
+    except (OSError, subprocess.SubprocessError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    return made
 
 
 def to_markdown(docx: Path) -> str:
