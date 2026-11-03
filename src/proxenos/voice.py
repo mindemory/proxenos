@@ -23,7 +23,9 @@ Only what the user wrote themselves, read as proxenos.chats reads it:
 - posts marked as theirs, or, in a stream that is only theirs (Bluesky, their website), the
   posts and replies, not reposts or pages.
 A message of fewer than MIN_WORDS words ("ok", an emoji) shows little of how they write and is
-skipped, a text under LONG_MIN characters isn't longer writing, and no text is shown twice.
+skipped, a text under LONG_MIN characters isn't longer writing, and no text is shown twice. A
+reply drafted as of an earlier time, to compare it with what the user sent then (proxenos.compare,
+`proxenos voice eval`), is shown only what came before it (`Writing.until`).
 
 Then what they changed. A draft they rewrote says more about how they write than any example:
 fidelity keeps each measured draft beside what they sent instead (clones/drafts/fidelity.json),
@@ -144,6 +146,20 @@ class Writing:
 
     def __init__(self, vault: Path) -> None:
         self.vault = vault
+
+    def until(self, ts: str) -> "Writing":
+        """The same writing as it stood at `ts` (an ISO time): only what the user wrote before
+        it, and only the drafts they changed and sent before it, so a draft written as of `ts`
+        sees nothing from after, such as the reply it's drafting. proxenos.compare and `voice
+        eval` hold replies out this way. The copy shares what this one has read; the rules the
+        user kept stay as they are, since they are theirs now."""
+        then = Writing(self.vault)
+        then.__dict__["messages"] = [m for m in self.messages if m["ts"] < ts]
+        then.__dict__["long"] = [t for t in self.long if t["ts"] < ts]
+        then.__dict__["corrections"] = [
+            m for m in self.corrections if "" < str(m.get("sent") or m.get("ts") or "") < ts
+        ]
+        return then
 
     @cached_property
     def messages(self) -> list[dict]:

@@ -18,6 +18,7 @@ from proxenos import (
     ask,
     auth,
     callserver,
+    compare,
     connect,
     demo,
     forms,
@@ -144,6 +145,10 @@ def main(argv: list[str] | None = None) -> None:
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
     voicemodel.add_arguments(tune)
+    comparing = commands.add_parser(
+        "compare", help="which of two models writes replies most like you, judged blind by you"
+    )
+    compare.add_arguments(comparing)
     form = commands.add_parser(
         "form", help="a PDF form filled in from your records, for you to check, sign and send"
     )
@@ -198,6 +203,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "voice":
         voicemodel.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "compare":  # JSON for the page; nothing is sent to anyone
+        print(json.dumps(compare.run(vault_path(), args), ensure_ascii=False))
         return
     if args.command == "form":
         print(_summary("form", forms.run(vault_path(), args)))

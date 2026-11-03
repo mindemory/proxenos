@@ -264,12 +264,7 @@ def work(
                 who = research.person(vault, name, person)
                 prompt += f"\n\n{untrusted.wrap(who, fence)}" if who else ""
             prompt += job.get("ask", "")
-            answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
-            if _BLANK.search(str(answer.get("body") or "")):  # once more, with nothing to fill
-                answer = llm.ask(prompt + _FILL, system=system, schema=_SCHEMA, effort="medium")
-            if chat and answer.get("needed") is False and _asked(chat):
-                # A question or a request waiting always gets an answer, whatever the model said.
-                answer = llm.ask(prompt + _ASKED, system=system, schema=_SCHEMA, effort="medium")
+            answer = _answered(prompt, system, chat)
             if chat and answer.get("needed") is False and not _asked(chat):
                 # No answer needed: filed as overtaken, with why, so it's never drafted again
                 # and the page can still bring it back.
@@ -297,6 +292,18 @@ def work(
         "replies_cleared": cleared,
         "left_for_next_run": max(len(jobs) - limit, 0),
     }
+
+
+def _answered(prompt: str, system: str, chat: dict | None = None) -> dict:
+    """The model's draft for a prompt: asked again once when it left a blank to fill, and for a
+    reply whose messages waiting ask something, once more when it said no answer was needed."""
+    answer = llm.ask(prompt, system=system, schema=_SCHEMA, effort="medium")
+    if _BLANK.search(str(answer.get("body") or "")):  # once more, with nothing to fill
+        answer = llm.ask(prompt + _FILL, system=system, schema=_SCHEMA, effort="medium")
+    if chat and answer.get("needed") is False and _asked(chat):
+        # A question or a request waiting always gets an answer, whatever the model said.
+        answer = llm.ask(prompt + _ASKED, system=system, schema=_SCHEMA, effort="medium")
+    return answer
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -339,12 +346,12 @@ def _jobs(vault: Path, now: datetime, waiting: list[dict] | None = None) -> Iter
     """Each deliverable to draft, as {id, for, title, prompt}, in the order they're drafted. A
     reply also has its channel and recipient, the links to read, and what to draft (ask), which
     goes after the pages."""
-    today = f"Today is {now.astimezone():%A %Y-%m-%d}."
+    today = _today(now)
     care = vault / "clones" / "care"
     doc = _load_json(care / "care.json")
 
     person = env("NAME", "the person")
-    health = _clip(_one_line(doc.get("summary")), CARE_CHARS)
+    health = _health(doc)
     waiting = list(chats.waiting(vault, now) if waiting is None else waiting)
     # Chats with no draft yet come first (each kind newest first, as waiting lists them): taking
     # the newest REPLIES alone, already drafted most nights, an older chat could wait out its
@@ -352,23 +359,7 @@ def _jobs(vault: Path, now: datetime, waiting: list[dict] | None = None) -> Iter
     drafted = set(_existing(vault / "clones" / "drafts"))
     waiting.sort(key=lambda chat: reply_key(chat) in drafted)
     for chat in waiting[:REPLIES]:
-        fence = untrusted.tag()
-        text, ask = _reply_text(chat, person, health, fence)
-        title = f"Reply to {chat['name']}"
-        job = _job(reply_key(chat), "reply", title, today, text)
-        yield job | {
-            "fence": fence,
-            "channel": _channel(chat["source"]),
-            "to": _one_line(chat["name"]),
-            "links": links.find(" ".join(m["text"] for m in chat["waiting"])),
-            "ask": ask,
-            "chat": chat,
-            "voice": {
-                "channel": chat["source"],
-                "chat": (chat["source"], chat["chat"]),
-                "here": chat["own"],
-            },
-        }
+        yield _reply_job(chat, person, health, today)
 
     tasks = _load_json(vault / "clones" / "tasks" / "tasks.json").get("tasks") or []
     closed = _latest(
@@ -428,6 +419,35 @@ def _jobs(vault: Path, now: datetime, waiting: list[dict] | None = None) -> Iter
     for item in _newest_batch(tracker / "items", reactions)[:READING]:
         job = _job(f"reading-{item['id']}", "reading", item.get("title"), today, _item_text(item))
         yield job | {"voice": {"channel": "other", "first": "post"}}
+
+
+def _reply_job(chat: dict, person: str, health: str, today: str) -> dict:
+    """The job of drafting the reply to a chat as chats.waiting gives it."""
+    fence = untrusted.tag()
+    text, ask = _reply_text(chat, person, health, fence)
+    job = _job(reply_key(chat), "reply", f"Reply to {chat['name']}", today, text)
+    return job | {
+        "fence": fence,
+        "channel": _channel(chat["source"]),
+        "to": _one_line(chat["name"]),
+        "links": links.find(" ".join(m["text"] for m in chat["waiting"])),
+        "ask": ask,
+        "chat": chat,
+        "voice": {
+            "channel": chat["source"],
+            "chat": (chat["source"], chat["chat"]),
+            "here": chat["own"],
+        },
+    }
+
+
+def _health(care: dict) -> str:
+    """The summary of the user's own health care in care.json, for a reply that asks about it."""
+    return _clip(_one_line(care.get("summary")), CARE_CHARS)
+
+
+def _today(now: datetime) -> str:
+    return f"Today is {now.astimezone():%A %Y-%m-%d}."
 
 
 def _job(key: object, kind: str, title: object, today: str, text: str) -> dict:
@@ -507,8 +527,9 @@ def _system(self_dir: Path, now: datetime | None = None) -> str:
 
 def _shared(directory: Path, now: datetime) -> str:
     """What the user has put out lately, for the system prompt: their sent drafts from the last
-    SHARED_DAYS with no one person on them, newest first."""
-    since = _iso(now - timedelta(days=SHARED_DAYS))
+    SHARED_DAYS with no one person on them, newest first; none written after `now`, which only a
+    reply drafted as of an earlier time (proxenos.compare) would find."""
+    since, until = _iso(now - timedelta(days=SHARED_DAYS)), _iso(now)
     found = []
     for path in directory.glob("*.md"):
         try:
@@ -519,7 +540,7 @@ def _shared(directory: Path, now: datetime) -> str:
         if not front or (fields.get("status") or "").strip().lower() != "sent":
             continue
         when = fields.get("created") or ""
-        if _one_line(fields.get("to")) or when < since:
+        if _one_line(fields.get("to")) or not since <= when <= until:
             continue
         body = _clip(_one_line(text[front.end() :]), SHARED_CHARS)
         found.append((when, f"- {_day(when)}, {_one_line(fields.get('title'))}: {body}"))
@@ -552,7 +573,7 @@ def short_self(vault: Path, now: datetime | None = None) -> str:
 
 def right_now(vault: Path, now: datetime | None = None) -> dict | None:
     """The user's newest "right now" note from the page (state/now.jsonl), unless it's older than
-    NOW_HOURS or was cleared: {text, at}."""
+    NOW_HOURS, was cleared, or came after `now`: {text, at}."""
     try:
         lines = (vault / "state" / "now.jsonl").read_text(encoding="utf-8").splitlines()
         note = json.loads(lines[-1])
@@ -563,7 +584,8 @@ def right_now(vault: Path, now: datetime | None = None) -> dict | None:
         at = datetime.fromisoformat(str(note.get("at")))
     except ValueError:
         return None
-    if not text or (now or datetime.now(UTC)) - at > timedelta(hours=NOW_HOURS):
+    age = (now or datetime.now(UTC)) - at
+    if not text or not timedelta(0) <= age <= timedelta(hours=NOW_HOURS):
         return None
     return {"text": text[:NOW_CHARS], "at": _iso(at)}
 

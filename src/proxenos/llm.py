@@ -14,7 +14,8 @@ one) never reroutes the key. Everything goes through `ask`.
 
 PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voicemodel): "mlx"
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
-or "local:<name>" for one served the ways above. It goes through `ask_voice`.
+or "local:<name>" for one served the ways above. It goes through `ask_voice`. `using` points the calls made inside it
+at other models than these settings name, so proxenos.compare can draft one reply with two.
 
 What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
@@ -115,7 +116,7 @@ def ask(
     inputs and long answers don't hit HTTP timeouts. `keep` is what a hosted model is meant to
     read although it would be blanked, such as an account number a call may tell.
     """
-    model = env("MODEL", DEFAULT_MODEL)
+    model = current()
     sent = len(prompt) + len(system or "")
     with _recorded(model, sent, len(images or [])) as answered:
         answer = _ask(model, prompt, system, schema, effort, max_tokens, images, keep)
@@ -168,6 +169,31 @@ def _ask(
     return json.loads(text) if schema is not None else text
 
 
+# The models and step name `using` sets for the calls made inside it, per thread.
+_using = threading.local()
+
+
+@contextmanager
+def using(
+    model: str | None = None, voice: str | None = None, step: str | None = None
+) -> Iterator[None]:
+    """Inside it, in this thread only, `ask` goes to `model` (a PROXENOS_MODEL value),
+    `ask_voice` to `voice` (a PROXENOS_VOICE_MODEL value), and each call is logged as `step`,
+    in place of the settings and the asking module's name. proxenos.compare drafts the same
+    reply with two models this way, through the same code a reply draft runs."""
+    saved = tuple(getattr(_using, key, None) for key in ("model", "voice", "step"))
+    _using.model, _using.voice, _using.step = model, voice, step
+    try:
+        yield
+    finally:
+        _using.model, _using.voice, _using.step = saved
+
+
+def current() -> str:
+    """The model `ask` goes to: PROXENOS_MODEL, unless `using` names another."""
+    return getattr(_using, "model", None) or env("MODEL", DEFAULT_MODEL)
+
+
 @contextmanager
 def foreground(vault: Path) -> Iterator[None]:
     """While this runs, other processes' local model calls hold off (see `waiting`)."""
@@ -195,14 +221,14 @@ def waiting(vault: Path | None = None) -> bool:
 def configured() -> bool:
     """Whether a model is set up (a local one, or a key), so steps that are optional can skip
     the model rather than fail."""
-    local = env("MODEL", DEFAULT_MODEL).startswith(LOCAL)
+    local = current().startswith(LOCAL)
     return local or bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def prompt_chars() -> int | None:
     """How much prompt, in characters, the model set up takes in one request, for steps that
     trim what they send to fit; None when the limit is far past what any step sends."""
-    if env("MODEL", DEFAULT_MODEL).startswith(LOCAL):
+    if current().startswith(LOCAL):
         return (LOCAL_CONTEXT - LOCAL_CONTEXT // 4) * 3  # as _ask_local counts it
     return None
 
@@ -533,7 +559,7 @@ def voice_on() -> bool:
 def ask_voice(prompt: str, system: str, max_tokens: int = VOICE_TOKENS) -> str:
     """One answer from the voice model, as plain text: no schema, which a small model trained
     only to write as the user wouldn't keep to."""
-    model = env("VOICE_MODEL").strip()
+    model = getattr(_using, "voice", None) or env("VOICE_MODEL").strip()
     with _recorded(f"voice:{model}", len(prompt) + len(system), 0) as answered:
         answer = _ask_voice(model, prompt, system, max_tokens)
         answered(answer)
@@ -611,7 +637,9 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
 
 def _step() -> str:
     """The part of Proxenos that asked: the innermost of its modules on the call's stack outside
-    this one ("tasks", "forms", "calls"), else "proxenos"."""
+    this one ("tasks", "forms", "calls"), else "proxenos"; inside `using`, the step it names."""
+    if step := getattr(_using, "step", None):
+        return step
     frame = sys._getframe(1)
     while frame is not None:
         name = frame.f_globals.get("__name__", "")

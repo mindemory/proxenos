@@ -658,9 +658,7 @@ def _drafters(vault: Path, person: str) -> dict[str, Callable[[list[dict]], list
         for point in points:
             # The prompt a reply draft gets, with the user's own writing from before the
             # answer only, as drafting it then would have seen it: never the answer itself.
-            before = voice.Writing(vault)
-            before.__dict__["messages"] = [m for m in written.messages if m["ts"] < point["ts"]]
-            before.__dict__["long"] = [t for t in written.long if t["ts"] < point["ts"]]
+            before = written.until(point["ts"])
             source, key = point["source"], point["conversation"].split("/", 1)[1]
             job = {"for": "reply", "voice": {"channel": source, "chat": (source, key)}}
             job["voice"]["here"] = point["own"]

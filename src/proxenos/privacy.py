@@ -67,6 +67,16 @@ SENDS = (
         ),
     ),
     (
+        "Compare",
+        ("compare",),
+        (
+            "Only to the two models you compare: for each of your recent replies, what its "
+            "draft would have been sent just before you replied (the conversation, your own "
+            "writing, your rules, notes and calendar), without what memory finds, and never the "
+            "reply itself."
+        ),
+    ),
+    (
         "Writing rules",
         ("voice",),
         (

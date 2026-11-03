@@ -36,6 +36,8 @@ proxenos voice eval
 
 This drafts 60 of the held-out answers three ways: with the base model untrained, with your voice model, and with the drafting model you use now, given the same prompt reply drafts get, your own last messages in that chat included. Each draft is then scored by how much of it survived into what you actually sent: 1.0 means word for word, near 0 means something else. That's the same measure the Drafts page tracks. A fourth row, your previous message in that chat sent again, shows what a score means on your data. `vault/voice/eval.json` has every draft next to what you sent, so you can read them yourself. After training again, `proxenos voice eval --models tuned` drafts only with the voice model and keeps the other drafts from the last run.
 
+That score is a machine's. To judge for yourself, `proxenos compare start --model voice:mlx` (or Settings' "Which writes like you?") has your voice model and your drafting model redraft your replies in your ten most recent conversations, held out the same way, and shows you each pair blind as A and B: you pick the one that reads more like you, and only then see which wrote which.
+
 ```bash
 proxenos voice score essay.md page.html
 ```
@@ -52,7 +54,7 @@ This serves the voice model on this computer (127.0.0.1:8899) until you stop it.
 
 Only replies. The voice model writes a reply's text from the conversation. Your drafting model still writes the draft's title, what your memory showed that the reply rests on, and the questions only you can answer. It also still writes everything else: emails for tasks, outreach, plans and reading notes. If the voice model isn't running, the drafting model's reply is used and nothing is lost.
 
-A voice model has learned how you write, not what you know. It doesn't see your calendar, your notes or the linked pages a reply's research turns up. Compare its drafts against your drafting model's with `proxenos voice eval` before turning it on, and train it again every few months as your writing changes.
+A voice model has learned how you write, not what you know. It doesn't see your calendar, your notes or the linked pages a reply's research turns up. Compare its drafts against your drafting model's with `proxenos voice eval`, and blind with `proxenos compare`, before turning it on, and train it again every few months as your writing changes.
 
 ## What stays private
 
