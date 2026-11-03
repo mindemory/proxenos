@@ -5,7 +5,8 @@ import json
 import os
 import stat
 import subprocess
-from datetime import UTC, datetime
+import zipfile
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -581,3 +582,64 @@ def test_the_word_files_are_in_arial_with_black_headings(tmp_path, monkeypatch):
         assert '<w:tblPr><w:tblBorders><w:top w:val="single"' in table and "insideV" in table
         assert z.read("word/document.xml") == b"<w:document/>"
     assert folders._reference() == reference and len(asked) == 1  # made once
+
+
+def word_with_comments(path):
+    """A Word file as Word or Google Docs saves one with comments: one on a passage, one in
+    general, and one resolved."""
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    w14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"'
+    w15 = 'xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"'
+    document = (
+        f"<w:document {w}><w:body><w:p><w:r><w:t>Birds sing at </w:t></w:r>"
+        '<w:commentRangeStart w:id="0"/><w:r><w:t>dawn and </w:t></w:r><w:r><w:t>dusk</w:t></w:r>'
+        '<w:commentRangeEnd w:id="0"/><w:commentRangeStart w:id="2"/><w:r><w:t>.</w:t></w:r>'
+        '<w:commentRangeEnd w:id="2"/></w:p></w:body></w:document>'
+    )
+    said = (
+        f"<w:comments {w} {w14}>"
+        '<w:comment w:id="0" w:author="Ana Lee" w:date="2026-03-11T09:00:00Z">'
+        '<w:p w14:paraId="A1"><w:r><w:t>Say which species.</w:t></w:r></w:p></w:comment>'
+        '<w:comment w:id="1" w:author="Joe" w:date="2026-03-11T09:05:00Z">'
+        '<w:p w14:paraId="B2"><w:r><w:t>Shorten the abstract.</w:t></w:r></w:p></w:comment>'
+        '<w:comment w:id="2" w:author="Ana Lee" w:date="2026-03-11T09:10:00Z">'
+        '<w:p w14:paraId="C3"><w:r><w:t>Typo, fixed.</w:t></w:r></w:p></w:comment>'
+        "</w:comments>"
+    )
+    extended = (
+        f'<w15:commentsEx {w15}><w15:commentEx w15:paraId="C3" w15:done="1"/></w15:commentsEx>'
+    )
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("word/document.xml", document)
+        z.writestr("word/comments.xml", said)
+        z.writestr("word/commentsExtended.xml", extended)
+
+
+def test_comments_on_a_manuscript_become_a_step_once(setup):
+    from proxenos.clones import steps
+
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(
+        repo, {"paper/main.tex": LATEX, "paper/refs.bib": "@article{a, title={A}}\n"}, "LaTeX", 3
+    )
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW)
+    copy = drive / FOLDER / DOCX
+    word_with_comments(copy)
+
+    assert [c["text"] for c in folders.comments(copy)] == [
+        "Say which species.",
+        "Shorten the abstract.",
+    ]
+    assert folders.comments(copy)[0]["on"] == "dawn and dusk"
+    stats = run(vault, NOW + timedelta(days=1))
+    assert stats["comments_queued"] == 2
+    (queued,) = steps.queued(vault, "calls")
+    assert queued["manuscript"] == {"path": "paper/main.tex", "branch": "paper-storyline"}
+    assert "1. On “dawn and dusk” (Ana Lee): Say which species." in queued["text"]
+    assert "2. In general (Joe): Shorten the abstract." in queued["text"]
+    assert "Typo" not in queued["text"]  # resolved
+    assert "comments_queued" not in run(vault, NOW + timedelta(days=2))  # each once
+    assert len(steps.queued(vault, "calls")) == 1
+    assert folders.comments(drive / "not a word file.docx") == []

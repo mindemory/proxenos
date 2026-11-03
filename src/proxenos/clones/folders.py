@@ -21,6 +21,12 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
 A paused project gets one only when it has something to show, and one marked "cloud": false on
 the list (an immigration petition, say) never gets one: what it had there is left as it was.
 
+Comments left on a manuscript's copy, Markdown or LaTeX, come back too: each night the ones not
+seen before (not those marked resolved) are queued as one step, each with the passage it is on
+and who left it, which makes the changes in the manuscript itself on a branch of its own, for
+the user to accept (proxenos.clones.steps). So a LaTeX paper, whose edits go one way, can still
+be worked on from Word or Google Docs by commenting.
+
 Nothing the user does there is lost. For each file written, clones/folders/state.json keeps the
 SHA-256 of what it was made from and of the bytes written. A note whose source changed is
 written again only while its file is still exactly what Proxenos wrote; one the user edited or
@@ -55,6 +61,7 @@ import zipfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from xml.etree import ElementTree
 
 from proxenos import manuscript
 from proxenos.clones import projects, steps, work
@@ -166,6 +173,8 @@ def refresh(
         stats["skipped"] += 1
         return stats
     docx = f"{where.name} - manuscript.docx"
+    if paper:
+        _queue_comments(vault, project, where / docx, record, paper, now, stats)
     try:
         how = _bring_back(vault, project, where / docx, record, now, stats)
     except (ConvertError, SystemExit, steps.GitError) as e:
@@ -224,6 +233,120 @@ def _paper(project: dict) -> dict | None:
         return None
     repo = steps._repo(project)
     return found | {"repo": repo, "tip": manuscript._tip(repo, found["branch"]), "kind": kind}
+
+
+# Comments on the manuscript's copy: each new one becomes part of a step that makes the change in
+# the manuscript itself, LaTeX or Markdown, on a branch of its own for the user to accept.
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_W14 = "{http://schemas.microsoft.com/office/word/2010/wordml}"
+_W15 = "{http://schemas.microsoft.com/office/word/2012/wordml}"
+QUOTED = 200  # of the passage a comment is on, in the step
+SAID = 600  # of a comment, in the step
+
+
+def comments(docx: Path) -> list[dict]:
+    """The comments in a Word file, in its order, {author, at, text, on}: `on` the passage it's
+    anchored to. Resolved ones (marked done) and empty ones are left out; a file that can't be
+    read has none."""
+    try:
+        with zipfile.ZipFile(docx) as z:
+            names = set(z.namelist())
+            if "word/comments.xml" not in names:
+                return []
+            said = ElementTree.fromstring(z.read("word/comments.xml"))
+            body = ElementTree.fromstring(z.read("word/document.xml"))
+            extended = (
+                ElementTree.fromstring(z.read("word/commentsExtended.xml"))
+                if "word/commentsExtended.xml" in names
+                else None
+            )
+    except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError):
+        return []
+    done = {
+        e.get(f"{_W15}paraId")
+        for e in (extended if extended is not None else [])
+        if e.get(f"{_W15}done") == "1"
+    }
+    on: dict[str, list[str]] = {}
+    open_ids: set[str] = set()
+    for e in body.iter():
+        if e.tag == f"{_W}commentRangeStart":
+            open_ids.add(e.get(f"{_W}id"))
+        elif e.tag == f"{_W}commentRangeEnd":
+            open_ids.discard(e.get(f"{_W}id"))
+        elif e.tag == f"{_W}t" and e.text:
+            for cid in open_ids:
+                on.setdefault(cid, []).append(e.text)
+    found = []
+    for c in said.iter(f"{_W}comment"):
+        paragraphs = list(c.iter(f"{_W}p"))
+        if any(p.get(f"{_W14}paraId") in done for p in paragraphs):
+            continue
+        text = " ".join("".join(t.text or "" for t in p.iter(f"{_W}t")) for p in paragraphs)
+        if text := " ".join(text.split()):
+            found.append(
+                {
+                    "author": c.get(f"{_W}author") or "",
+                    "at": c.get(f"{_W}date") or "",
+                    "text": text,
+                    "on": " ".join("".join(on.get(c.get(f"{_W}id"), [])).split()),
+                }
+            )
+    return found
+
+
+def _queue_comments(
+    vault: Path,
+    project: dict,
+    target: Path,
+    record: dict,
+    paper: dict,
+    now: datetime,
+    stats: Counter,
+) -> None:
+    """The comments on the manuscript's copy not queued before, as one step that makes them in
+    the manuscript, from its branch; as many as fit a step, the rest next run."""
+    if not target.exists():
+        return
+    seen = set(record.get("comments") or [])
+    lines, keys = [], []
+    for c in comments(target):
+        key = _digest(c["author"], c["at"], c["on"], c["text"])
+        if key in seen:
+            continue
+        who = f" ({c['author']})" if c["author"] else ""
+        where = f"On “{_cut(c['on'], QUOTED)}”{who}: " if c["on"] else f"In general{who}: "
+        line = f"{len(lines) + 1}. {where}{_cut(c['text'], SAID)}"
+        if len(_COMMENTS_STEP) + sum(len(x) + 1 for x in [*lines, line]) > steps.STEP_CHARS:
+            break
+        lines.append(line)
+        keys.append(key)
+    if not lines:
+        return
+    text = _COMMENTS_STEP + "\n".join(lines)
+    try:
+        steps.queue(
+            vault,
+            project["id"],
+            text,
+            now,
+            manuscript={"path": paper["path"], "branch": paper["branch"]},
+        )
+    except SystemExit as e:  # the queue is full, or the step isn't one: they wait for the next run
+        print(f"folders: {project['id']}'s comments weren't queued ({e})", file=sys.stderr)
+        return
+    record["comments"] = [*seen, *keys]
+    stats["comments_queued"] += len(lines)
+
+
+_COMMENTS_STEP = (
+    "Make the changes these comments on the manuscript's copy ask for, in the manuscript itself, "
+    "keeping its format and everything they don't touch:\n"
+)
+
+
+def _cut(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 def _bring_back(
