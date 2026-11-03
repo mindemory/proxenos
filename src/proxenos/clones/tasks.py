@@ -21,6 +21,7 @@ The same run keeps Drafts current. The model also reads the drafts waiting on th
 addressed to someone (their title, whom they're to and the start of their text) and names those
 the messages overtook: someone else already did what one asks, the user said it another way, or
 the plan it's about changed. A draft whose task is done or closed is overtaken too, with no model.
+And the other way: a task whose draft the user sent is done, with no model.
 Each gets status overtaken and why in its front matter, and the page folds it away with the
 reason, unless the user said to keep it there (clones/drafts/feedback.jsonl), which holds for good.
 A reply draft tied to its chat is left to fidelity and the work clone, which already follow it.
@@ -238,6 +239,10 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
         tasks = {k: task for k, task in tasks.items() if k in mine} | updated
         overtaken = _overtaken(answer.get("overtaken") or [], asked, refs)
 
+    # A task whose draft the user sent is done: the reply or email it asked for went out.
+    for key in sent_drafts(vault) & tasks.keys():
+        if tasks[key]["status"] in ("open", "waiting"):
+            tasks[key] = {**tasks[key], "status": "done"}
     tasks = _settle(tasks, closed, verdicts, now)
     overtaken = _finished(drafts, tasks, closed) | overtaken
     keep = max(CLOSED_KEEP, timedelta(days=days) + DONE_KEEP)
@@ -299,6 +304,18 @@ def waiting_drafts(vault: Path) -> dict[str, dict]:
             "text": " ".join(text[front.end() :].split()),
         }
     return found
+
+
+def sent_drafts(vault: Path) -> set[str]:
+    """The tasks whose draft the user sent, by id: a task's draft carries its id and `for: task`,
+    and is marked sent from the page, or by fidelity once the user wrote to that person."""
+    sent = set()
+    for path in (vault / "clones" / "drafts").glob("*.md"):
+        fields = work._front(path.read_text(encoding="utf-8")) or {}
+        status = (fields.get("status") or "").strip().lower()
+        if fields.get("for") == "task" and status == "sent":
+            sent.add(fields.get("id") or path.stem)
+    return sent
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:

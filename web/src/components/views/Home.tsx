@@ -330,7 +330,19 @@ function Agenda({ briefing, now }: { briefing: Briefing; now: string }) {
   );
 }
 
-function TodayCard({ home, data, briefing, onNavigate }: { home: HomeState; data: HomeResponse; briefing: Briefing; onNavigate: (v: View) => void }) {
+function TodayCard({
+  home,
+  data,
+  briefing,
+  onNavigate,
+  onDraft,
+}: {
+  home: HomeState;
+  data: HomeResponse;
+  briefing: Briefing;
+  onNavigate: (v: View) => void;
+  onDraft: (id: string) => void;
+}) {
   const open = data.tasks.actionable.filter((t) => t.action === null);
   const today = localDay(data.now);
   const urgent = open.filter((t) => isUrgent(t, today)).length;
@@ -383,7 +395,7 @@ function TodayCard({ home, data, briefing, onNavigate }: { home: HomeState; data
               {top.length > 0 ? (
                 <ul className="tile divide-y divide-line overflow-hidden">
                   {top.map((t) => (
-                    <TaskRow key={t.id} task={t} now={data.now} actions={["done", "not_mine"]} onAct={home.actTask} showEvidence={false} />
+                    <TaskRow key={t.id} task={t} now={data.now} actions={["done", "not_mine"]} onAct={home.actTask} onDraft={onDraft} showEvidence={false} />
                   ))}
                 </ul>
               ) : (
@@ -1058,7 +1070,7 @@ export function Home({ home, onNavigate, onMemory, onDraft, onCare, onProject, o
       <Greeting data={data} briefing={briefing} onNavigate={onNavigate} onThink={onThink} />
 
       <Section id="home-needs-you" label="Needs you">
-        <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} />
+        <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
         <ProjectsCard onNavigate={onNavigate} onProject={onProject} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
         <CareCard onNavigate={onNavigate} onCare={onCare} />

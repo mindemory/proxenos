@@ -40,7 +40,7 @@ function CalendarNote() {
   );
 }
 
-export function Tasks({ onChange }: { onChange?: () => void }) {
+export function Tasks({ onChange, onDraft }: { onChange?: () => void; onDraft?: (id: string) => void }) {
   const { data, error, flashId, act, clearError } = useTasks(onChange);
   const [showDone, setShowDone] = useState(false);
 
@@ -65,7 +65,7 @@ export function Tasks({ onChange }: { onChange?: () => void }) {
   const list = (tasks: TaskView[]) => (
     <ul className="divide-y divide-line border-b border-line">
       {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} now={data.now} actions={TASK_ACTIONS} onAct={act} flash={flashId === t.id} />
+        <TaskRow key={t.id} task={t} now={data.now} actions={TASK_ACTIONS} onAct={act} onDraft={onDraft} flash={flashId === t.id} />
       ))}
     </ul>
   );

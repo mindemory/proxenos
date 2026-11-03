@@ -125,6 +125,8 @@ export interface Task {
 export interface TaskView extends Task {
   action: TaskAction | null;
   acted_at: string | null;
+  /** The draft written for it (clones/drafts/<task id>.md), by its status: waiting, or settled. */
+  draft: { status: "draft" | "approved" | "sent" | "discarded" | "overtaken" } | null;
 }
 
 export interface TasksResponse {

@@ -1,4 +1,4 @@
-import { CalendarClock, Check, ChevronRight, UserX, X, type LucideIcon } from "lucide-react";
+import { CalendarClock, Check, ChevronRight, PenLine, Send, UserX, X, type LucideIcon } from "lucide-react";
 
 import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -32,11 +32,13 @@ interface TaskRowProps {
   now: string;
   actions?: readonly TaskAction[];
   onAct?: (task: TaskView, action: TaskAction) => void;
+  /** Opens the task's draft on Drafts. */
+  onDraft?: (id: string) => void;
   showEvidence?: boolean;
   flash?: boolean;
 }
 
-export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true, flash = false }: TaskRowProps) {
+export function TaskRow({ task: t, now, actions = [], onAct, onDraft, showEvidence = true, flash = false }: TaskRowProps) {
   const due = dueLabel(t, now);
   const at = atLabel(t, now);
   const done = placeOf(t) === "done";
@@ -98,9 +100,17 @@ export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true
         </details>
       )}
 
-      {onAct && actions.length > 0 && (
+      {t.draft?.status === "sent" && (
+        <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted">
+          <Send size={12} aria-hidden="true" />
+          Its draft was sent
+        </p>
+      )}
+
+      {((onAct && actions.length > 0) || (onDraft && waiting(t))) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {actions.map((a) => {
+          {onDraft && waiting(t) && <ActionButton icon={PenLine} label="Open draft" tone="accent" name={`Open the draft for ${t.title}`} onClick={() => onDraft(t.id)} />}
+          {onAct && actions.map((a) => {
             const m = TASK_ACTION_META[a];
             return <ActionButton key={a} icon={m.icon} label={m.label} tone={m.tone} onClick={() => onAct(t, a)} />;
           })}
@@ -108,4 +118,9 @@ export function TaskRow({ task: t, now, actions = [], onAct, showEvidence = true
       )}
     </li>
   );
+}
+
+/** Whether the task has a draft still waiting to be sent. */
+function waiting(t: TaskView): boolean {
+  return t.draft?.status === "draft" || t.draft?.status === "approved";
 }

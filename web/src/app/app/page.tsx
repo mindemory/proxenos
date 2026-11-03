@@ -238,7 +238,7 @@ export default function AppPage() {
       case "saved":
         return <Saved />;
       case "tasks":
-        return <Tasks onChange={home.reload} />;
+        return <Tasks onChange={home.reload} onDraft={openDraft} />;
       case "projects":
         return <Projects onThink={openThink} focus={projectIntent} onFocused={projectConsumed} />;
       case "care":

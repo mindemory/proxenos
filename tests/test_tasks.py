@@ -679,3 +679,26 @@ def test_other_people_s_messages_are_fenced_as_data_and_mine_are_not():
     assert "Sending the slides" not in theirs and "Sending the slides" in text
     assert len(refs) == 3 and text.count("<untrusted-ab12>") == 1
     assert "<untrusted-" not in tasks.render([convo])[0]  # no fence asked, none drawn
+
+
+def test_a_task_whose_draft_was_sent_is_done(tmp_path, model):
+    vault = make_vault(tmp_path)
+    write_tasks(
+        vault,
+        task("sentsentsent", "Send Asha the slides"),
+        task("waitwaitwait", "Answer Ben"),
+        task("keepkeepkeep", "Book the room"),
+    )
+    write_draft(vault, "sentsentsent", to="Asha", status="sent")
+    write_draft(vault, "waitwaitwait", to="Ben")  # still waiting: the task stays open
+    write_draft(vault, "other-reply", to="Cy", status="sent")  # sent, but for no task
+
+    assert tasks.sent_drafts(vault) == {"sentsentsent", "other-reply"}
+    tasks.plan(vault, now=NOW)  # the model finds nothing new; the sent draft settles its task
+
+    listed = {
+        t["id"]: t["status"]
+        for t in json.loads((vault / "clones" / "tasks" / "tasks.json").read_text())["tasks"]
+    }
+    assert listed == {"sentsentsent": "done", "waitwaitwait": "open", "keepkeepkeep": "open"}
+    assert front(vault, "waitwaitwait")["status"] == "draft"

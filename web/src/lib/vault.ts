@@ -785,6 +785,7 @@ export async function getTasks(): Promise<TasksResponse> {
   const doc = await readJsonFile(path.join(dir, "tasks.json"));
   const d = doc && typeof doc === "object" ? (doc as Record<string, unknown>) : null;
   const acted = await foldLog<TaskAction>(path.join(dir, "feedback.jsonl"), "task_id", TASK_ACTIONS);
+  const drafts = await taskDrafts(vault);
 
   const seen = new Set<string>();
   const tasks: TaskView[] = [];
@@ -793,7 +794,10 @@ export async function getTasks(): Promise<TasksResponse> {
     if (!t || seen.has(t.id)) continue;
     seen.add(t.id);
     const a = acted.get(t.id);
-    tasks.push({ ...t, action: a?.action ?? null, acted_at: a?.ts ?? null });
+    const draft = drafts.get(t.id) ?? null;
+    // Its draft went out: done, as the next tasks run (proxenos.clones.tasks.sent_drafts) records it.
+    const status = draft?.status === "sent" && t.status !== "cancelled" ? "done" : t.status;
+    tasks.push({ ...t, status, action: a?.action ?? null, acted_at: a?.ts ?? null, draft });
   }
 
   return {
@@ -803,6 +807,21 @@ export async function getTasks(): Promise<TasksResponse> {
     generated: d ? str(d.generated) : null,
     tasks,
   };
+}
+
+const DRAFT_STATUSES = ["draft", "approved", "sent", "discarded", "overtaken"] as const;
+
+/** Each task's draft, by task id: the work clone writes a task's draft with the task's id and `for: task`. */
+async function taskDrafts(vault: string): Promise<Map<string, NonNullable<TaskView["draft"]>>> {
+  const found = new Map<string, NonNullable<TaskView["draft"]>>();
+  for (const file of await readDraftFiles(vault)) {
+    if (file.fields.for !== "task") continue;
+    const id = file.fields.id || file.name.replace(/\.md$/i, "");
+    const status = (file.fields.status || "draft").toLowerCase();
+    const known = DRAFT_STATUSES.find((s) => s === status);
+    if (known) found.set(id, { status: known });
+  }
+  return found;
 }
 
 export async function appendTaskFeedback(taskId: string, action: TaskAction) {
