@@ -6,6 +6,7 @@ import { markdownHtml } from "@/components/Markdown";
 import { useToast } from "@/components/Toasts";
 
 import { markdownFile, openText } from "./actions";
+import { wordsKey } from "./format";
 import type {
   Action,
   AdviceAction,
@@ -38,7 +39,9 @@ import type {
   WatchPick,
   WatchResponse,
   JournalResponse,
+  LifeCorrection,
   LifeResponse,
+  LifeStory,
   RhythmsResponse,
   ThinkJobResponse,
   ThinkResponse,
@@ -505,17 +508,12 @@ export function useLife(month: string | null) {
     return () => window.clearInterval(timer);
   }, [running, absorb]);
 
+  /** `again`: the user said to write a month whose abstract and essay are their own, from them. */
   const write = useCallback(
-    async (which: string) => {
+    async (which: string, again = false) => {
       const since = Date.now();
       try {
-        const res = await fetch("/api/life", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ month: which }),
-        });
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        if (!res.ok) throw new Error(body.error ?? `returned ${res.status}`);
+        await postLife({ month: which, ...(again ? { again: true } : {}) });
       } catch (e) {
         setError(`Couldn't start writing ${monthName(which)}: ${e instanceof Error ? e.message : String(e)}`);
         return;
@@ -527,7 +525,68 @@ export function useLife(month: string | null) {
     [absorb, setError, track],
   );
 
-  return { data, error, write, clearError: () => setError(null) };
+  /** Keep the user's own abstract and essay for the month shown. Resolves true once saved. */
+  const saveEdit = useCallback(
+    async (which: string, summary: string, essay: string): Promise<boolean> => {
+      try {
+        const body = (await postLife({ month: which, edit: { summary, essay } })) as { story?: LifeStory | null };
+        setData((d) => (d?.open?.month === which ? { ...d, open: { ...d.open, story: body.story ?? d.open.story } } : d));
+      } catch (e) {
+        setError(`Couldn't save your text: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+      setError(null);
+      notify("Saved as yours", "ok");
+      getJson<LifeResponse>("/api/life").then(absorb, () => undefined);
+      return true;
+    },
+    [absorb, notify, setData, setError],
+  );
+
+  /**
+   * Mark an item of the month shown not true, with what's true in the user's words, or (`undo`)
+   * take that back. It's struck out (or back) on the page at once, and put back if it isn't saved.
+   */
+  const mark = useCallback(
+    async (which: string, item: string, text: string, correction: string, undo = false): Promise<boolean> => {
+      const same = (c: LifeCorrection) => c.item === item && wordsKey(c.text) === wordsKey(text);
+      const set = (next: (marks: LifeCorrection[]) => LifeCorrection[]) =>
+        setData((d) => (d?.open?.month === which ? { ...d, open: { ...d.open, corrections: next(d.open.corrections) } } : d));
+      let before: LifeCorrection[] = [];
+      set((marks) => {
+        before = marks;
+        const kept = marks.filter((c) => !same(c));
+        return undo ? kept : [...kept, { item, text, correction, at: new Date().toISOString() }];
+      });
+      try {
+        const body = (await postLife({ month: which, [undo ? "unmark" : "mark"]: { item, text, ...(undo ? {} : { correction }) } })) as {
+          corrections?: LifeCorrection[];
+        };
+        if (body.corrections) set(() => body.corrections ?? []);
+      } catch (e) {
+        set(() => before);
+        setError(`Couldn't save that: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+      getJson<LifeResponse>("/api/life").then(absorb, () => undefined);
+      return true;
+    },
+    [absorb, setData, setError],
+  );
+
+  return { data, error, write, saveEdit, mark, clearError: () => setError(null) };
+}
+
+/** POST /api/life, and its answer; throws with the server's reason when it isn't done. */
+async function postLife(body: Record<string, unknown>): Promise<unknown> {
+  const res = await fetch("/api/life", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const answer = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(answer.error ?? `returned ${res.status}`);
+  return answer;
 }
 
 const THINK_POLL_MS = 4000;

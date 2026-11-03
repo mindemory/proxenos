@@ -125,6 +125,11 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
+/** Some words as a mark of "not true" in the diary matches them, whatever their spacing and case, as the life clone does. */
+export function wordsKey(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 /**
  * One line about how fresh the raw sources are, grouped by calendar day:
  * "WhatsApp and Email synced today, Spotify yesterday, Strava 70 days ago."

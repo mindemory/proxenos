@@ -288,24 +288,38 @@ export interface LifeEntry {
   text: string;
 }
 
-/** clones/life/months/YYYY-MM.json: a month's diary, written by the model from its care, what the user told Proxenos, the observers' notes and its days. */
+/**
+ * clones/life/months/YYYY-MM.json: a month's diary, written by the model from what the user said about the month, its care,
+ * the observers' notes and its days; with the user's own abstract and essay in place of the model's while they're newer.
+ */
 export interface LifeStory {
   month: string;
   generated: string | null;
-  summary: string; // a few sentences; a story written before there were entries, whole, its paragraphs separated by a blank line
+  summary: string; // the abstract, a few sentences; a story written before there were entries, whole, its paragraphs separated by a blank line
+  essay: string; // paragraphs separated by a blank line; "" for a diary written before there was an essay, which the night writes again
   entries: LifeEntry[] | null; // oldest first; null for a story written before there were entries, which the night writes again
   highlights: string[];
   days_with_records: number;
+  edited: string | null; // when the user saved the abstract and essay shown, their own (clones/life/edits.jsonl); null when it's the model's
 }
 
-/** A month in the list: how much the vault holds from it, and the start of its diary when there is one. */
+/** clones/life/corrections.jsonl: something the user marked not true in a month's diary, the latest line for its item and text. */
+export interface LifeCorrection {
+  item: string; // "essay" (a paragraph of it), "highlight" or "entry:YYYY-MM-DD"
+  text: string; // what it said
+  correction: string; // what's true, in the user's words; "" when they didn't say
+  at: string;
+}
+
+/** A month in the list: how much the vault holds from it, and its abstract when it has a diary. */
 export interface LifeMonth {
   month: string; // YYYY-MM
   days: number; // days with records
   records: number;
   written: string | null; // when its diary was written
-  opening: string; // the summary's first paragraph, cut; "" when there's none
-  highlights: string[];
+  opening: string; // the abstract's first paragraph, cut; "" when there's none
+  highlights: string[]; // not those marked not true
+  edited: boolean; // the abstract is the user's own
 }
 
 /** The page's "Write this month": `proxenos clone life --month`, one at a time. */
@@ -322,8 +336,8 @@ export interface LifeResponse {
   vault: VaultInfo;
   today: string; // YYYY-MM-DD, on this computer's clock
   months: LifeMonth[]; // newest first: every month with records or a story
-  left: number; // past months with no diary (or a story from before) that the night will write, four a night
-  open: { month: string; story: LifeStory | null; days: LifeDay[] } | null;
+  left: number; // past months with no diary (or one from before there was an essay) that the night will write, four a night
+  open: { month: string; story: LifeStory | null; days: LifeDay[]; corrections: LifeCorrection[] } | null;
   job: LifeJob | null;
   error: string | null;
 }
