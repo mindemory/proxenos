@@ -107,8 +107,8 @@ export function Errands() {
         !working && (
           <p className="max-w-2xl text-sm leading-relaxed text-muted">
             Give it something to get done for you, like reaching someone about a role. It looks them up, finds a way to reach them from your
-            own mail and chats (an address is never guessed), finds your newest CV, writes the message the way you&apos;ve written these
-            before, and stops one tap short. You read what it did, step by step, and press Send. Nothing goes out unless you do. An errand
+            own mail and chats, or else on their organization&apos;s own web pages (an address is never guessed), finds your newest CV,
+            writes the message the way you&apos;ve written these before, and stops one tap short. You read what it did, step by step, and press Send. Nothing goes out unless you do. An errand
             still waiting on an address looks again each night.
           </p>
         )

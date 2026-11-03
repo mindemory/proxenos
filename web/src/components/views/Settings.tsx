@@ -29,6 +29,24 @@ import { cn } from "@/lib/utils";
 /** The secrets phone notices use, shown with them rather than with the keys and sign-ins. */
 const NOTICE_SECRETS = ["NTFY_TOPIC", "NTFY_TOKEN"];
 
+/** The key a lookup can search with, shown with the other lookup settings. */
+const LOOKUP_SECRETS = ["BRAVE_SEARCH_KEY"];
+
+const LOOKUP_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "searxng_url",
+    label: "Your SearXNG",
+    hint: "Searches go there when it's set, with json among its search formats. Empty: Brave Search with a key below, else DuckDuckGo.",
+    placeholder: "http://127.0.0.1:8888",
+  },
+  {
+    key: "lookup",
+    label: "Looking people up",
+    hint: "off to never look anyone up on the web; empty or on to look.",
+    placeholder: "on",
+  },
+];
+
 const NOTICE_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
   {
     key: "ntfy_server",
@@ -189,7 +207,7 @@ export function Settings() {
       >
         <div className="card divide-y divide-line">
           {status.secrets
-            .filter((s) => !NOTICE_SECRETS.includes(s.name))
+            .filter((s) => !NOTICE_SECRETS.includes(s.name) && !LOOKUP_SECRETS.includes(s.name))
             .map((s) => (
               <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
             ))}
@@ -202,6 +220,21 @@ export function Settings() {
         note="When something new waits on you, one short notice through ntfy, an open-source push service: how many drafts, care items, steps and tasks, never a name, a message's words or a health detail."
       >
         <NoticesCard status={status} apply={apply} />
+      </Group>
+
+      <Group
+        kicker="Web"
+        title="Looking people up"
+        note="When an errand, Ask or Think needs someone's email address and your records have none, only that person's name and where they are go to a search engine, and only that organization's own pages are read. Nothing about you, and an address is never guessed."
+      >
+        <div className="card divide-y divide-line">
+          {status.secrets
+            .filter((s) => LOOKUP_SECRETS.includes(s.name))
+            .map((s) => (
+              <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
+            ))}
+        </div>
+        <FoldersForm status={status} apply={apply} fields={LOOKUP_SETTINGS} button="Save" />
       </Group>
 
       <Group kicker="Folders" title="Read on every sync">
@@ -306,7 +339,9 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
         ? "Letters, digits, - and _, up to 64. The same name you subscribed to in the app."
         : s.name === "NTFY_TOKEN"
           ? "Only for a server that asks for one. ntfy.sh doesn't."
-          : null;
+          : s.name === "BRAVE_SEARCH_KEY"
+            ? "From api-dashboard.search.brave.com. It goes only to Brave, with each search."
+            : null;
 
   return (
     <div className="space-y-3 px-4 py-3.5">

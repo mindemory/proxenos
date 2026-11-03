@@ -53,6 +53,7 @@ function blocker(m: ErrandMessage, address: string, subject: string, body: strin
       ? "Type their email address to send it."
       : `There's no ${channelLabel(m.channel)} chat with ${m.to} to send it in yet: copy it there, or type an email address.`;
   }
+  if (m.found === "web" && !address.trim()) return "Type their email address to send it.";
   if (address.trim() && !ADDRESS.test(address.trim())) return "That isn't an email address.";
   if (email && !subject.trim()) return "Give the email a subject.";
   return null;
@@ -120,10 +121,31 @@ function MessageBox({
           <span className="text-ink/90">{message.address}</span>: {message.evidence}.
         </p>
       )}
-      {!sent && !message.via && (
+      {message.found === "web" && message.sources.length > 0 && (
+        <div className="text-xs text-muted">
+          <p>From the web, not your records: check it&apos;s theirs on {message.sources.length === 1 ? "the page" : "the pages"} it&apos;s on.</p>
+          <ul className="mt-1 space-y-0.5">
+            {message.sources.map((url) => (
+              <li key={url} className="min-w-0 break-all">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+                >
+                  {url.replace(/^https?:\/\/(www\.)?/i, "")}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!sent && (!message.via || message.found === "web") && (
         <label className="block space-y-1">
           <span className="text-xs text-muted">
-            {message.channel === "email" ? "Their email address" : "Or their email address"}, when you have it (it&apos;s never guessed)
+            {message.found === "web"
+              ? "Their email address, as their organization's pages give it; change it if it isn't theirs"
+              : `${message.channel === "email" ? "Their email address" : "Or their email address"}, when you have it (it's never guessed)`}
           </span>
           <input
             type="email"

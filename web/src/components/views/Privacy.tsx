@@ -8,8 +8,19 @@ import { CloudWarning, originLabel, secretLabel } from "@/components/setup/parts
 import { StatusSkeleton } from "@/components/Skeleton";
 import { usePrivacy } from "@/lib/client";
 import { formatDateTime, joinAnd, plural } from "@/lib/format";
-import { VAULT_FOLDERS, type CallTotals, type PrivacyReport, type VaultFolder } from "@/lib/types";
+import { VAULT_FOLDERS, type CallTotals, type LookupEngine, type PrivacyReport, type VaultFolder } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const LOOKUP_NAMES: Record<LookupEngine, string> = {
+  searxng: "your SearXNG",
+  brave: "Brave Search",
+  duckduckgo: "DuckDuckGo",
+};
+
+/** The search engine a lookup goes to, with its host. */
+function lookupWhere(lookup: PrivacyReport["fetched"]["lookup"]): string {
+  return lookup.host ? `${LOOKUP_NAMES[lookup.engine]} (${lookup.host})` : LOOKUP_NAMES[lookup.engine];
+}
 
 const FOLDER_COPY: Record<VaultFolder, { label: string; note: string }> = {
   raw: { label: "Raw data", note: "every source, as monthly files" },
@@ -398,7 +409,7 @@ function Fetched({ fetched, now }: { fetched: PrivacyReport["fetched"]; now: str
       icon={Globe}
       kicker="Fetched from elsewhere"
       title="From elsewhere"
-      lead="The services you connected, read with your own sign-in, and the downloads and folders you gave it. Nothing else is read from outside, apart from the links and the music genres below."
+      lead="The services you connected, read with your own sign-in, and the downloads and folders you gave it. Nothing else is read from outside, apart from the links, the music genres and the people looked up below."
     >
       {live.length > 0 ? (
         <div className="card divide-y divide-line">
@@ -446,6 +457,17 @@ function Fetched({ fetched, now }: { fetched: PrivacyReport["fetched"]; now: str
           {fetched.music.on
             ? `For Rhythms' kinds of music, the night looks up the artists you play most at MusicBrainz, one name a request and nothing else: no track, time or anything about you. ${fetched.music.artists ? `${fetched.music.artists.toLocaleString("en-US")} looked up so far.` : "None looked up yet."} PROXENOS_MUSICBRAINZ=off stops it.`
             : "PROXENOS_MUSICBRAINZ is off, so no artist's name is looked up; kinds of music stay empty."}
+        </p>
+      </div>
+      <div className="card space-y-1.5 p-4 sm:p-5">
+        <StatePill
+          on={fetched.lookup.on}
+          label={fetched.lookup.on ? `People's addresses are looked up through ${LOOKUP_NAMES[fetched.lookup.engine]}` : "No one is looked up on the web"}
+        />
+        <p className="text-sm leading-relaxed text-muted">
+          {fetched.lookup.on
+            ? `When an errand, Ask or Think needs someone's email address and your records have none, only that person's name and where they are go to ${lookupWhere(fetched.lookup)}, and only that organization's own public pages are read. Nothing about you. An address is never guessed. PROXENOS_LOOKUP=off stops it.`
+            : "PROXENOS_LOOKUP is off, so an errand with no address in your records waits for you to type one."}
         </p>
       </div>
     </Section>

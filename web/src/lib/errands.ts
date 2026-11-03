@@ -115,6 +115,9 @@ function toMessage(raw: unknown): ErrandMessage | null {
     address: str(r.address),
     via: r.via === "apple_mail" || r.via === "beeper" ? r.via : "",
     evidence: str(r.evidence),
+    found: r.found === "web" ? "web" : "",
+    // Only web addresses: each is shown as a link, for the user to check the address against.
+    sources: strings(r.sources, 5).filter((s) => /^https?:\/\/[^\s]+$/i.test(s)),
     subject: str(r.subject),
     body,
     attach: r.attach === true,

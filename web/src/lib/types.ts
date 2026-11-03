@@ -1063,6 +1063,8 @@ export const SETTING_KEYS = [
   "project_folder",
   "ntfy_server",
   "quiet_hours",
+  "searxng_url",
+  "lookup",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -1553,6 +1555,10 @@ export interface ErrandMessage {
   via: "apple_mail" | "beeper" | "";
   /** How the address or chat is known. */
   evidence: string;
+  /** "web" when the address came from the person's organization's own pages, not the records. */
+  found: "web" | "";
+  /** The pages a web address is on, for the user to check. */
+  sources: string[];
   subject: string;
   body: string;
   /** The CV goes with it. */
@@ -1941,6 +1947,10 @@ export interface CallsResponse {
 export type ModelWhere = "this computer" | "Anthropic";
 export const MODEL_WHERES: readonly ModelWhere[] = ["this computer", "Anthropic"];
 
+/** Where a lookup of someone's address searches: the user's own SearXNG, Brave Search, or DuckDuckGo. */
+export type LookupEngine = "searxng" | "brave" | "duckduckgo";
+export const LOOKUP_ENGINES: readonly LookupEngine[] = ["searxng", "brave", "duckduckgo"];
+
 /** The vault's own folders, in the order the page lists them; the rest is "other". */
 export const VAULT_FOLDERS = ["raw", "memory", "clones", "self", "observations", "state", "other"] as const;
 export type VaultFolder = (typeof VAULT_FOLDERS)[number];
@@ -2027,6 +2037,8 @@ export interface PrivacyReport {
     links: boolean;
     /** Whether artists' names are looked up at MusicBrainz for their genres, and how many have been. */
     music: { on: boolean; artists: number };
+    /** Whether people's addresses are looked up on the web, and the search engine's host (never a key). */
+    lookup: { on: boolean; engine: LookupEngine; host: string };
   };
   /** Notices on the phone through ntfy: whether they're on, the server's host (never the topic), the quiet hours and what one carries. */
   notices: { on: boolean; server: string; quiet: string | null; sends: string };

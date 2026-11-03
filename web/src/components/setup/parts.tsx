@@ -453,6 +453,7 @@ export function secretLabel(name: string): string {
     TWILIO_AUTH_TOKEN: "Twilio auth token (calls)",
     NTFY_TOPIC: "ntfy topic (phone notices)",
     NTFY_TOKEN: "ntfy token (phone notices)",
+    BRAVE_SEARCH_KEY: "Brave Search key (looking people up)",
     SLACK_USER_TOKEN: "Slack token",
   };
   if (fixed[name]) return fixed[name];

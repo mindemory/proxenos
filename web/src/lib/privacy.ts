@@ -3,7 +3,8 @@
 // Everything comes from `proxenos privacy`: what stays on this computer (the vault by folder,
 // FileVault, the secrets kept, by name), what went to a model in the last 30 days (from the log
 // each call leaves, never its words), what's read from elsewhere (the connected sources, by
-// name and address) and whether notices go to the phone (by the server's host, never the topic).
+// name and address, and the search engine people are looked up with, by its host, never a key)
+// and whether notices go to the phone (by the server's host, never the topic).
 // Its answer is read field by field, so nothing else in it reaches the page.
 
 
@@ -21,7 +22,7 @@ import type {
   StepCalls,
   VaultFolder,
 } from "./types";
-import { MODEL_WHERES, VAULT_FOLDERS } from "./types";
+import { LOOKUP_ENGINES, MODEL_WHERES, VAULT_FOLDERS } from "./types";
 import { nowIso, proxenos, vaultInfo, vaultPath } from "./vault";
 
 // Adding up a large vault's folders can take a while on a slow disk.
@@ -167,6 +168,11 @@ function toReport(raw: unknown): PrivacyReport | null {
       links: fetched.links === true,
       // An older proxenos doesn't say: it looked nothing up.
       music: { on: rec(fetched.music).on === true, artists: count(rec(fetched.music).artists) ?? 0 },
+      lookup: {
+        on: rec(fetched.lookup).on === true,
+        engine: LOOKUP_ENGINES.find((e) => e === rec(fetched.lookup).engine) ?? "duckduckgo",
+        host: text(rec(fetched.lookup).host),
+      },
     },
     notices: {
       on: notices.on === true,
