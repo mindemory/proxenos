@@ -7,7 +7,9 @@ import io
 import json
 import os
 import socket
+import sys
 import threading
+import types
 import wave
 from pathlib import Path
 
@@ -293,7 +295,20 @@ def test_clip_from_the_page_through_the_command(tmp_path, monkeypatch, capsys):
     assert speech.clip(tmp_path) is None
 
 
+class _Tqdm:
+    """tqdm as far as the progress bars use it, where the speech extra isn't installed."""
+
+    def __init__(self, *args, total=None, **kwargs):
+        self.total = total
+
+
 def test_download_notes_how_far_it_got(tmp_path, monkeypatch):
+    try:
+        import tqdm.auto  # noqa: F401
+    except ImportError:
+        monkeypatch.setitem(sys.modules, "tqdm", types.ModuleType("tqdm"))
+        monkeypatch.setitem(sys.modules, "tqdm.auto", types.SimpleNamespace(tqdm=_Tqdm))
+
     def fetch(model, progress):
         assert model is speech.MODELS["own"]
         bar = progress.bar()(total=0, initial=0, unit="B", desc="Downloading")
