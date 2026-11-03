@@ -46,8 +46,9 @@ The same Electron app, built for Windows on GitHub's Windows machines. *Built, u
 ### 4. Android, as a companion to your computer (short)
 
 The phone shows your own computer's Proxenos over a private link, like `proxenos phone` does today.
-- Nothing new runs on the phone and nothing leaves your devices.
+- Nothing new runs on the phone and nothing leaves your devices, apart from notices if you switch them on (below).
 - First as the page saved to the home screen (it already works); later as a small Play Store app that pairs with the computer by scanning a code, instead of a Tailscale setup.
+- *Built:* notices, so the phone hears when something new waits without opening the page: through the ntfy app (Android or iOS), off until a topic is saved in Settings, and only counts and kinds, never a name or a message's words, through ntfy's server or your own ([architecture.md](architecture.md)).
 - **Limit:** it needs a computer that's on. Many people, and many patients, only have a phone.
 
 ### 5. Android on its own (the largest piece)
