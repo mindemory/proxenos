@@ -142,6 +142,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "label": rhythms.LABEL,
         "look_up": musicbrainz.LOOK_UP,  # artists' genres, by name only
         "month": None,  # the month cards due, not one named
+        "earlier": None,  # and as many earlier ones as a night makes
         "json": False,
     }
 

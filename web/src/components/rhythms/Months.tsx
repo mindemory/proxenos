@@ -524,7 +524,13 @@ export function Months({ months }: { months: RhythmsMonths }) {
             &apos;s genres, looked up by artist name alone (CC BY-NC-SA)
           </>
         )}
-        .{waiting > 0 && ` ${plural(waiting, "more month")} ${waiting === 1 ? "waits" : "wait"} for a card; the night makes a few each night.`}
+        .
+        {waiting > 0 && (
+          <>
+            {` ${plural(waiting, "more month")} ${waiting === 1 ? "waits" : "wait"} for a card; the night makes a few each night, newest first, and `}
+            <code>proxenos clone rhythms --earlier all</code> makes them all now.
+          </>
+        )}
       </p>
     </section>
   );

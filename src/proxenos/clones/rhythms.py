@@ -904,6 +904,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--month", help="make that month's card now, YYYY-MM: its mood, music and writing"
     )
     parser.add_argument(
+        "--earlier",
+        metavar="N",
+        help=f"make up to N earlier months' cards now, newest first, or 'all' (the night makes "
+        f"{portrait.BACKFILL})",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="print the weekly series and the month cards as JSON for the page; no model",
@@ -913,7 +919,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
     """The night's run with no options: count what changed, label and look up more artists,
     and make the month cards that are due. With --json, the series and the cards made are the
-    whole answer, counted again where it changed, with no model and no lookups."""
+    whole answer, counted again where it changed, with no model and no lookups. --month makes one
+    card, and --earlier the cards due as far back as asked, so years needn't wait for the nights."""
     if args.weeks is not None and args.weeks < 1:
         raise SystemExit("rhythms: --weeks takes a number of weeks, 1 or more")
     if args.month:
@@ -925,6 +932,12 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
             "hours of music": round(made["music"]["music_hours"]),
             "words written": made["writing"]["words"],
         }
+    if args.earlier:
+        if not (args.earlier == "all" or args.earlier.isdigit()):
+            raise SystemExit(
+                f"rhythms: --earlier takes a number of months or 'all', not {args.earlier!r}"
+            )
+        return portrait.night(vault, backfill=None if args.earlier == "all" else int(args.earlier))
     look_up = 0 if args.json else args.look_up
     data, stats = build(vault, 0 if args.json else args.label, look_up=look_up)
     last = data["weeks"][-args.weeks :] if args.weeks else data["weeks"]

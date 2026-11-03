@@ -515,3 +515,16 @@ def test_the_page_gets_the_cards_with_no_model(vault, hosted, monkeypatch, capsy
     assert capsys.readouterr().out.startswith("rhythms: 20 days with a mood, 20 hours of music")
     with pytest.raises(SystemExit, match="YYYY-MM"):
         cli.main(["clone", "rhythms", "--month", "March"])
+
+
+def test_earlier_months_can_be_made_now(vault, hosted, monkeypatch, capsys):
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
+    held = portrait.held(portrait.inputs(vault), f"{datetime.now(UTC).astimezone():%Y-%m}")
+    assert held == ["2026-03", "2026-02", "2026-01", "2025-12"]  # all earlier than last month
+    cli.main(["clone", "rhythms", "--earlier", "1"])
+    assert "3 months left" in capsys.readouterr().out
+    assert list(portrait.cards(vault)) == ["2026-03"]  # the newest first
+    cli.main(["clone", "rhythms", "--earlier", "all"])
+    assert sorted(portrait.cards(vault), reverse=True) == held
+    with pytest.raises(SystemExit, match="number of months"):
+        cli.main(["clone", "rhythms", "--earlier", "some"])

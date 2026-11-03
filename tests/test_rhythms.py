@@ -323,7 +323,12 @@ def test_the_command_prints_counts_or_the_series(vault, monkeypatch, capsys):
     assert line.startswith("rhythms: 0 files counted, ") and " rides, " in line
     assert " month cards, " in line  # December's and March's, made with no model
     assert cli._defaults(rhythms) == argparse.Namespace(
-        weeks=None, label=rhythms.LABEL, look_up=musicbrainz.LOOK_UP, month=None, json=False
+        weeks=None,
+        label=rhythms.LABEL,
+        look_up=musicbrainz.LOOK_UP,
+        month=None,
+        earlier=None,
+        json=False,
     )
 
 
