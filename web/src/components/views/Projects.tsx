@@ -42,6 +42,8 @@ interface SectionProps {
   /** Ask for a step that says more than its words: queue it, or take it now. */
   onAsk: (text: string, now: boolean, ask: StepAsk) => Promise<boolean>;
   onSaveEdit: (edit: ManuscriptEdit) => Promise<boolean>;
+  /** Read the steps again: changes came back from the manuscript's Google Doc as one. */
+  onRefresh: () => void;
   /** Think the project through with Proxenos, in a new thread that starts from it. */
   onThink?: () => void;
 }
@@ -128,6 +130,7 @@ function ProjectSection({
   onDiscard,
   onAsk,
   onSaveEdit,
+  onRefresh,
   onThink,
 }: SectionProps) {
   const [text, setText] = useState(kept.get(project.id) ?? "");
@@ -215,6 +218,7 @@ function ProjectSection({
             deciding={deciding}
             onAsk={onAsk}
             onSave={onSaveEdit}
+            onDocPulled={onRefresh}
             onClose={() => showPaper(false)}
           />
         ) : (
@@ -330,7 +334,7 @@ interface ProjectsProps {
 }
 
 export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
-  const { data, error, clearError, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
+  const { data, error, clearError, refresh, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
   // The project open below the cards: the one asked for (Home's tiles), else the one open last.
   const [open, setOpen] = useState<string | null>(focus ?? opened.get("id") ?? null);
   const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
@@ -417,6 +421,7 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
             onDiscard={(id) => void discard(id)}
             onAsk={(text, now, ask) => (now ? takeAsked(p.id, text, ask) : queue(p.id, text, ask))}
             onSaveEdit={(edit) => saveEdit(p.id, edit)}
+            onRefresh={refresh}
             onThink={
               onThink &&
               (() =>

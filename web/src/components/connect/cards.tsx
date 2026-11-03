@@ -79,6 +79,8 @@ interface SignInCopy {
   /** What the consent page asks to read, and what Proxenos reads after, for the running and done lines. */
   asks: string;
   reads: string;
+  /** Beside an account that hasn't been read yet, when that isn't the next sync's job. */
+  unread?: string;
 }
 
 function StepsLink({ href }: { href: string }) {
@@ -135,6 +137,22 @@ const CALENDAR_COPY: SignInCopy = {
   reads: "Proxenos reads its calendar on every sync.",
 };
 
+const DOCS_COPY: SignInCopy = {
+  button: "Sign in with Google",
+  placeholder: "you@gmail.com",
+  noClientProblem: "no_google_client",
+  noClient: (
+    <>
+      Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Drive API
+      turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page.{" "}
+      <StepsLink href={CALENDAR_STEPS} />
+    </>
+  ),
+  asks: "allow access to only the files Proxenos makes in your Drive.",
+  reads: "Open in Google Docs on a project's manuscript now makes its doc in that Drive.",
+  unread: "used when you open a manuscript in Google Docs",
+};
+
 interface SignInProps {
   s: ConnectSource;
   now: string;
@@ -156,6 +174,11 @@ export function MicrosoftCard(props: SignInProps) {
 /** Google Calendar, live: a read-only Google sign-in per account, apart from Gmail's. */
 export function GoogleCalendarCard(props: SignInProps) {
   return <SignInCard {...props} copy={CALENDAR_COPY} />;
+}
+
+/** Google Docs: a sign-in that sees only the files Proxenos makes, for a manuscript's doc. */
+export function GoogleDocsCard(props: SignInProps) {
+  return <SignInCard {...props} copy={DOCS_COPY} />;
 }
 
 /** A source read through a sign-in: the accounts signed in, and a sign-in for another (or the same one again). */
@@ -195,7 +218,7 @@ function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { c
                       <LastRead iso={a.lastRead} now={now} />
                     </>
                   ) : (
-                    " · read on the next sync"
+                    ` · ${copy.unread ?? "read on the next sync"}`
                   )}
                 </div>
               </div>

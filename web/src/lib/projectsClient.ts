@@ -5,18 +5,29 @@
 // minutes, so the page checks every few seconds while one is being taken or a decision is going,
 // and picks up one already running when the view opens. A project's manuscript, its versions and
 // their changes, and a step's changes, are read when asked for (useManuscript, useStepChanges); an
-// edit to the manuscript is saved like a decision, as a step waiting on the user.
+// edit to the manuscript is saved like a decision, as a step waiting on the user. Its Google Doc
+// (useManuscriptDoc) is made, brought back and its comments read on a click, each answered when
+// it's done.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
-import type { ManuscriptEdit, ManuscriptResponse, ProjectsResponse, StepAsk, StepChangesResponse } from "./types";
+import type {
+  ManuscriptDocPull,
+  ManuscriptDocResponse,
+  ManuscriptEdit,
+  ManuscriptResponse,
+  ProjectsResponse,
+  StepAsk,
+  StepChangesResponse,
+} from "./types";
 
 const POLL_MS = 5000;
 
-async function post(body: object, url = "/api/projects"): Promise<void> {
+/** POST a JSON body; the answer, or throw what the server said was wrong. */
+async function post<T = unknown>(body: object, url = "/api/projects"): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -27,8 +38,8 @@ async function post(body: object, url = "/api/projects"): Promise<void> {
   } catch {
     throw new Error("Couldn't reach Proxenos. Is your Mac awake?");
   }
-  if (res.status >= 200 && res.status < 300) return;
-  const answer = (await res.json().catch(() => ({}))) as { error?: string };
+  const answer = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (res.status >= 200 && res.status < 300) return answer;
   throw new Error(answer.error ?? `The server answered ${res.status}.`);
 }
 
@@ -149,6 +160,8 @@ export function useProjects() {
     data,
     error,
     clearError: () => setError(null),
+    /** Read the projects again now: a step was made outside the jobs the page follows. */
+    refresh: load,
     waiting,
     take,
     takeAsked,
@@ -219,4 +232,90 @@ export function useManuscript(project: string, open: boolean, base: string, head
 export function useStepChanges(project: string, step: string, open: boolean) {
   const query = new URLSearchParams({ project, step });
   return useRead<StepChangesResponse>(open ? `/api/projects/manuscript?${query}` : null, "");
+}
+
+type DocAction = "open" | "fresh" | "pull" | "comments";
+
+/** A tab opened before the wait, so the browser lets it open, saying what it waits for. */
+function waitingTab(): Window | null {
+  const tab = window.open("", "_blank");
+  if (tab) {
+    tab.document.title = "Google Docs";
+    tab.document.body.textContent = "Making the Google Doc…";
+  }
+  return tab;
+}
+
+/**
+ * The project's manuscript as a Google Doc while `open`, as the vault keeps it (read again when
+ * `again` changes and after each action), and what can be done to it: make it and open it in a
+ * new tab, make a fresh one, bring back its changes as a step waiting on the user (then
+ * `onPulled`, so the step shows), or read its comments again.
+ */
+export function useManuscriptDoc(project: string, open: boolean, again: string, onPulled: () => void) {
+  const [round, setRound] = useState(0);
+  const read = useRead<ManuscriptDocResponse>(open ? `/api/projects/gdocs?${new URLSearchParams({ project })}` : null, `${again}|${round}`);
+  const [busy, setBusy] = useState<DocAction | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const notify = useToast();
+
+  const act = useCallback(
+    async <T extends ManuscriptDocResponse>(action: DocAction): Promise<T | null> => {
+      setBusy(action);
+      setError(null);
+      try {
+        return await post<T>({ project, action }, "/api/projects/gdocs");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setBusy(null);
+        setRound((r) => r + 1);
+      }
+    },
+    [project],
+  );
+
+  /** Make the doc (or a fresh one) and open it in a new tab. */
+  const make = useCallback(
+    async (fresh: boolean) => {
+      const tab = waitingTab();
+      const link = (await act(fresh ? "fresh" : "open"))?.doc?.link;
+      if (!link) {
+        tab?.close();
+        return;
+      }
+      if (tab) {
+        tab.opener = null;
+        tab.location.replace(link);
+      } else {
+        window.open(link, "_blank", "noopener,noreferrer");
+      }
+    },
+    [act],
+  );
+
+  const pull = useCallback(async () => {
+    const answer = await act<ManuscriptDocPull>("pull");
+    if (!answer) return;
+    if (answer.changed) {
+      notify("Brought back: it's waiting on you", "ok");
+      onPulled();
+    } else {
+      notify(answer.said || "Nothing has changed in the doc.", "ok");
+    }
+  }, [act, notify, onPulled]);
+
+  const readComments = useCallback(() => void act("comments"), [act]);
+
+  return {
+    ...read,
+    busy,
+    actionError: error,
+    clearActionError: () => setError(null),
+    open: () => void make(false),
+    fresh: () => void make(true),
+    pull: () => void pull(),
+    readComments,
+  };
 }

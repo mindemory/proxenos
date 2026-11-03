@@ -8,13 +8,23 @@
 // An edit the user saves goes to the same command with --edit, its text on the command's stdin,
 // and runs as the job "decide", like an Accept: it commits the text on a new branch, made apart
 // from the user's checkout, as a step waiting on them to accept or discard.
+//
+// Its Google Doc is `proxenos project gdocs <id>`: as kept in the vault, with nothing fetched; or,
+// with an action, made in the user's own Drive (open, fresh), its changes brought back as a step
+// waiting on them (pull), or its comments read again (comments). Those wait for the answer, which
+// is short: one upload or export, the comments, and at most a commit.
 
-import { lastLine, NO_COMMAND, startJob, type Job } from "./connect";
-import { isBranch, isRepoPath } from "./projects";
+import { latestJob, lastLine, NO_COMMAND, startJob, type Job } from "./connect";
+import { isBranch, isRepoPath, isStepId } from "./projects";
 import type {
   ChangedFile,
   DiffOp,
+  DocComment,
+  DocReply,
   FileChanges,
+  ManuscriptDoc,
+  ManuscriptDocPull,
+  ManuscriptDocResponse,
   ManuscriptEdit,
   ManuscriptResponse,
   ManuscriptVersion,
@@ -23,6 +33,8 @@ import type {
 import { proxenos } from "./vault";
 
 const READ_MS = 60_000;
+const DOC_MS = 3 * 60_000;
+const COMMENTS = 1000;
 const MAX_OUTPUT = 32 * 1024 * 1024;
 const VERSIONS = 200;
 
@@ -34,15 +46,15 @@ export function isRev(value: unknown): value is string {
 }
 
 /** The command's answer, parsed, or why there's none: what it said last, without its name. */
-function run(args: string[]): Promise<Read<unknown>> {
+function run(args: string[], what: "manuscript" | "gdocs" = "manuscript", timeout = READ_MS): Promise<Read<unknown>> {
   return proxenos().then(
     (cli) =>
       new Promise((resolve) => {
         if (!cli) return resolve({ error: NO_COMMAND, status: 500 });
-        cli.exec(["project", "manuscript", ...args], { timeout: READ_MS, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+        cli.exec(["project", what, ...args], { timeout, maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
           if (error) {
             const why = error.killed ? "It took too long." : lastLine(stderr) || lastLine(stdout) || "It failed.";
-            return resolve({ error: why.replace(/^(manuscript|steps): /, ""), status: error.killed ? 504 : 400 });
+            return resolve({ error: why.replace(/^(manuscript|steps|gdocs): /, ""), status: error.killed ? 504 : 400 });
           }
           try {
             resolve({ data: JSON.parse(stdout) as unknown });
@@ -144,4 +156,93 @@ export async function readStepChanges(project: string, step: string): Promise<Re
 /** Save the user's text as a step waiting on them. Null when another decision is still going. */
 export function startEdit(project: string, edit: ManuscriptEdit): Promise<Job | null> {
   return startJob("decide", ["project", "manuscript", project, "--edit"], null, JSON.stringify(edit) + "\n");
+}
+
+// ── Its Google Doc ──────────────────────────────────────────────────────────
+
+export const DOC_ACTIONS = ["open", "fresh", "pull", "comments"] as const;
+export type DocAction = (typeof DOC_ACTIONS)[number];
+
+// On globalThis, so every route sees which projects' docs are busy.
+const shared = globalThis as typeof globalThis & { __proxenosDocs?: Set<string> };
+const BUSY = (shared.__proxenosDocs ??= new Set<string>());
+
+function toReply(raw: unknown): DocReply {
+  const r = obj(raw);
+  return { author: str(r.author) || "Someone", content: str(r.content), created: str(r.created) };
+}
+
+function toComment(raw: unknown): DocComment | null {
+  const r = obj(raw);
+  if (!str(r.content) && !Array.isArray(r.replies)) return null;
+  return {
+    id: str(r.id),
+    author: str(r.author) || "Someone",
+    content: str(r.content),
+    quoted: str(r.quoted),
+    resolved: r.resolved === true,
+    created: str(r.created),
+    replies: Array.isArray(r.replies) ? r.replies.map(toReply) : [],
+  };
+}
+
+/** The doc's record, if its link is a Google Docs one: the page opens it in a new tab. */
+function toDoc(raw: unknown): ManuscriptDoc | null {
+  const r = obj(raw);
+  const link = str(r.link);
+  if (!link.startsWith("https://docs.google.com/")) return null;
+  return {
+    link,
+    title: str(r.title),
+    account: str(r.account),
+    address: str(r.address),
+    path: str(r.path),
+    branch: str(r.branch),
+    commit: str(r.commit),
+    at: str(r.at),
+    pulled: typeof r.pulled === "string" ? r.pulled : null,
+    step: isStepId(r.step) ? r.step : null,
+  };
+}
+
+function toDocState(project: string, r: Record<string, unknown>): ManuscriptDocResponse {
+  const accounts = Array.isArray(r.accounts) ? r.accounts.map(obj) : [];
+  return {
+    project,
+    accounts: accounts.map((a) => ({ name: str(a.name), address: str(a.address) })).filter((a) => a.name),
+    doc: toDoc(r.doc),
+    comments: Array.isArray(r.comments)
+      ? r.comments.slice(0, COMMENTS).map(toComment).filter((c): c is DocComment => c !== null)
+      : [],
+    commentsRead: typeof r.comments_read === "string" ? r.comments_read : null,
+  };
+}
+
+/** The project's Google Doc and its comments as kept in the vault. Nothing is fetched. */
+export async function readDoc(project: string): Promise<Read<ManuscriptDocResponse>> {
+  const answer = await run([project], "gdocs");
+  return "error" in answer ? answer : { data: toDocState(project, obj(answer.data)) };
+}
+
+/**
+ * Make the doc (open: the first time, else its link; fresh: a new one), bring back its changes
+ * as a step waiting on the user (pull), or read its comments again. One at a time for a project,
+ * and a pull not while a decision is going, since both commit.
+ */
+export async function actOnDoc(project: string, action: DocAction): Promise<Read<ManuscriptDocResponse | ManuscriptDocPull>> {
+  if (BUSY.has(project)) return { error: "The last one is still going.", status: 409 };
+  if (action === "pull" && latestJob("decide")?.state === "running") {
+    return { error: "Wait for the decision that's going to finish.", status: 409 };
+  }
+  BUSY.add(project);
+  try {
+    const answer = await run([project, action], "gdocs", DOC_MS);
+    if ("error" in answer) return answer;
+    const r = obj(answer.data);
+    const state = toDocState(project, r);
+    if (action !== "pull") return { data: state };
+    return { data: { ...state, changed: r.changed === true, step: isStepId(r.step) ? r.step : null, said: str(r.said) } };
+  } finally {
+    BUSY.delete(project);
+  }
 }

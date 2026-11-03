@@ -458,6 +458,7 @@ export function secretLabel(name: string): string {
   if (fixed[name]) return fixed[name];
   if (name.startsWith("GMAIL_")) return `Gmail · ${name.slice(6).toLowerCase()}`;
   if (name.startsWith("GCALENDAR_")) return `Google Calendar · ${name.slice(10).toLowerCase()}`;
+  if (name.startsWith("GDOCS_")) return `Google Docs · ${name.slice(6).toLowerCase()}`;
   if (name.startsWith("MICROSOFT_")) return `Microsoft · ${name.slice(10).toLowerCase()}`;
   if (name.startsWith("SLACK_USER_TOKEN_")) return `Slack · ${name.slice(17)}`;
   return name;

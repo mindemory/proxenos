@@ -1,16 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { ListPlus, PencilLine, Play, RotateCcw, Save, ScrollText, X } from "lucide-react";
+import {
+  CopyPlus,
+  Download,
+  ExternalLink,
+  FileText,
+  ListPlus,
+  MessageSquareText,
+  PencilLine,
+  Play,
+  RotateCcw,
+  Save,
+  ScrollText,
+  X,
+} from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
+import { Command } from "@/components/EmptyState";
 import { Bone } from "@/components/Skeleton";
-import { shortDate } from "@/lib/format";
-import { useManuscript, useStepChanges } from "@/lib/projectsClient";
+import { formatDateTime, shortDate } from "@/lib/format";
+import { useManuscript, useManuscriptDoc, useStepChanges } from "@/lib/projectsClient";
 import {
   MANUSCRIPT_MAX_TEXT,
   STEP_MAX_TEXT,
   type DiffOp,
+  type DocComment,
   type FileChanges,
   type ManuscriptEdit,
   type ManuscriptVersion,
@@ -196,6 +211,151 @@ function VersionPick({
   );
 }
 
+/** A comment in the manuscript's Google Doc: who, what they said, the passage it's on, and its replies. */
+function DocNote({ c }: { c: DocComment }) {
+  return (
+    <li className={cn("space-y-1.5 px-3.5 py-3", c.resolved && "opacity-70")}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="text-sm font-medium text-ink">{c.author}</span>
+        <span className="text-xs text-muted">
+          {formatDateTime(c.created)}
+          {c.resolved && " · resolved"}
+        </span>
+      </div>
+      {c.quoted && (
+        <blockquote className="line-clamp-4 border-l-2 border-line-strong pl-2.5 font-display text-sm italic leading-relaxed text-muted">
+          {c.quoted}
+        </blockquote>
+      )}
+      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink/90">{c.content}</p>
+      {c.replies.length > 0 && (
+        <ul className="space-y-1.5 border-l border-line pl-3">
+          {c.replies.map((r, i) => (
+            <li key={i} className="text-sm leading-relaxed">
+              <span className="text-xs text-muted">
+                {r.author} · {formatDateTime(r.created)}
+              </span>
+              <p className="whitespace-pre-wrap break-words text-ink/90">{r.content}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/**
+ * The manuscript as a Google Doc in the user's own Drive, to edit, comment on and share with
+ * co-authors there: made the first time it's opened, its changes brought back as a step waiting on
+ * the user, and its comments, which are other people's words, shown here and never sent to a model.
+ */
+function GoogleDoc({ project, again, deciding, onPulled }: { project: string; again: string; deciding: boolean; onPulled: () => void }) {
+  const { data, error, busy, actionError, clearActionError, open, fresh, pull, readComments } = useManuscriptDoc(
+    project,
+    true,
+    again,
+    onPulled,
+  );
+  const doc = data?.doc ?? null;
+  const unresolved = data ? data.comments.filter((c) => !c.resolved).length : 0;
+
+  return (
+    <div className="space-y-3 border-t border-line pt-4">
+      <p className="smallcaps inline-flex items-center gap-1.5">
+        <FileText size={13} aria-hidden="true" />
+        Google Docs
+      </p>
+      {error && <p className="text-sm text-bad-ink">{error}</p>}
+      {actionError && (
+        <p className="flex items-start justify-between gap-2 text-sm text-bad-ink" role="alert">
+          <span className="min-w-0 break-words">{actionError}</span>
+          <button onClick={clearActionError} aria-label="Dismiss" className="flex-shrink-0 rounded p-0.5 text-faint hover:text-ink">
+            <X size={14} />
+          </button>
+        </p>
+      )}
+      {!data && !error && <Bone className="h-8 w-2/3" />}
+
+      {data && data.accounts.length === 0 && !doc && (
+        <p className="text-sm leading-relaxed text-muted">
+          To edit it in Google Docs, comment on it and share it with co-authors, sign in to Google Docs once, on the Connect page or
+          with <Command>proxenos auth gdocs NAME ADDRESS</Command>. That sign-in sees only the files Proxenos makes.
+        </p>
+      )}
+
+      {data && data.accounts.length > 0 && !doc && (
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton icon={ExternalLink} label={busy === "open" ? "Making it…" : "Open in Google Docs"} tone="accent" disabled={busy !== null} onClick={open} />
+          <p className="text-xs text-muted">
+            Makes a Google Doc of it as it stands, in {data.accounts[0].address}&apos;s Drive. It&apos;s yours alone until you share it
+            from Docs.
+          </p>
+        </div>
+      )}
+
+      {doc && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={doc.link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.8125rem] leading-none text-accent transition-colors hover:bg-accent/15"
+            >
+              <ExternalLink size={14} strokeWidth={2.25} aria-hidden="true" />
+              Open in Google Docs
+            </a>
+            <ActionButton
+              icon={Download}
+              label={busy === "pull" ? "Bringing it back…" : "Bring back its changes"}
+              tone="ok"
+              disabled={busy !== null || deciding}
+              onClick={pull}
+            />
+            <ActionButton
+              icon={MessageSquareText}
+              label={busy === "comments" ? "Reading…" : "Read comments"}
+              tone="neutral"
+              disabled={busy !== null}
+              onClick={readComments}
+            />
+            <ActionButton
+              icon={CopyPlus}
+              label={busy === "fresh" ? "Making it…" : "A fresh copy"}
+              tone="neutral"
+              disabled={busy !== null}
+              onClick={fresh}
+            />
+          </div>
+          <p className="break-words text-xs leading-relaxed text-muted">
+            Made from <span className="font-mono">{doc.branch}</span> at <span className="font-mono">{doc.commit.slice(0, 7)}</span>,{" "}
+            {shortDate(doc.at)}, in {doc.address}&apos;s Drive. {doc.pulled ? `Last brought back ${formatDateTime(doc.pulled)}. ` : ""}
+            Bring back its changes and only the paragraphs changed in Docs change, on a branch of their own that waits on you below.
+          </p>
+          <div className="space-y-2">
+            <p className="text-xs text-muted">
+              {data?.comments.length
+                ? `${data.comments.length} ${data.comments.length === 1 ? "comment" : "comments"}, ${unresolved} open`
+                : data?.commentsRead
+                  ? "No comments yet"
+                  : "Comments show here once they're read"}
+              {data?.commentsRead ? `, read ${formatDateTime(data.commentsRead)}` : ""}. Your co-authors&apos; words are shown here
+              only, never sent to a model.
+            </p>
+            {data && data.comments.length > 0 && (
+              <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto rounded-xl border border-line">
+                {data.comments.map((c, i) => (
+                  <DocNote key={c.id || i} c={c} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 interface PanelProps {
   project: string;
   /** Changes when a step or an edit comes or goes, so the versions are read again. */
@@ -204,6 +364,8 @@ interface PanelProps {
   deciding: boolean;
   onAsk: (text: string, now: boolean, ask: StepAsk) => Promise<boolean>;
   onSave: (edit: ManuscriptEdit) => Promise<boolean>;
+  /** Changes were brought back from its Google Doc as a step: read the steps again. */
+  onDocPulled: () => void;
   onClose: () => void;
 }
 
@@ -211,9 +373,9 @@ interface PanelProps {
  * A project's manuscript: the old version, the new one and the changes between them, and two
  * ways to change it, both kept off the user's checkout: ask for a change, which a step does on a
  * branch of its own, or edit the text, which is saved on a branch of its own. Either waits on the
- * user below, to accept or discard.
+ * user below, to accept or discard, and so do the changes brought back from its Google Doc.
  */
-export function ManuscriptPanel({ project, again, stepping, deciding, onAsk, onSave, onClose }: PanelProps) {
+export function ManuscriptPanel({ project, again, stepping, deciding, onAsk, onSave, onDocPulled, onClose }: PanelProps) {
   const [pick, setPick] = useState({ base: "", head: "" });
   const [onlyChanges, setOnlyChanges] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
@@ -313,6 +475,8 @@ export function ManuscriptPanel({ project, again, stepping, deciding, onAsk, onS
               onAsk={(text, now) => onAsk(text, now, { base: found.branch, manuscript: { path: found.path, branch: found.branch } })}
             />
           </div>
+
+          <GoogleDoc project={project} again={again} deciding={deciding} onPulled={onDocPulled} />
         </>
       )}
 

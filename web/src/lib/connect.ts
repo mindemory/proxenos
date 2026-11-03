@@ -2,7 +2,7 @@
 //
 // Which sources are connected comes from `proxenos connect`, which reports names, addresses,
 // handles and dates, never a secret. Its answer is read field by field, so nothing else in it
-// reaches the page. A sign-in (`proxenos auth gmail`, `microsoft` or `gcalendar`), a read of
+// reaches the page. A sign-in (`proxenos auth gmail`, `microsoft`, `gcalendar` or `gdocs`), a read of
 // WhatsApp (`proxenos ingest whatsapp`) and a Beeper token (`proxenos auth beeper`) run in the
 // background, one of each at a time, and the page follows them through connectJobs(). A job tells
 // the page only its command's last line, with anything that looks like a token blanked. The one
@@ -46,6 +46,7 @@ const JOB_MS: Record<JobKind, number> = {
   gmail: 6 * 60_000,
   microsoft: 6 * 60_000,
   gcalendar: 6 * 60_000,
+  gdocs: 6 * 60_000,
   whatsapp: 15 * 60_000,
   beeper: 60_000,
   ask: ASK_MS,

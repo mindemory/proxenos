@@ -977,9 +977,9 @@ export interface CareResponse {
 /** How a source gets in: signed in or read directly, a download imported, or a folder named. */
 export type ConnectHow = "live" | "download" | "folder";
 
-/** A signed-in account: Gmail's, Microsoft's or Google Calendar's. */
+/** A signed-in account: Gmail's, Microsoft's, Google Calendar's or Google Docs'. */
 export interface MailAccount {
-  name: string; // GMAIL_<NAME>, MICROSOFT_<NAME> or GCALENDAR_<NAME>, lower case
+  name: string; // GMAIL_<NAME>, MICROSOFT_<NAME>, GCALENDAR_<NAME> or GDOCS_<NAME>, lower case
   address: string;
   signIn: "google" | "microsoft" | "app_password";
   lastRead: string | null;
@@ -997,13 +997,13 @@ export interface ConnectSource {
   problem: string | null;
   /** A handle, where one helps. Apple Mail's is the Python that needs Full Disk Access. */
   detail: string | null;
-  accounts: MailAccount[]; // the sign-ins: Gmail, Microsoft 365 and Google Calendar only
+  accounts: MailAccount[]; // the sign-ins: Gmail, Microsoft 365, Google Calendar and Google Docs only
   workspaces: string[]; // Slack only: the workspaces slackdump is signed in to
 }
 
 /** The sign-ins the page starts, each an account's name and address. */
-export type SignInKind = "gmail" | "microsoft" | "gcalendar";
-export const SIGN_IN_KINDS: readonly SignInKind[] = ["gmail", "microsoft", "gcalendar"];
+export type SignInKind = "gmail" | "microsoft" | "gcalendar" | "gdocs";
+export const SIGN_IN_KINDS: readonly SignInKind[] = ["gmail", "microsoft", "gcalendar", "gdocs"];
 
 /** What the page can start: a sign-in, a read of WhatsApp, or a Beeper token. One of each at a time. */
 export type ConnectJobKind = SignInKind | "whatsapp" | "beeper";
@@ -1811,6 +1811,59 @@ export interface ManuscriptEdit {
   /** The commit the text was read at. */
   from: string;
   text: string;
+}
+
+/** A reply to a comment in the manuscript's Google Doc. Someone else's words: shown, never sent to a model. */
+export interface DocReply {
+  author: string;
+  content: string;
+  created: string;
+}
+
+/** A comment in the manuscript's Google Doc, with the passage it's on. */
+export interface DocComment {
+  id: string;
+  author: string;
+  content: string;
+  /** The passage it's on, as Docs quotes it; empty for a comment on the whole doc. */
+  quoted: string;
+  resolved: boolean;
+  created: string;
+  replies: DocReply[];
+}
+
+/** The manuscript's Google Doc, as `proxenos project gdocs` keeps it. */
+export interface ManuscriptDoc {
+  link: string;
+  title: string;
+  /** The GDOCS_<NAME> sign-in whose Drive it's in, and its address. */
+  account: string;
+  address: string;
+  path: string;
+  branch: string;
+  /** The commit it was made from. */
+  commit: string;
+  at: string;
+  /** When its changes were last brought back. */
+  pulled: string | null;
+  /** The step the changes last brought back made, which may still wait on the user. */
+  step: string | null;
+}
+
+export interface ManuscriptDocResponse {
+  project: string;
+  /** The Google Docs sign-ins: none means the user must sign in first. */
+  accounts: { name: string; address: string }[];
+  doc: ManuscriptDoc | null;
+  comments: DocComment[];
+  commentsRead: string | null;
+}
+
+/** What bringing back the doc's changes did: a step waiting on the user, or why there was none. */
+export interface ManuscriptDocPull extends ManuscriptDocResponse {
+  changed: boolean;
+  step: string | null;
+  said: string;
 }
 
 // ── Calls ───────────────────────────────────────────────────────────────────

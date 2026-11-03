@@ -37,6 +37,11 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
     kind: "calendar",
     how: "Your calendar, a year back and two months ahead, read through a read-only Google sign-in. One per account.",
   },
+  gdocs: {
+    label: "Google Docs",
+    kind: "drive",
+    how: "A project's manuscript as a Google Doc in your own Drive, to edit, comment on and share with co-authors, and its changes brought back to git as a step for you to accept. Made only when you click Open in Google Docs on the manuscript; the sign-in sees only the files Proxenos makes.",
+  },
   whatsapp: { label: "WhatsApp", how: "Your messages and groups, from WhatsApp for Mac's own store on this computer." },
   slack: { label: "Slack", how: "Your messages in each workspace, read with slackdump signed in as you. Add each workspace once." },
   beeper: {

@@ -7,6 +7,7 @@ import {
   BeeperCard,
   GmailCard,
   GoogleCalendarCard,
+  GoogleDocsCard,
   MicrosoftCard,
   PhoneCard,
   SlackCard,
@@ -19,7 +20,7 @@ import { useConnect } from "@/lib/connectClient";
 import type { ConnectHow, ConnectSource } from "@/lib/types";
 
 /** Sources with a card of their own here; the rest are rows that say how to connect them. */
-const WITH_BUTTONS = ["applemail", "gmail", "microsoft", "gcalendar", "whatsapp", "slack", "beeper"];
+const WITH_BUTTONS = ["applemail", "gmail", "microsoft", "gcalendar", "gdocs", "whatsapp", "slack", "beeper"];
 
 function Group({ kicker, title, children, note }: { kicker: string; title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
@@ -58,6 +59,7 @@ export function Connect() {
   const gmail = data.sources.find((s) => s.id === "gmail");
   const microsoft = data.sources.find((s) => s.id === "microsoft");
   const gcalendar = data.sources.find((s) => s.id === "gcalendar");
+  const gdocs = data.sources.find((s) => s.id === "gdocs");
   const whatsapp = data.sources.find((s) => s.id === "whatsapp");
   const slack = data.sources.find((s) => s.id === "slack");
   const beeper = data.sources.find((s) => s.id === "beeper");
@@ -78,8 +80,9 @@ export function Connect() {
           </p>
           <p className="leading-relaxed text-muted">
             Connect a source once and Proxenos reads it on every sync. It only reads: nothing here sends, posts or changes
-            anything in your accounts. Tokens and passwords stay on this computer, and this page never shows one back. The
-            Beeper token is the only one you paste here.
+            anything in your accounts, apart from Google Docs, which makes a manuscript&apos;s doc in your own Drive when you
+            ask. Tokens and passwords stay on this computer, and this page never shows one back. The Beeper token is the only
+            one you paste here.
           </p>
         </div>
       </section>
@@ -122,6 +125,22 @@ export function Connect() {
         )}
         <Rows sources={of("live")} now={data.now} />
       </Group>
+
+      {gdocs && (
+        <Group
+          kicker="Papers"
+          title="Write with your co-authors"
+          note="The manuscript stays in git. This sign-in lets Projects & papers open it as a Google Doc in your own Drive, which you share from Docs, and bring its changes back for you to accept."
+        >
+          <GoogleDocsCard
+            s={gdocs}
+            now={data.now}
+            job={job("gdocs")}
+            onSignIn={(n, a) => signIn("gdocs", n, a)}
+            onCancel={() => cancel("gdocs")}
+          />
+        </Group>
+      )}
 
       <Group kicker="Phone" title="Reach it from your phone">
         <PhoneCard phone={data.phone} />
