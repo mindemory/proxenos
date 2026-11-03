@@ -1562,6 +1562,8 @@ export interface WorkProject {
   paused: boolean;
   /** The folder of its code, with ~ for home; "" when steps aren't taken on it. */
   repo: string;
+  /** The paper it names in projects.json ("manuscript"), as a path in its code; "" when it names none. */
+  paper: string;
   data: string[];
   /** Where it stands, as the projects clone last wrote it: markdown, without its title. */
   status: string;

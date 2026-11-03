@@ -294,6 +294,13 @@ function toJob(job: Job | null): ProjectsJob | null {
   return job && { state: job.state, message: job.message, started: job.started, finished: job.finished, project: job.account };
 }
 
+/** The manuscript a project names, as projects.json gives it: a path, or {"path", "branch"}. */
+function paperPath(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object") return str((value as Record<string, unknown>).path).trim();
+  return "";
+}
+
 /** Every project on the list, with where it stands, its queue and its newest steps, and how the jobs stand. */
 export async function getProjects(): Promise<ProjectsResponse> {
   const vault = vaultPath();
@@ -320,6 +327,7 @@ export async function getProjects(): Promise<ProjectsResponse> {
       about: str(r.about).trim(),
       paused: r.paused === true,
       repo: str(r.repo).trim() ? displayPath(path.resolve(expandHome(str(r.repo).trim()))) : "",
+      paper: paperPath(r.manuscript),
       data: strings(r.data, 10).map((d) => displayPath(path.resolve(expandHome(d.trim())))),
       status,
       statusDate: date,

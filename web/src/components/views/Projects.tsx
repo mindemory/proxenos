@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ListPlus, MessagesSquare, Play, ScrollText, X } from "lucide-react";
+import { ArrowLeft, FileText, FolderGit2, ListPlus, MessagesSquare, NotebookText, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
@@ -13,7 +13,16 @@ import { Bone } from "@/components/Skeleton";
 import { timeAgo } from "@/lib/format";
 import { useProjects } from "@/lib/projectsClient";
 import { scrollBehavior } from "@/lib/reading";
-import { STEP_MAX_TEXT, type ManuscriptEdit, type ProjectsResponse, type StepAsk, type ThinkStart, type WorkProject } from "@/lib/types";
+import {
+  STEP_MAX_TEXT,
+  type ManuscriptEdit,
+  type ProjectsResponse,
+  type StepAsk,
+  type StepStatus,
+  type ThinkStart,
+  type WorkProject,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // What was being written in each project's queue box when the view was left.
 const kept = new Map<string, string>();
@@ -39,6 +48,59 @@ interface SectionProps {
 
 // Which projects' manuscripts were open when the view was left.
 const reading = new Set<string>();
+
+// The project open when the view was left, so coming back opens it again.
+const opened = new Map<"id", string | null>();
+
+const STEP_WORDS: Record<StepStatus, string> = {
+  working: "being taken",
+  ready: "waiting on you",
+  failed: "failed",
+  accepted: "accepted",
+  discarded: "discarded",
+};
+
+/** A project at a glance: what it is, whether it's a paper, and how its steps stand. Opens it. */
+function ProjectCard({ project, now, open, onOpen }: { project: WorkProject; now: string; open: boolean; onOpen: () => void }) {
+  const waiting = project.steps.filter((s) => s.status === "ready").length;
+  const last = project.steps[0];
+  const Icon = project.paper ? FileText : project.repo ? FolderGit2 : NotebookText;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-current={open ? "true" : undefined}
+        className={cn(
+          "card flex h-full w-full flex-col gap-2 p-4 text-left transition-colors hover:border-line-strong",
+          open && "border-accent ring-1 ring-accent",
+        )}
+      >
+        <span className="flex items-center gap-1.5 text-xs text-muted">
+          <Icon size={14} aria-hidden="true" />
+          {project.paper ? "Paper" : project.repo ? "Code" : "Notes"}
+          {project.paused && <span>· paused</span>}
+        </span>
+        <span className="title-2 text-lg leading-snug text-ink">{project.name}</span>
+        {project.about && <span className="line-clamp-3 text-sm leading-relaxed text-muted">{project.about}</span>}
+        <span className="mt-auto flex flex-wrap gap-x-3 gap-y-1 pt-1 text-xs text-muted">
+          {waiting > 0 && (
+            <span className="text-warn-ink">
+              {waiting} {waiting === 1 ? "step" : "steps"} waiting on you
+            </span>
+          )}
+          {last ? (
+            <span>
+              Last step {STEP_WORDS[last.status]}, {timeAgo(last.updated, now)}
+            </span>
+          ) : (
+            project.statusDate && <span>Where it stands, {project.statusDate}</span>
+          )}
+        </span>
+      </button>
+    </li>
+  );
+}
 
 /** One project: where it stands, its manuscript, the steps asked for, and the steps taken, newest first. */
 function ProjectSection({
@@ -250,22 +312,32 @@ interface ProjectsProps {
 
 export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
   const { data, error, clearError, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
-  const [focusId] = useState(focus ?? null);
+  // The project open below the cards: the one asked for (Home's tiles), else the one open last.
+  const [open, setOpen] = useState<string | null>(focus ?? opened.get("id") ?? null);
+  const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
 
   useEffect(() => {
     if (focus) onFocused?.();
   }, [focus, onFocused]);
 
-  const found = data?.projects.some((p) => p.id === focusId) ?? false;
+  const choose = (id: string | null) => {
+    setOpen(id);
+    opened.set("id", id);
+    setScrollTo(id);
+  };
+
+  // With one project there's nothing to choose between.
+  const current = data?.projects.find((p) => p.id === open) ?? (data?.projects.length === 1 ? data.projects[0] : null);
+  const found = current !== null && current.id === scrollTo;
   useEffect(() => {
-    if (!focusId || !found) return;
-    // After the projects have rendered.
+    if (!scrollTo || !found) return;
+    // After the project has rendered.
     const timer = window.setTimeout(
-      () => document.getElementById(`project-${focusId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
+      () => document.getElementById(`project-${scrollTo}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);
-  }, [focusId, found]);
+  }, [scrollTo, found]);
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
 
@@ -293,7 +365,21 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
           which merges it into your checkout, or discard it. Nothing is pushed, and no one is contacted.
         </p>
       ) : (
-        data.projects.map((p) => (
+        <>
+          <section aria-label="Projects and papers" className="space-y-3">
+            <p className="max-w-2xl text-sm text-muted">Open one to read its paper, its steps and where it stands.</p>
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {data.projects.map((p) => (
+                <ProjectCard key={p.id} project={p} now={data.now} open={current?.id === p.id} onOpen={() => choose(p.id)} />
+              ))}
+            </ul>
+          </section>
+          {current && data.projects.length > 1 && (
+            <div>
+              <ActionButton icon={ArrowLeft} label="All projects" tone="neutral" onClick={() => choose(null)} />
+            </div>
+          )}
+          {[current].filter((p): p is WorkProject => p !== null).map((p) => (
           <ProjectSection
             key={p.id}
             project={p}
@@ -318,7 +404,8 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
                 }))
             }
           />
-        ))
+          ))}
+        </>
       )}
     </div>
   );
