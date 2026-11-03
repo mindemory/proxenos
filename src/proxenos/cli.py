@@ -41,6 +41,8 @@ from proxenos import (
 )
 from proxenos.config import vault_path
 
+NIGHT_WAIT = 3600  # seconds a night waits for a running sync before it gives up
+
 # What `proxenos night` runs after the master, in this order: the feed, then the tasks, where
 # their health care stands, and advice that read the fresh self-model, the people index and ideas,
 # the week's choices (once a week) that read the tasks and ideas, and what to watch (once a
@@ -269,6 +271,8 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(code)
         return
     job = _exclusive(args)
+    if job == "night":
+        _wait_for_sync(vault)
     try:
         with lock.run(vault, job) if job else nullcontext():
             _command(args, vault, groups)
@@ -277,10 +281,26 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(lock.BUSY) from None
 
 
+def _wait_for_sync(vault: Path, wait: float = NIGHT_WAIT, every: float = 30) -> None:
+    """Let a sync that's running finish before the night starts, for up to `wait` seconds. The
+    night has one slot a day under launchd, so giving up on a sync that ran long would lose the
+    whole day; a sync is minutes. Anything else holding the lock still turns the night away."""
+    deadline = time.monotonic() + wait
+    said = False
+    while (held := lock.holder(vault)) and held.get("job") == "sync":
+        if time.monotonic() >= deadline:
+            return
+        if not said:
+            print(f"night: waiting; {lock.describe(held)}", file=sys.stderr, flush=True)
+            said = True
+        time.sleep(every)
+
+
 def _exclusive(args: argparse.Namespace) -> str | None:
     """The runs that refresh the whole vault, which never overlap, whoever starts them: the
     scheduler, launchd, the page or a terminal. One that finds another going exits with
-    lock.BUSY, and the scheduler, or launchd's next slot, tries again later."""
+    lock.BUSY, and the scheduler, or launchd's next slot, tries again later; a night first waits
+    out a sync that's running (`_wait_for_sync`), since its next slot is a day away."""
     if args.command in ("sync", "night"):
         return args.command
     if args.command == "master" and args.action == "run":

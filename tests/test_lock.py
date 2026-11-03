@@ -152,3 +152,25 @@ def test_master_runs_take_the_run_lock_and_accepting_proposals_doesnt(tmp_path, 
             cli.main(["master"])
         assert exit_.value.code == lock.BUSY
         cli.main(["master", "accept"])  # changes no source, so it needn't wait
+
+
+def test_a_night_waits_for_a_running_sync_and_for_nothing_else(tmp_path, monkeypatch, capsys):
+    vault = tmp_path / "vault"
+    slept = []
+    monkeypatch.setattr(cli.time, "sleep", slept.append)
+
+    holders = [{"job": "sync", "pid": 7}, {"job": "sync", "pid": 7}, None]
+    monkeypatch.setattr(lock, "holder", lambda v: holders.pop(0))
+    cli._wait_for_sync(vault, wait=60, every=5)
+    assert slept == [5, 5]  # said once, then it went ahead once the sync let go
+    assert capsys.readouterr().err == "night: waiting; sync is running (process 7)\n"
+
+    monkeypatch.setattr(lock, "holder", lambda v: {"job": "master"})
+    cli._wait_for_sync(vault, wait=60, every=5)  # not a sync: the night is turned away as before
+    assert slept == [5, 5]
+
+    times = iter([0.0, 10.0, 70.0])
+    monkeypatch.setattr(cli.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(lock, "holder", lambda v: {"job": "sync"})
+    cli._wait_for_sync(vault, wait=60, every=5)  # a sync past the wait: it stops waiting
+    assert slept == [5, 5, 5]
