@@ -12,7 +12,7 @@
 
 Your life is spread across mail, chats, calendars, notes and documents, and keeping up with it is work of its own. Proxenos reads what you already have, keeps track of where things stand, and writes the reply, the plan, the call script or the brief, in your own voice. You stay in charge: it drafts, and you press send. It started with health care, where the hard part is often everything around the care: referrals that go quiet, portals, bills that don't match, forms, and the same story told again at every visit. The same memory serves your replies, tasks, projects and papers, a diary of your life, and whatever else you keep up with.
 
-![Home: today's agenda and open tasks, drafts to send, and where health care stands](docs/images/home-desktop.png)
+![Home for Joe Bloggs, a made-up person: the sidebar with every view by group (Today, Ask and think, Work, Your life), a morning greeting, and today's agenda beside the drafts to send](docs/images/home-desktop.png)
 *The home page of `proxenos demo`, a made-up person with made-up records. More [below](#what-it-looks-like).*
 
 It grew out of one person's weeks of getting through the system while unwell. The story is [Try anything, but don't fall sick](https://mrugankdake.substack.com/p/try-anything-but-dont-fall-sick), and more on the project is at [mindemory.io/proxenos](https://www.mindemory.io/proxenos).
@@ -53,23 +53,33 @@ These come from `proxenos demo` (see [Quick start](#quick-start)), like the home
 
 | Care: where things stand, what's yours to do, what to say | Errands: carried as far as they go, one tap short of sending |
 |---|---|
-| ![Care: a summary of a knee injury's referrals, scan and bill, and the next steps, each with a due date](docs/images/care-desktop.png) | ![Errands: a message to a recruiter with the CV attached, ready to send, with how the address was found](docs/images/errands-desktop.png) |
+| ![Care for a made-up person: where his eye exam, new glasses and their bill stand, and the next step, with a due date and a script for the call](docs/images/care-desktop.png) | ![Errands for a made-up person: a message to a recruiter with the CV attached, ready to send, with how the address was found](docs/images/errands-desktop.png) |
 | **Drafts: replies and documents in your voice, ready to send** | **Tasks: what was asked of you, pulled from your conversations** |
-| ![Drafts: a WhatsApp reply and an email reply to send, with each app's track record and the outbox, off](docs/images/drafts-desktop.png) | ![Tasks: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
+| ![Drafts for a made-up person: a WhatsApp reply and an email reply to send, with each app's track record and the outbox, off](docs/images/drafts-desktop.png) | ![Tasks for a made-up person: tasks from email and WhatsApp, with who asked, when, and when each is due](docs/images/tasks-desktop.png) |
+| **Projects & papers: each one where it stands, and its next step on a branch** | **Jobs: every lead, whether to apply, with which CV and through whom** |
+| ![Projects & papers for a made-up person: three cards, a paper with a step waiting on him, an analysis in code and a project of notes](docs/images/projects-desktop.png) | ![Jobs for a made-up person: two leads to apply for, one from a recruiter with a draft and an errand to start, one he looks to have applied to already](docs/images/jobs-desktop.png) |
+| **Life: a diary of each month, in your own voice** | **Rhythms: your weeks side by side, and a card for each month** |
+| ![Life for a made-up person: October's abstract and essay, a paragraph for each thing the month was about, each one his to edit or mark not true](docs/images/life-desktop.png) | ![Rhythms for a made-up person: a month's card, how it felt in his own writing, the genres and moods of what he listened to, and how much he wrote on each channel](docs/images/rhythms-desktop.png) |
 
 **Journal: the day, written down, from what Proxenos already tracks**
 
-![Journal: a brief on yesterday, the next three things to do, and the replies sent, what's waiting on others and what's next](docs/images/journal-desktop.png)
+![Journal for a made-up person: a brief on yesterday, the next three things to do, and the replies sent, what's waiting on others and what's next](docs/images/journal-desktop.png)
 
 On a phone, over `proxenos phone`:
 
 <p>
-  <img src="docs/images/home-phone.png" width="15.5%" alt="Home on a phone">
-  <img src="docs/images/care-phone.png" width="15.5%" alt="Care on a phone">
-  <img src="docs/images/errands-phone.png" width="15.5%" alt="Errands on a phone">
-  <img src="docs/images/drafts-phone.png" width="15.5%" alt="Drafts on a phone">
-  <img src="docs/images/tasks-phone.png" width="15.5%" alt="Tasks on a phone">
-  <img src="docs/images/journal-phone.png" width="15.5%" alt="Journal on a phone">
+  <img src="docs/images/home-phone.png" width="19%" alt="Home on a phone, for a made-up person">
+  <img src="docs/images/care-phone.png" width="19%" alt="Care on a phone: where a made-up person's new glasses and their bill stand">
+  <img src="docs/images/errands-phone.png" width="19%" alt="Errands on a phone: a made-up person's message to a recruiter, ready to send">
+  <img src="docs/images/drafts-phone.png" width="19%" alt="Drafts on a phone: a made-up person's replies to send">
+  <img src="docs/images/tasks-phone.png" width="19%" alt="Tasks on a phone: what was asked of a made-up person, and when it's due">
+</p>
+<p>
+  <img src="docs/images/journal-phone.png" width="19%" alt="Journal on a phone: a made-up person's day, written down">
+  <img src="docs/images/projects-phone.png" width="19%" alt="Projects and papers on a phone: a made-up person's three projects as cards">
+  <img src="docs/images/life-phone.png" width="19%" alt="Life on a phone: a month's essay in a made-up person's voice">
+  <img src="docs/images/rhythms-phone.png" width="19%" alt="Rhythms on a phone: a made-up person's month card, its mood and music">
+  <img src="docs/images/jobs-phone.png" width="19%" alt="Jobs on a phone: a made-up person's job leads">
 </p>
 
 ## How Proxenos compares

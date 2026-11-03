@@ -7,14 +7,21 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const [page, debugPort, out] = process.argv.slice(2);
-const VIEWS = ["home", "care", "errands", "drafts", "tasks", "journal"];
+const VIEWS = ["home", "care", "errands", "drafts", "tasks", "journal", "projects", "life", "rhythms", "jobs"];
 const SIZES = {
   desktop: { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
   // Drawn at twice the size, then scaled by half: smoother text than drawing it small.
   phone: { width: 412, height: 892, deviceScaleFactor: 2, mobile: true, scale: 0.5 },
 };
-// Views that open on a long preamble, scrolled so the button starting with this text is at the top.
-const SCROLL_TO = { drafts: "Awaiting you" };
+// Views that open on a list, or on a preamble a phone has no room for, made ready first: `press`
+// presses the first button whose text starts with it (a month, to read it), then `top`, by size,
+// scrolls the first element matching [selector, the text it starts with] to just under the top bar.
+const MONTHS = "section[aria-labelledby='rhythms-months-title']";
+const BEFORE = {
+  drafts: { top: { phone: ["p", "To send"] } },
+  life: { press: "Read the month", top: { phone: ["h2.title-1", ""] } },
+  rhythms: { top: { desktop: [MONTHS, ""], phone: [MONTHS, ""] } },
+};
 const LOADED_FOR_MS = 1000; // nothing loading for this long, and the view is done
 const TIMEOUT_MS = 90_000; // the dev server compiles each route the first time it's asked
 
@@ -74,11 +81,25 @@ for (const [size, { scale = 1, ...metrics }] of Object.entries(SIZES)) {
     await send("Page.navigate", { url: view === "home" ? `${page}/app` : `${page}/app?view=${view}` });
     await sleep(500);
     await settled(view);
-    if (SCROLL_TO[view]) {
-      await evaluate(`(() => {
-        const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(${JSON.stringify(SCROLL_TO[view])}));
-        if (button) window.scrollTo(0, button.getBoundingClientRect().top + window.scrollY - 76);
+    const { press, top } = BEFORE[view] ?? {};
+    if (press) {
+      const pressed = await evaluate(`(() => {
+        const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(${JSON.stringify(press)}));
+        button?.click();
+        return !!button;
       })()`);
+      if (!pressed) throw new Error(`${view} has no button "${press}"`);
+      await sleep(500);
+      await settled(view);
+    }
+    if (top?.[size]) {
+      const [selector, text] = top[size];
+      const found = await evaluate(`(() => {
+        const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim().startsWith(${JSON.stringify(text)}));
+        if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 76);
+        return !!el;
+      })()`);
+      if (!found) throw new Error(`${view} has no ${selector} starting "${text}"`);
       await sleep(500);
     }
     const shot = await send("Page.captureScreenshot", {

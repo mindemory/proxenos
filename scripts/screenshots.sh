@@ -1,14 +1,17 @@
 #!/bin/bash
-# Retake the README's pictures (docs/images): Home, Care, Errands, Drafts, Tasks and Journal at
-# desktop and phone width. They show only the made-up vault `proxenos demo` writes: the page runs
-# on it alone, on the demo's port (never 4747), with no way to run the proxenos command from a
-# button, and Chrome runs headless on a throwaway profile. Everything is removed again afterwards.
+# Retake the README's pictures (docs/images): Home, Care, Errands, Drafts, Tasks, Journal, Projects &
+# papers, Life, Rhythms and Jobs at desktop and phone width. They show only the made-up vault
+# `proxenos demo` writes: the page runs on it alone, on the demo's port (never 4747), with the
+# proxenos command only for what Rhythms and Life read (counts and days, which call no model and
+# send nothing), and Chrome runs headless on a throwaway profile. Everything is removed again
+# afterwards.
 # They're taken in a time zone where it's nine in the morning, whenever this runs, so the demo's
 # day reads as one, from a morning greeting on.
 #
 # Needs the proxenos conda env, the web packages (npm --prefix web install), Google Chrome (or
 # CHROME=<its binary>) and a Python with Pillow (python3, or PYTHON=<another>) to shrink the
-# pictures; zopflipng on the PATH shrinks them further. Open every one before committing it.
+# pictures; zopflipng on the PATH shrinks them further. PORT=<another> runs the page there, when
+# something else has the demo's. Open every one before committing it.
 #
 #   scripts/screenshots.sh         into docs/images
 #   scripts/screenshots.sh DIR     into DIR instead
@@ -38,8 +41,10 @@ find_conda_env
 [ -d "$repo/web/node_modules" ] || fail "the web packages aren't installed: npm --prefix web install"
 read -r port name <<<"$(in_env 'from proxenos import demo; print(demo.PORT, demo.NAME)')"
 [ -n "$name" ] || fail "couldn't read the demo's port and name from $repo/src/proxenos/demo.py."
+port="${PORT:-$port}"
+[ "$port" != 4747 ] || fail "4747 is your own page's port; give the pictures another."
 if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-  fail "something is already serving on port $port. Stop it, then run this again."
+  fail "something is already serving on port $port. Stop it, or give another with PORT, then run this again."
 fi
 
 work="$(mktemp -d)"
@@ -51,13 +56,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The page's proxenos command: the counts those views read, and nothing a button would run.
+env_python="$(in_env 'import sys; print(sys.executable)')"
+cat >"$work/proxenos" <<EOF
+#!/bin/bash
+case "\$*" in
+  "clone rhythms --json" | "clone life --calendar") ;;
+  "clone life --days "[0-9][0-9][0-9][0-9]-[0-9][0-9]) ;;
+  *) exit 1 ;;
+esac
+PYTHONPATH=$(printf %q "$repo/src") exec $(printf %q "$env_python") -m proxenos "\$@"
+EOF
+chmod 700 "$work/proxenos"
+
 echo "Writing the demo vault..."
 in_env 'import sys; from proxenos import cli; cli.main(sys.argv[1:])' demo "$work/vault" >/dev/null
 
 echo "Starting the page on it, on port $port..."
 (
   cd "$repo/web"
-  PROXENOS_VAULT="$work/vault" PROXENOS_NAME="$name" PROXENOS_BIN=/usr/bin/false \
+  PROXENOS_VAULT="$work/vault" PROXENOS_NAME="$name" PROXENOS_BIN="$work/proxenos" \
     exec ./node_modules/.bin/next dev -H 127.0.0.1 -p "$port"
 ) >"$work/page.log" 2>&1 &
 pids+=($!)
