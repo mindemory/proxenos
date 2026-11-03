@@ -13,8 +13,9 @@ The user changes it from the page in two ways, both kept off their checkout. The
 change, which queues a step that starts from the manuscript's branch (proxenos.clones.steps).
 Or they edit the text, which is committed on a new branch, proxenos/<project>-edit-<when>, made
 from the manuscript's branch in a worktree that's removed again, and waits on them as a step:
-Accept merges it, Discard deletes it. Every version is read from git at its commit, so the
-user's checkout, its index and its working tree are never read or touched, and nothing is pushed.
+Accept merges it, Discard deletes it. What co-authors change in its Google Doc comes back the
+same way (proxenos.paperdoc). Every version is read from git at its commit, so the user's
+checkout, its index and its working tree are never read or touched, and nothing is pushed.
 """
 
 import argparse
@@ -325,10 +326,13 @@ def _count(ops: list[dict], op: str, prose: bool) -> int:
 # Editing it by hand.
 
 
-def edit(vault: Path, project: dict, request: dict, now: datetime | None = None) -> dict:
+def edit(
+    vault: Path, project: dict, request: dict, now: datetime | None = None, docs: bool = False
+) -> dict:
     """The user's own text for the manuscript, {path, branch, from, text}, committed on a new
     branch from `from` (the version they edited, on the manuscript's branch) in a worktree
-    that's removed again, and saved as a step waiting on them. The step."""
+    that's removed again, and saved as a step waiting on them. With `docs`, the text is what
+    changed in its Google Doc, and the step says so. The step."""
     now = now or datetime.now(UTC)
     path, branch = str(request.get("path") or ""), str(request.get("branch") or "")
     text = request.get("text")
@@ -374,9 +378,8 @@ def edit(vault: Path, project: dict, request: dict, now: datetime | None = None)
             raise SystemExit(f"manuscript: {path} isn't a file in the repository")
         target.write_bytes(new.encode("utf-8"))
         steps._git(worktree, "add", "--", path)
-        steps._git(
-            worktree, *steps.who(worktree), "commit", "-q", "--no-verify", "-m", f"Edit {path}."
-        )
+        said = f"Bring in what changed in its Google Doc to {path}." if docs else f"Edit {path}."
+        steps._git(worktree, *steps.who(worktree), "commit", "-q", "--no-verify", "-m", said)
         files = steps._changed_files(worktree, start)
         head = steps._git(worktree, "rev-parse", "HEAD")
     except BaseException:
@@ -387,6 +390,8 @@ def edit(vault: Path, project: dict, request: dict, now: datetime | None = None)
 
     ops = diff(was.replace("\r\n", "\n"), new.replace("\r\n", "\n"), _is_prose(path))
     unit = "words" if _is_prose(path) else "lines"
+    prose = unit == "words"
+    counts = f"{_count(ops, 'add', prose)} {unit} in, {_count(ops, 'del', prose)} out"
     step = {
         "id": step_id,
         "project": project["id"],
@@ -400,10 +405,11 @@ def edit(vault: Path, project: dict, request: dict, now: datetime | None = None)
         "branch": branched,
         "head": head,
         "manuscript": {"path": path, "branch": branch},
-        "step": f"Your edit to {path}",
+        "step": f"What changed in its Google Doc, for {path}" if docs else f"Your edit to {path}",
         "why": "",
-        "did": f"You edited {path} on the page: {_count(ops, 'add', unit == 'words')} {unit} "
-        f"in, {_count(ops, 'del', unit == 'words')} out.",
+        "did": f"Brought back what changed in {path}'s Google Doc: {counts}."
+        if docs
+        else f"You edited {path} on the page: {counts}.",
         "found": "",
         "couldnt": "",
         "next": "",
@@ -495,8 +501,15 @@ def _is_prose(path: str) -> bool:
 # The command.
 
 
+def listed(vault: Path, project_id: str) -> dict:
+    """The project with this id in clones/projects/projects.json."""
+    project = next((p for p in projects.listed_projects(vault) if p["id"] == project_id), None)
+    if project is None:
+        raise SystemExit(f"manuscript: no project {project_id!r} in clones/projects/projects.json")
+    return project
+
+
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("what", choices=["manuscript"])
     parser.add_argument("id", help="the project's id, as in clones/projects/projects.json")
     parser.add_argument("--base", metavar="REV", help="the older version: a commit or branch")
     parser.add_argument("--head", metavar="REV", help="the newer version: a commit or branch")
@@ -512,9 +525,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(vault: Path, args: argparse.Namespace) -> dict:
     """What the page shows, as JSON: the manuscript and its changes, or a step's changes; or,
     with --edit, the step the user's edit made."""
-    project = next((p for p in projects.listed_projects(vault) if p["id"] == args.id), None)
-    if project is None:
-        raise SystemExit(f"manuscript: no project {args.id!r} in clones/projects/projects.json")
+    project = listed(vault, args.id)
     if args.edit:
         try:
             request = json.loads(sys.stdin.readline())

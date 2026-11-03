@@ -29,6 +29,7 @@ from proxenos import (
     memory,
     notify,
     observe,
+    paperdoc,
     phone,
     privacy,
     schedule,
@@ -163,9 +164,16 @@ def main(argv: list[str] | None = None) -> None:
     )
     forms.add_arguments(form)
     paper = commands.add_parser(
-        "project", help="a project's manuscript, its versions and their changes, as JSON"
+        "project", help="a project's manuscript, its versions, their changes and its Google Doc"
+    ).add_subparsers(dest="what", required=True)
+    manuscript.add_arguments(
+        paper.add_parser("manuscript", help="its versions and their changes, as JSON")
     )
-    manuscript.add_arguments(paper)
+    paperdoc.add_arguments(
+        paper.add_parser(
+            "gdocs", help="it as a Google Doc: make it, bring back its changes, read its comments"
+        )
+    )
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     commands.add_parser(
         "privacy", help="what stays here, what went to a model and what's read, as JSON"
@@ -186,6 +194,7 @@ def main(argv: list[str] | None = None) -> None:
             "slackdump",
             "gmail",
             "gcalendar",
+            "gdocs",
             "microsoft",
             "beeper",
         ],
@@ -193,8 +202,8 @@ def main(argv: list[str] | None = None) -> None:
     sign_in.add_argument(
         "account",
         nargs="*",
-        help="for gmail, gcalendar and microsoft: NAME ADDRESS, e.g. personal me@x.com; for "
-        "slackdump: the workspace",
+        help="for gmail, gcalendar, gdocs and microsoft: NAME ADDRESS, e.g. personal me@x.com; "
+        "for slackdump: the workspace",
     )
     args = parser.parse_args(argv)
 
@@ -236,8 +245,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "call":  # a call can go on while a sync runs, so it takes no lock
         callserver.run(vault_path(), args)  # vault_path also loads settings
         return
-    if args.command == "project":  # reads the code's history; writes only an edit the user saves
-        print(json.dumps(manuscript.run(vault_path(), args), ensure_ascii=False))
+    if args.command == "project":  # reads the code's history; writes only what the user asks for
+        module = paperdoc if args.what == "gdocs" else manuscript
+        print(json.dumps(module.run(vault_path(), args), ensure_ascii=False))
         return
     if args.command == "connect":
         print(json.dumps(connect.report(vault_path())))  # vault_path also loads settings
@@ -265,7 +275,7 @@ def main(argv: list[str] | None = None) -> None:
             if len(args.account) != 1:
                 raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. acme")
             print(auth.slackdump(args.account[0]))
-        elif args.service in ("gmail", "gcalendar", "microsoft"):
+        elif args.service in ("gmail", "gcalendar", "gdocs", "microsoft"):
             if len(args.account) != 2:
                 raise SystemExit(f"usage: proxenos auth {args.service} NAME ADDRESS")
             print(getattr(auth, args.service)(*args.account))

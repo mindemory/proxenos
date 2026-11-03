@@ -12,6 +12,7 @@ _SECRET_PREFIXES = (
     "ANTHROPIC_",
     "BEEPER_",
     "GCALENDAR_",
+    "GDOCS_",
     "GMAIL_",
     "GOOGLE_CLIENT_",
     "MICROSOFT_",

@@ -482,4 +482,4 @@ def args(project_id, **kw):
     parser = argparse.ArgumentParser()
     manuscript.add_arguments(parser)
     extra = [x for k, v in kw.items() for x in (f"--{k}", v)]
-    return parser.parse_args(["manuscript", project_id, *extra])
+    return parser.parse_args([project_id, *extra])

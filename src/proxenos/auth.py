@@ -22,6 +22,10 @@ GMAIL_<NAME>=address:oauth:<refresh token>.
 calendar.readonly, and saves GCALENDAR_<NAME>=address:oauth:<refresh token>. It's its own
 sign-in, not an extra scope on Gmail's, so a calendar can be connected without mail access.
 
+`proxenos auth gdocs NAME ADDRESS` is the same again, asking only for drive.file, which lets
+Proxenos see only the files it makes itself (a project's manuscript as a Google Doc, when the
+user asks for one), and saves GDOCS_<NAME>=address:oauth:<refresh token>.
+
 `proxenos auth microsoft NAME ADDRESS` does it with Microsoft's sign-in for a Microsoft 365 or
 Outlook.com account: the person's own app registration (MICROSOFT_CLIENT_ID, a public client with
 no secret, so PKCE is what keeps a stolen code useless), read-only mail and calendar scopes, the
@@ -63,6 +67,7 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+from proxenos import gdocs as gdocs_api
 from proxenos.config import REPO_ROOT, save_secret
 from proxenos.ingest import beeper as beeper_api
 from proxenos.ingest import gcalendar as gcalendar_api
@@ -79,6 +84,7 @@ _GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GMAIL_SCOPE = "https://mail.google.com/"
 GCALENDAR_SCOPE = gcalendar_api.SCOPE
+GDOCS_SCOPE = gdocs_api.SCOPE
 MICROSOFT_SCOPES = microsoft_api.SCOPES
 # One address on one line. No ":" either: it's kept as address:oauth:<token>.
 _ADDRESS = re.compile(r"[^\s@:]+@[^\s@:]+\.[^\s@:]+")
@@ -229,6 +235,30 @@ def gcalendar(
         post,
     )
     return f"saved {variable} in {where}; `proxenos sync` now reads {address}'s calendar every run"
+
+
+def gdocs(
+    name: str,
+    address: str,
+    port: int = PORT,
+    open_browser: Callable[[str], object] = webbrowser.open,
+    post: Callable[[str, dict], dict] | None = None,
+) -> str:
+    variable, where = _google(
+        "GDOCS",
+        name,
+        address,
+        GDOCS_SCOPE,
+        "the Google Drive API",
+        "only the files Proxenos makes in your Drive",
+        port,
+        open_browser,
+        post,
+    )
+    return (
+        f"saved {variable} in {where}; Open in Google Docs on a project's manuscript now makes "
+        f"its doc in {address}'s Drive"
+    )
 
 
 def microsoft(
