@@ -175,6 +175,8 @@ def _recent(item: dict) -> dict:
         "show": (track.get("show") or {}).get("name") or None,
         "uri": track.get("uri") or None,
         "ms_played": track.get("duration_ms"),
+        "skipped": None,  # the API doesn't say whether it was skipped, or played in private;
+        "incognito": None,  # the export does
         "source": "api",
     }
 

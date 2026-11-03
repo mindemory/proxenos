@@ -265,3 +265,23 @@ def test_a_sync_signed_in_with_no_export_reads_only_the_live_plays(
     monkeypatch.setattr(spotify, "ingest_recent", lambda v, fetch=spotify._fetch_json: {"added": 1})
     stats = spotify.run(tmp_path, argparse.Namespace(export=None))
     assert stats == {"live_added": 1}
+
+
+def test_the_spotify_observer_reads_live_plays_with_no_incognito_flag():
+    from proxenos import observe
+
+    live = spotify._recent(
+        {
+            "played_at": "2026-11-02T21:00:00Z",
+            "track": {
+                "type": "track",
+                "name": "Says",
+                "duration_ms": 480000,
+                "artists": [{"name": "Nils Frahm"}],
+            },
+        }
+    )
+    hidden = live | {"ts": "2026-11-01T22:00:00Z", "incognito": True, "skipped": False}
+    text = observe.render_spotify([live, hidden])
+    assert text.startswith("1 plays, 0.1 hours, 0% skipped.")  # the private play isn't counted
+    assert "Says by Nils Frahm: 1 plays" in text

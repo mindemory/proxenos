@@ -79,12 +79,13 @@ def render_email(records: list[dict]) -> str:
 
 
 def render_spotify(records: list[dict]) -> str:
-    plays = [r for r in records if r["ms_played"] and not r["incognito"]]
+    # A play from the recently-played API has no incognito or skipped flag: only the export says.
+    plays = [r for r in records if r.get("ms_played") and not r.get("incognito")]
     if not plays:
         return ""
     minutes = Counter()
     hours = Counter()
-    skipped = sum(bool(r["skipped"]) for r in plays)
+    skipped = sum(bool(r.get("skipped")) for r in plays)
     for r in plays:
         what = f"{r['artist']} (artist)" if r["kind"] == "track" else f"{r['show']} ({r['kind']})"
         minutes[what] += r["ms_played"] / 60000
