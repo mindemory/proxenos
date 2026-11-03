@@ -50,10 +50,11 @@ NIGHT_WAIT = 3600  # seconds a night waits for a running sync before it gives up
 # the week's choices (once a week) that read the tasks and ideas, the job leads, which read the
 # people index and the openings kept from Ask, and what to watch (once a week), then what each of
 # those brings to mind from memory, the projects, the errands still waiting on a way to reach
-# someone, the drafts of them all, a step of each project's own work, which takes longest, the
-# journal of the day that just ended, which reads them all, the stories of the months, which read
-# the journal, and last the weeks over time, counted, with more artists labelled and looked up for
-# their genres and moods, and the month cards due.
+# someone, the drafts of them all, a step of each project's own work, which takes longest, then
+# each project's folder in the user's cloud drive, with what those wrote and the manuscript's
+# changes there brought back, the journal of the day that just ended, which reads them all, the
+# stories of the months, which read the journal, and last the weeks over time, counted, with more
+# artists labelled and looked up for their genres and moods, and the month cards due.
 NIGHT_CLONES = (
     "tracker",
     "tasks",
@@ -68,6 +69,7 @@ NIGHT_CLONES = (
     "errands",
     "work",
     "steps",
+    "folders",
     "journal",
     "life",
     "rhythms",
