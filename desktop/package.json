@@ -1,7 +1,7 @@
 {
   "name": "proxenos-desktop",
   "productName": "Proxenos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Proxenos as an app: the page in a window, a menu-bar icon and the scheduler.",
   "private": true,
   "license": "MIT",
