@@ -1071,8 +1071,8 @@ export function Home({ home, onNavigate, onMemory, onDraft, onCare, onProject, o
 
       <Section id="home-needs-you" label="Needs you">
         <TodayCard home={home} data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
-        <ProjectsCard onNavigate={onNavigate} onProject={onProject} />
         <DraftsCard data={data} briefing={briefing} onNavigate={onNavigate} onDraft={onDraft} />
+        <ProjectsCard onNavigate={onNavigate} onProject={onProject} />
         <CareCard onNavigate={onNavigate} onCare={onCare} />
       </Section>
 
