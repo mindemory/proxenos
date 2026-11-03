@@ -6,6 +6,7 @@ import os
 import re
 import stat
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,7 @@ from proxenos.clones import jobs, work
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 ME = "tess@uni.example"
+TYPES = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "types.ts"
 ASK_ID = "ask-20261015T090000Z"
 
 ALERT = (
@@ -800,6 +802,13 @@ def test_a_draft_the_user_touched_is_never_written_again(vault):
 
     assert stats["jobs_judged"] == 1 and stats["drafts_written"] == 0
     assert "status: sent" in path.read_text(encoding="utf-8")
+
+
+def test_the_page_knows_the_same_statuses():
+    shown = re.search(r"export const JOB_STATUSES = \[([^\]]*)\]", TYPES.read_text())[1]
+    assert re.findall(r'"(\w+)"', shown) == list(jobs.STATUSES)
+    actions = re.search(r"export const JOB_ACTIONS = \[([^\]]*)\]", TYPES.read_text())[1]
+    assert re.findall(r'"(\w+)"', actions.replace("...JOB_STATUSES", "")) == ["not_applied"]
 
 
 def test_only_mail_that_applies_suggests_applied():

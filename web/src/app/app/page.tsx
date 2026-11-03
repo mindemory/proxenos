@@ -53,6 +53,9 @@ const Advice = dynamic(() => import("@/components/views/Advice").then((m) => m.A
 const Choices = dynamic(() => import("@/components/views/Choices").then((m) => m.Choices), {
   loading: () => <ProseSkeleton label="Loading choices" />,
 });
+const Jobs = dynamic(() => import("@/components/views/Jobs").then((m) => m.Jobs), {
+  loading: () => <ProseSkeleton label="Loading jobs" />,
+});
 const Journal = dynamic(() => import("@/components/views/Journal").then((m) => m.Journal), {
   loading: () => <ProseSkeleton label="Loading the journal" />,
 });
@@ -94,6 +97,7 @@ const COLUMN_VIEWS: readonly View[] = [
   "care",
   "advice",
   "choices",
+  "jobs",
   "watch",
   "journal",
   "life",
@@ -249,6 +253,8 @@ export default function AppPage() {
         return <Advice onChange={home.reload} />;
       case "choices":
         return <Choices onChange={home.reload} onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
+      case "jobs":
+        return <Jobs onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
       case "journal":
         return <Journal />;
       case "life":

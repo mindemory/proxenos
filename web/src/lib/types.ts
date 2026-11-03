@@ -220,6 +220,76 @@ export interface ChoicesResponse {
   skip: Skip[];
 }
 
+// ── Jobs clone: clones/jobs/jobs.json and status.jsonl ──────────────────────
+
+/** Where a job stands, as the user sets it: the jobs clone's STATUSES, in its order. */
+export const JOB_STATUSES = ["new", "interested", "applied", "interviewing", "closed"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+/** What the page appends to status.jsonl: a status, or "not applied" to set a suggestion aside. */
+export const JOB_ACTIONS = [...JOB_STATUSES, "not_applied"] as const;
+export type JobAction = (typeof JOB_ACTIONS)[number];
+
+export type JobVerdict = "apply" | "maybe" | "skip";
+/** Where a lead came from: LinkedIn, Work at a Startup, a recruiter, a job board or a receipt, a list, Slack, a post shared to Ask. */
+export const JOB_SOURCES = ["linkedin", "workatastartup", "recruiter", "boards", "lists", "slack", "ask"] as const;
+export type JobSource = (typeof JOB_SOURCES)[number];
+
+export interface JobPerson {
+  name: string;
+  /** How the user knows them, or who they are to the job. */
+  how: string;
+  channel: string;
+  /** "contact": who posted or wrote; "known": someone the user knows there. */
+  role: "contact" | "known";
+}
+
+export interface JobSourceRef {
+  source: JobSource;
+  label: string;
+  ts: string;
+  /** Its record in the memory index, or "" when it isn't one. */
+  id: string;
+}
+
+export interface Job {
+  id: string;
+  company: string;
+  role: string;
+  place: string;
+  mode: string;
+  pay: string;
+  deadline: string; // YYYY-MM-DD, or ""
+  link: string;
+  /** Where a founder's or recruiter's message is answered, on Work at a Startup or LinkedIn. */
+  reply_link: string;
+  verdict: JobVerdict | null;
+  why: string;
+  rests_on: string[];
+  route: { kind: string; why: string } | null;
+  cv: { name: string; kind: string; why: string } | null;
+  people: JobPerson[];
+  step: { kind: string; to: string; channel: string } | null;
+  /** The first step's draft; status is null until it's written. */
+  draft: { id: string; status: string | null } | null;
+  /** An errand that sends the CV too, in the user's words, or "". */
+  errand: string;
+  sources: JobSourceRef[];
+  first_seen: string;
+  last_seen: string;
+  status: JobStatus;
+  status_at: string | null;
+  /** Applied, as the records suggest it, for the user to confirm. */
+  suggested: { why: string; ts: string } | null;
+}
+
+export interface JobsResponse {
+  now: string;
+  vault: VaultInfo;
+  generated: string | null;
+  cvs: { name: string; kind: string }[];
+  jobs: Job[];
+}
+
 // ── Watch clone: clones/watch/YYYY-MM-DD.json and history.json ───────────────
 
 export type WatchAction = "want" | "seen" | "not_me";

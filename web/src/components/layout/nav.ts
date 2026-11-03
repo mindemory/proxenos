@@ -3,6 +3,7 @@ import {
   AudioWaveform,
   Bookmark,
   Brain,
+  BriefcaseBusiness,
   Clapperboard,
   Compass,
   FolderGit2,
@@ -35,6 +36,7 @@ export type View =
   | "saved"
   | "tasks"
   | "projects"
+  | "jobs"
   | "care"
   | "drafts"
   | "advice"
@@ -93,6 +95,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "work",
     words: "paper manuscript thesis work steps branches code repository analysis",
     blurb: "Each project's paper, its steps and their branches.",
+  },
+  {
+    icon: BriefcaseBusiness,
+    label: "Jobs",
+    id: "jobs",
+    group: "work",
+    words: "job leads roles apply applications recruiters linkedin work at a startup cv resume",
+    blurb: "Every job lead: whether to apply, how, with which CV and through whom.",
   },
   { icon: Rss, label: "Feed", id: "feed", group: "work", words: "research papers arxiv articles new" },
   { icon: Bookmark, label: "Saved", id: "saved", group: "work", words: "bookmarks kept later" },

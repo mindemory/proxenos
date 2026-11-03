@@ -1168,7 +1168,7 @@ function toSkip(raw: unknown) {
 }
 
 /** A draft's status from its file, or null when it hasn't been written yet. */
-async function draftStatus(vault: string, id: string): Promise<string | null> {
+export async function draftStatus(vault: string, id: string): Promise<string | null> {
   const file = path.join(draftsDir(vault), `${id}.md`);
   try {
     const st = await fs.lstat(file);
