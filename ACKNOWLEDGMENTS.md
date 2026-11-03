@@ -27,6 +27,7 @@ If you add code or data from another project, keep its licence and copyright not
 | [pdfminer.six](https://github.com/pdfminer/pdfminer.six) | MIT | Where a PDF form's labels and lines sit, to fill it |
 | [python-dotenv](https://github.com/theskumar/python-dotenv) | BSD-3-Clause | Reading `.env` when running from source |
 | [keyring](https://github.com/jaraco/keyring) | MIT | Secrets on Windows and Linux |
+| [VADER](https://github.com/cjhutto/vaderSentiment) (vaderSentiment), by C.J. Hutto: Hutto and Gilbert, "VADER: A Parsimonious Rule-based Model for Sentiment Analysis of Social Media Text", ICWSM 2014 | MIT | The mood of your own writing a day at a time, on this computer, for Rhythms' month cards |
 | [pytest](https://github.com/pytest-dev/pytest), [Ruff](https://github.com/astral-sh/ruff) | MIT | Tests and lint |
 
 ## Tools and services it works with
@@ -44,6 +45,7 @@ If you add code or data from another project, keep its licence and copyright not
 | [slackdump](https://github.com/rusq/slackdump) | AGPL-3.0 | Reading Slack. Run as a separate program, not included in Proxenos |
 | [Beeper Desktop API](https://www.beeper.com) | Beeper's terms | Instagram, Messenger, X and LinkedIn chats |
 | [OpenAlex](https://openalex.org) | CC0 data | Papers and mentions |
+| [MusicBrainz](https://musicbrainz.org), from the MetaBrainz Foundation | CC0 core data; tags and genres CC BY-NC-SA 3.0 | Kinds of music for Rhythms, looked up by artist name and kept in your vault for your own use, never shipped here |
 | [Tailscale](https://tailscale.com) | BSD-3-Clause client | Reaching the page from your own phone |
 | [Pillow](https://github.com/python-pillow/Pillow), [Zopfli](https://github.com/google/zopfli) | MIT-CMU, Apache-2.0 | Shrinking the README's pictures |
 
