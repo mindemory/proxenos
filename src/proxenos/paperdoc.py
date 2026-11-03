@@ -127,6 +127,8 @@ def pull(
     if now_text != baseline:
         original = _text_at(repo, start, doc["path"])
         text = rebuild(original, baseline, now_text)
+        if original.endswith("\n") and not text.endswith("\n"):
+            text += "\n"  # as an edit would end it
         if text == original:
             answer["said"] = "Only how Docs writes it changed, so there's nothing to bring back."
         else:
@@ -150,8 +152,8 @@ def rebuild(original: str, baseline: str, now: str) -> str:
         return now
     came = manuscript._paragraphs(now)
     pieces: list[str] = []
-    matcher = SequenceMatcher(None, [p.strip() for p in was], [p.strip() for p in came], False)
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    keys = [p.strip() for p in was], [p.strip() for p in came]
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, *keys, autojunk=False).get_opcodes():
         pieces += mine[i1:i2] if tag == "equal" else came[j1:j2]
     return _join(pieces, original[len(original.rstrip()) :])
 

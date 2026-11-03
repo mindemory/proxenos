@@ -356,6 +356,12 @@ def test_bringing_back_nothing_changed_makes_no_step(setup):
     assert git(repo, "branch", "--list", "proxenos/*") == ""
     assert kept(vault, "baseline.txt") == baseline
 
+    # Changes that come back to the manuscript as it is bring nothing back either.
+    fake.docs["doc-01-made-by-proxenos"] = PAPER.rstrip("\n")
+    answer = paperdoc.pull(vault, project(vault), LATEST, fake)
+    assert answer["changed"] is False and answer["said"].startswith("Only how Docs writes it")
+    assert projects.steps_taken(vault, "calls") == []
+
 
 def test_bringing_back_changes_makes_a_step_from_the_commit_uploaded(setup):
     vault, repo = setup

@@ -236,16 +236,6 @@ export function useStepChanges(project: string, step: string, open: boolean) {
 
 type DocAction = "open" | "fresh" | "pull" | "comments";
 
-/** A tab opened before the wait, so the browser lets it open, saying what it waits for. */
-function waitingTab(): Window | null {
-  const tab = window.open("", "_blank");
-  if (tab) {
-    tab.document.title = "Google Docs";
-    tab.document.body.textContent = "Making the Google Doc…";
-  }
-  return tab;
-}
-
 /**
  * The project's manuscript as a Google Doc while `open`, as the vault keeps it (read again when
  * `again` changes and after each action), and what can be done to it: make it and open it in a
@@ -276,23 +266,18 @@ export function useManuscriptDoc(project: string, open: boolean, again: string, 
     [project],
   );
 
-  /** Make the doc (or a fresh one) and open it in a new tab. */
+  /**
+   * Make the doc (or a fresh one) and open it in a new tab. A browser that won't open a tab this
+   * long after the click leaves the link on the page, which says so.
+   */
   const make = useCallback(
     async (fresh: boolean) => {
-      const tab = waitingTab();
       const link = (await act(fresh ? "fresh" : "open"))?.doc?.link;
-      if (!link) {
-        tab?.close();
-        return;
-      }
-      if (tab) {
-        tab.opener = null;
-        tab.location.replace(link);
-      } else {
-        window.open(link, "_blank", "noopener,noreferrer");
-      }
+      if (!link) return;
+      window.open(link, "_blank", "noopener,noreferrer");
+      notify("It's in your Drive: Open in Google Docs opens it", "ok");
     },
-    [act],
+    [act, notify],
   );
 
   const pull = useCallback(async () => {
