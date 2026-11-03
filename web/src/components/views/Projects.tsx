@@ -45,8 +45,12 @@ interface SectionProps {
   /** Read the steps again: changes came back from the manuscript's Google Doc as one. */
   onRefresh: () => void;
   /** Think the project through with Proxenos, in a new thread that starts from it. */
-  onThink?: () => void;
+  /** Think it through, about the project, starting from what the user asked, when they asked. */
+  onThink?: (asked?: string) => void;
 }
+
+// What reads as a question rather than a step to take: it ends with "?", or opens like one.
+const QUESTION = /\?$|^(why|what|how|when|where|who|which|is|are|can|could|should|does|do|did|will|would)\b/i;
 
 // Which projects' manuscripts were open when the view was left.
 const reading = new Set<string>();
@@ -161,6 +165,8 @@ function ProjectSection({
   const starting = mine && !project.steps.some((s) => s.status === "working");
   const waitingOnYou = project.steps.filter((s) => s.status === "ready").length;
   const canQueue = text.trim() !== "" && text.length <= STEP_MAX_TEXT && !queueing && !deciding;
+  // A question gets an answer in Think in a minute; a step works on the code for up to half an hour.
+  const question = onThink !== undefined && QUESTION.test(text.trim());
 
   const write = (value: string) => {
     setText(value);
@@ -226,7 +232,7 @@ function ProjectSection({
 
       {onThink && (
         <div>
-          <ActionButton icon={MessagesSquare} label="Think it through" tone="neutral" onClick={onThink} />
+          <ActionButton icon={MessagesSquare} label="Think it through" tone="neutral" onClick={() => onThink()} />
         </div>
       )}
 
@@ -289,7 +295,9 @@ function ProjectSection({
           )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted">
-              {mine
+              {question
+                ? "That reads as a question: Ask it for an answer in a minute. A step works on the code, for up to half an hour."
+                : mine
                 ? "Taking a step now. It can take half an hour."
                 : stepping
                   ? "A step is being taken on another project: one at a time."
@@ -298,6 +306,17 @@ function ProjectSection({
                     : "Each night it takes one step, once the last is accepted or discarded."}
             </p>
             <div className="flex flex-wrap gap-2">
+              {question && (
+                <ActionButton
+                  icon={MessagesSquare}
+                  label="Ask it"
+                  tone="accent"
+                  onClick={() => {
+                    onThink?.(text.trim());
+                    write("");
+                  }}
+                />
+              )}
               <ActionButton
                 icon={ListPlus}
                 label={queueing ? "Queueing…" : "Queue it"}
@@ -308,7 +327,7 @@ function ProjectSection({
               <ActionButton
                 icon={Play}
                 label={mine ? "Working…" : "Do a step now"}
-                tone="accent"
+                tone={question ? "neutral" : "accent"}
                 disabled={stepping || project.paused}
                 onClick={onTake}
               />
@@ -445,12 +464,12 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
             onRefresh={refresh}
             onThink={
               onThink &&
-              (() =>
+              ((asked?: string) =>
                 onThink({
                   kind: "project",
                   id: p.id,
                   label: `Project: ${p.name}`,
-                  text: `Help me think through where ${p.name} stands and what to do next.`,
+                  text: asked || `Help me think through where ${p.name} stands and what to do next.`,
                 }))
             }
           />
