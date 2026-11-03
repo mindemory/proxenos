@@ -210,7 +210,30 @@ def test_microsoft_and_google_calendar_sign_ins_show_their_accounts_and_never_a_
     assert by_id(connect.report(tmp_path, store(tmp_path)))["calendar"]["connected"]
 
 
-@pytest.mark.parametrize("service", ["microsoft", "gcalendar"])
+def test_a_google_docs_sign_in_shows_its_account_and_when_a_doc_was_last_read(
+    tmp_path, monkeypatch
+):
+    docs = by_id(connect.report(tmp_path, store(tmp_path)))["gdocs"]
+    assert not docs["connected"] and docs["problem"] == "no_google_client"
+    assert docs["how"] == "live" and docs["last_read"] is None
+
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", SECRET)
+    monkeypatch.setenv("GDOCS_PAPERS", f"joe@home.example:oauth:1//{SECRET}")
+    kept = tmp_path / "clones" / "projects" / "calls" / "gdocs" / "comments.json"
+    kept.parent.mkdir(parents=True)
+    kept.write_text('{"read": null, "comments": []}')
+
+    report = connect.report(tmp_path, store(tmp_path))
+    assert SECRET not in json.dumps(report)
+    docs = by_id(report)["gdocs"]
+    assert docs["connected"] and docs["problem"] is None and docs["last_read"]
+    assert [(a["name"], a["address"], a["sign_in"]) for a in docs["accounts"]] == [
+        ("papers", "joe@home.example", "google")
+    ]
+
+
+@pytest.mark.parametrize("service", ["microsoft", "gcalendar", "gdocs"])
 def test_the_page_starts_the_new_sign_ins_the_same_way(tmp_path, monkeypatch, capsys, service):
     monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path))
     seen = []

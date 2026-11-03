@@ -175,6 +175,15 @@ SENDS = (
         ("calls", "callserver"),
         "On a call you start, what the other side says. The call's audio goes through Twilio.",
     ),
+    (
+        "Google Docs",
+        ("gdocs",),
+        (
+            "Nothing to a model. The manuscript's text goes to your own Google Drive when you "
+            "click Open in Google Docs, and comes back when you click Bring back its changes. "
+            "Its comments are other people's words: shown on the page, never sent to a model."
+        ),
+    ),
 )
 
 

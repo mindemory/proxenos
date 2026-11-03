@@ -4,6 +4,10 @@ The page's Connect view shows this, so it holds only names, addresses, handles a
 a token, password or key. Connected means Proxenos has what it needs to read the source: a
 sign-in or a setting for a live source, a setting or data for a folder, data in the vault for a
 download. Last read is the newest change to the source's files under raw/.
+
+Google Docs is a sign-in too, though nothing is read from it on a sync: a project's manuscript
+goes there and comes back when the user asks (proxenos.paperdoc), and it was last read when a
+doc's comments were last kept.
 """
 
 import os
@@ -11,6 +15,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from proxenos import gdocs
 from proxenos.config import env
 from proxenos.ingest import gcalendar, gmail, microsoft, slack, slackdump, spotify, whatsapp
 
@@ -20,6 +25,7 @@ LIVE = (
     "gmail",
     "microsoft",
     "gcalendar",
+    "gdocs",
     "whatsapp",
     "slack",
     "beeper",
@@ -81,6 +87,10 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
             }
             for name, (address, _) in sorted(gcalendar.accounts().items())
         ],
+        "gdocs": [
+            {"name": name, "address": address, "sign_in": "google", "last_read": None}
+            for name, (address, _) in sorted(gdocs.accounts().items())
+        ],
     }
     # Mail folders no sign-in reads came from an mbox download, and calendars from an export
     # (or the Mac's Calendar app).
@@ -101,6 +111,7 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         "gmail": bool(accounts),
         "microsoft": bool(signed_in["microsoft"]),
         "gcalendar": bool(signed_in["gcalendar"]),
+        "gdocs": bool(signed_in["gdocs"]),
         "whatsapp": store is None,
         "slack": bool(workspaces or slack.tokens()),
         "beeper": beeper_token,
@@ -115,13 +126,15 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         "gmail": None if google_client else "no_google_client",
         "microsoft": None if os.environ.get(microsoft.CLIENT) else "no_microsoft_client",
         "gcalendar": None if google_client else "no_google_client",
+        "gdocs": None if google_client else "no_google_client",
         "whatsapp": store,
         "beeper": None if beeper_token else "no_token",
     }
     # Where a source's last read shows, when it isn't a folder of its own under raw/.
     states = {
-        "applemail": vault / "state" / "applemail.json",
-        "beeper": vault / "state" / "beeper.json",
+        "applemail": [vault / "state" / "applemail.json"],
+        "beeper": [vault / "state" / "beeper.json"],
+        "gdocs": list((vault / "clones" / "projects").glob("*/gdocs/comments.json")),
     }
     # What the page shows beside a source: the Python that Mail's folder must be opened to.
     details = {
@@ -142,7 +155,7 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
     for how, ids in (("live", LIVE), ("download", DOWNLOADS), ("folder", FOLDERS)):
         for source in ids:
             last_read = (
-                _changed(states[source])
+                _changed(*states[source])
                 if source in states
                 else _last_read(*folders.get(source, [raw / source]))
             )
@@ -171,11 +184,12 @@ def _subdirs(folder: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []
 
 
-def _changed(path: Path) -> str | None:
-    """When one file last changed, as UTC ISO, or None when it isn't there."""
-    if not path.exists():
+def _changed(*paths: Path) -> str | None:
+    """When the newest of these files last changed, as UTC ISO, or None when none is there."""
+    times = [p.stat().st_mtime for p in paths if p.exists()]
+    if not times:
         return None
-    when = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    when = datetime.fromtimestamp(max(times), UTC)
     return when.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 

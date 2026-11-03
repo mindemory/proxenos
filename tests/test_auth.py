@@ -310,6 +310,30 @@ def test_google_calendar_sign_in_needs_the_google_client():
         auth.gcalendar("personal", "joe@home.example", free_port(), print, None)
 
 
+def test_google_docs_sign_in_asks_only_for_the_files_proxenos_makes(dotenv, monkeypatch, capsys):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    dotenv.write_text("")
+    asked, sent = {}, {}
+
+    def post(url, form):
+        sent.update(form, url=url)
+        return {"refresh_token": "1//docs-refresh", "access_token": "ya29.a"}
+
+    said = auth.gdocs("personal", "joe@home.example", free_port(), browser(asked), post)
+
+    assert asked["scope"] == "https://www.googleapis.com/auth/drive.file"
+    assert asked["access_type"] == "offline" and asked["login_hint"] == "joe@home.example"
+    digest = hashlib.sha256(sent["code_verifier"].encode()).digest()
+    assert base64.urlsafe_b64encode(digest).decode().rstrip("=") == asked["code_challenge"]
+    assert dotenv.read_text() == "GDOCS_PERSONAL=joe@home.example:oauth:1//docs-refresh\n"
+    shown = said + capsys.readouterr().out
+    assert said.startswith("saved GDOCS_PERSONAL in .env") and "docs-refresh" not in shown
+    with pytest.raises(SystemExit, match="Google Drive API"):
+        monkeypatch.delenv("GOOGLE_CLIENT_SECRET")
+        auth.gdocs("personal", "joe@home.example", free_port(), print, None)
+
+
 def microsoft_token(url, form):
     return {"refresh_token": "M.C5-ms-refresh", "access_token": "eyJ.ms-access", "expires_in": 3600}
 
