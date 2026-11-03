@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Save, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BellRing, KeyRound, Save, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -15,14 +15,33 @@ import {
   ModelChoice,
   NOT_A_LOGIN,
   originLabel,
+  type Said,
   SaidLine,
   secretLabel,
   useChange,
 } from "@/components/setup/parts";
 import { StatusSkeleton } from "@/components/Skeleton";
 import { cloudFor, useSetup } from "@/lib/setupClient";
-import type { SecretState, SettingKey, SettingValue, SetupStatus } from "@/lib/types";
+import type { NoticeTest, SecretState, SettingKey, SettingValue, SetupStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** The secrets phone notices use, shown with them rather than with the keys and sign-ins. */
+const NOTICE_SECRETS = ["NTFY_TOPIC", "NTFY_TOKEN"];
+
+const NOTICE_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "ntfy_server",
+    label: "Server",
+    hint: "Empty for ntfy.sh. Your own ntfy server's address, if you run one.",
+    placeholder: "https://ntfy.sh",
+  },
+  {
+    key: "quiet_hours",
+    label: "Quiet hours",
+    hint: "In this computer's time. A notice waits until they end; off for none.",
+    placeholder: "22:00-08:00",
+  },
+];
 
 const FOLDERS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
   {
@@ -154,10 +173,20 @@ export function Settings() {
         note="Whether each is set and where it's kept, never what it is. Gmail and Slack accounts are added from Connect."
       >
         <div className="card divide-y divide-line">
-          {status.secrets.map((s) => (
-            <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
-          ))}
+          {status.secrets
+            .filter((s) => !NOTICE_SECRETS.includes(s.name))
+            .map((s) => (
+              <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
+            ))}
         </div>
+      </Group>
+
+      <Group
+        kicker="Phone"
+        title="Notices on your phone"
+        note="When something new waits on you, one short notice through ntfy, an open-source push service: how many drafts, care items, steps and tasks, never a name, a message's words or a health detail."
+      >
+        <NoticesCard status={status} apply={apply} />
       </Group>
 
       <Group kicker="Folders" title="Read on every sync">
@@ -250,7 +279,11 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
     ? "address:app password. Or sign in again from Connect."
     : s.name === "ANTHROPIC_API_KEY"
       ? "Checked with Anthropic before it's saved."
-      : null;
+      : s.name === "NTFY_TOPIC"
+        ? "Letters, digits, - and _, up to 64. The same name you subscribed to in the app."
+        : s.name === "NTFY_TOKEN"
+          ? "Only for a server that asks for one. ntfy.sh doesn't."
+          : null;
 
   return (
     <div className="space-y-3 px-4 py-3.5">
@@ -338,6 +371,113 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
       {fromShell && mode === "idle" && (
         <p className="text-xs text-muted">Set in the environment Proxenos was started with; change it there.</p>
       )}
+      <SaidLine said={said} />
+    </div>
+  );
+}
+
+/** Phone notices: how to set them up, the topic and token, the server and quiet hours, and a test. */
+function NoticesCard({ status, apply }: { status: SetupStatus; apply: Apply }) {
+  const rows = status.secrets.filter((s) => NOTICE_SECRETS.includes(s.name));
+  const topicSet = rows.some((s) => s.name === "NTFY_TOPIC" && s.set);
+  return (
+    <div className="card divide-y divide-line">
+      <ol className="list-decimal space-y-1 py-3.5 pl-9 pr-4 text-sm leading-relaxed text-muted">
+        <li>Install the ntfy app, on Android or iOS.</li>
+        <li>
+          Make up a long, random topic name, like proxenos- and twenty letters and digits, and subscribe to it in the
+          app.
+        </li>
+        <li>
+          Save it here as the topic. On ntfy.sh anyone who knows a topic can read what&apos;s sent to it, so keep it like a
+          password.
+        </li>
+      </ol>
+      {rows.map((s) => (
+        <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
+      ))}
+      <NoticeSettings status={status} apply={apply} />
+      <TestNotice ready={topicSet} />
+    </div>
+  );
+}
+
+function NoticeSettings({ status, apply }: { status: SetupStatus; apply: Apply }) {
+  const savedOf = (key: SettingKey) => status.settings[key].value ?? "";
+  const [values, setValues] = useState<Partial<Record<SettingKey, string>>>(() =>
+    Object.fromEntries(NOTICE_SETTINGS.map((f) => [f.key, savedOf(f.key)])),
+  );
+  const { busy, said, run } = useChange(apply);
+  const changed = Object.fromEntries(
+    NOTICE_SETTINGS.flatMap((f) => (values[f.key]?.trim() !== savedOf(f.key) ? [[f.key, values[f.key]?.trim() ?? ""]] : [])),
+  );
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        run({ settings: changed });
+      }}
+      className="space-y-4 px-4 py-3.5"
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        {NOTICE_SETTINGS.map((f) => (
+          <Field key={f.key} label={f.label} hint={f.hint}>
+            <input
+              value={values[f.key] ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              className={cn(inputClass, "num")}
+              {...NOT_A_LOGIN}
+            />
+          </Field>
+        ))}
+      </div>
+      <FromShell values={NOTICE_SETTINGS.map((f) => status.settings[f.key])} />
+      <div className="flex items-center justify-between gap-3">
+        <SaidLine said={said} />
+        <span className="ml-auto">
+          <PrimaryButton type="submit" disabled={busy || !Object.keys(changed).length}>
+            <Save size={14} aria-hidden="true" />
+            Save
+          </PrimaryButton>
+        </span>
+      </div>
+    </form>
+  );
+}
+
+/** One test notice, through the command, which keeps the topic to itself. */
+function TestNotice({ ready }: { ready: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<Said>(null);
+  const test = async () => {
+    setBusy(true);
+    setSaid(null);
+    try {
+      const res = await fetch("/api/notify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ test: true }),
+      });
+      const answer = (await res.json().catch(() => ({}))) as Partial<NoticeTest> & { error?: string };
+      setSaid({ ok: res.ok && answer.ok === true, text: answer.message ?? answer.error ?? `The test didn't go through (${res.status}).` });
+    } catch (e) {
+      setSaid({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-2 px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-3">
+        <PrimaryButton onClick={test} disabled={busy || !ready}>
+          <BellRing size={14} aria-hidden="true" />
+          {busy ? "Sending…" : "Send a test"}
+        </PrimaryButton>
+        <span className="text-xs text-muted">
+          {ready ? "Your phone should show it in a few seconds." : "Save a topic first."}
+        </span>
+      </div>
       <SaidLine said={said} />
     </div>
   );

@@ -973,6 +973,8 @@ export const SETTING_KEYS = [
   "spotify_export",
   "slackdump_dir",
   "cv_dirs",
+  "ntfy_server",
+  "quiet_hours",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -1026,6 +1028,12 @@ export interface SetupResult {
   message: string | null; // what was done, when it was
   error: string | null; // why not, when it wasn't
   status: SetupStatus | null;
+}
+
+/** What `proxenos notify test` said: whether a test notice reached ntfy, in the page's words. */
+export interface NoticeTest {
+  ok: boolean;
+  message: string;
 }
 
 // ── Ask ─────────────────────────────────────────────────────────────────────
@@ -1636,6 +1644,8 @@ export interface PrivacyReport {
     /** Whether links in chats waiting on a reply are read: whenever a model is set up. */
     links: boolean;
   };
+  /** Notices on the phone through ntfy: whether they're on, the server's host (never the topic), the quiet hours and what one carries. */
+  notices: { on: boolean; server: string; quiet: string | null; sends: string };
 }
 
 export interface PrivacyResponse {

@@ -265,6 +265,8 @@ export function secretLabel(name: string): string {
     MICROSOFT_CLIENT_ID: "Microsoft sign-in client ID",
     TWILIO_ACCOUNT_SID: "Twilio account SID (calls)",
     TWILIO_AUTH_TOKEN: "Twilio auth token (calls)",
+    NTFY_TOPIC: "ntfy topic (phone notices)",
+    NTFY_TOKEN: "ntfy token (phone notices)",
     SLACK_USER_TOKEN: "Slack token",
   };
   if (fixed[name]) return fixed[name];

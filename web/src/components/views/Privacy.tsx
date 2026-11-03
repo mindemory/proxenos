@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, Globe, HardDrive, ShieldCheck, type LucideIcon } from "lucide-react";
+import { BellRing, Cpu, Globe, HardDrive, ShieldCheck, type LucideIcon } from "lucide-react";
 
 import { Chip, copyFor, LastRead, StatePill } from "@/components/connect/parts";
 import { ErrorBanner, NoVault } from "@/components/EmptyState";
@@ -101,6 +101,7 @@ export function Privacy() {
       </section>
       <StaysHere here={report.here} />
       <SentToModel sent={report.sent} />
+      <Notices notices={report.notices} />
       <Fetched fetched={report.fetched} now={data.now} />
     </div>
   );
@@ -359,6 +360,30 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
         model, where it ran, how many characters went in and came back (tokens where the model counted them) and how many numbers
         and secrets were blanked, never the words.
       </p>
+    </Section>
+  );
+}
+
+// ── Notices on the phone ────────────────────────────────────────────────────
+
+function Notices({ notices }: { notices: PrivacyReport["notices"] }) {
+  const server = notices.server || "ntfy.sh";
+  return (
+    <Section
+      icon={BellRing}
+      kicker="Sent to your phone"
+      title="Notices"
+      lead="Off until you save a topic in Settings. Then, when something new waits on you, one short notice goes to your phone through ntfy, a push service, on its server or your own."
+    >
+      <div className="card space-y-1.5 p-4 sm:p-5">
+        <StatePill on={notices.on} label={notices.on ? `On, through ${server}` : "Off"} />
+        {notices.sends && <p className="text-sm leading-relaxed text-muted">{notices.sends}</p>}
+        {notices.on && (
+          <p className="text-sm leading-relaxed text-muted">
+            {notices.quiet ? `None from ${notices.quiet.replace("-", " to ")}: one waits until then.` : "No quiet hours."}
+          </p>
+        )}
+      </div>
     </Section>
   );
 }

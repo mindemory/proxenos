@@ -2,8 +2,9 @@
 //
 // Everything comes from `proxenos privacy`: what stays on this computer (the vault by folder,
 // FileVault, the secrets kept, by name), what went to a model in the last 30 days (from the log
-// each call leaves, never its words) and what's read from elsewhere (the connected sources, by
-// name and address). Its answer is read field by field, so nothing else in it reaches the page.
+// each call leaves, never its words), what's read from elsewhere (the connected sources, by
+// name and address) and whether notices go to the phone (by the server's host, never the topic).
+// Its answer is read field by field, so nothing else in it reaches the page.
 
 
 import { lastLine, NO_COMMAND } from "./connect";
@@ -124,6 +125,8 @@ function toReport(raw: unknown): PrivacyReport | null {
   const model = rec(sent.model);
   const byWhere = rec(sent.by_where);
   const fetched = rec(r.fetched);
+  // An older proxenos doesn't say: it had no notices.
+  const notices = rec(r.notices);
   const folders = rec(vault.folders);
   if (!text(vault.path) || !Object.keys(sent).length || !Object.keys(fetched).length) return null;
   return {
@@ -162,6 +165,12 @@ function toReport(raw: unknown): PrivacyReport | null {
     fetched: {
       sources: list(fetched.sources).flatMap((s) => toSource(s) ?? []),
       links: fetched.links === true,
+    },
+    notices: {
+      on: notices.on === true,
+      server: text(notices.server),
+      quiet: text(notices.quiet) || null,
+      sends: typeof notices.sends === "string" ? notices.sends.slice(0, 400) : "",
     },
   };
 }

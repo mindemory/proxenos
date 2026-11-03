@@ -160,7 +160,7 @@ def report(vault: Path, now: datetime | None = None) -> dict:
         "here": here(vault),
         "sent": sent(vault, now),
         "fetched": fetched(vault),
-        # The one thing that leaves for no model: a notice on the phone, counts only.
+        # What leaves for the user's own phone, when they switch it on: counts only.
         "notices": notify.report(),
     }
 
