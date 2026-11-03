@@ -463,7 +463,8 @@ SUPPLEMENT_FILES = 80
 SUPPLEMENT_BYTES = 200 * 10**6
 FILE_BYTES = 25 * 10**6  # one bigger than this stays in the repository
 _NAMED = re.compile(
-    r"[\w./-]*[\w-]\.(?:csv|tsv|xlsx|xls|json|txt|png|jpe?g|svg|pdf|tiff?|mat|npz|nc)\b", re.IGNORECASE
+    r"[\w./-]*[\w-]\.(?:csv|tsv|xlsx|xls|json|txt|png|jpe?g|svg|pdf|tiff?|mat|npz|nc)\b",
+    re.IGNORECASE,
 )
 
 
