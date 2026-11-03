@@ -78,13 +78,32 @@ change what the records show has changed. No title: the file has one. Facts, dat
 names only from the records or the last status; never invent any, nor spell out an \
 abbreviation the records don't. Say plainly what isn't known.
 - changed: what's new since the last status, in a few sentences, or "" if nothing is.
-- next: the next steps, most useful first, three to six: each with who does it ({person}, or a \
-collaborator by name) and by when ("" when there's no date).
-- asks: what only {person} can decide or knows, as short questions.
+- next: the next steps, most useful first, three to six: each with who does it and by when ("" \
+when there's no date). {doer} Give {person} only what needs them: a decision, their judgment, \
+their access, or a person to talk to; a collaborator by name for what's theirs.
+- asks: what only {person} can decide or knows, as short questions about this project, never \
+what you could find out or do yourself.
+
+The records come from all of {person}'s life and work, so some will be about another project or \
+another paper: use only what is about this one, and leave out the rest.
 - drafts: up to {drafts} things written for {person} that would move it on now: a message to a \
 collaborator in {person}'s voice, a plan for the next analysis, a checklist, a short doc. Each \
 with a title under 12 words, kind, channel ("other" when it isn't a message), to ("" when it \
 isn't a message) and body, ready to use. None when nothing is worth drafting now."""
+
+
+# Who a step is for, by whether Proxenos can take steps on the project's code (proxenos.clones.steps).
+_CAN_DO = (
+    "Work you can do yourself on its code and data on this computer, an analysis, a figure, a "
+    'fix to the code, a search of the literature, a section drafted, is "Proxenos": it is queued '
+    "and done as a step on a branch of its own, for them to accept."
+)
+_CANT_DO = (
+    "Its code isn't on this computer, so steps on it are its people's; drafting text for them "
+    "is yours, in drafts."
+)
+PROXENOS = "proxenos"  # a step's who, when it's Proxenos's to take
+QUEUED = 3  # steps of Proxenos's a run queues at most
 
 
 def _schema() -> dict:
@@ -246,7 +265,8 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
         )
         if part
     )
-    system = _SYSTEM.format(person=person, drafts=DRAFTS) + "\n\n" + voice.rules(person)
+    doer = _CAN_DO if project["repo"] else _CANT_DO
+    system = _SYSTEM.format(person=person, drafts=DRAFTS, doer=doer) + "\n\n" + voice.rules(person)
     answer = model(
         prompt,
         system=system + "\n\n" + work.short_self(vault, now),
@@ -258,9 +278,36 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
         raise ValueError("the model wrote no status")
     steps = [s for s in answer.get("next") or [] if isinstance(s, dict) and _text(s.get("step"))]
     asks = [_text(a) for a in answer.get("asks") or [] if _text(a)]
+    if project["repo"]:
+        _queue_own(vault, project, steps, now)
     work._write(status_path, _status_file(project, status, steps, asks, now))
     _append(log_path, _log_entry(_text(answer.get("changed")), steps, len(new), now))
     return _drafts(vault, project, answer.get("drafts") or [], asks, now)
+
+
+def _queue_own(vault: Path, project: dict, steps: list[dict], now: datetime) -> None:
+    """The next steps that are Proxenos's to take, queued for the steps clone (up to QUEUED a
+    run, none twice), each marked so the status says it's queued."""
+    from proxenos.clones import steps as taken  # steps imports this module
+
+    waiting = {_text(q.get("text")).casefold() for q in taken.queued(vault, project["id"])}
+    added = 0
+    for step in steps:
+        if _text(step.get("who")).casefold() != PROXENOS:
+            continue
+        text = _text(step["step"])
+        if text.casefold() in waiting:
+            step["who"] = "Proxenos, queued"
+            continue
+        if added >= QUEUED:
+            continue
+        try:
+            taken.queue(vault, project["id"], text, now)
+        except SystemExit:  # the queue is full: it waits for the next run
+            return
+        waiting.add(text.casefold())
+        step["who"] = "Proxenos, queued"
+        added += 1
 
 
 def gather(vault: Path, project: dict, since: datetime) -> tuple[list[dict], list[dict]]:

@@ -239,3 +239,37 @@ def test_a_project_with_no_code_folder_has_no_code(tmp_path, monkeypatch):
 
     assert projects._code({"repo": ""}, datetime.now(UTC)) == ""
     assert projects._code({}, datetime.now(UTC)) == ""
+
+
+def test_work_proxenos_can_do_is_queued_for_it_not_given_to_the_user(tmp_path):
+    from proxenos.clones import steps as taken
+
+    write_list(
+        tmp_path,
+        {"id": "cookbook", "name": "The cookbook", "repo": "~/cookbook"},
+        {"id": "notes", "name": "Notes only"},
+    )
+
+    class Doer(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            answer["next"] = [
+                {"step": "Plot rise against temperature", "who": "Proxenos", "by": ""},
+                {"step": "Choose the publisher", "who": "Joe", "by": "Mar 20"},
+            ]
+            return answer
+
+    model = Doer()
+    projects.projects(tmp_path, now=NOW, model=model)
+    projects.projects(tmp_path, now=NOW + timedelta(days=1), model=model)  # not queued twice
+
+    cookbook, notes = (c["system"] for c in model.calls[:2])
+    assert 'is "Proxenos": it is queued' in cookbook and "isn't on this computer" in notes
+    assert "about another project" in cookbook
+    assert [q["text"] for q in taken.queued(tmp_path, "cookbook")] == [
+        "Plot rise against temperature"
+    ]
+    assert taken.queued(tmp_path, "notes") == []
+    status = (tmp_path / "clones" / "projects" / "cookbook" / "status.md").read_text()
+    assert "Plot rise against temperature (Proxenos, queued)" in status
+    assert "Choose the publisher (Joe, Mar 20)" in status
