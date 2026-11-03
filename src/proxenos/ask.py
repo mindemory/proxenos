@@ -126,6 +126,10 @@ letter (cover_letter), or, for a call for papers or abstracts, a plan for the su
 about them all, and draft_body stays "" unless they ask for a message beyond them. Nothing is \
 sent, submitted or applied for: these are drafts."""
 
+# A channel, or "" where nothing is drafted: a local model held to no grammar leaves it empty
+# then, and an answer that's otherwise whole mustn't fail on it. Saved, "" reads as "other".
+_CHANNELS = [*work.CHANNELS, ""]
+
 _OPENING = {
     "kind": {"type": "string", "enum": list(OPENING_KINDS)},
     "title": {"type": "string"},
@@ -139,7 +143,7 @@ _OPENING = {
     "why": {"type": "string"},
     "first_step": {"type": "string", "enum": [*FIRST_STEPS, ""]},
     "step_to": {"type": "string"},
-    "step_channel": {"type": "string", "enum": list(work.CHANNELS)},
+    "step_channel": {"type": "string", "enum": _CHANNELS},
     "step_body": {"type": "string"},
 }
 # Not required by either answer: one with no openings holds from a model that leaves them out.
@@ -158,7 +162,7 @@ _QUICK_SCHEMA = {
     "properties": {
         "answer": {"type": "string"},
         "draft_to": {"type": "string"},
-        "draft_channel": {"type": "string", "enum": list(work.CHANNELS)},
+        "draft_channel": {"type": "string", "enum": _CHANNELS},
         "draft_body": {"type": "string"},
         "openings": _OPENINGS_SCHEMA,
     },
@@ -171,7 +175,7 @@ _ANSWER_SCHEMA = {
     "properties": {
         "answer": {"type": "string"},
         "draft_to": {"type": "string"},
-        "draft_channel": {"type": "string", "enum": list(work.CHANNELS)},
+        "draft_channel": {"type": "string", "enum": _CHANNELS},
         "draft_body": {"type": "string"},
         "found": {"type": "string"},
         "asks": {"type": "array", "items": {"type": "string"}},

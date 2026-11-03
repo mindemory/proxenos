@@ -409,3 +409,37 @@ def test_keeping_an_opening_twice_keeps_it_once(tmp_path, capsys):
     for bad in (("../ask", postdoc), (result["id"], "not-an-id"), (result["id"], "0" * 12)):
         with pytest.raises(SystemExit):
             ask.keep(tmp_path, *bad)
+
+
+def test_a_local_answer_with_nothing_drafted_keeps_its_openings():
+    # A model held to no grammar leaves the channels empty where it drafts nothing.
+    from proxenos import llm
+
+    opening = {
+        "kind": "job",
+        "title": "Research Engineer",
+        "org": "Example Labs",
+        "place": "",
+        "mode": "",
+        "pay": "",
+        "deadline": "",
+        "link": "",
+        "verdict": "skip",
+        "why": "Far from your work.",
+        "first_step": "",
+        "step_to": "",
+        "step_channel": "",
+        "step_body": "",
+    }
+    text = json.dumps(
+        {
+            "answer": "One opening, not for you.",
+            "draft_to": "",
+            "draft_channel": "",
+            "draft_body": "",
+            "openings": [opening],
+        }
+    )
+    held = llm._object(f"```json\n{text}\n```", ask._QUICK_SCHEMA)
+    assert held is not None
+    assert held["openings"][0]["title"] == "Research Engineer"
