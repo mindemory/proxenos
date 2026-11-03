@@ -1,6 +1,10 @@
 # The desktop app (desktop/), built unsigned on a Mac and on Windows, tried, and kept as this run's
 # artifacts. Only by hand (Actions, desktop, Run workflow) or for a v* tag, never on every push:
 # it takes a while, and checks.yml already checks the code.
+#
+# A tag (v0.1.0, matching desktop/package.json) also attaches the installers to a draft release,
+# for anyone to download once the owner publishes it. GitHub counts each file's downloads
+# (docs/apps.md says where to see them); nothing in the app reports anything back.
 name: desktop
 
 on:
@@ -13,7 +17,41 @@ permissions:
 
 # Actions are pinned to a commit, not a tag a compromised repo could move; Dependabot bumps them.
 jobs:
+  draft:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # electron-builder names the files from desktop/package.json, so the tag has to agree with it.
+      - run: |
+          version="$(node -p 'require("./desktop/package.json").version')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error title=version::the tag is $TAG but desktop/package.json says $version"
+            exit 1
+          fi
+          gh release create "$TAG" --draft --verify-tag --title "Proxenos $TAG" --notes "$NOTES"
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: |
+            The desktop app: the page in a window, a menu-bar menu, and the sync and night built in, with its own Python. Your records stay on your computer.
+
+            - **Mac (Apple silicon, macOS 13 or newer):** the `.dmg`. It isn't signed yet, so the first time macOS won't open it: open System Settings, then Privacy & Security, and choose Open Anyway beside Proxenos.
+            - **Windows (x64):** the `.exe`. It isn't signed yet, so Windows SmartScreen warns: choose More info, then Run anyway.
+
+            Setting it up: [README](https://github.com/mindemory/proxenos#readme) and [docs/apps.md](https://github.com/mindemory/proxenos/blob/main/docs/apps.md).
+
   build:
+    needs: [draft]
+    # A run by hand has no draft to wait for; a tag's run builds only once its draft exists.
+    if: ${{ !cancelled() && (needs.draft.result == 'success' || github.ref_type != 'tag') }}
+    permissions:
+      contents: write # to attach the installers to a tag's draft release
     strategy:
       fail-fast: false
       matrix:
@@ -49,3 +87,12 @@ jobs:
             desktop/dist/*.exe
           if-no-files-found: error
           retention-days: 14
+      - if: github.ref_type == 'tag'
+        run: |
+          shopt -s nullglob
+          files=(desktop/dist/*.dmg desktop/dist/*.zip desktop/dist/*.exe)
+          gh release upload "$TAG" "${files[@]}" --clobber
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

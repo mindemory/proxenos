@@ -32,7 +32,8 @@ Before any app ships, make the core platform-neutral, so the Mac and Windows app
 
 As [everyone.md](everyone.md) describes: Electron, the page as a standalone Next.js build, Python from python-build-standalone with the `proxenos` wheel, a menu-bar icon, and the setup page that's already built. *Built, unsigned:* `desktop/build.sh` makes `Proxenos-<version>-arm64.dmg` and a `.zip`, and the desktop workflow builds them on GitHub's Macs, by hand or for a `v*` tag.
 - **Signed and notarized** so macOS opens it without warnings. This needs an Apple Developer Program membership.
-- **Released on GitHub** as `Proxenos.dmg`. The website's download button points at the latest release, which anyone can download with no GitHub account.
+- **Released on GitHub:** a `v*` tag that matches `desktop/package.json`'s version (`git tag v0.1.0 && git push origin v0.1.0`) builds both installers and attaches them to a draft release, which goes public only when the owner presses Publish. Anyone can download it there with no GitHub account, and the website's download button can point at `https://github.com/mindemory/proxenos/releases/latest`.
+- **Downloads, counted without tracking anyone:** GitHub counts each file's downloads and nothing else. `curl -s https://api.github.com/repos/mindemory/proxenos/releases` lists them (`download_count` on each asset), and a badge such as `https://img.shields.io/github/downloads/mindemory/proxenos/total` shows the total in the README once a release exists. The repository's Insights, then Traffic, shows the owner its views and clones for the last 14 days. The app itself never reports anything back.
 - **Updates** from signed GitHub releases.
 
 ### 3. The Windows app (weeks, once 1 and 2 exist)
