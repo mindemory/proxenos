@@ -78,8 +78,8 @@ SENDS = (
         "Choices",
         ("choices",),
         (
-            "Mail and Slack posts that announce an opening, with who sent each, and what your time "
-            "goes to."
+            "Mail and Slack posts that announce an opening, with who sent each, the openings you "
+            "kept from Ask, and what your time goes to."
         ),
     ),
     (

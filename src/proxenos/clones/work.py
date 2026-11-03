@@ -15,7 +15,7 @@ one call apiece, in this order until `--max` drafts are written:
   open: the message itself, from the script, with nothing added;
 - this week's choices (clones/choices, its newest list): the first step of each opening to take
   on that starts with something written, and the decline of each thing to skip that owes someone
-  an answer, as choice-<id>;
+  an answer, as choice-<id>; an opening kept from Ask has Ask's draft instead;
 - the top three outreach ideas and the top three projects in clones/network/ideas.json: the
   message that makes the ask, and a plan to start the project;
 - the top six items of the newest batch in tracker/items: a reading note.
@@ -450,7 +450,8 @@ def _open_ideas(items: object, shut: set[str], field: str) -> list[dict]:
 
 
 def _choices(directory: Path) -> list[dict]:
-    """The items of the newest list in clones/choices that have something to draft."""
+    """The items of the newest list in clones/choices that have something to draft: not an
+    opening kept from Ask, whose draft Ask wrote."""
     days = sorted(p for p in directory.glob("*.json") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem))
     doc = _load_json(days[-1]) if days else {}
     return [
@@ -459,6 +460,7 @@ def _choices(directory: Path) -> list[dict]:
         if isinstance(i, dict)
         and isinstance(i.get("id"), str)
         and isinstance(i.get("draft_id"), str)
+        and i["draft_id"].startswith("choice-")
     ]
 
 

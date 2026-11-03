@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/ask {text, images: [{type, data}], deep} starts `proxenos ask` on a question: up to
- * 8,000 characters and up to four screenshots (PNG, JPEG or WebP as base64, 6 MB each), at least
+ * 8,000 characters and up to eight screenshots (PNG, JPEG or WebP as base64, 6 MB each), at least
  * one of the two; a quick answer unless `deep` is true. {again: <id>} thinks an earlier quick ask
  * through instead. The question goes to the command on its stdin and nowhere else: not its
  * arguments, its environment, a log, or any answer from here. Answers at once; the page follows the

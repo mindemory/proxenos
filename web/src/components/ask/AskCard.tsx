@@ -9,9 +9,10 @@ import { Markdown } from "@/components/Markdown";
 import { useToast } from "@/components/Toasts";
 import { copyText } from "@/lib/client";
 import { formatDateTime, timeAgo } from "@/lib/format";
-import type { AskDraft, AskEntry } from "@/lib/types";
+import type { AskDraft, AskEntry, Opening } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { Openings } from "./Openings";
 import { Fold, QuestionText, ShotCount } from "./parts";
 
 /** The reply written in the reader's voice: its text as it'll be copied, and where else it is. */
@@ -69,10 +70,12 @@ interface AskCardProps {
   onAgain: (() => void) | null;
   /** Hand it to an errand, to carry out what the answer says to do. */
   onErrand: () => void;
+  /** Keep one of its openings for the week's choices: null once kept, else why not. */
+  onKeep: (opening: Opening) => Promise<string | null>;
 }
 
 /** One question and what came of it, newest first on the page. */
-export function AskCard({ ask, now, flash, onDrafts, onAgain, onErrand }: AskCardProps) {
+export function AskCard({ ask, now, flash, onDrafts, onAgain, onErrand, onKeep }: AskCardProps) {
   const failed = ask.status === "failed";
   const working = ask.status === "working";
   return (
@@ -114,6 +117,8 @@ export function AskCard({ ask, now, flash, onDrafts, onAgain, onErrand }: AskCar
       )}
 
       {ask.answer && <Markdown source={ask.answer} />}
+
+      <Openings openings={ask.openings} now={now} onDrafts={onDrafts} onKeep={onKeep} />
 
       {ask.draft && <DraftBox draft={ask.draft} onDrafts={onDrafts} />}
 

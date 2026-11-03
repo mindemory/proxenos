@@ -6,9 +6,12 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /share: what's shared to the installed app from the phone's share sheet (the manifest's
- * share_target): a title, text or link, and up to four screenshots. It's asked about as on the
- * Ask page, then the app opens there to follow the answer. Nothing is kept from the request but
- * the question the ask is given.
+ * share_target): a title, text or link, and up to eight screenshots (ASK_MAX_IMAGES; the rest are
+ * dropped), such as job posts and calls from LinkedIn or X. They arrive as the phone made them,
+ * not made smaller as the Ask page makes them, so a phone's screenshot, a few hundred KB to a few
+ * MB, counts against ASK_MAX_BODY whole. It's asked about as on the Ask page, then the app opens
+ * there to follow the answer, openings and all. Nothing is kept from the request but the question
+ * the ask is given.
  */
 export async function POST(req: Request) {
   const denied = rejectNonLocal(req);

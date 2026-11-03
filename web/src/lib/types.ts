@@ -1066,7 +1066,7 @@ export type AskImageType = (typeof ASK_IMAGE_TYPES)[number];
 
 /** What a question may hold: characters of text, screenshots, and each screenshot's decoded size. */
 export const ASK_MAX_TEXT = 8000;
-export const ASK_MAX_IMAGES = 4;
+export const ASK_MAX_IMAGES = 8;
 export const ASK_MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
 /** One screenshot as it's sent: base64, without a "data:" prefix. */
@@ -1084,6 +1084,34 @@ export interface AskDraft {
   body: string;
 }
 
+/** Whether to go for an opening that was shared, in the order they're listed. */
+export const OPENING_VERDICTS = ["apply", "maybe", "skip"] as const;
+export type OpeningVerdict = (typeof OPENING_VERDICTS)[number];
+
+/** An opening's first step, drafted: a note to whoever posted it, a cover letter's start, or a plan. */
+export interface OpeningDraft extends AskDraft {
+  id: string; // its draft in Drafts
+  step: "message" | "cover_letter" | "plan";
+}
+
+/** A job, postdoc, residency, fellowship, scholar program, call for papers or workshop seen in what was shared. */
+export interface Opening {
+  id: string;
+  kind: string; // "job", "postdoc", "residency", "fellowship", "scholar_program", "cfp", "workshop"
+  title: string;
+  org: string;
+  place: string;
+  mode: string; // "on-site", "remote", "hybrid" or ""
+  pay: string;
+  deadline: string; // YYYY-MM-DD, or ""
+  link: string;
+  verdict: OpeningVerdict;
+  why: string;
+  draft: OpeningDraft | null;
+  /** Kept for the week's choices to weigh (clones/choices/kept.jsonl). */
+  kept: boolean;
+}
+
 export interface AskEntry {
   id: string;
   at: string;
@@ -1095,6 +1123,8 @@ export interface AskEntry {
   seen: string; // what the screenshots show, transcribed
   answer: string; // markdown
   draft: AskDraft | null;
+  /** The openings in what was shared, apply first; empty when there were none. */
+  openings: Opening[];
   found: string;
   asks: string[];
   error: string | null;

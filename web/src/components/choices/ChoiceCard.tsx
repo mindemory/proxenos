@@ -6,6 +6,7 @@ import type { ChoiceAction, ChoiceEvidence, Skip, TakeOn } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const KINDS: Record<string, string> = {
+  job: "Job",
   cfp: "Call for papers",
   grant: "Grant",
   fellowship: "Fellowship",

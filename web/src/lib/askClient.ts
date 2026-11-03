@@ -173,5 +173,24 @@ export function useAsk(onEnd: (answered: boolean) => void) {
     );
   }, [load]);
 
-  return { data, error, clearError: () => setError(null), pending, stopping, flashId, send, again, stop };
+  /**
+   * Keep an opening an answer showed, for the week's choices to weigh. Resolves null once it's
+   * kept (a second time changes nothing), else why not, for the reader.
+   */
+  const keep = useCallback(
+    async (askId: string, openingId: string): Promise<string | null> => {
+      try {
+        const { status, answer } = await postJson<object>("/api/ask/keep", { ask: askId, opening: openingId });
+        if (status < 200 || status >= 300) return answer.error ?? `The server answered ${status}.`;
+        notify("Kept for this week's choices", "ok");
+        load();
+        return null;
+      } catch (e) {
+        return e instanceof TypeError ? "Couldn't reach Proxenos. Is your Mac awake?" : String(e);
+      }
+    },
+    [load, notify],
+  );
+
+  return { data, error, clearError: () => setError(null), pending, stopping, flashId, send, again, stop, keep };
 }

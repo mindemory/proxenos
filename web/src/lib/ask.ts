@@ -15,6 +15,7 @@ import {
   ASK_MAX_IMAGE_BYTES,
   ASK_MAX_IMAGES,
   ASK_MAX_TEXT,
+  OPENING_VERDICTS,
   type AskDraft,
   type AskEntry,
   type AskImage,
@@ -22,14 +23,25 @@ import {
   type AskJob,
   type AskResponse,
   type AskStatus,
+  type Opening,
+  type OpeningDraft,
 } from "./types";
-import { nowIso, vaultInfo, vaultPath } from "./vault";
+import { nowIso, proxenos, vaultInfo, vaultPath } from "./vault";
 
 const MAX_ASKS = 20;
 /** An ask's file is text and a transcription: a few KB. One far beyond that isn't read. */
 const MAX_ASK_BYTES = 2 * 1024 * 1024;
 const ASK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const STATUSES: readonly AskStatus[] = ["working", "done", "failed"];
+/** An opening's id, as `proxenos ask` makes them. */
+const OPENING_ID = /^[0-9a-f]{12}$/;
+const MAX_OPENINGS = 12;
+const STEPS: readonly OpeningDraft["step"][] = ["message", "cover_letter", "plan"];
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** The openings kept for the week's choices: a line each, so a few KB. */
+const MAX_KEPT_BYTES = 2 * 1024 * 1024;
+/** Keeping one runs `proxenos ask --keep`, which reads one file and writes one line. */
+const KEEP_MS = 60_000;
 /**
  * How far an ask's time may read from its command's. The ask writes it after its command has
  * started (a second may be rounded away), and the command can end a moment before the ask's last
@@ -139,7 +151,70 @@ function toDraft(raw: unknown): AskDraft | null {
   return { to: str(r.to)?.trim() ?? "", channel: (str(r.channel) ?? "").trim().toLowerCase(), body };
 }
 
-function toAsk(raw: unknown): AskEntry | null {
+/** A link as a page to open: http or https only. */
+function webLink(v: unknown): string {
+  const s = str(v)?.trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function toOpeningDraft(raw: unknown): OpeningDraft | null {
+  const draft = toDraft(raw);
+  if (!draft) return null;
+  const r = raw as Record<string, unknown>;
+  const id = str(r.id);
+  const step = STEPS.find((s) => s === r.step);
+  if (!id || !ASK_ID.test(id) || !step) return null;
+  return { ...draft, id, step };
+}
+
+function toOpening(raw: unknown, kept: Set<string>): Opening | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = str(r.id);
+  const title = str(r.title)?.trim();
+  const verdict = OPENING_VERDICTS.find((v) => v === r.verdict);
+  if (!id || !OPENING_ID.test(id) || !title || !verdict) return null;
+  const line = (v: unknown) => str(v)?.trim() ?? "";
+  const deadline = line(r.deadline);
+  return {
+    id,
+    kind: line(r.kind) || "job",
+    title,
+    org: line(r.org),
+    place: line(r.place),
+    mode: line(r.mode),
+    pay: line(r.pay),
+    deadline: ISO_DAY.test(deadline) ? deadline : "",
+    link: webLink(r.link),
+    verdict,
+    why: line(r.why),
+    draft: verdict === "skip" ? null : toOpeningDraft(r.draft),
+    kept: kept.has(id),
+  };
+}
+
+/** The openings an ask lists, apply first, each once. */
+function toOpenings(raw: unknown, kept: Set<string>): Opening[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const found: Opening[] = [];
+  for (const item of raw.slice(0, MAX_OPENINGS * 2)) {
+    const opening = toOpening(item, kept);
+    if (!opening || seen.has(opening.id)) continue;
+    seen.add(opening.id);
+    found.push(opening);
+  }
+  const order = (o: Opening) => OPENING_VERDICTS.indexOf(o.verdict);
+  return found.sort((a, b) => order(a) - order(b)).slice(0, MAX_OPENINGS);
+}
+
+function toAsk(raw: unknown, kept: Set<string> = new Set()): AskEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const id = str(r.id);
@@ -157,6 +232,7 @@ function toAsk(raw: unknown): AskEntry | null {
     seen: str(r.seen) ?? "",
     answer: str(r.answer) ?? "",
     draft: toDraft(r.draft),
+    openings: toOpenings(r.openings, kept),
     found: str(r.found)?.trim() ?? "",
     asks: Array.isArray(r.asks) ? r.asks.filter((a): a is string => typeof a === "string" && a.trim() !== "").slice(0, 20) : [],
     error: str(r.error)?.trim() || null,
@@ -230,10 +306,11 @@ export async function getAsks(): Promise<AskResponse> {
   const jobs = askJobs();
   const job = jobs[0] ?? null;
   const nowMs = Date.now();
+  const kept = await keptIds(vault);
   const seen = new Set<string>();
   const rows: { entry: AskEntry; since: number }[] = [];
   for (const { name, mtime } of files.slice(0, MAX_ASKS)) {
-    const entry = toAsk(await readPlainJson(path.join(dir, name)));
+    const entry = toAsk(await readPlainJson(path.join(dir, name)), kept);
     if (!entry || seen.has(entry.id)) continue;
     seen.add(entry.id);
     const since = Date.parse(entry.at) || mtime;
@@ -250,4 +327,54 @@ export async function getAsks(): Promise<AskResponse> {
     id: job.state === "done" && ASK_ID.test(job.message) ? job.message : null,
   };
   return { now: nowIso(), vault: await vaultInfo(vault), asks: rows.map((r) => r.entry), job: view };
+}
+
+// ── Keeping an opening ──────────────────────────────────────────────────────
+
+/** The ids of the openings kept for the week's choices, from clones/choices/kept.jsonl. */
+async function keptIds(vault: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let text = "";
+  try {
+    const fh = await fs.open(path.join(vault, "clones", "choices", "kept.jsonl"), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    try {
+      const st = await fh.stat();
+      if (st.isFile() && st.size <= MAX_KEPT_BYTES) text = await fh.readFile("utf8");
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return ids; // Nothing kept yet.
+  }
+  for (const line of text.split("\n")) {
+    try {
+      const id: unknown = (JSON.parse(line) as Record<string, unknown> | null)?.id;
+      if (typeof id === "string" && OPENING_ID.test(id)) ids.add(id);
+    } catch {
+      // An empty or torn line.
+    }
+  }
+  return ids;
+}
+
+/** Whether a value is an opening's id, as `proxenos ask` makes them. */
+export function isOpeningId(value: unknown): value is string {
+  return typeof value === "string" && OPENING_ID.test(value);
+}
+
+/**
+ * Keep an opening an ask showed among those the week's choices weigh, with `proxenos ask --keep`.
+ * It takes what it keeps from the ask's own file, never from the request, and keeps an opening
+ * once however often it's asked. Only the two ids go on its command line. Never throws.
+ */
+export async function keepOpening(askId: string, openingId: string): Promise<{ ok: boolean; message: string }> {
+  const cli = await proxenos();
+  if (!cli) return { ok: false, message: "Couldn't find the proxenos command. Set PROXENOS_BIN in .env." };
+  const last = (text: string) => text.trim().split("\n").pop()?.slice(0, 300) ?? "";
+  return new Promise((resolve) => {
+    cli.exec(["ask", "--keep", askId, openingId], { timeout: KEEP_MS, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
+      if (!error) resolve({ ok: true, message: last(stdout) });
+      else resolve({ ok: false, message: error.killed ? "It took too long." : last(stderr) || "It didn't keep." });
+    });
+  });
 }

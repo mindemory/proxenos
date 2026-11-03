@@ -11,7 +11,10 @@ The first, in code with no model, gathers what there is to choose from:
   the posts in Slack channels that do. Each is scored by those words, by the words it shares with
   the self-model (the rarer among the openings, the more they count), by whether it was written
   to the user as a person, and by how the user took earlier items from the same sender. The best
-  OPENINGS go on; an announcement sent again counts once.
+  OPENINGS go on; an announcement sent again counts once. Beside mail and Slack are the openings
+  the user kept from Ask (proxenos.ask: a job, postdoc or call in a post they shared from their
+  phone), in clones/choices/kept.jsonl, until their deadline passes, or for KEPT_DAYS when they
+  have none. The user chose those, so they come first whatever their words score.
 - costs: the meetings of the next AHEAD_DAYS and the hours each takes, calendar invitations not
   answered yet, chats that have waited on the user for more than a week (proxenos.chats), open
   tasks older than STALE_DAYS, senders that mail often and whom the user never writes to, and
@@ -25,12 +28,15 @@ returns:
   is a draft (an email to the organizer, an abstract, an outline), which the work clone writes the
   same night into clones/drafts/ as choice-<id>, or an errand, a goal the page starts in one tap.
   Some openings are in no announcement: writing the user's work is ready for, a collaboration
-  their network makes easy, a talk to offer.
+  their network makes easy, a talk to offer. Every kept opening is among them, after the model's
+  own when it left one out, with its deadline; its first step is the draft Ask wrote, so the work
+  clone writes none, unless Ask wrote none.
 - skip: up to SKIP things to let go of: a meeting, thread, invitation, list, channel or task, why,
   what it costs, the evidence, and, for a meeting, invitation, task or commitment where a person is
   owed an answer, a short decline, which the work clone drafts as choice-<id> too. Letting a thread
   go means not answering it, and a list or channel is left in its settings, so those get none. A
-  list or channel that one of the week's openings came from is never one to skip.
+  list or channel that one of the week's openings came from, or an opening the user kept, is
+  never one to skip.
 
 A run lands in clones/choices/<date>.json, and clones/choices/history.json keeps every item given.
 The drafts of earlier weeks' items go, unless the user touched them or marked the item useful or
@@ -38,7 +44,8 @@ doing.
 The page marks items useful, not me or doing in clones/choices/feedback.jsonl. Later runs never
 bring back an item marked not me or doing: not its id, not its title, not the records it came
 from. A sender whose items were marked not me ranks lower, one marked useful or doing higher, and
-the model is told how each kind of item has fared.
+the model is told how each kind of item has fared. A kept opening goes once an item taken on from
+it is marked not me or doing.
 """
 
 import argparse
@@ -84,7 +91,11 @@ SKIP = 5
 SHOWN = 30  # earlier items listed for each verdict, the newest
 EXCERPT_CHARS = 1500  # of an opening's text, kept with its item for the draft
 SELF_FILES = ("identity", "interests", "open_questions", "routines", "taste")
+KEPT = "kept.jsonl"  # the openings kept from Ask, in clones/choices
+KEPT_DAYS = 90  # how long a kept opening with no deadline is weighed
+CHOSEN = 100  # a kept opening's score on top of its words': above any opening's, so it comes first
 ON_KINDS = (
+    "job",
     "cfp",
     "grant",
     "fellowship",
@@ -102,6 +113,40 @@ OWED = ("meeting", "invitation", "task", "commitment", "other")
 STEPS = ("draft", "errand")
 _REACTIONS = ("useful", "not_me", "doing")
 _CLOSED = ("not_me", "doing")  # what never comes back
+# What a kept opening keeps of what Ask showed (proxenos.ask), besides its id and when.
+_KEPT_FIELDS = (
+    "ask",
+    "kind",
+    "title",
+    "org",
+    "place",
+    "mode",
+    "pay",
+    "deadline",
+    "link",
+    "verdict",
+    "why",
+    "step",
+    "to",
+    "channel",
+    "draft_id",
+)
+# An opening's kind in Ask, as a kind of opening here.
+_KIND_OF = {
+    "job": "job",
+    "postdoc": "job",
+    "residency": "program",
+    "fellowship": "fellowship",
+    "scholar_program": "program",
+    "cfp": "cfp",
+    "workshop": "event",
+}
+# The first steps Ask drafts, as the week's list says them.
+FIRST_STEPS = {
+    "message": "A short note to the person who posted it",
+    "cover_letter": "The opening paragraph of a cover letter",
+    "plan": "A plan for the submission",
+}
 
 # Words that announce an opening, in a subject or a post.
 _OPENING = re.compile(
@@ -143,15 +188,15 @@ You are {person}'s digital twin, choosing what is worth their time this week. Yo
 lately, what their time goes to, and how they took earlier weeks' choices. Return two short \
 lists.
 
-take_on: up to {take_on} openings worth taking on now, best first. An opening is a call for \
-papers or abstracts, a grant, fellowship or award, a talk to give, a collaboration, a piece of \
-writing to put out, an event or program to join. Some are among the openings below. Others \
+take_on: up to {take_on} openings worth taking on now, best first. An opening is a job, a call \
+for papers or abstracts, a grant, fellowship or award, a talk to give, a collaboration, a piece \
+of writing to put out, an event or program to join. Some are among the openings below. Others \
 nobody announced: what their work, notes and people make possible now (a post their thinking is \
 ready for, a talk they could offer, someone to build something with). Favour what {person} \
 wouldn't think of on their own but that fits who they are and where they're headed, by the \
 self-model, and make at least one of the list an opening nobody announced whenever the \
 self-model gives you one. For each:
-- kind: cfp, grant, fellowship, talk, collaboration, writing, event, program or other.
+- kind: job, cfp, grant, fellowship, talk, collaboration, writing, event, program or other.
 - title: short and specific, under 12 words.
 - why: two or three sentences said to {person} as "you": why it fits you in particular, naming \
 what in your records it builds on (a paper, a project, a note, a person, a goal).
@@ -187,6 +232,8 @@ Rules:
 - Nothing already on their task list or among their twin's ideas, unless you add something new.
 - Their reactions come first. Never bring back an item they marked not_me or doing, reworded or \
 not. Learn from what they mark: more of the kinds they find useful, fewer of those they reject.
+- An opening kept by them is one {person} chose from a post they shared: take it on, citing it, \
+unless it is already on their plate, and never list it to skip.
 - A skip is a suggestion, not a judgment; no moralizing. Never suggest skipping health care, \
 family, or something another person depends on them for, nor a list or channel one of your \
 openings came from.
@@ -266,7 +313,9 @@ def choose(vault: Path, force: bool = False, now: datetime | None = None) -> dic
 
     since = window(out, now)
     openings = [
-        o for o in gather_openings(vault, since, me, history, reactions) if o["key"] not in shut
+        o
+        for o in gather_openings(vault, since, me, history, reactions, now)
+        if o["key"] not in shut
     ]
     costs = [c for c in gather_costs(vault, now, me) if c["key"] not in shut]
     links = _tag(openings[:OPENINGS], costs)
@@ -363,11 +412,17 @@ def read_self(self_dir: Path) -> dict[str, str]:
 
 
 def gather_openings(
-    vault: Path, start: datetime, me: set[str], history: dict, reactions: dict[str, str]
+    vault: Path,
+    start: datetime,
+    me: set[str],
+    history: dict,
+    reactions: dict[str, str],
+    now: datetime | None = None,
 ) -> list[dict]:
-    """Every opening announced since `start`, best first, each {key, where, sender, address, ts,
-    title, text, copies, direct, score}. key is its record's id in the memory index. Anything
-    about the user's health care stays out: that's the care clone's, and never a choice."""
+    """Every opening announced since `start`, and every one kept from Ask still open, best
+    first, each {key, where, sender, address, ts, title, text, copies, direct, score}. key is its
+    record's id in the memory index, or kept/<id>. Anything about the user's health care stays
+    out: that's the care clone's, and never a choice."""
     since = _iso(start)
     found: dict[str, dict] = {}
     for opening in [*_mail_openings(vault, since, me), *_slack_openings(vault, since)]:
@@ -378,7 +433,7 @@ def gather_openings(
             if kept["ts"] > opening["ts"]:
                 opening = kept | {"copies": opening["copies"], "direct": opening["direct"]}
         found[same] = opening
-    openings = list(found.values())
+    openings = list(found.values()) + _kept_openings(vault, now or datetime.now(UTC))
     bias = _sender_bias(history, reactions)
     relevance = _relevance(vault, openings)
     for o in openings:
@@ -391,6 +446,7 @@ def gather_openings(
             + relevance(o)
             + 2 * o["direct"]
             + bias.get(o["address"], 0)
+            + CHOSEN * bool(o.get("kept"))
         )
     return sorted(openings, key=lambda o: (o["score"], o["ts"]), reverse=True)
 
@@ -449,6 +505,72 @@ def _slack_openings(vault: Path, since: str) -> Iterator[dict]:
                 "copies": 1,
                 "direct": False,
             }
+
+
+def _kept_openings(vault: Path, now: datetime) -> list[dict]:
+    """The openings kept from Ask still open: before their deadline, or kept in the last
+    KEPT_DAYS when they have none. Each reads as an opening from mail does, with what Ask made
+    of it, and keeps its record in `kept`."""
+    today = f"{now.astimezone():%Y-%m-%d}"
+    since = _iso(now - timedelta(days=KEPT_DAYS))
+    found = []
+    for k in kept(vault):
+        deadline = _deadline(k["deadline"])
+        if (deadline and deadline < today) or (not deadline and k["kept"] < since):
+            continue
+        shown = [k["place"], k["mode"], k["pay"] and f"pay {k['pay']}"]
+        shown += [deadline and f"deadline {deadline}", k["link"]]
+        verdict = f"Ask said {k['verdict']}: {k['why']}" if k["verdict"] else k["why"]
+        step = FIRST_STEPS.get(k["step"], "")
+        text = ". ".join(
+            p for p in ("; ".join(filter(None, shown)), verdict, step and f"Drafted: {step}") if p
+        )
+        found.append(
+            {
+                "key": f"kept/{k['id']}",
+                "where": "a post they shared to Ask",
+                "sender": k["org"] or "someone",
+                "address": "",
+                "home": "",
+                "ts": k["kept"],
+                "title": f"{k['title']}, {k['org']}" if k["org"] else k["title"],
+                "text": text,
+                "copies": 1,
+                "direct": False,
+                "kept": k | {"deadline": deadline},
+            }
+        )
+    return found
+
+
+def keep(vault: Path, opening: dict, now: datetime | None = None) -> bool:
+    """Keep an opening Ask showed (proxenos.ask.keep) among the ones the week's choices weigh:
+    one line in clones/choices/kept.jsonl. One kept already stays as it was the first time, so
+    keeping it again changes nothing. Whether it was new."""
+    key = _one_line(opening.get("id"))
+    if not key or not _one_line(opening.get("title")) or key in {k["id"] for k in kept(vault)}:
+        return False
+    when = _iso(now or datetime.now(UTC))
+    record = {"id": key, "kept": when} | {f: _one_line(opening.get(f)) for f in _KEPT_FIELDS}
+    path = vault / "clones" / "choices" / KEPT
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    torn = path.exists() and path.read_bytes()[-1:] not in (b"", b"\n")  # a line left unended
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(("\n" if torn else "") + json.dumps(record, ensure_ascii=False) + "\n")
+    return True
+
+
+def kept(vault: Path) -> list[dict]:
+    """The openings kept from Ask, oldest first, each once, as it was first kept."""
+    found: dict[str, dict] = {}
+    for r in _lines(vault / "clones" / "choices" / KEPT):
+        key, title = _one_line(r.get("id")), _one_line(r.get("title"))
+        if key and title and key not in found:
+            found[key] = {"id": key, "kept": _one_line(r.get("kept"))} | {
+                f: _one_line(r.get(f)) for f in _KEPT_FIELDS
+            }
+    return list(found.values())
 
 
 def _health(text: str) -> bool:
@@ -813,7 +935,8 @@ def prompt(
         f'# On their plate already (cite as "tasks")\n\n{_plate(vault)}',
         f'# Their twin\'s ideas for their network (cite as "network")\n\n{_ideas(vault)}',
         f"# Openings that reached {person} since {since.astimezone():%Y-%m-%d}, best first\n\n"
-        "Mail and Slack posts announcing something, by ref. [L..] tags stand for links.\n\n"
+        "Mail and Slack posts announcing something, by ref. [L..] tags stand for links. One "
+        f"kept by them is an opening {person} kept from a post they shared to Ask.\n\n"
         + ("\n\n".join(map(_opening_text, openings)) or "None."),
         f"# What {person}'s time and attention go to\n\n"
         + ("\n".join(f"- [{c['ref']}] {c['kind']}: {c['line']}" for c in costs) or "Nothing."),
@@ -826,9 +949,10 @@ def prompt(
 def _opening_text(o: dict) -> str:
     copies = f", sent {o['copies']} times" if o["copies"] > 1 else ""
     to_them = ", written to them" if o["direct"] else ""
+    chosen = ", kept by them" if o.get("kept") else ""
     return (
         f'<opening ref="{o["ref"]}" where="{o["where"]}" from="{o["sender"]}" '
-        f'date="{o["ts"][:10]}"{copies}{to_them}>\n{o["title"]}\n{o["text"]}\n</opening>'
+        f'date="{o["ts"][:10]}"{copies}{to_them}{chosen}>\n{o["title"]}\n{o["text"]}\n</opening>'
     )
 
 
@@ -898,7 +1022,8 @@ def _accept(
     now: datetime,
 ) -> dict[str, list]:
     """The model's lists, checked: refs only from what it was given, nothing closed coming back,
-    no deadline already past, links only from the openings, no repeats."""
+    no deadline already past, links only from the openings, no repeats. Then each kept opening
+    the model didn't take on, as Ask showed it."""
     today = f"{now.astimezone():%Y-%m-%d}"
     seen: set[str] = set()
 
@@ -916,32 +1041,41 @@ def _accept(
         if not (checked := fresh("take_on", item)):
             continue
         key, refs = checked
-        deadline = _deadline(item.get("deadline"))
+        chosen = next((by_ref[r]["kept"] for r in refs if by_ref.get(r, {}).get("kept")), None)
+        deadline = _deadline(item.get("deadline")) or (chosen or {}).get("deadline", "")
         if deadline and deadline < today:
             continue
         step = item.get("step") or {}
         what = _one_line(step.get("what"))
         kind = step.get("kind") if step.get("kind") in STEPS else "draft"
         opening = next((by_ref[r] for r in refs if r in by_ref and r.startswith("o")), None)
-        take_on.append(
-            {
-                "id": key,
-                "kind": item.get("kind") if item.get("kind") in ON_KINDS else "other",
-                "title": _one_line(item["title"]),
-                "why": str(item.get("why") or "").strip(),
-                "deadline": deadline,
-                "link": _link(item.get("link"), refs, by_ref, links),
-                "evidence": [_evidence(r, by_ref) for r in refs],
-                "step": {
-                    "kind": kind,
-                    "what": what,
-                    "to": _one_line(step.get("to")),
-                    "channel": _channel(step.get("channel")),
-                },
-                "draft_id": f"choice-{key}" if kind == "draft" and what else None,
-                "excerpt": _clip(opening["excerpt"], EXCERPT_CHARS) if opening else "",
-            }
-        )
+        made = {
+            "id": key,
+            "kind": item.get("kind") if item.get("kind") in ON_KINDS else "other",
+            "title": _one_line(item["title"]),
+            "why": str(item.get("why") or "").strip(),
+            "deadline": deadline,
+            "link": _link(item.get("link"), refs, by_ref, links) or _web(chosen),
+            "evidence": [_evidence(r, by_ref) for r in refs],
+            "step": {
+                "kind": kind,
+                "what": what,
+                "to": _one_line(step.get("to")),
+                "channel": _channel(step.get("channel")),
+            },
+            "draft_id": f"choice-{key}" if kind == "draft" and what else None,
+            "excerpt": _clip(opening["excerpt"], EXCERPT_CHARS) if opening else "",
+        }
+        if chosen and chosen["draft_id"]:  # Ask drafted its first step: that one, not another
+            made |= {"step": _kept_step(chosen), "draft_id": chosen["draft_id"]}
+        take_on.append(made)
+    take_on = take_on[:TAKE_ON]
+    cited = {e["ref"] for i in take_on for e in i["evidence"]}
+    for ref, o in by_ref.items():
+        if not o.get("kept") or ref in cited:
+            continue
+        if checked := fresh("take_on", {"title": o["title"], "refs": [ref]}):
+            take_on.append(_from_kept(checked[0], ref, o, by_ref))
     # Where the openings to take on came from: a list or channel the user shouldn't leave for them.
     homes = {
         by_ref[e["ref"]].get("home") for i in take_on for e in i["evidence"] if e["ref"] in by_ref
@@ -949,7 +1083,9 @@ def _accept(
     skip = []
     for item in answer.get("skip") or []:
         refs = [r for r in item.get("refs") or [] if r in by_ref]
-        if any(by_ref[r]["key"] in homes for r in refs) or not (checked := fresh("skip", item)):
+        if any(by_ref[r]["key"] in homes or by_ref[r].get("kept") for r in refs):
+            continue
+        if not (checked := fresh("skip", item)):
             continue
         key, refs = checked
         kind = item.get("kind") if item.get("kind") in OFF_KINDS else "other"
@@ -974,7 +1110,42 @@ def _accept(
                 "draft_id": f"choice-{key}" if what else None,
             }
         )
-    return {"take_on": take_on[:TAKE_ON], "skip": skip[:SKIP]}
+    return {"take_on": take_on, "skip": skip[:SKIP]}
+
+
+def _from_kept(key: str, ref: str, opening: dict, by_ref: dict[str, dict]) -> dict:
+    """A kept opening the model left out, to take on as Ask showed it: its why, its deadline,
+    its link and the draft Ask wrote, or one the work clone writes when Ask wrote none."""
+    chosen = opening["kept"]
+    return {
+        "id": key,
+        "kind": _KIND_OF.get(chosen["kind"], "other"),
+        "title": opening["title"],
+        "why": chosen["why"],
+        "deadline": chosen["deadline"],
+        "link": _web(chosen),
+        "evidence": [_evidence(ref, by_ref)],
+        "step": _kept_step(chosen),
+        "draft_id": chosen["draft_id"] or f"choice-{key}",
+        "excerpt": _clip(opening["excerpt"], EXCERPT_CHARS),
+    }
+
+
+def _kept_step(chosen: dict) -> dict:
+    """A kept opening's first step: the one Ask drafted, else the one for its kind."""
+    step = chosen["step"] or ("plan" if chosen["kind"] in ("cfp", "workshop") else "cover_letter")
+    return {
+        "kind": "draft",
+        "what": FIRST_STEPS.get(step, FIRST_STEPS["cover_letter"]),
+        "to": chosen["to"] if step == "message" else "",
+        "channel": _channel(chosen["channel"]) if step == "message" else "other",
+    }
+
+
+def _web(chosen: dict | None) -> str:
+    """A kept opening's link, when it's a web page's."""
+    link = (chosen or {}).get("link", "")
+    return link if _URL.fullmatch(link) else ""
 
 
 def item_id(side: str, title: str) -> str:
@@ -988,6 +1159,9 @@ def _evidence(ref: str, by_ref: dict[str, dict]) -> dict:
         labels = {"tasks": "Your task list", "network": "Your network's ideas"}
         own = ref.removeprefix("self/").replace("_", " ")
         return {"ref": ref, "label": labels.get(ref, f"Your {own}"), "id": ""}
+    if item.get("kept"):
+        when = item["ts"][:10]
+        return {"ref": ref, "label": f"You kept it from Ask, {when}: {item['title']}", "id": ""}
     if ref.startswith("o"):
         when = item["ts"][:10]
         return {
@@ -1017,7 +1191,9 @@ def _remembered(item: dict, by_ref: dict[str, dict], day: str) -> dict:
         "title": item["title"],
         "given": day,
         "sources": [by_ref[r]["key"] for r in refs if r in by_ref],
-        "senders": sorted({by_ref[r]["address"] for r in refs if r in by_ref and r[0] == "o"})
+        "senders": sorted(
+            {by_ref[r]["address"] for r in refs if r in by_ref and r[0] == "o"} - {""}
+        )
         if side == "take_on"
         else [],
     }

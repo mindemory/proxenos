@@ -45,7 +45,7 @@ export function Ask({ onNavigate, prefill, onPrefilled }: AskProps) {
       setShots((s) => (s.length === 0 ? lastSent.shots : s));
     }
   }, []);
-  const { data, error, clearError, pending, stopping, flashId, send, again, stop } = useAsk(ended);
+  const { data, error, clearError, pending, stopping, flashId, send, again, stop, keep } = useAsk(ended);
   const [handOffError, setHandOffError] = useState<string | null>(null);
 
   /** Carry out what an answer says to do, as an errand, and go to Errands to follow it. */
@@ -147,6 +147,7 @@ export function Ask({ onNavigate, prefill, onPrefilled }: AskProps) {
               onDrafts={() => onNavigate("drafts")}
               onAgain={thinking ? null : () => void again(a)}
               onErrand={() => handOff(a.question, a.answer)}
+              onKeep={(o) => keep(a.id, o.id)}
             />
           ))}
         </section>

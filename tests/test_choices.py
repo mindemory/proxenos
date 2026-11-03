@@ -818,3 +818,136 @@ def test_a_skip_never_cuts_off_an_opening_s_source_and_only_people_owed_one_get_
     assert brief["decline"] is None
     assert panel["decline"] == {"what": "Say no.", "to": "Dean Ray", "channel": "email"}
     assert panel["draft_id"] == f"choice-{panel['id']}"
+
+
+# Openings kept from Ask: a post shared from the phone. Every name here is made up.
+KEPT = {
+    "id": "a1b2c3d4e5f6",
+    "ask": "ask-20260308T100000Z",
+    "kind": "postdoc",
+    "title": "Postdoc in working memory models",
+    "org": "Northfield Institute",
+    "place": "Lisbon",
+    "mode": "on-site",
+    "pay": "",
+    "deadline": "2026-04-15",
+    "link": "https://careers.northfield.example/postdoc-7",
+    "verdict": "apply",
+    "why": "It builds on your capacity paper.",
+    "step": "message",
+    "to": "Rui Matos",
+    "channel": "linkedin",
+    "draft_id": "ask-20260308T100000Z-o1",
+}
+WORKSHOP = KEPT | {
+    "id": "0000000000a2",
+    "kind": "workshop",
+    "title": "Workshop on attention",
+    "org": "",
+    "deadline": "",
+    "link": "",
+    "verdict": "skip",
+    "step": "",
+    "draft_id": "",
+}
+
+
+def test_openings_kept_from_ask_are_weighed_first_and_taken_on_with_their_deadlines(
+    tmp_path, model, monkeypatch
+):
+    vault = make_vault(tmp_path)
+    shared = datetime(2026, 3, 8, 10, 0, tzinfo=UTC)
+    assert choices.keep(vault, KEPT, shared) is True
+    assert choices.keep(vault, KEPT | {"why": "Kept again."}, NOW) is False  # once is enough
+    choices.keep(vault, WORKSHOP, shared)
+    closed = {"id": "0000000000a3", "title": "Residency long closed", "deadline": "2026-03-01"}
+    choices.keep(vault, KEPT | closed, shared)
+    old = {"id": "0000000000a4", "title": "Fellowship kept long ago", "deadline": ""}
+    choices.keep(vault, KEPT | old, datetime(2025, 11, 1, tzinfo=UTC))
+    monkeypatch.setattr(choices, "OPENINGS", 2)  # room for two: the kept, whatever their words
+
+    def answer(prompt):
+        postdoc = ref(prompt, r'<opening ref="(o\d+)"[^>]*, kept by them>\nPostdoc')
+        workshop = ref(prompt, r'<opening ref="(o\d+)"[^>]*, kept by them>\nWorkshop')
+        return {
+            "take_on": [
+                {
+                    "kind": "job",
+                    "title": "Write to Rui about the postdoc",
+                    "why": "Your capacity paper is the fit.",
+                    "refs": [postdoc, "self/identity"],
+                    "deadline": "",
+                    "link": "",
+                    "step": {"kind": "errand", "what": "Reach Rui", "to": "Rui", "channel": "x"},
+                }
+            ],
+            "skip": [
+                {
+                    "kind": "other",
+                    "title": "Let the workshop go",
+                    "why": "",
+                    "cost": "",
+                    "refs": [workshop],
+                    "decline": {"what": "", "to": "", "channel": "other"},
+                }
+            ],
+        }
+
+    model.answer = answer
+    stats = run(vault)
+
+    prompt = model.calls[0]["prompt"]
+    assert stats["openings_read"] == 2 and "Call for abstracts" not in prompt
+    assert "Residency long closed" not in prompt and "Fellowship kept long ago" not in prompt
+    assert prompt.count("Postdoc in working memory models") == 1
+    assert "Lisbon; on-site; deadline 2026-04-15; [L" in prompt  # its link, as a tag
+    assert "Ask said apply: It builds on your capacity paper." in prompt
+    assert "Drafted: A short note to the person who posted it" in prompt
+    saved = json.loads((vault / "clones" / "choices" / f"{DAY}.json").read_text())
+    assert saved["skip"] == []  # never one to skip
+    postdoc, workshop = saved["take_on"]
+    assert postdoc["title"] == "Write to Rui about the postdoc"  # as the model took it on
+    assert postdoc["deadline"] == "2026-04-15" and postdoc["link"] == KEPT["link"]
+    assert postdoc["draft_id"] == "ask-20260308T100000Z-o1"  # Ask's draft, not another
+    assert postdoc["step"] == {
+        "kind": "draft",
+        "what": "A short note to the person who posted it",
+        "to": "Rui Matos",
+        "channel": "linkedin",
+    }
+    assert postdoc["evidence"][0] == {
+        "ref": postdoc["evidence"][0]["ref"],
+        "label": "You kept it from Ask, 2026-03-08: "
+        "Postdoc in working memory models, Northfield Institute",
+        "id": "",
+    }
+    # The one the model left out is there anyway, as Ask showed it, with a first step to draft.
+    assert workshop["title"] == "Workshop on attention" and workshop["kind"] == "event"
+    assert workshop["deadline"] == "" and workshop["why"] == KEPT["why"]
+    assert workshop["step"]["what"] == "A plan for the submission"
+    assert workshop["draft_id"] == f"choice-{workshop['id']}"
+    assert [i["id"] for i in work._choices(vault / "clones" / "choices")] == [workshop["id"]]
+    history = json.loads((vault / "clones" / "choices" / "history.json").read_text())
+    assert history[postdoc["id"]]["sources"] == ["kept/a1b2c3d4e5f6"]
+    assert history[postdoc["id"]]["senders"] == []
+
+    # Doing it closes the kept opening for good; the other stays until its time is up.
+    write_jsonl(
+        vault / "clones" / "choices" / "feedback.jsonl",
+        [{"item_id": postdoc["id"], "action": "doing", "ts": "2026-03-10T13:00:00Z"}],
+    )
+    model.answer = {"take_on": [], "skip": []}
+    run(vault, now=datetime(2026, 3, 17, 12, 0, tzinfo=UTC))
+    later = model.calls[-1]["prompt"]
+    assert "Postdoc in working memory models" not in later and "Workshop on attention" in later
+    run(vault, now=datetime(2026, 6, 10, 12, 0, tzinfo=UTC), force=True)
+    assert "Workshop on attention" not in model.calls[-1]["prompt"]  # past KEPT_DAYS
+
+
+def test_a_torn_line_in_the_kept_file_costs_nothing(tmp_path):
+    kept = tmp_path / "clones" / "choices" / "kept.jsonl"
+    kept.parent.mkdir(parents=True)
+    kept.write_text('{"id": "x", "title": "Torn', encoding="utf-8")
+    assert choices.keep(tmp_path, KEPT, NOW) is True
+    assert [k["id"] for k in choices.kept(tmp_path)] == [KEPT["id"]]
+    assert choices.keep(tmp_path, KEPT | {"title": ""}, NOW) is False

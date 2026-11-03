@@ -27,16 +27,19 @@ interface ActionButtonProps {
   active?: boolean;
   fillWhenActive?: boolean;
   disabled?: boolean;
+  /** The name a screen reader gives it, when the label alone is one of several alike: it starts with the label. */
+  name?: string;
   onClick: () => void;
 }
 
 /** One pill-shaped action. Its pressed state is the record of what you chose. */
-export function ActionButton({ icon: Icon, label, tone, active = false, fillWhenActive, disabled = false, onClick }: ActionButtonProps) {
+export function ActionButton({ icon: Icon, label, tone, active = false, fillWhenActive, disabled = false, name, onClick }: ActionButtonProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
+      aria-label={name}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8125rem] leading-none transition-colors whitespace-nowrap",
         "disabled:cursor-not-allowed disabled:opacity-50",
