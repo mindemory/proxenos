@@ -33,6 +33,7 @@ from proxenos import (
     privacy,
     schedule,
     setup,
+    speech,
     think,
     vectors,
     voice,
@@ -147,6 +148,10 @@ def main(argv: list[str] | None = None) -> None:
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
     voicemodel.add_arguments(tune)
+    speaking = commands.add_parser(
+        "speech", help="Listen's natural voice or your own, made on this Mac; nothing is sent"
+    )
+    speech.add_arguments(speaking)
     comparing = commands.add_parser(
         "compare", help="which of two models writes replies most like you, judged blind by you"
     )
@@ -205,6 +210,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "voice":
         voicemodel.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "speech":  # its own server; works alongside a sync
+        speech.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "compare":  # JSON for the page; nothing is sent to anyone
         print(json.dumps(compare.run(vault_path(), args), ensure_ascii=False))
