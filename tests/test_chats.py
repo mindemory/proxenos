@@ -342,3 +342,42 @@ def test_mail_without_a_thread_id_threads_by_subject_and_people_and_skips_the_un
         "Also, the figure?",
     ]
     assert chat["own"] == ["Draft attached."]
+
+
+def test_a_group_waits_when_someone_asks_back_right_after_the_user(tmp_path):
+    def group(chat, *said):
+        return [
+            wa(chat, ts, text, mine=mine, kind="group", name=chat.title())
+            for ts, text, mine in said
+        ]
+
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        group(
+            "hike",
+            ("2026-03-08T02:13:00Z", "we could do the ridge trail, thoughts?", True),
+            ("2026-03-08T14:59:00Z", "sounds good to me", False),
+            ("2026-03-08T14:59:30Z", "which day works?", False),
+        )
+        + group(
+            "crew",  # a question to everyone, days after the user last wrote
+            ("2026-03-01T09:00:00Z", "hi all", True),
+            ("2026-03-09T09:00:00Z", "who is in?", False),
+        )
+        + group(
+            "club",  # the user's message is long past: many others came after it
+            ("2026-03-08T09:00:00Z", "I'm in", True),
+            *((f"2026-03-08T10:0{i}:00Z", f"note {i}", False) for i in range(5)),
+            ("2026-03-08T11:00:00Z", "anyone driving?", False),
+        )
+        + group(
+            "book",  # answered, but asks nothing
+            ("2026-03-08T09:00:00Z", "finished it", True),
+            ("2026-03-08T10:00:00Z", "nice, me too", False),
+        ),
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert chat["chat"] == "hike"
+    assert [m["text"] for m in chat["waiting"]] == ["sounds good to me", "which day works?"]

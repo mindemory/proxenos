@@ -72,7 +72,7 @@ def chat_vault(tmp_path):
             wa("ben", "Ben", 5, "sure thing will do tonight", mine=True),
             wa("ben", "Ben", 7, "👍 👍", mine=True),
             wa("fam", "Family", 6, "home by 8 probably", mine=True, kind="group"),
-            wa("fam", "Family", 6, "dinner?", kind="group"),
+            wa("fam", "Family", 8, "dinner?", kind="group"),  # to everyone, days later
             wa("me", "Tess", 8, "headache again, log it", mine=True),  # a note to self
         ],
     )

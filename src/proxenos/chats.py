@@ -9,6 +9,10 @@ addressed to one of their PROXENOS_EMAILS among a few people), and only when wha
 waiting says something: a question, a link or a few words, not a lone "ok" or emoji. A chat
 with an app's own AI assistant, like Meta AI, never counts.
 
+A group chat counts when what's waiting answers the user: a question from someone, among the
+first few messages after the user's own and within a day of it, as when a friend asks back in a
+group the user just wrote to. A question to the whole group days later doesn't.
+
 One email from someone new counts too: their first, written to the user as one person (from no
 role address like info@, with no unsubscribe or copyright line), calling them by name and asking
 something, by someone who hasn't written to them in any other thread. So a founder's or a
@@ -44,6 +48,8 @@ EMAIL_CHARS = 2000  # an email says more than a chat message
 EMAIL_MONTHS = 6
 OWN_EMAILS = 6  # the user's own emails kept as examples: fewer, since each is longer
 MAX_RECIPIENTS = 6  # more than this on To and Cc is an announcement, not a question to answer
+GROUP_FOLLOW = 4  # others' messages after the user's own in a group that can still answer them
+GROUP_HOURS = 24  # and how soon after it they come
 _LINKEDIN_FOLDERS = ("INBOX", "ARCHIVE", None)  # not sponsored messages or InMail offers
 _ADDRESS = re.compile(r"[^\s<>\"',;]+@[^\s<>\"',;]+")
 _BULK_LABELS = {"category promotions", "category social", "category updates", "category forums"}
@@ -171,9 +177,11 @@ def _waiting(
     new's first email (marked first) needs none, but waits only while all of it is new: a
     follow-up to one the user let sit doesn't count."""
     said = sorted((m for m in messages if m["text"]), key=lambda m: m["ts"])
-    if not said or said[-1]["mine"] or said[-1]["ts"] < since or not said[-1]["direct"]:
+    if not said or said[-1]["mine"] or said[-1]["ts"] < since:
         return None
     own = [i for i, m in enumerate(said) if m["mine"]]
+    if not said[-1]["direct"] and not _answers_me(said, own):
+        return None
     words = [said[i]["text"] for i in own] or (elsewhere(said[-1]) if elsewhere else [])
     first = bool(said[-1].get("first"))
     if (not words and not first) or (first and said[0]["ts"] < since):
@@ -192,6 +200,16 @@ def _waiting(
         "own": words[-examples:],
         "first": first,
     }
+
+
+def _answers_me(said: list[dict], own: list[int]) -> bool:
+    """Whether a group's last messages answer the user: a few, straight after their own, within
+    GROUP_HOURS of it, and asking something. A question to the group days later doesn't."""
+    if not own or len(said) - 1 - own[-1] > GROUP_FOLLOW:
+        return False
+    after = said[own[-1] + 1 :]
+    soon = _iso(datetime.fromisoformat(said[own[-1]]["ts"]) + timedelta(hours=GROUP_HOURS))
+    return all(m["ts"] <= soon for m in after) and any("?" in m["text"] for m in after)
 
 
 def _first(
