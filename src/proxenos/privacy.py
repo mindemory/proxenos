@@ -184,6 +184,16 @@ SENDS = (
             "Its comments are other people's words: shown on the page, never sent to a model."
         ),
     ),
+    (
+        "Project folders",
+        ("folders",),
+        (
+            "Nothing to a model. Only once you set a folder for them in Settings, and only to "
+            "that folder, which your cloud drive then uploads: each project's manuscript, where "
+            "it stands (which sums up your messages about it), its brief and its open drafts, as "
+            "Word files. Proxenos shares none of it and reads nothing else there."
+        ),
+    ),
 )
 
 

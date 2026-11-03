@@ -11,6 +11,7 @@ from proxenos.clones import (
     care,
     choices,
     errands,
+    folders,
     jobs,
     journal,
     life,
@@ -52,6 +53,7 @@ def calls(tmp_path, monkeypatch):
         errands,
         work,
         steps,
+        folders,
         journal,
         life,
         rhythms,
@@ -111,6 +113,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "folders: 1 done",
         "journal: 1 done",
         "life: 1 done",
         "rhythms: 1 done",
@@ -126,6 +129,9 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("jobs")
     # The month's story reads the journal of the day that just ended.
     assert cli.NIGHT_CLONES.index("journal") < cli.NIGHT_CLONES.index("life")
+    # Each project's folder takes the night's status, drafts and step.
+    assert cli.NIGHT_CLONES.index("projects") < cli.NIGHT_CLONES.index("folders")
+    assert cli.NIGHT_CLONES.index("steps") < cli.NIGHT_CLONES.index("folders")
     assert all(vault == "vault" for _, vault, _ in calls)
     args = {name: a for name, _, a in calls}
     assert args["network"] == {"people_only": False}  # the full run, ideas too
@@ -137,6 +143,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["choices"] == args["watch"] == {"force": False}  # once a week
     assert args["jobs"] == {"days": None}  # since the last run
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
+    assert args["folders"] == {"project": None, "pull_only": False}  # every project, both ways
     assert args["rhythms"] == {
         "weeks": None,
         "label": rhythms.LABEL,
@@ -177,6 +184,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "folders: 1 done",
         "journal: 1 done",
         "life: 1 done",
         "rhythms: 1 done",
@@ -196,6 +204,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands",
         "work",
         "steps",
+        "folders",
         "journal",
         "life",
         "rhythms",

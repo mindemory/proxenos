@@ -119,6 +119,10 @@ def test_folder_settings_are_saved_and_missing_ones_said(home):
     assert result["ok"]
     assert result["message"] == "Saved in your settings. Not there yet: ~/Scans."
     assert config.env("DOCS_DIRS") == "~/Health, ~/Scans"
+    # The folder the projects go to, in a cloud drive, is one too (proxenos.clones.folders).
+    result = apply({"settings": {"project_folder": "~/Drive/Projects"}})
+    assert result["message"] == "Saved in your settings. Not there yet: ~/Drive/Projects."
+    assert result["status"]["settings"]["project_folder"]["value"] == "~/Drive/Projects"
 
     assert "Not a setting" in apply({"settings": {"anthropic_api_key": "x"}})["error"]
     assert "one line" in apply({"settings": {"name": "Ana\nPROXENOS_VAULT=/"}})["error"]

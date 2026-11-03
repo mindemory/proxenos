@@ -244,7 +244,7 @@ def _bring_back(
     if text != original:
         request = {"path": pull["path"], "branch": pull["branch"], "from": start, "text": text}
         step = manuscript.edit(vault, project, request, now, source="folder")
-        work._write(_kept(vault, project["id"]) / BASELINE, now_text)
+        _save(vault, BASELINE, now_text, project["id"])
         pull |= {"step": step["id"], "head": step["head"]}
         stats["steps_made"] += 1
     entry["seen"] = digest  # brought back: its changes aren't new any more
@@ -294,7 +294,7 @@ def _write_paper(
         if baseline is None:
             record.pop("pull", None)  # LaTeX goes one way
         else:
-            work._write(_kept(vault, project["id"]) / BASELINE, baseline)
+            _save(vault, BASELINE, baseline, project["id"])
             waiting = (record.get("pull") or {}).get("step")  # a step brought back still counts
             record["pull"] = {
                 "from": tip,
@@ -650,8 +650,13 @@ def _state(vault: Path, root: Path) -> dict:
 
 
 def _keep_state(vault: Path, state: dict) -> None:
-    """Swapped in whole, 0600 in a 0700 folder."""
-    work._write(_kept(vault) / "state.json", json.dumps(state, ensure_ascii=False, indent=1))
+    _save(vault, "state.json", json.dumps(state, ensure_ascii=False, indent=1))
+
+
+def _save(vault: Path, name: str, text: str, project_id: str = "") -> None:
+    """Swapped in whole, 0600 in 0700 folders."""
+    _kept(vault).mkdir(mode=0o700, parents=True, exist_ok=True)
+    work._write(_kept(vault, project_id) / name, text)
 
 
 def _kept(vault: Path, project_id: str = "") -> Path:

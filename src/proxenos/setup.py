@@ -42,11 +42,12 @@ SETTINGS = {
     "spotify_export": "SPOTIFY_EXPORT",
     "slackdump_dir": "SLACKDUMP_DIR",
     "cv_dirs": "CV_DIRS",
+    "project_folder": "PROJECT_FOLDER",
     "ntfy_server": "NTFY_SERVER",
     "quiet_hours": "QUIET_HOURS",
 }
 FOLDER_LISTS = ("docs_dirs", "cv_dirs")
-FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", *FOLDER_LISTS)
+FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", "project_folder", *FOLDER_LISTS)
 # Shown whether they're set or not; mail and calendar sign-ins and Slack workspaces only once
 # they are.
 SECRETS = (
