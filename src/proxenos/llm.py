@@ -81,11 +81,17 @@ _NO_SCHEMA = re.compile(r"response_format|schema|grammar|guided|structured", re.
 _NO_GRAMMAR: set[str] = set()
 # Thinking a server leaves in the words, where it doesn't part it out as reasoning_content.
 _THINKING = re.compile(r"\A\s*<think>.*?</think>\s*", re.DOTALL)
-# A local model answers one request at a time, so a question someone is waiting on (an Ask)
-# marks itself here, and other calls, a sync's drafts or the night's notes, wait until it's
-# answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
+# A local model given two requests at once works on both, each the slower, so Proxenos's
+# processes take turns: one local call at a time, holding _TURN while it's answered, and a
+# question someone is waiting on (an Ask, a Think) marks itself, so other calls, a sync's drafts
+# or the night's notes, let it go next and don't start until it's answered: for at most
+# FOREGROUND_MAX seconds, past which a mark counts as left behind. A turn is waited for at most
+# TURN_MAX seconds, past which a call goes ahead anyway, beside whatever holds it.
 _FOREGROUND = "state/asking"
 FOREGROUND_MAX = 900
+_TURN = "state/model.lock"
+TURN_MAX = 3900  # past _LOCAL_DEADLINE, the longest one call may take
+_TURN_EVERY = 0.5  # seconds between looks for a turn
 CALLS = "state/model-calls.jsonl"
 CALLS_KEPT = 20000  # lines kept, newest last: months of nights and syncs
 VOICE_PORT = 8899
@@ -217,6 +223,34 @@ def waiting(vault: Path | None = None) -> bool:
     if pid == os.getpid() or age > FOREGROUND_MAX:
         return False
     return lock.alive(pid)  # not when it ended without clearing its mark
+
+
+def _mine() -> bool:
+    """Whether this process is answering a question someone is waiting on."""
+    try:
+        return int((vault_path() / _FOREGROUND).read_text()) == os.getpid()
+    except (OSError, ValueError):
+        return False
+
+
+@contextmanager
+def _turn() -> Iterator[None]:
+    """This process's turn at the local model (see _TURN): taken once no other call holds it,
+    and for a call no one is waiting on, once no question someone is waiting on wants it."""
+    held = lock.Lock(vault_path() / _TURN)
+    mine = _mine()
+    deadline = time.monotonic() + TURN_MAX
+    took = False
+    while time.monotonic() < deadline:
+        if (mine or not waiting()) and held.acquire():
+            took = True
+            break
+        time.sleep(_TURN_EVERY)
+    try:
+        yield
+    finally:
+        if took:
+            held.release()
 
 
 def configured() -> bool:
@@ -361,22 +395,20 @@ def _ask_local(
         holds = schema
     if schema is not None and model not in _NO_GRAMMAR:
         body[held] = holds
-    deadline = time.monotonic() + FOREGROUND_MAX
-    while waiting() and time.monotonic() < deadline:
-        time.sleep(2)
-    for _ in range(2):
-        try:
-            text = chat(name, body, answer_room)
-        except ModelError as e:
-            if held not in body or not cant(str(e)):
-                raise
-            _NO_GRAMMAR.add(model)
-            body.pop(held)
-            text = chat(name, body, answer_room)
-        if schema is None:
-            return text
-        if (answer := _object(text, schema)) is not None:
-            return answer
+    with _turn():
+        for _ in range(2):
+            try:
+                text = chat(name, body, answer_room)
+            except ModelError as e:
+                if held not in body or not cant(str(e)):
+                    raise
+                _NO_GRAMMAR.add(model)
+                body.pop(held)
+                text = chat(name, body, answer_room)
+            if schema is None:
+                return text
+            if (answer := _object(text, schema)) is not None:
+                return answer
     raise ModelError(f"local model {name} didn't answer with the JSON asked for")
 
 

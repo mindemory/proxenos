@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 import time
 import types
 from contextlib import contextmanager
@@ -9,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from proxenos import llm
+from proxenos import llm, lock
 
 _real_waiting = llm.waiting  # conftest stands it in for every test; this one tests it
 
@@ -237,6 +238,37 @@ def test_a_question_being_answered_holds_other_processes_off(tmp_path):
     old = time.time() - 2000
     os.utime(mark, (old, old))  # left behind long ago
     assert not waiting(tmp_path)
+
+
+def test_local_calls_take_turns_and_a_question_goes_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path))
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    monkeypatch.setattr(llm, "_TURN_EVERY", 0.01)
+    monkeypatch.setattr(llm, "_calls_path", lambda: None)
+    asked = []
+    monkeypatch.setattr(llm, "_chat", lambda model, body, room: asked.append(1) or "ok")
+    wanted = []  # a question someone is waiting on, in another process
+    monkeypatch.setattr(llm, "waiting", lambda vault=None: bool(wanted))
+    other = lock.Lock(tmp_path / "state" / "model.lock")
+    assert other.acquire()  # another process's call has the model
+
+    done = threading.Event()
+    background = threading.Thread(target=lambda: llm.ask("a night's note") and done.set())
+    background.start()
+    time.sleep(0.2)
+    assert not asked  # it waits for its turn
+    wanted.append("Think")
+    other.release()
+    time.sleep(0.2)
+    assert not asked  # the model is free, but the question goes first
+    wanted.clear()
+    assert done.wait(5) and asked == [1]
+    background.join()
+
+    # The question's own process waits for the turn alone, never for itself.
+    (tmp_path / "state" / "asking").write_text(str(os.getpid()))
+    wanted.append("Think")
+    assert llm.ask("the question") == "ok" and asked == [1, 1]
 
 
 def test_a_voice_model_answers_from_the_server_on_this_computer(monkeypatch):
