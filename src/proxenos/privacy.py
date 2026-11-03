@@ -1,11 +1,12 @@
-"""`proxenos privacy`: what stays on this computer, what went to a model and what's read from
-elsewhere, as JSON for the page's Privacy view.
+"""`proxenos privacy`: what stays on this computer, what went to a model, what's read from
+elsewhere and whether notices go to the phone, as JSON for the page's Privacy view.
 
 It's drawn from what the code does rather than from a promise: the vault's folders and their
-sizes, the line every model call leaves (llm.calls), the sources connect.py finds set up, and
-the secrets config.py finds set. So it can be shown, it holds paths, names, addresses, counts
-and dates, never a message, a prompt, a token or a key: a call's line is copied field by field,
-a source by its names and addresses, and a secret by its name.
+sizes, the line every model call leaves (llm.calls), the sources connect.py finds set up, the
+secrets config.py finds set, and notify.py's settings. So it can be shown, it holds paths,
+names, addresses, counts and dates, never a message, a prompt, a token or a key: a call's line
+is copied field by field, a source by its names and addresses, a secret by its name, and notices
+by the server's host, never the topic.
 """
 
 import math
@@ -15,7 +16,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import config, connect, keychain, llm, setup
+from proxenos import config, connect, keychain, llm, notify, setup
 
 DAYS = 30
 NEWEST = 50  # calls listed one by one
@@ -159,6 +160,8 @@ def report(vault: Path, now: datetime | None = None) -> dict:
         "here": here(vault),
         "sent": sent(vault, now),
         "fetched": fetched(vault),
+        # The one thing that leaves for no model: a notice on the phone, counts only.
+        "notices": notify.report(),
     }
 
 

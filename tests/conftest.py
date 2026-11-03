@@ -15,6 +15,7 @@ _SECRET_PREFIXES = (
     "GMAIL_",
     "GOOGLE_CLIENT_",
     "MICROSOFT_",
+    "NTFY_",
     "SLACK_USER_TOKEN",
     "STRAVA_",
     "TWILIO_",

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import anthropic
 
-from proxenos import config, keychain, llm
+from proxenos import config, keychain, llm, notify
 
 # What the page can change, by its key in the settings file, and how many folders each takes.
 SETTINGS = {
@@ -37,6 +37,8 @@ SETTINGS = {
     "spotify_export": "SPOTIFY_EXPORT",
     "slackdump_dir": "SLACKDUMP_DIR",
     "cv_dirs": "CV_DIRS",
+    "ntfy_server": "NTFY_SERVER",
+    "quiet_hours": "QUIET_HOURS",
 }
 FOLDER_LISTS = ("docs_dirs", "cv_dirs")
 FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", *FOLDER_LISTS)
@@ -55,6 +57,8 @@ SECRETS = (
     "MICROSOFT_CLIENT_ID",
     "TWILIO_ACCOUNT_SID",
     "TWILIO_AUTH_TOKEN",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
 )
 _MODEL = re.compile(r"[\w.:/-]{1,100}")
 _VOICE = re.compile(r"mlx(:\d{1,5})?|ollama:[\w.:/-]{1,100}")
@@ -156,6 +160,8 @@ def _apply(request: object) -> str:
         _known_secret(name)
         if not value or len(value) > 4096 or any(c in value for c in "\r\n\0"):
             raise ValueError("Paste the new value on one line.")
+        if name == "NTFY_TOPIC" and not notify.TOPIC.fullmatch(value):
+            raise ValueError("A topic has only letters, digits, - and _, up to 64 of them.")
         return f"Saved {name} in {config.save_secret(name, value)}."
     if "forget" in request:
         name = str(request["forget"])
@@ -183,6 +189,16 @@ def _save_settings(changes: dict) -> str:
         raise ValueError(
             "A voice model is mlx (as `proxenos voice serve` runs it) or ollama:<name>."
         )
+    if values.get("ntfy_server"):
+        try:
+            values["ntfy_server"] = notify.server_address(values["ntfy_server"])
+        except notify.Failed:
+            raise ValueError(f"The ntfy server is a web address, like {notify.SERVER}.") from None
+    if values.get("quiet_hours"):
+        try:
+            notify.parse_quiet(values["quiet_hours"])
+        except ValueError:
+            raise ValueError("Give quiet hours as 22:00-08:00, or off.") from None
     if "vault" in values:
         values["vault"] = _make_vault(values["vault"])
 

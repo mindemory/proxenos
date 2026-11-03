@@ -26,6 +26,7 @@ from proxenos import (
     manuscript,
     master,
     memory,
+    notify,
     observe,
     phone,
     privacy,
@@ -123,6 +124,10 @@ def main(argv: list[str] | None = None) -> None:
     trial = commands.add_parser("demo", help="write a made-up vault to try the page on")
     trial.add_argument("path", nargs="?", type=Path, help="where (default: a new temp folder)")
     commands.add_parser("phone", help="open the page to your own phone, privately, over Tailscale")
+    notices = commands.add_parser(
+        "notify", help="notices on your phone through ntfy when something new waits on you"
+    )
+    notices.add_argument("action", choices=["test"], help="test: send a test notice now")
     phoning = commands.add_parser(
         "call", help="place a phone call that waits on hold for you, from a call sheet"
     )
@@ -200,6 +205,13 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "phone":
         vault_path()  # loads settings
         print(phone.setup())
+        return
+    if args.command == "notify":
+        vault_path()  # loads settings and secrets
+        sent, said = notify.test()
+        print(said)
+        if not sent:
+            raise SystemExit(1)
         return
     if args.command == "call":  # a call can go on while a sync runs, so it takes no lock
         callserver.run(vault_path(), args)  # vault_path also loads settings
@@ -281,6 +293,7 @@ def _command(
         stats = importer.run(vault, args.paths or None)
     elif args.command == "sync":
         stats = master.sync(vault)
+        stats |= notify.run(vault)  # last, once what the sync brought in is counted
     elif args.command == "index":
         stats = memory.build(vault, args.rebuild)
         if args.vectors:
@@ -300,16 +313,20 @@ def _command(
 
 def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     """The master's run (sync, observe, consolidate), then each of NIGHT_CLONES with its
-    default arguments, then the voice model trained again where it's due, and last the writing
+    default arguments, then the voice model trained again where it's due, then the writing
     rules learned from drafts the user changed (proxenos.voice.lessons, nothing until enough are
-    new), one summary line each with how long it took, so a slow step shows in the log. A step
-    that fails is reported and the rest still run. Whether every step worked."""
+    new), and last, with notices on, one to the user's phone when something new waits on them
+    (proxenos.notify, held through quiet hours), one summary line each with how long it took, so
+    a slow step shows in the log. A step that fails is reported and the rest still run. Whether
+    every step worked."""
     print(f"night: started {datetime.now():%Y-%m-%d %H:%M}", flush=True)
     steps: list[tuple[str, Callable[[], dict[str, int]]]] = [("master", lambda: master.run(vault))]
     for name in NIGHT_CLONES:
         steps.append((name, lambda module=clones[name]: module.run(vault, _defaults(module))))
     steps.append(("voice", lambda: voicemodel.refresh(vault)))
     steps.append(("lessons", lambda: voice.lessons(vault)))
+    if notify.configured():
+        steps.append(("notify", lambda: notify.run(vault)))  # never fails the night
     ok = True
     for name, step in steps:
         began = time.monotonic()

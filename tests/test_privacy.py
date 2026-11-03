@@ -326,6 +326,7 @@ def test_the_command_prints_the_report_as_json(home, monkeypatch, capsys):
 
     out = capsys.readouterr().out
     printed = json.loads(out)
-    assert set(printed) == {"now", "here", "sent", "fetched"}
+    assert set(printed) == {"now", "here", "sent", "fetched", "notices"}
+    assert printed["notices"]["on"] is False
     assert printed["sent"]["by_where"]["Anthropic"]["calls"] == 1
     assert SECRET not in out
