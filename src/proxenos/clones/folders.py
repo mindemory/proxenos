@@ -437,6 +437,7 @@ def _write_paper(
                 "head": None,
             }
 
+    _write_supplement(repo, tip, path, where, files, now, stats)
     pdf = str(PurePosixPath(path).with_suffix(".pdf"))
     blob = manuscript._git(repo, "rev-parse", "-q", "--verify", f"{tip}:{pdf}")
     if not blob:
@@ -454,6 +455,69 @@ def _write_paper(
         stats["moved_to_earlier"] += 1
     files[target.name] = {"source": source, "written": _put(data, target), "at": steps._iso(now)}
     stats["files_written"] += 1
+
+
+# The files a manuscript names, its tables, figures and data, copied into Supplement/ beside it.
+SUPPLEMENT = "Supplement"
+SUPPLEMENT_FILES = 80
+SUPPLEMENT_BYTES = 200 * 10**6
+FILE_BYTES = 25 * 10**6  # one bigger than this stays in the repository
+_NAMED = re.compile(
+    r"[\w./-]*[\w-]\.(?:csv|tsv|xlsx|xls|json|txt|png|jpe?g|svg|pdf|tiff?|mat|npz|nc)\b", re.IGNORECASE
+)
+
+
+def _write_supplement(
+    repo: Path, tip: str, path: str, where: Path, files: dict, now: datetime, stats: Counter
+) -> None:
+    """The files the manuscript names by name or path (S1_table.csv, figures/fig2.png), found in
+    its repository at `tip`, in Supplement/ beside the copy, each when it changed in git and
+    never over one the user changed. The manuscript's own PDF is copied on its own."""
+    text = manuscript._blob(repo, tip, path) or b""
+    named = {m.group(0).strip("./") for m in _NAMED.finditer(text.decode("utf-8", "replace"))}
+    own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
+    if not named:
+        return
+    tree: dict[str, list[tuple[str, int, str]]] = {}
+    listed = manuscript._git(repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip)
+    for line in listed.split("\0"):
+        meta, _, name = line.partition("\t")
+        fields = meta.split()
+        if len(fields) == 4 and fields[1] == "blob" and fields[3].isdigit():
+            tree.setdefault(PurePosixPath(name).name.lower(), []).append(
+                (name, int(fields[3]), fields[2])
+            )
+    chosen: dict[str, tuple[str, str]] = {}
+    total = 0
+    for ref in sorted(named):
+        found = tree.get(PurePosixPath(ref).name.lower()) or []
+        # A path that ends the same way as the one named, else the file of that name.
+        exact = [f for f in found if f[0].lower().endswith(ref.lower())] or found[:1]
+        if not exact:
+            continue
+        name, size, blob = exact[0]
+        base = PurePosixPath(name).name
+        if name == own_pdf or base in chosen or size > FILE_BYTES:
+            continue
+        if len(chosen) >= SUPPLEMENT_FILES or total + size > SUPPLEMENT_BYTES:
+            break
+        chosen[base] = (name, blob)
+        total += size
+    for base, (name, blob) in chosen.items():
+        target = where / SUPPLEMENT / base
+        key = f"{SUPPLEMENT}/{base}"
+        source = _digest("supplement", name, blob)
+        found = _found(target, files.get(key), source)
+        if found == "same":
+            continue
+        data = manuscript._blob(repo, tip, name)
+        if data is None:
+            continue
+        if found == "theirs":
+            _set_aside(target, now)
+            stats["moved_to_earlier"] += 1
+        files[key] = {"source": source, "written": _put(data, target), "at": steps._iso(now)}
+        stats["files_written"] += 1
 
 
 def _paper_files(repo: Path, tip: str, path: str) -> list[tuple[str, str]]:

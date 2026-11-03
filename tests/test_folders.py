@@ -242,7 +242,7 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
 
     assert stats == {
         "folders_written": 3,
-        "files_written": 6 + 3 + 3,
+        "files_written": 7 + 3 + 3,  # the paper's folder: its six and the figure it names
         "kept_as_edited": 0,
         "manuscripts_brought_back": 0,
         "steps_made": 0,
@@ -260,8 +260,10 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
             "Drafts.docx",
             "About this project.docx",
             "About this folder.docx",
+            "Supplement",
         ]
     )
+    assert [p.name for p in (where / "Supplement").iterdir()] == ["fig.png"]
     # The manuscript at its branch's tip, converted where the files beside it are, and nothing
     # else of the repository; its PDF as committed.
     assert text_of(where / DOCX) == PAPER
@@ -643,3 +645,35 @@ def test_comments_on_a_manuscript_become_a_step_once(setup):
     assert "comments_queued" not in run(vault, NOW + timedelta(days=2))  # each once
     assert len(steps.queued(vault, "calls")) == 1
     assert folders.comments(drive / "not a word file.docx") == []
+
+
+def test_the_files_a_manuscript_names_go_to_its_supplement(setup):
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    paper = (
+        "# Calls\n\nBirds sing at dawn (Table S1, `results/S01_tableS1_sites.csv`).\n\n"
+        "![Calls by hour](figures/fig2.png)\n\nSee also notes.txt, which isn't there.\n"
+    )
+    commit(
+        repo,
+        {
+            "docs/paper/paper.md": paper,
+            "results/S01_tableS1_sites.csv": "site,n\nA,3\n",
+            "results/S99_unnamed.csv": "not named in the paper\n",
+            "figures/fig2.png": b"\x89PNG fake",
+        },
+        "Tables and a figure",
+        3,
+    )
+    git(repo, "checkout", "-q", "main")
+
+    run(vault, NOW)
+
+    supplement = drive / FOLDER / "Supplement"
+    assert sorted(p.name for p in supplement.iterdir()) == ["S01_tableS1_sites.csv", "fig2.png"]
+    assert (supplement / "S01_tableS1_sites.csv").read_text() == "site,n\nA,3\n"
+    # One the user changed is never written over; an unchanged one isn't written again.
+    (supplement / "fig2.png").write_bytes(b"their annotated figure")
+    stats = run(vault, NOW + timedelta(days=1))
+    assert (supplement / "fig2.png").read_bytes() == b"their annotated figure"
+    assert stats.get("files_written", 0) == 0
