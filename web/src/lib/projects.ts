@@ -301,12 +301,23 @@ function paperPath(value: unknown): string {
   return "";
 }
 
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+/** Only addresses on drive.google.com: the page opens them, so nothing else gets through. */
+function driveLinks(links: Record<string, unknown>): WorkProject["drive"] {
+  const ok = (v: unknown) => (typeof v === "string" && v.startsWith("https://drive.google.com/") ? v : "");
+  return { folder: ok(links.folder), manuscript: ok(links.manuscript), pdf: ok(links.pdf) };
+}
+
 /** Every project on the list, with where it stands, its queue and its newest steps, and how the jobs stand. */
 export async function getProjects(): Promise<ProjectsResponse> {
   const vault = vaultPath();
   const root = path.join(vault, "clones", "projects");
   const job = latestJob("step");
   const listed = await readJson(path.join(root, "projects.json"));
+  const folders = rec(rec(await readJson(path.join(vault, "clones", "folders", "state.json"))).projects);
   const raw = listed && typeof listed === "object" ? (listed as Record<string, unknown>).projects : null;
   const projects: WorkProject[] = [];
   const seen = new Set<string>();
@@ -327,6 +338,7 @@ export async function getProjects(): Promise<ProjectsResponse> {
       about: str(r.about).trim(),
       group: str(r.group).trim(),
       brief: ((await readPlain(path.join(folder, "brief.md"), MAX_STATUS_BYTES)) ?? "").trim(),
+      drive: driveLinks(rec(rec(folders[id]).links)),
       paused: r.paused === true,
       repo: str(r.repo).trim() ? displayPath(path.resolve(expandHome(str(r.repo).trim()))) : "",
       paper: paperPath(r.manuscript),

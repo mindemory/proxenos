@@ -1695,6 +1695,8 @@ export interface WorkProject {
   group: string;
   /** What's known around it, the question and first analyses: clones/projects/<id>/brief.md, markdown, or "". */
   brief: string;
+  /** Its folder, manuscript and PDF on drive.google.com, as the folders clone found them synced; "" for each it hasn't. */
+  drive: { folder: string; manuscript: string; pdf: string };
   paused: boolean;
   /** The folder of its code, with ~ for home; "" when steps aren't taken on it. */
   repo: string;

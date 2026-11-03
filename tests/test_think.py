@@ -276,7 +276,7 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
         "body": "Hi Ana, yes. Tess",
     }
     work._write(drafts / "reply-ana.md", work.render(draft))
-    work._write(drafts / "task-ana.md", work.render(draft | {"id": "task-ana", "for": "task"}))
+    work._write(drafts / "task-ana.md", work.render(draft | {"id": "task-ana", "to": "Ana"}))
     work._write(drafts / "task-ben.md", work.render(draft | {"id": "task-ben", "to": "Ben"}))
     model = Redrafting()
 

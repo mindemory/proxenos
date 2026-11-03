@@ -469,7 +469,7 @@ def _set_aside(vault: Path, ref: str, to: str, title: str) -> int:
         raw = path.read_text(encoding="utf-8").removeprefix("\ufeff")
         match = work._FRONT.match(raw)
         fields = work._front(raw) or {}
-        if not match or work._one_line(fields.get("to")).casefold() != to.casefold():
+        if not match or not _same_person(work._one_line(fields.get("to")), to):
             continue
         lines = raw[: match.end()].rstrip("\n").split("\n")  # its front matter, "---" last
         lines = ["status: overtaken" if ln.startswith("status:") else ln for ln in lines]
@@ -477,6 +477,15 @@ def _set_aside(vault: Path, ref: str, to: str, title: str) -> int:
         _write_private(path, "\n".join(lines) + "\n" + raw[match.end() :])
         moved += 1
     return moved
+
+
+def _same_person(a: str, b: str) -> bool:
+    """Whether two drafts' "to" name one person: the same name, or a first name alone and a
+    full name it begins ("Priyanka" and "Priyanka Kulkarni")."""
+    a, b = a.casefold().split(), b.casefold().split()
+    if not a or not b:
+        return False
+    return a == b or (len(a) == 1 or len(b) == 1) and a[0] == b[0]
 
 
 def _plural(n: int, word: str) -> str:

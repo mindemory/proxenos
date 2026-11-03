@@ -524,3 +524,22 @@ def test_an_edit_says_where_its_text_came_from(setup):
     request = {"path": "docs/paper/paper.md", "branch": "paper-storyline", "text": "New.\n"}
     with pytest.raises(ValueError, match="no edit comes from"):
         manuscript.edit(vault, project, request, NOW, source="email")
+
+
+def test_links_are_drive_addresses_only_once_drive_has_synced_the_files(tmp_path, monkeypatch):
+    where = tmp_path / "PhD" / "Calls"
+    where.mkdir(parents=True)
+    (where / "Calls - manuscript.docx").write_bytes(b"x")
+    assert folders._links(where) == {"folder": "", "manuscript": "", "pdf": ""}  # not synced
+
+    def synced(cmd, **kw):
+        item = "1AbC_d-EfGhIjKlMnOp" if cmd[-1].endswith((".docx", "Calls")) else ""
+        return subprocess.CompletedProcess(cmd, 0 if item else 1, stdout=item, stderr="")
+
+    monkeypatch.setattr(folders.sys, "platform", "darwin")
+    monkeypatch.setattr(folders.subprocess, "run", synced)
+    assert folders._links(where) == {
+        "folder": "https://drive.google.com/drive/folders/1AbC_d-EfGhIjKlMnOp",
+        "manuscript": "https://drive.google.com/file/d/1AbC_d-EfGhIjKlMnOp/view",
+        "pdf": "",  # none written
+    }

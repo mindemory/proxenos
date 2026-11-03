@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, FileText, FolderGit2, ListPlus, MessagesSquare, NotebookText, Play, ScrollText, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileText, FolderGit2, ListPlus, MessagesSquare, NotebookText, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
@@ -63,6 +63,20 @@ const STEP_WORDS: Record<StepStatus, string> = {
 };
 
 /** A project at a glance: what it is, whether it's a paper, and how its steps stand. Opens it. */
+function DriveLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-accent underline decoration-line-strong underline-offset-2 hover:text-ink"
+    >
+      <ExternalLink size={13} aria-hidden="true" />
+      {label}
+    </a>
+  );
+}
+
 /**
  * The projects under their groups, in the order each group first comes on the list, those with none last.
  * With no groups at all it's one untitled list.
@@ -172,6 +186,13 @@ function ProjectSection({
           )}
         </div>
         {project.about && <p className="text-sm leading-relaxed text-muted">{project.about}</p>}
+        {(project.drive.folder || project.drive.manuscript || project.drive.pdf) && (
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {project.drive.manuscript && <DriveLink href={project.drive.manuscript} label="Manuscript in Google Docs" />}
+            {project.drive.pdf && <DriveLink href={project.drive.pdf} label="The PDF" />}
+            {project.drive.folder && <DriveLink href={project.drive.folder} label="Its Drive folder" />}
+          </p>
+        )}
         <p className="break-words text-xs text-muted">
           {project.repo ? (
             <>

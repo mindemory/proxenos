@@ -33,6 +33,9 @@ merges it, Discard deletes it. While it waits, newer changes wait in the copy, w
 it is. Then, once git's branch has moved on, the newer version is written, after the user's copy
 moves to Earlier/ with the date, so their changes and comments stay.
 
+Where Google Drive for desktop syncs the folder, each project's record keeps the web addresses of
+its folder, manuscript and PDF (from the id Drive keeps on each file), for the page's links.
+
 Proxenos reads nothing else in the folder and shares nothing: the drive uploads what's there,
 and who sees it is the user's choice. No model is used.
 """
@@ -135,6 +138,7 @@ def folders(
             record |= {"folder": places[project["id"]], "files": {}}
         try:
             stats.update(refresh(vault, root, project, record, now, pull_only))
+            record["links"] = _links(root.joinpath(*record["folder"].split("/")))
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one project must not stop the rest
             stats["failed"] += 1
             reason = " ".join(str(e).split())[:200]
@@ -616,6 +620,43 @@ def _sha(path: Path) -> str | None:
 
 def _digest(*parts: str) -> str:
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+_DRIVE_ID = "com.google.drivefs.item-id#S"  # the id Google Drive for desktop keeps on a file
+_ITEM = re.compile(r"[A-Za-z0-9_-]{10,200}")
+
+
+def _links(where: Path) -> dict[str, str]:
+    """The project's folder, manuscript and PDF on drive.google.com, for the page to open, where
+    Google Drive for desktop has synced them; "" for each it hasn't yet, or in another drive. A
+    run fills in those it missed."""
+    name = f"{where.name} - manuscript"
+    return {
+        "folder": _drive_link(where, folder=True),
+        "manuscript": _drive_link(where / f"{name}.docx"),
+        "pdf": _drive_link(where / f"{name}.pdf"),
+    }
+
+
+def _drive_link(path: Path, folder: bool = False) -> str:
+    if sys.platform != "darwin" or not path.exists():
+        return ""
+    try:
+        said = subprocess.run(
+            ["/usr/bin/xattr", "-p", _DRIVE_ID, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    item = said.stdout.strip()
+    if said.returncode or not _ITEM.fullmatch(item):
+        return ""
+    if folder:
+        return f"https://drive.google.com/drive/folders/{item}"
+    return f"https://drive.google.com/file/d/{item}/view"
 
 
 def _places(listed: list[dict]) -> dict[str, str]:
