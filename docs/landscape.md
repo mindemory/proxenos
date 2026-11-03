@@ -173,6 +173,20 @@ The consensus has moved. Filters and prompts don't reliably stop prompt injectio
   - **The routes:** Apple Health's export (read today), SMART on FHIR patient apps against providers' certified APIs, insurers' Patient Access APIs (prior-authorization data due by January 2027 under CMS-0057-F), and TEFCA Individual Access Services.
   - **The law:** HIPAA covers providers and insurers, not a person's own tool. A hosted Proxenos would likely fall under the FTC's Health Breach Notification Rule.
 
+### Odysseus, a self-hosted workspace
+
+[Odysseus](https://github.com/odysseus-dev/odysseus) (AGPL-3.0) does much of what ChatGPT does, on your own machine. Proxenos takes ideas from it, never code or text.
+
+- **Taken:**
+  - **Notices on the phone** through ntfy, saying only how many things wait and of what kind ([notify.py](../src/proxenos/notify.py)).
+  - **A blind comparison of models,** turned to Proxenos's question: which writes replies most like you, on replies you already sent and held out from everything after them ([compare.py](../src/proxenos/compare.py)).
+  - **Other local servers:** LM Studio, llama-server, Jan, LocalAI and vLLM through OpenAI's API, at this computer's own address only, and a setup list that marks models too big for this computer's memory, as Odysseus's Cookbook does.
+- **Left out:**
+  - **An MCP server** over the vault: it would hand your records to whichever model the other app uses, outside the list of what reaches a model.
+  - **Agents with a shell,** beyond the project steps' sandbox.
+  - **An image gallery, a document editor and two-factor sign-in:** the page is on your own computer and devices, and manuscripts already have their own editor.
+- **Next, as on its roadmap too:** backing up and restoring the vault.
+
 ### One download, for Mac and Windows
 
 The plan in [everyone.md](everyone.md) holds: an Electron shell around a bundled Python, with the page as a standalone Next.js build.
