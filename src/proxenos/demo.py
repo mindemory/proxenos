@@ -7,12 +7,12 @@ their formats, dated around today: WhatsApp chats and groups, two mail accounts,
 walks, listening, notes and LinkedIn connections, and, months back, everyday chatter, rides and
 listening for the Rhythms view. What the model would write from them is written the way each
 clone writes it: the self-model, a feed, tasks, care, advice, network ideas, the week's choices,
-job leads, drafts, errands and a thread on the Think view. Then the steps that need no model run
-on it as they would on a real vault: the memory index, the people index, today's recall, the
-outbox's track record and yesterday's journal, with the brief the model would write; the stories
-of the last months, as the night would have written them from those months' days; the weeks over
-time, with the artists' genres and moods the model would give; and a week of model calls for the
-Privacy view, all on this computer.
+job leads, projects and their steps, drafts, errands and a thread on the Think view. Then the
+steps that need no model run on it as they would on a real vault: the memory index, the people
+index, today's recall, the outbox's track record and yesterday's journal, with the brief the model
+would write; the stories of the last months, as the night would have written them from those
+months' days; the weeks over time, with the artists' genres and moods the model would give; and a
+week of model calls for the Privacy view, all on this computer.
 
 No model is called, and nothing on this computer is read. The people and organizations are made
 up, phone numbers are 555-01xx (kept for fiction), and addresses and links use the reserved
@@ -44,8 +44,10 @@ from proxenos.clones import (
     life,
     network,
     portrait,
+    projects,
     recall,
     rhythms,
+    steps,
     tasks,
     tracker,
     work,
@@ -147,6 +149,7 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
         _drafts(vault, c)
         _choices(vault, c)
         _jobs(vault, c)
+        _projects(vault, c)
         _errands(vault, c)
         indexed = memory.build(vault)
         people = network.build(vault, people_only=True, now=c.now)
@@ -2464,6 +2467,158 @@ def _jobs(vault: Path, c: _Clock) -> None:
             "jobs": found,
             "read": {key: fay["ts"]},
         },
+    )
+
+
+def _projects(vault: Path, c: _Clock) -> None:
+    """Joe's projects, as he'd list them, with where each stands as the projects clone writes it:
+    his meetup talk as a short paper, an analysis of damaged deliveries in code, and his pieces for
+    the holiday sale, with no code. The paper and the analysis have steps as the steps clone
+    reports them, one waiting on him; their folders aren't on this computer, so a step's Accept,
+    or the manuscript, only says so."""
+    listed = [
+        {
+            "id": "holiday-orders",
+            "name": "Holiday orders on time",
+            "about": "The supply chain meetup talk as a short paper: how last December's orders "
+            "went out on time, with Kai's shift and delivery numbers.",
+            "people": ["Kai Lund", "Uma Rao"],
+            "terms": ["holiday orders", "meetup", "talk"],
+            "repo": "~/Documents/holiday-orders",
+            "data": ["~/Documents/acme-deliveries"],
+            "manuscript": "paper/holiday-orders.md",
+        },
+        {
+            "id": "damage-claims",
+            "name": "Damaged deliveries",
+            "about": "Which carriers and boxes break the most, from a year of damage claims, for "
+            "the flat-pack side table's packaging with Hana.",
+            "people": ["Hana Ito", "Ben Ode"],
+            "terms": ["damaged", "damage claims", "packaging", "flat-pack"],
+            "repo": "~/Documents/damage-claims",
+            "data": ["~/Documents/damage-claims-data"],
+        },
+        {
+            "id": "holiday-sale",
+            "name": "Pieces for the holiday sale",
+            "about": "Six mugs, four bowls and a vase for the pottery class's December sale: "
+            "what's thrown, bisqued and glazed, and the firings left.",
+            "people": ["Gus Hale", "Ivy Chen", "Lia Ruiz"],
+            "terms": ["holiday sale", "kiln", "glaze", "bisque"],
+        },
+    ]
+    status = {
+        "holiday-orders": (
+            (
+                "The paper is the meetup talk written out for the meetup's newsletter: about "
+                "2,000 words and three figures. The introduction and the section on the Saturday "
+                "shift are drafted; the section on carriers isn't started.\n\n"
+                "- **Done**: the outline, the Saturday shift section from Kai's December numbers.\n"
+                "- **Waiting**: Uma Rao, on the newsletter's length and its deadline."
+            ),
+            [
+                ("Accept or discard the figure of orders shipped a day", "Joe", c.day(2)),
+                ("Write the section on carriers", "Joe", c.day(9)),
+                ("Ask Kai for this year's December plan", "Joe", c.day(4)),
+            ],
+            ["Should the paper name the carriers, or keep them anonymous?"],
+        ),
+        "damage-claims": (
+            (
+                "A year of damage claims, counted by carrier and box size. One delivery in twelve "
+                "is claimed damaged, most of them flat-pack tables in the large box.\n\n"
+                "- **Done**: the claims cleaned and counted, a table by carrier and box.\n"
+                "- **Open**: whether it's the box or the route; Hana has the drop-test results."
+            ),
+            [
+                ("Split the claims by delivery route", "Joe", ""),
+                ("Ask Hana for the drop-test results", "Joe", c.day(3)),
+            ],
+            [],
+        ),
+        "holiday-sale": (
+            (
+                "Six mugs, four bowls and a vase by the December sale. Four mugs and two bowls are "
+                "bisqued; the vase is still drying.\n\n"
+                "- **Waiting**: Gus, for everyone's numbers for the sale.\n"
+                "- **Open**: the last glaze firing is early December, so nothing thrown after mid "
+                "November makes it."
+            ),
+            [
+                ("Tell Gus how many pieces you're putting in", "Joe", c.day(3)),
+                ("Glaze the four mugs at the next class", "Joe", c.day(2)),
+            ],
+            ["Is the vase worth rushing, or kept for spring?"],
+        ),
+    }
+    folder = vault / "clones" / "projects"
+    _write_json(folder / "projects.json", {"projects": listed})
+    for p in projects.listed_projects(vault):
+        text, next_up, asks = status[p["id"]]
+        next_steps = [{"step": s, "who": who, "by": by} for s, who, by in next_up]
+        work._write(
+            folder / p["id"] / "status.md",
+            projects._status_file(p, text, next_steps, asks, c.local),
+        )
+
+    def step(project: str, hours: float, status: str, files: list[tuple], **report) -> None:
+        made = c.now - timedelta(hours=hours)
+        when = f"{made:%Y%m%d-%H%M%S}"
+        record = {
+            "id": f"{project}/{when}",
+            "project": project,
+            "created": _iso(made),
+            "updated": _iso(made + timedelta(minutes=24)),
+            "status": status,
+            "asked": "",
+            "base": "main",
+            "branch": f"proxenos/{project}-{when}",
+            "runner": "claude",
+            "made": [],
+            "files": [{"path": f, "added": a, "removed": r} for f, a, r in files],
+            "thread": [],
+            "meta": {"turns": 18},
+        } | report
+        if status == "accepted":
+            record["decided"] = c.ago(hours - 20)
+        record["summary"] = steps.summary(record)
+        work._write(
+            folder / project / "steps" / f"{when}.json",
+            json.dumps(record, ensure_ascii=False, indent=1),
+        )
+
+    step(
+        "holiday-orders",
+        70,
+        "accepted",
+        [("paper/holiday-orders.md", 34, 6)],
+        step="Drafted the section on the Saturday shift from Kai's December numbers",
+        why="The outline's next section, and Kai's numbers came in last week.",
+        did="Wrote the section, about 400 words, from the shift plan and the orders shipped.",
+        found="The Saturday shift shipped one order in five in the last two weeks of December.",
+        next="A figure of orders shipped a day, last December against this year's plan.",
+    )
+    step(
+        "holiday-orders",
+        9,
+        "ready",
+        [("paper/figures.py", 48, 3), ("paper/holiday-orders.md", 6, 2)],
+        step="Made figure 2: orders shipped a day, last December against this year's plan",
+        why="The section on the Saturday shift refers to it, and the paper had none.",
+        did="Added a plot to figures.py from the delivery exports and put it in the section.",
+        found="This year's plan ships about as much a day as last December's last week did.",
+        next="The section on carriers.",
+    )
+    step(
+        "damage-claims",
+        52,
+        "accepted",
+        [("count_claims.py", 61, 0), ("tables/claims_by_carrier.csv", 13, 0)],
+        step="Counted the claims by carrier and box size, over the last twelve months",
+        why="The first question Hana asked, and what the packaging choice turns on.",
+        did="Cleaned the claims export and counted it by carrier and box size.",
+        found="One delivery in twelve is claimed damaged, most of them in the large box.",
+        next="Split the claims by delivery route.",
     )
 
 

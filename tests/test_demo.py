@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from proxenos import cli, demo, memory, outbox, think, webapp
-from proxenos.clones import errands, jobs, life, work
+from proxenos.clones import errands, jobs, journal, life, projects, steps, work
 
 NOW = datetime(2026, 10, 29, 13, 0, tzinfo=UTC)
 
@@ -103,6 +103,25 @@ def test_the_life_view_has_months_told_and_their_days(vault):
     assert any("Juniper" in e["text"] for e in stories["2026-10"]["entries"])
     assert not any(" you" in f" {e['text']}".lower() for e in stories["2026-10"]["entries"])
     assert life.months(vault, NOW.date())["2026-10"]["days"] > 10  # counted for the page
+
+
+def test_the_projects_view_has_a_paper_code_and_notes(vault):
+    listed = projects.listed_projects(vault)
+    assert [(bool(p["manuscript"]), bool(p["repo"])) for p in listed] == [
+        (True, True),
+        (False, True),
+        (False, False),
+    ]
+    today = NOW.astimezone().date()
+    for p in listed:
+        status = (vault / "clones/projects" / p["id"] / "status.md").read_text(encoding="utf-8")
+        assert status.startswith(f"# {p['name']}\n\n_Where it stands, {today}._")
+        assert "## Next steps" in status
+    taken = [s for p in listed for s in projects.steps_taken(vault, p["id"])]
+    assert sorted(s["status"] for s in taken) == ["accepted", "accepted", "ready"]
+    assert all(steps.STEP_ID.fullmatch(s["id"]) and s["summary"] == steps.summary(s) for s in taken)
+    # Their code isn't on this computer, so the journal finds none, not even the folder it runs in.
+    assert journal.lines(vault, today)["moved"] == []
 
 
 def test_the_rhythms_view_has_months_of_weeks_to_compare(vault):
