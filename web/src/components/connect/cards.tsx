@@ -12,6 +12,7 @@ import { Chip, CopyBox, copyFor, JobLine, LastRead, PrimaryButton, Steps, StateP
 
 const MAIL_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#email";
 const CALENDAR_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#activity-and-habits";
+const DOCS_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#a-manuscript-in-google-docs";
 const FULL_DISK_ACCESS = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const ACCOUNT_NAME = /^[A-Za-z0-9_]{1,32}$/;
 /** A Slack workspace's name as it appears before .slack.com. */
@@ -145,7 +146,7 @@ const DOCS_COPY: SignInCopy = {
     <>
       Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Drive API
       turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page.{" "}
-      <StepsLink href={CALENDAR_STEPS} />
+      <StepsLink href={DOCS_STEPS} />
     </>
   ),
   asks: "allow access to only the files Proxenos makes in your Drive.",
