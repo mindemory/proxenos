@@ -12,6 +12,8 @@ secret's value: only whether it's set.
   one. The vault folder is made if it isn't there, and has to be outside this repo. A voice model
   (for reply drafts, see proxenos.voicemodel) is "mlx", "mlx:<port>", "ollama:<name>" or
   "local:<name>". The local server's address ("local_url") has to be this computer's own.
+  SearXNG's ("searxng_url"), for looking people up (proxenos.lookup), is any web address, and
+  "lookup" is on or off.
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
   it would use) and saves it, and the model is then Anthropic's.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
@@ -23,6 +25,7 @@ Secrets come in on stdin, never as arguments, and never go back out.
 
 import json
 import re
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -46,6 +49,8 @@ SETTINGS = {
     "project_folder": "PROJECT_FOLDER",
     "ntfy_server": "NTFY_SERVER",
     "quiet_hours": "QUIET_HOURS",
+    "searxng_url": "SEARXNG_URL",
+    "lookup": "LOOKUP",
 }
 FOLDER_LISTS = ("docs_dirs", "cv_dirs")
 FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", "project_folder", *FOLDER_LISTS)
@@ -66,6 +71,7 @@ SECRETS = (
     "TWILIO_AUTH_TOKEN",
     "NTFY_TOPIC",
     "NTFY_TOKEN",
+    "BRAVE_SEARCH_KEY",
 )
 # A model's name: LM Studio's may name a quantization after an @ (qwen3-8b@q4_k_m).
 _MODEL = re.compile(r"[\w.:/@+-]{1,200}")
@@ -237,6 +243,13 @@ def _save_settings(changes: dict) -> str:
             values["local_url"] = llm.local_url(values["local_url"])
         except llm.ModelError as e:
             raise ValueError(str(e)) from None
+    if values.get("searxng_url"):
+        parts = urllib.parse.urlsplit(values["searxng_url"])
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ValueError("SearXNG's address is a web address, like http://127.0.0.1:8888.")
+        values["searxng_url"] = values["searxng_url"].rstrip("/")
+    if values.get("lookup") and values["lookup"].casefold() not in ("on", "off"):
+        raise ValueError("Looking people up is on or off.")
     if "vault" in values:
         values["vault"] = _make_vault(values["vault"])
 

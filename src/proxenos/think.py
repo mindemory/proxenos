@@ -25,7 +25,10 @@ your goals"; up to QUESTIONS questions to sit with or to ask someone; and up to 
 next steps, any of which may be a message to draft. The model lays out considerations and
 trade-offs and never decides for the user, says so when the records say nothing, diagnoses
 nothing, and for health, law, money or immigration names the professional to ask as a step. A
-line of what matters whose source isn't one it was given is dropped in code.
+line of what matters whose source isn't one it was given is dropped in code. Asked for someone's
+email address, it names whom to look up and where they are (`lookup`), and code looks on that
+place's own web pages (proxenos.lookup) and adds what it finds, with the pages it's on, to the
+reply: the model never writes the address itself.
 
 A thread is clones/think/<id>.json, private to the user: {id, title, created, updated, status,
 error, context, messages: [{role: "me" | "proxenos", at, text, parts}]}. Its title is the first
@@ -48,7 +51,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from proxenos import llm, memory, research, told, untrusted
+from proxenos import llm, lookup, memory, research, told, untrusted
 from proxenos.clones import life, projects, work
 from proxenos.config import env
 
@@ -205,6 +208,9 @@ def answer(vault: Path, thread: dict, now: datetime, model: Callable[..., object
     reply = str(raw.get("reply") or "").strip()
     if not reply:
         raise llm.ModelError("the model gave no reply")
+    said, _ = lookup.for_answer(raw)
+    if said:
+        reply += f"\n\n{said}"
     ctx = thread.get("context") or {}
     parts = _parts(raw, refs)
     draft = ""
@@ -224,6 +230,8 @@ def build(
     fence = untrusted.tag()  # this answer's tag, for whatever may hold others' words
     refs: dict[str, dict] = {}
     system = _SYSTEM.format(person=person, matters=MATTERS, questions=QUESTIONS, next=NEXT)
+    if lookup.on():
+        system += "\n- " + lookup.ASKED.format(person=person)
 
     own = _self_model(vault, llm.fit(SELF_CHARS, OVERHEAD))
     if own:
@@ -339,15 +347,18 @@ def _schema(refs: list[str]) -> dict:
             },
         }
 
+    properties = {
+        "reply": text,
+        "matters": items({"text": text, "ref": ref}),
+        "questions": {"type": "array", "items": text},
+        "next": items({"step": text, "draft_to": text}),
+        "draft": text,
+    }
+    if lookup.on():  # whom to look up on the web; not required, as most answers ask for no one
+        properties["lookup"] = lookup.FIELD
     return {
         "type": "object",
-        "properties": {
-            "reply": text,
-            "matters": items({"text": text, "ref": ref}),
-            "questions": {"type": "array", "items": text},
-            "next": items({"step": text, "draft_to": text}),
-            "draft": text,
-        },
+        "properties": properties,
         "required": ["reply", "matters", "questions", "next", "draft"],
         "additionalProperties": False,
     }

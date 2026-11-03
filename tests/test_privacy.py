@@ -291,6 +291,20 @@ def test_what_is_fetched_is_each_connected_source_by_name_and_address(home, monk
     assert SECRET not in json.dumps(fetched)
 
 
+def test_people_lookups_say_where_they_go_and_never_the_key(home, monkeypatch):
+    lookups = privacy.report(home / "vault", NOW)["fetched"]["lookup"]
+    assert lookups == {"on": True, "engine": "duckduckgo", "host": "html.duckduckgo.com"}
+
+    monkeypatch.setenv("BRAVE_SEARCH_KEY", "a-brave-test-key")
+    fetched = privacy.report(home / "vault", NOW)["fetched"]
+    assert fetched["lookup"]["host"] == "api.search.brave.com"
+    assert "a-brave-test-key" not in json.dumps(fetched)
+    monkeypatch.setenv("PROXENOS_LOOKUP", "off")
+    assert privacy.report(home / "vault", NOW)["fetched"]["lookup"]["on"] is False
+    sends = {s["part"]: s["sends"] for s in privacy.report(home / "vault", NOW)["sent"]["sends"]}
+    assert "only that person's name and where they are" in sends["Looking people up"]
+
+
 def test_filevault_is_read_from_fdesetup_and_never_fails(monkeypatch):
     monkeypatch.setattr(privacy, "_fdesetup", REAL_FDESETUP)  # with subprocess faked below
     ran = []

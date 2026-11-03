@@ -138,6 +138,18 @@ def test_a_voice_model_is_served_here_or_in_ollama(home):
     assert config.env("VOICE_MODEL") == ""
 
 
+def test_lookups_take_a_searxng_address_a_brave_key_and_on_or_off(home):
+    assert apply({"settings": {"searxng_url": "http://127.0.0.1:8888/"}})["ok"]
+    assert config.env("SEARXNG_URL") == "http://127.0.0.1:8888"
+    assert "web address" in apply({"settings": {"searxng_url": "searx.local"}})["error"]
+    assert apply({"settings": {"lookup": "off"}})["ok"] and config.env("LOOKUP") == "off"
+    assert "on or off" in apply({"settings": {"lookup": "maybe"}})["error"]
+    saved = apply({"secret": "BRAVE_SEARCH_KEY", "value": "a-brave-test-key"})
+    assert saved["ok"] and "BRAVE_SEARCH_KEY" in config.secrets()
+    (brave,) = [s for s in saved["status"]["secrets"] if s["name"] == "BRAVE_SEARCH_KEY"]
+    assert brave["set"] is True and "a-brave-test-key" not in json.dumps(saved)
+
+
 def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
     home, anthropic_says, fake_keychain
 ):

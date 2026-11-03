@@ -8,9 +8,11 @@ email, with my CV". A run:
    too (one quick model call);
 2. looks the person up: the records that name them, the network's note on them, and the people
    the user knows where they are;
-3. finds a way to reach them, from the records only: an address they wrote from, an address
-   with their name that the user already wrote to, or a chat with them through Beeper. An
-   address is never guessed;
+3. finds a way to reach them, from the records: an address they wrote from, an address with
+   their name that the user already wrote to, or a chat with them through Beeper. When the
+   records have no address and an email would do, it looks for one on the web, on their
+   organization's own pages only (proxenos.lookup), and says on which. An address is never
+   guessed;
 4. finds the user's newest CV: a PDF named CV or resume with the user's name in it, in their
    documents and downloaded exports;
 5. reads the emails the user wrote before with a CV attached, as the pattern for this one;
@@ -39,7 +41,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory, outbox, research, voice
+from proxenos import llm, lookup, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 
@@ -220,7 +222,17 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
 
     routes = reach(vault, name)
     route = _pick(routes, channel)
-    _step(vault, errand, "Looked for a way to reach them", _routes_found(name, routes, route))
+    # No address in the records, and an email would do: their organization's pages may have one.
+    web = (
+        bool(org)
+        and lookup.on()
+        and not any(r["channel"] == "email" for r in routes)
+        and (route is None or channel == "email")
+    )
+    _step(vault, errand, "Looked for a way to reach them", _routes_found(name, routes, route, web))
+    if web and (found := on_the_web(vault, errand, name, org)):
+        routes.append(found)
+        route = found
 
     cv = find_cv(person) if read.get("cv") else None
     errand["cv"] = cv and {k: cv[k] for k in ("name", "path", "made", "where")}
@@ -319,6 +331,44 @@ def recheck(vault: Path, errand: dict, now: datetime) -> bool:
     return found
 
 
+def on_the_web(vault: Path, errand: dict, name: str, org: str) -> dict | None:
+    """An email address for the person from their organization's own pages (proxenos.lookup),
+    as a way to reach them, with the pages it's on; its step says what was searched and read.
+    None when no address there looks like theirs."""
+    report = lookup.look(name, org)
+    read = f" and read {lookup._count(len(report['read']), 'page')} of {report['domain']}'s own"
+    read = read if report["read"] else ""
+    if not report["address"]:
+        _step(
+            vault,
+            errand,
+            "Looked on the web",
+            f"Searched for {name} at {org}{read}: {report['error'] or 'nothing found'}. An "
+            "address isn't guessed, so the message waits for one.",
+        )
+        return None
+    pages = report["evidence"]
+    others = f" Also there: {', '.join(report['other'])}." if report["other"] else ""
+    _step(
+        vault,
+        errand,
+        "Looked on the web",
+        f"Searched for {name} at {org}{read} ({report['domain']}: {report['how']}). "
+        f"{report['address']} is on "
+        f"{lookup._count(len(pages), 'page')}: {', '.join(pages)}.{others} Check it's theirs "
+        "before you press Send.",
+    )
+    return {
+        "channel": "email",
+        "address": report["address"],
+        "seen": 0,
+        "last": "",
+        "how": f"it's on {lookup._count(len(pages), 'page')} of {report['domain']}'s own",
+        "found": "web",
+        "sources": pages,
+    }
+
+
 # Sending, only when the user presses Send on a message.
 
 Sender = Callable[[dict, dict | None], None]  # (the message, the CV) → sent, or raises
@@ -353,6 +403,8 @@ def send(
             raise SystemExit(f"errands: {address!r} isn't an email address")
         message.update(channel="email", address=address, via="apple_mail", chat=None)
         message["evidence"] = "you typed it in"
+        message.pop("found", None)
+        message.pop("sources", None)
     if not message.get("body"):
         raise SystemExit("errands: the message is empty")
     if message.get("channel") == "email" and not message.get("subject"):
@@ -697,21 +749,30 @@ def _words(text: str) -> list[str]:
 
 
 def _route_fields(route: dict) -> dict:
+    """A route as a message's fields. `via` is how Send sends it; an address found on the web
+    also says so (`found`), with the pages it's on (`sources`)."""
     email = route["channel"] == "email"
-    return {
+    fields = {
         "channel": route["channel"],
         "address": route.get("address", "") if email else "",
         "via": "apple_mail" if email else "beeper",
         "chat": None if email else route["chat"],
         "evidence": route["how"],
     }
+    if route.get("found") == "web":
+        fields |= {"found": "web", "sources": list(route["sources"])}
+    return fields
 
 
-def _routes_found(name: str, routes: list[dict], route: dict | None) -> str:
+def _routes_found(name: str, routes: list[dict], route: dict | None, web: bool = False) -> str:
     if not route:
         return (
             f"No email from or to {name} in your mail, and no chat with them through Beeper. "
-            "An address isn't guessed, so the message waits for one."
+            + (
+                "So it looks on the web, on their organization's own pages."
+                if web
+                else "An address isn't guessed, so the message waits for one."
+            )
         )
     others = len(routes) - 1
     return _route_line(name, route) + (f" ({others} other ways too.)" if others else "")

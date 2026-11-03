@@ -39,6 +39,11 @@ submitted. An answer with none has no
 `openings` at all, as before. Keeping one (`--keep`, the page's Keep) adds it to the openings
 the week's choices weigh (proxenos.clones.choices.keep), once however often it's kept.
 
+Asked for someone's email address or how to reach them, either answer names whom to look up and
+where they are (`lookup`), and code looks for the address on that place's own web pages
+(proxenos.lookup) and adds it to the answer with the pages it's on, or says none was found: the
+model never writes the address itself. With PROXENOS_LOOKUP=off the answer has no `lookup`.
+
 Each ask is a file, clones/ask/<id>.json, written first as "working" and then "done" or
 "failed", which the page polls; a drafted reply is also saved as a draft (for: ask), so it shows
 in Drafts with its actions, and so is each opening's first step, as <id>-o<n>. A quick ask's
@@ -57,7 +62,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from proxenos import llm, research, untrusted, voice
+from proxenos import llm, lookup, research, untrusted, voice
 from proxenos.clones import choices, work
 from proxenos.config import env
 
@@ -223,6 +228,9 @@ def ask(
         with llm.foreground(vault):
             answer = (_deep if deep else _quick)(vault, text, images, now, model, result)
         result |= {"status": "done", "answer": str(answer["answer"]).strip()}
+        said, found = lookup.for_answer(answer)
+        if found:
+            result |= {"answer": f"{result['answer']}\n\n{said}".strip(), "lookup": found}
         if body := str(answer.get("draft_body") or "").strip():
             result["draft"] = {
                 "to": work._one_line(answer["draft_to"]),
@@ -284,7 +292,7 @@ def _quick(
     return model(
         prompt,
         system=_quick_system(vault, now),
-        schema=_QUICK_SCHEMA,
+        schema=_with_lookup(_QUICK_SCHEMA),
         images=images or None,
         effort="low",
         max_tokens=QUICK_TOKENS + OPENING_TOKENS * OPENINGS,
@@ -317,8 +325,18 @@ def _quick_system(vault: Path, now: datetime) -> str:
     local model can keep it read between them."""
     person = env("NAME", "the person")
     system = _QUICK_SYSTEM.format(person=person) + "\n\n" + _OPENINGS
+    if lookup.on():
+        system += "\n\n" + lookup.ASKED.format(person=person)
     system += "\n\n" + voice.rules(person)
     return system + "\n\n" + work.short_self(vault, now)
+
+
+def _with_lookup(schema: dict) -> dict:
+    """An answer's schema with `lookup`, whom to look up on the web, unless lookups are off. Not
+    required: an answer that asks for no one holds without it."""
+    if not lookup.on():
+        return schema
+    return schema | {"properties": schema["properties"] | {"lookup": lookup.FIELD}}
 
 
 def _local() -> bool:
@@ -389,10 +407,12 @@ def _deep(
     own = voice.examples(voice.Writing(vault), None, name=who)  # how they write, for a draft
     today = f"Today is {now.astimezone():%A %Y-%m-%d}."
     task = f"{today} {_ANSWER.format(person=person)}\n\n{_OPENINGS}"
+    if lookup.on():
+        task += "\n\n" + lookup.ASKED.format(person=person)
     answer = model(
         "\n\n".join(p for p in (brief, about, found, own, task) if p),
         system=work._system(vault / "self", now),
-        schema=_ANSWER_SCHEMA,
+        schema=_with_lookup(_ANSWER_SCHEMA),
         effort="high",
     )
     result |= {

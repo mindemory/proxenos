@@ -11,6 +11,7 @@ import pytest
 _SECRET_PREFIXES = (
     "ANTHROPIC_",
     "BEEPER_",
+    "BRAVE_",
     "GCALENDAR_",
     "GDOCS_",
     "GMAIL_",
@@ -134,6 +135,13 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
         raise OSError("no MusicBrainz in tests")
 
     monkeypatch.setattr("proxenos.musicbrainz._fetch", no_network)
+
+    # Nor a search engine or anyone's web pages, which a lookup reads: a test brings a fake.
+    def no_web(url, headers):
+        raise OSError("no web lookups in tests")
+
+    monkeypatch.setattr("proxenos.lookup._fetch", no_web)
+    monkeypatch.setattr("proxenos.lookup.PACE", 0)
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)

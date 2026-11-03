@@ -73,12 +73,14 @@ def read(url: str, fetch: Fetch | None = None, chars: int = PAGE_CHARS) -> dict:
     return {"url": url, "title": title, "text": text[:chars]}
 
 
-def _fetch(url: str) -> tuple[str, bytes]:
+def _fetch(url: str, headers: dict[str, str] | None = None) -> tuple[str, bytes]:
+    """The page's content type and body, from the public internet only. `headers` adds to the
+    request's (proxenos.lookup names itself, and gives a search engine its key)."""
     _public(url)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({}), _PublicHTTP, _PublicHTTPS, _PublicRedirects
     )
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     with opener.open(request, timeout=TIMEOUT) as response:
         return response.headers.get_content_type(), response.read(MAX_BYTES)
 

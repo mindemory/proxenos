@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import ask, voice
+from proxenos import ask, lookup, voice
 from proxenos.clones import choices
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -486,3 +486,42 @@ def test_a_note_to_someone_already_written_with_follows_on_from_that_chat(tmp_pa
     assert draft["asks"] == ["It follows on from your earlier messages with Rui Matos."]
     saved = (tmp_path / "clones" / "drafts" / f"{draft['id']}.md").read_text()
     assert "kind: email" in saved and "follows on from your earlier messages" in saved
+
+
+class LooksUp(Model):
+    """Asked for an address, names whom to look up rather than writing one."""
+
+    def __call__(self, prompt, **kw):
+        answer = super().__call__(prompt, **kw)
+        if "answer" in answer:
+            answer |= {"answer": "Your records don't have it.", "draft_body": ""}
+            answer["lookup"] = {"name": "Ana Lee", "org": "uni.edu"}
+        return answer
+
+
+def test_asked_for_an_address_the_answer_adds_what_the_places_pages_show(tmp_path, monkeypatch):
+    page = "https://profiles.uni.edu/ana-lee"
+
+    def web(url, headers):
+        if url.startswith(lookup.DUCKDUCKGO):
+            return "text/html", f'<a class="result__a" href="{page}">Ana Lee</a>'.encode()
+        return "text/html", b"<h1>Ana Lee</h1><a href='mailto:alee@uni.edu'>Email</a>"
+
+    monkeypatch.setattr(lookup, "_fetch", web)
+    model = LooksUp()
+
+    result = ask.ask(tmp_path, "What's Ana Lee's email at Uni?", [], NOW, model)
+
+    [call] = model.calls
+    assert "lookup" in call["schema"]["properties"]
+    assert "lookup" not in call["schema"]["required"]  # most answers name no one
+    assert "Never write an address you weren't given" in call["system"]
+    assert result["answer"].startswith("Your records don't have it.\n\n**From the web:** alee@")
+    assert f"]({page})" in result["answer"]
+    assert result["lookup"]["address"] == "alee@uni.edu" and result["lookup"]["evidence"] == [page]
+
+    monkeypatch.setenv("PROXENOS_LOOKUP", "off")
+    model = LooksUp()
+    result = ask.ask(tmp_path, "What's Ana Lee's email at Uni?", [], NOW, model, deep=True)
+    assert "lookup" not in model.calls[-1]["schema"]["properties"]
+    assert result["answer"] == "Your records don't have it." and "lookup" not in result

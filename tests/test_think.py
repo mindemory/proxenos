@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import llm, research, think
+from proxenos import llm, lookup, research, think
 from proxenos.clones import work
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -314,3 +314,33 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
     # A thread that didn't start from a draft changes none.
     think.say(vault, None, "A thought", {"kind": "free", "text": "Studio or not."}, NOW, model)
     assert len((drafts / "feedback.jsonl").read_text().splitlines()) == 1
+
+
+class LooksUp(Model):
+    """Asked for an address, names whom to look up rather than writing one."""
+
+    def __call__(self, prompt, *, system=None, schema=None, **kw):
+        answer = super().__call__(prompt, system=system, schema=schema, **kw)
+        if "reply" in answer:
+            answer["lookup"] = {"name": "Ana Lee", "org": "studio.example.org"}
+        return answer
+
+
+def test_asked_for_an_address_the_reply_adds_what_the_places_pages_show(vault, monkeypatch):
+    page = "https://www.studio.example.org/team"
+
+    def web(url, headers):
+        if url.startswith(lookup.DUCKDUCKGO):
+            return "text/html", f'<a class="result__a" href="{page}">Our team</a>'.encode()
+        return "text/html", b"<p>Ana Lee, studio lead: ana [at] studio.example.org</p>"
+
+    monkeypatch.setattr(lookup, "_fetch", web)
+    model = LooksUp(reply="Ana leads the studio.")
+
+    thread = think.say(vault, None, "What's Ana Lee's email at the studio?", None, NOW, model)
+
+    answered = model.calls[-1]
+    assert "lookup" in answered["schema"]["properties"] and "fill `lookup`" in answered["system"]
+    text = thread["messages"][-1]["text"]
+    assert text.startswith("Ana leads the studio.\n\n**From the web:** ana@studio.example.org")
+    assert f"]({page})" in text

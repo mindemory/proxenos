@@ -24,6 +24,7 @@ from proxenos import (
     forms,
     importer,
     lock,
+    lookup,
     manuscript,
     master,
     memory,
@@ -165,6 +166,10 @@ def main(argv: list[str] | None = None) -> None:
         "form", help="a PDF form filled in from your records, for you to check, sign and send"
     )
     forms.add_arguments(form)
+    finding = commands.add_parser(
+        "lookup", help="a person's public email address, from their organization's own pages"
+    )
+    lookup.add_arguments(finding)
     paper = commands.add_parser(
         "project", help="a project's manuscript, its versions, their changes and its Google Doc"
     ).add_subparsers(dest="what", required=True)
@@ -232,6 +237,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "form":
         print(_summary("form", forms.run(vault_path(), args)))
+        return
+    if args.command == "lookup":  # needs no vault; sends only the name and the place
+        print(json.dumps(lookup.run(args), ensure_ascii=False, indent=1))
         return
     if args.command == "phone":
         vault_path()  # loads settings

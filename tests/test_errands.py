@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import llm, memory, voice
+from proxenos import llm, lookup, memory, voice
 from proxenos.clones import errands
 
 NOW = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
@@ -340,6 +340,61 @@ def test_send_sends_that_one_message_as_edited_and_only_once(vault):
     with pytest.raises(SystemExit, match="sent already"):
         errands.send(vault, errand["id"], 0, {}, NOW, sender)
     assert len(sent) == 1
+
+
+def test_with_no_address_in_the_records_one_on_their_places_own_pages_is_used(vault, monkeypatch):
+    page = "https://people.acmelabs.org/cy-doe"
+    search = f'<a class="result__a" href="{page}">Cy Doe | Acme Labs</a>'
+    asked = []
+
+    def web(url, headers):
+        asked.append(url)
+        if url.startswith(lookup.DUCKDUCKGO):
+            return "text/html", search.encode()
+        if url == page:
+            return "text/html", b"<h1>Cy Doe</h1><p>Write to cy.doe [at] acmelabs.org</p>"
+        raise OSError("not found")
+
+    monkeypatch.setattr(lookup, "_fetch", web)
+    model = Model("Cy Doe", "Acme Labs")
+
+    errand = errands.start(vault, "Reach Cy Doe at Acme Labs", NOW, model)
+
+    assert errand["status"] == "ready"
+    (message,) = errand["messages"]  # reachable now, so no note asking for an introduction
+    assert (message["address"], message["via"], message["state"]) == (
+        "cy.doe@acmelabs.org",
+        "apple_mail",
+        "ready",
+    )
+    assert (message["found"], message["sources"]) == ("web", [page])
+    assert message["evidence"] == "it's on 1 page of acmelabs.org's own"
+    step = next(s for s in errand["steps"] if s["title"] == "Looked on the web")
+    assert page in step["detail"] and "Check it's theirs" in step["detail"]
+    assert "cy.doe@acmelabs.org, known because it's on 1 page" in model.calls[1]["prompt"]
+    assert errand["summary"].startswith("Ready to send to Cy Doe at cy.doe@acmelabs.org")
+    # Only the name and the place went to the search engine; nothing about Joe.
+    query = asked[0].split("?q=", 1)[1]
+    assert query == "%22Cy+Doe%22+Acme+Labs+email"
+    assert not (vault / "clones" / "outbox" / "log.jsonl").exists()  # nothing went out
+
+    sent = []
+    errands.send(vault, errand["id"], 0, {}, NOW, lambda m, cv: sent.append(m["address"]))
+    assert sent == ["cy.doe@acmelabs.org"]
+
+
+def test_with_lookups_off_or_none_found_an_errand_waits_as_before(vault, monkeypatch):
+    errand = errands.start(vault, "Reach Cy Doe at Acme Labs", NOW, Model("Cy Doe", "Acme Labs"))
+    step = next(s for s in errand["steps"] if s["title"] == "Looked on the web")
+    assert "the search failed" in step["detail"] and "isn't guessed" in step["detail"]
+    assert errand["messages"][0]["state"] == "waiting"
+
+    monkeypatch.setenv("PROXENOS_LOOKUP", "off")
+    later = datetime(2026, 10, 1, 9, 5, tzinfo=UTC)
+    errand = errands.start(vault, "Reach Cy Doe at Acme Labs", later, Model("Cy Doe", "Acme Labs"))
+    assert "Looked on the web" not in [s["title"] for s in errand["steps"]]
+    assert errand["steps"][2]["detail"].endswith("so the message waits for one.")
+    assert "found" not in errand["messages"][0]
 
 
 def test_each_night_a_waiting_errand_looks_again_for_a_way_to_reach_them(vault):

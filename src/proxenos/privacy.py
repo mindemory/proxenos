@@ -5,8 +5,8 @@ It's drawn from what the code does rather than from a promise: the vault's folde
 sizes, the line every model call leaves (llm.calls), the sources connect.py finds set up, the
 secrets config.py finds set, and notify.py's settings. So it can be shown, it holds paths,
 names, addresses, counts and dates, never a message, a prompt, a token or a key: a call's line
-is copied field by field, a source by its names and addresses, a secret by its name, and notices
-by the server's host, never the topic.
+is copied field by field, a source by its names and addresses, a secret by its name, notices by
+the server's host, never the topic, and the search engine for lookups by its host, never a key.
 """
 
 import math
@@ -16,7 +16,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import config, connect, keychain, llm, musicbrainz, notify, setup
+from proxenos import config, connect, keychain, llm, lookup, musicbrainz, notify, setup
 
 DAYS = 30
 NEWEST = 50  # calls listed one by one
@@ -185,6 +185,15 @@ SENDS = (
         ),
     ),
     (
+        "Looking people up",
+        ("lookup",),
+        (
+            "Nothing to a model. When an errand, Ask or Think needs someone's email address and "
+            "your records have none, only that person's name and where they are go to the search "
+            "engine, and only that place's own public pages are read. Nothing about you."
+        ),
+    ),
+    (
         "Project folders",
         ("folders",),
         (
@@ -266,9 +275,10 @@ def sent(vault: Path, now: datetime) -> dict:
 
 def fetched(vault: Path) -> dict:
     """What's read from elsewhere: each connected source with its accounts' names and addresses,
-    whether links in chats are read, and whether artists' names are looked up at MusicBrainz for
-    their genres (musicbrainz.py), with how many have been. Links are read whenever a model is set
-    up, as replies are then drafted, and only from public hosts (links.py)."""
+    whether links in chats are read, whether artists' names are looked up at MusicBrainz for
+    their genres (musicbrainz.py), with how many have been, and whether people's addresses are
+    looked up on the web, through which search engine (lookup.py). Links are read whenever a
+    model is set up, as replies are then drafted, and only from public hosts (links.py)."""
     sources = [
         {
             "id": str(source["id"]),
@@ -287,6 +297,7 @@ def fetched(vault: Path) -> dict:
         "sources": sources,
         "links": llm.configured(),
         "music": {"on": musicbrainz.on(), "artists": musicbrainz.asked(vault)},
+        "lookup": {"on": lookup.on(), "engine": lookup.engine(), "host": lookup.engine_host()},
     }
 
 
