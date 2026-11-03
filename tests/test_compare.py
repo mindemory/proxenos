@@ -388,7 +388,7 @@ def test_models_are_named_as_the_settings_take_them(monkeypatch):
     assert compare.model("ollama:gemma4:26b") == "ollama:gemma4:26b"
     assert compare.model("claude-opus-5-5") == "claude-opus-5-5"
     assert compare.model("voice:mlx:8899") == "voice:mlx:8899"
-    for bad in ("two words", "voice:nope", "", "x" * 101):
+    for bad in ("two words", "voice:nope", "", "x" * 201):
         with pytest.raises(ValueError):
             compare.model(bad)
     with pytest.raises(ValueError, match="No voice model"):
@@ -430,3 +430,12 @@ def test_a_round_stopped_partway_says_so_and_frees_its_replies(tmp_path, models,
 def _model_of(vault, round_id, n, side):
     doc = json.loads((vault / "state" / "compare" / f"{round_id}.json").read_text())
     return next(i for i in doc["items"] if i["n"] == n)["drafts"][side]["model"]
+
+
+def test_models_served_by_another_local_app_run_on_this_computer():
+    assert compare.model("local:qwen3-8b@q4_k_m") == "local:qwen3-8b@q4_k_m"
+    assert compare.where("local:qwen3-8b") == "this computer"
+    assert compare.where("voice:local:my-voice") == "this computer"
+    assert compare.label("local:qwen3-8b") == "qwen3-8b"
+    assert compare.label("voice:local:my-voice") == "voice model my-voice"
+    assert compare.label("ollama:gemma4:26b") == "gemma4:26b"

@@ -43,11 +43,11 @@ const EARLIER_SHOWN = 4; // of the conversation before what waited, the newest s
 
 const pct = (n: number | null) => (n === null ? "–" : `${Math.round(n * 100)}%`);
 
-/** A model's name as the page shows it: a local one without "ollama:", a voice model as such. */
+/** A model's name as the page shows it: a local one without "ollama:" or "local:", a voice model as such. */
 function modelLabel(name: string): string {
   if (name === "voice") return "your voice model";
-  if (name.startsWith("voice:")) return `voice model ${name.slice(6).replace(/^ollama:/, "")}`;
-  return name.replace(/^ollama:/, "");
+  if (name.startsWith("voice:")) return `voice model ${name.slice(6).replace(/^(ollama|local):/, "")}`;
+  return name.replace(/^(ollama|local):/, "");
 }
 
 /**
@@ -131,9 +131,12 @@ function StartForm({
   onStart: (model: string, n: number) => Promise<boolean>;
 }) {
   const setUp = data.setUp;
-  const drafting = setUp?.drafting ?? (status.model.kind === "local" ? `ollama:${status.model.name}` : status.model.name);
+  const drafting =
+    setUp?.drafting ??
+    (status.model.kind === "local" ? `${status.model.via === "server" ? "local" : "ollama"}:${status.model.name}` : status.model.name);
   const options = [
-    ...status.ollama.models.map((m) => ({ value: `ollama:${m}`, label: `${m}, on this computer` })),
+    ...status.ollama.models.map((m) => ({ value: `ollama:${m.name}`, label: `${m.name}, on this computer` })),
+    ...status.server.models.map((m) => ({ value: `local:${m.name}`, label: `${m.name}, on this computer` })),
     ...(setUp?.key ? [{ value: setUp.hosted, label: `${setUp.hosted}, through Anthropic` }] : []),
     ...(setUp?.voice ? [{ value: "voice", label: "your voice model, on this computer" }] : []),
   ].filter((o) => o.value !== drafting);
@@ -143,7 +146,7 @@ function StartForm({
   const list = useId();
   const count = Number(n);
   const valid = model.trim() !== "" && Number.isInteger(count) && count >= 1 && count <= COMPARE_MAX_ROUND;
-  const hosted = valid && !/^(ollama:|voice)/.test(model.trim());
+  const hosted = valid && !/^(ollama:|local:|voice)/.test(model.trim());
 
   return (
     <form

@@ -14,8 +14,9 @@ one) never reroutes the key. Everything goes through `ask`.
 
 PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voicemodel): "mlx"
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
-or "local:<name>" for one served the ways above. It goes through `ask_voice`. `using` points the calls made inside it
-at other models than these settings name, so proxenos.compare can draft one reply with two.
+or "local:<name>" for one served the ways above. It goes through `ask_voice`. `using` points the
+calls made inside it at other models than these settings name, so proxenos.compare can draft one
+reply with two.
 
 What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers

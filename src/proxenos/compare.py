@@ -70,9 +70,9 @@ _ID = re.compile(r"\d{8}T\d{6}Z")
 
 def model(name: str) -> str:
     """A model as a round names it, checked as Settings checks the settings it stands for: a
-    drafting model as PROXENOS_MODEL takes one ("ollama:<name>", or Anthropic's by name), or a
-    voice model as "voice:" and what PROXENOS_VOICE_MODEL takes ("voice:mlx",
-    "voice:ollama:<name>"). "voice" alone is the voice model set up now. ValueError otherwise."""
+    drafting model as PROXENOS_MODEL takes one ("ollama:<name>", "local:<name>", or Anthropic's
+    by name), or a voice model as "voice:" and what PROXENOS_VOICE_MODEL takes ("voice:mlx",
+    "voice:ollama:<name>", "voice:local:<name>"). "voice" alone is the voice model set up now. ValueError otherwise."""
     name = name.strip()
     if name == "voice":
         if not (set_up := env("VOICE_MODEL").strip()):
@@ -82,7 +82,10 @@ def model(name: str) -> str:
         name = VOICE + set_up
     if name.startswith(VOICE):
         if not setup._VOICE.fullmatch(name.removeprefix(VOICE)):
-            raise ValueError("A voice model is voice:mlx, voice:mlx:<port> or voice:ollama:<name>.")
+            raise ValueError(
+                "A voice model is voice:mlx, voice:mlx:<port>, voice:ollama:<name> or "
+                "voice:local:<name>."
+            )
         return name
     if not setup._MODEL.fullmatch(name):
         raise ValueError(f"{name!r} isn't a model's name.")
@@ -91,14 +94,14 @@ def model(name: str) -> str:
 
 def where(name: str) -> str:
     """Where a model runs: "this computer" or "Anthropic", as the calls log says it."""
-    return "this computer" if name.startswith((llm.LOCAL, VOICE)) else "Anthropic"
+    return "this computer" if name.startswith((*llm.LOCAL, VOICE)) else "Anthropic"
 
 
 def label(name: str) -> str:
     """A model's name as the page shows it."""
     if name.startswith(VOICE):
-        return f"voice model {name.removeprefix(VOICE).removeprefix(llm.LOCAL)}"
-    return name.removeprefix(llm.LOCAL)
+        return f"voice model {llm.bare(name.removeprefix(VOICE))}"
+    return llm.bare(name)
 
 
 # ── A round ──────────────────────────────────────────────────────────────────
@@ -556,8 +559,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     begin.add_argument(
         "--model",
         required=True,
-        help="a drafting model (ollama:<name>, or Anthropic's), or voice:mlx, voice:ollama:<name> "
-        "or voice (the voice model set up now)",
+        help="a drafting model (ollama:<name>, local:<name>, or Anthropic's), or voice:mlx, "
+        "voice:ollama:<name>, voice:local:<name> or voice (the voice model set up now)",
     )
     begin.add_argument("--against", help="the other model (default: the drafting model set up)")
     begin.add_argument("-n", type=int, default=ROUND, help=f"replies to draft (default {ROUND})")
