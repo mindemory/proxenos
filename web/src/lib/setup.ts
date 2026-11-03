@@ -8,7 +8,18 @@
 
 
 import { lastLine, NO_COMMAND } from "./connect";
-import type { SecretState, SettingKey, SettingOrigin, SettingValue, SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
+import type {
+  LocalModel,
+  LocalModels,
+  SecretState,
+  SettingKey,
+  SettingOrigin,
+  SettingValue,
+  SetupChange,
+  SetupResponse,
+  SetupResult,
+  SetupStatus,
+} from "./types";
 import { SETTING_KEYS } from "./types";
 import { proxenos, setting } from "./vault";
 
@@ -20,7 +31,8 @@ const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "k
 /** The secrets `proxenos setup` keeps, as config.SECRET names them. */
 const SECRET_NAME =
   /^(ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)|GCALENDAR_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)|NTFY_(TOPIC|TOKEN))$/;
-const MODEL_NAME = /^[\w.:/-]{1,100}$/;
+/** As setup._MODEL: LM Studio's names may say a quantization after an @ (qwen3-8b@q4_k_m). */
+const MODEL_NAME = /^[\w.:/@+-]{1,200}$/;
 
 /** A first run: no name and no vault, from the environment, the repo's .env or the settings file. */
 export function setupNeeded(): boolean {
@@ -41,12 +53,31 @@ function origin(v: unknown): SettingOrigin | null {
   return ORIGINS.find((o) => o === v) ?? null;
 }
 
+function positive(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** A local server's models, each with its size and whether it fits, and the one suggested if it's among them. */
+function localModels(v: unknown): LocalModels {
+  const r = rec(v);
+  const models = Array.isArray(r.models)
+    ? r.models.flatMap((raw): LocalModel[] => {
+        const m = rec(raw);
+        const name = str(m.name);
+        return name && MODEL_NAME.test(name) ? [{ name, bytes: positive(m.bytes), fits: typeof m.fits === "boolean" ? m.fits : null }] : [];
+      })
+    : [];
+  const suggested = str(r.suggested);
+  return { running: r.running === true, models, suggested: models.some((m) => m.name === suggested) ? suggested : null };
+}
+
 function toStatus(raw: unknown): SetupStatus | null {
   const r = rec(raw);
   const settings = rec(r.settings);
   const vault = rec(r.vault);
   const model = rec(r.model);
-  const ollama = rec(r.ollama);
+  const computer = rec(r.computer);
+  const server = rec(r.server);
   if (typeof r.needed !== "boolean" || !str(vault.path) || !str(model.name)) return null;
   return {
     needed: r.needed,
@@ -67,10 +98,20 @@ function toStatus(raw: unknown): SetupStatus | null {
     model: {
       kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
       name: str(model.name) ?? "",
+      via: model.via === "ollama" || model.via === "server" ? model.via : null,
     },
-    ollama: {
-      running: ollama.running === true,
-      models: Array.isArray(ollama.models) ? ollama.models.filter((m): m is string => typeof m === "string") : [],
+    computer: {
+      memory: positive(computer.memory),
+      advice: str(computer.advice)?.slice(0, 400) ?? "",
+      rule: str(computer.rule)?.slice(0, 400) ?? "",
+      get: str(computer.get) && MODEL_NAME.test(str(computer.get) ?? "") ? str(computer.get) : null,
+    },
+    ollama: localModels(r.ollama),
+    server: {
+      ...localModels(server),
+      url: str(server.url)?.slice(0, MAX_VALUE) ?? "",
+      error: str(server.error)?.slice(0, 600) ?? null,
+      context: positive(server.context) ?? 0,
     },
     keychain: r.keychain === true,
     // An older proxenos doesn't say: it only ran on a Mac.
@@ -167,6 +208,11 @@ export function parseChange(body: Record<string, unknown>): SetupChange | { erro
     return typeof body.ollama === "string" && MODEL_NAME.test(body.ollama.trim())
       ? { ollama: body.ollama.trim() }
       : { error: "Name a model, e.g. gemma4:26b." };
+  }
+  if ("server" in body) {
+    return typeof body.server === "string" && MODEL_NAME.test(body.server.trim())
+      ? { server: body.server.trim() }
+      : { error: "Name a model the server lists." };
   }
   if ("secret" in body) {
     if (typeof body.secret !== "string" || !SECRET_NAME.test(body.secret)) return { error: "That isn't one of Proxenos's secrets." };

@@ -118,8 +118,9 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
         raise RuntimeError("no embedding model in tests")
 
     monkeypatch.setattr("proxenos.vectors._ollama", no_model)
-    # Nor Ollama itself, which setup asks for its models.
+    # Nor Ollama itself, nor another model server on this computer, which setup asks for models.
     monkeypatch.setattr("proxenos.setup._ollama_models", lambda: None)
+    monkeypatch.setattr("proxenos.setup._server_models", lambda: None)
     # Nor an Ask running on this computer, which a local model call would wait out.
     monkeypatch.setattr("proxenos.llm.waiting", lambda vault=None: False)
     # Nor the real vault's log of model calls: a test that checks the log points it elsewhere.

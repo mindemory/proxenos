@@ -1,5 +1,5 @@
 """`proxenos setup`: the page's first-run setup and Settings. A made-up person, a vault under
-tmp_path, conftest's fake Keychain, and Anthropic and Ollama faked out."""
+tmp_path, conftest's fake Keychain, and Anthropic, Ollama and other model servers faked out."""
 
 import io
 import json
@@ -15,6 +15,7 @@ from proxenos import cli, config, setup
 
 KEY = "sk-ant-api03-" + "k" * 40
 SECRET = "s3cret-value-that-must-never-show"
+_real_server_models = setup._server_models  # conftest stands it in for every test; one tests it
 
 
 @pytest.fixture
@@ -64,7 +65,7 @@ def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
         "exists": False,
         "cloud": None,
     }
-    assert status["model"] == {"kind": "none", "name": "claude-opus-5-5"}
+    assert status["model"] == {"kind": "none", "name": "claude-opus-5-5", "via": None}
     assert status["saves_to"] == "settings"
     assert {s["name"] for s in status["secrets"]} == set(setup.SECRETS)
     assert not any(s["set"] for s in status["secrets"])
@@ -127,6 +128,7 @@ def test_a_voice_model_is_served_here_or_in_ollama(home):
     assert apply({"settings": {"voice_model": "mlx"}})["ok"]
     assert config.env("VOICE_MODEL") == "mlx"
     assert apply({"settings": {"voice_model": "ollama:tess-voice"}})["ok"]
+    assert apply({"settings": {"voice_model": "local:tess-voice@q4_k_m"}})["ok"]
     assert "A voice model is" in apply({"settings": {"voice_model": "gpt-9"}})["error"]
     assert apply({"settings": {"voice_model": ""}})["ok"]
     assert config.env("VOICE_MODEL") == ""
@@ -146,7 +148,7 @@ def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
         "claude-opus-5-5",  # the model it will use: a local model setting is dropped for it
     ]
     assert fake_keychain.items == {"ANTHROPIC_API_KEY": KEY}
-    assert result["status"]["model"] == {"kind": "api", "name": "claude-opus-5-5"}
+    assert result["status"]["model"] == {"kind": "api", "name": "claude-opus-5-5", "via": None}
     key = next(s for s in result["status"]["secrets"] if s["name"] == "ANTHROPIC_API_KEY")
     assert key == {"name": "ANTHROPIC_API_KEY", "set": True, "from": "keychain"}
     assert KEY not in config.SETTINGS_FILE.read_text()
@@ -167,16 +169,98 @@ def test_a_key_anthropic_refuses_is_not_saved(home, anthropic_says, fake_keychai
     assert not fake_keychain.items and "ANTHROPIC_API_KEY" not in os.environ
 
 
+GB, GIB = 10**9, 2**30
+
+
 def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
     assert "isn't running" in apply({"ollama": "gemma4:26b"})["error"]
 
-    monkeypatch.setattr(setup, "_ollama_models", lambda: ["gemma4:26b", "qwen3-embedding:0.6b"])
+    pulled = {"gemma4:26b": 17 * GB, "big:70b": 42 * GB, "qwen3-embedding:0.6b": GB // 2}
+    monkeypatch.setattr(setup, "_ollama_models", lambda: pulled)
+    monkeypatch.setattr(setup.machine, "memory", lambda: 32 * GIB)
     assert "ollama pull qwen3:8b" in apply({"ollama": "qwen3:8b"})["error"]
     result = apply({"ollama": "gemma4:26b"})
 
     assert result["ok"] and config.env("MODEL") == "ollama:gemma4:26b"
-    assert result["status"]["model"] == {"kind": "local", "name": "gemma4:26b"}
-    assert result["status"]["ollama"] == {"running": True, "models": ["gemma4:26b"]}
+    status = result["status"]
+    assert status["model"] == {"kind": "local", "name": "gemma4:26b", "via": "ollama"}
+    assert status["ollama"] == {
+        "running": True,
+        "models": [  # the embedding model isn't one to write with
+            {"name": "big:70b", "bytes": 42 * GB, "fits": False},
+            {"name": "gemma4:26b", "bytes": 17 * GB, "fits": True},
+        ],
+        "suggested": "gemma4:26b",
+    }
+    assert status["computer"]["memory"] == 32 * GIB
+    assert "enough for gemma4:26b" in status["computer"]["advice"]
+    assert status["computer"]["get"] == "gemma4:26b"
+    assert status["server"]["running"] is False and status["server"]["models"] == []
+
+
+def test_a_model_on_another_server_here_must_be_served(home, monkeypatch):
+    assert config.env("LOCAL_URL") == ""
+    status = setup.status()["server"]
+    assert status["url"] == "http://127.0.0.1:1234/v1" and status["error"] is None
+    assert "Nothing answers at http://127.0.0.1:1234/v1" in apply({"server": "qwen3-8b"})["error"]
+
+    served = {"qwen3-8b@q4_k_m": 5 * GB, "qwen3-30b-a3b": None, "nomic-embed-text": None}
+    monkeypatch.setattr(setup, "_server_models", lambda: served)
+    monkeypatch.setattr(setup.machine, "memory", lambda: 16 * GIB)
+    assert "doesn't have mistral" in apply({"server": "mistral"})["error"]
+    result = apply({"server": "qwen3-8b@q4_k_m"})
+
+    assert result["ok"] and config.env("MODEL") == "local:qwen3-8b@q4_k_m"
+    status = result["status"]
+    assert status["model"] == {"kind": "local", "name": "qwen3-8b@q4_k_m", "via": "server"}
+    assert status["server"]["models"] == [
+        {"name": "qwen3-30b-a3b", "bytes": None, "fits": None},  # its server didn't say its size
+        {"name": "qwen3-8b@q4_k_m", "bytes": 5 * GB, "fits": True},
+    ]
+    assert status["server"]["suggested"] == "qwen3-8b@q4_k_m"
+    assert status["server"]["context"] == 65536
+    assert status["computer"]["advice"].startswith("This computer has 16 GB of memory, so get")
+    assert status["computer"]["get"] is None  # gemma4:26b doesn't fit 16 GB
+
+
+def test_the_servers_address_is_saved_only_when_its_this_computers(home, monkeypatch):
+    assert apply({"settings": {"local_url": "http://localhost:8080/v1/"}})["ok"]
+    assert config.env("LOCAL_URL") == "http://localhost:8080/v1"
+    assert setup.status()["server"]["url"] == "http://localhost:8080/v1"
+
+    refused = apply({"settings": {"local_url": "http://127.0.0.1@evil.example/v1"}})
+    assert not refused["ok"] and "isn't on this computer" in refused["error"]
+    assert config.env("LOCAL_URL") == "http://localhost:8080/v1"
+
+    monkeypatch.setenv("PROXENOS_LOCAL_URL", "http://192.168.1.20:1234/v1")  # set by hand
+    server = setup.status()["server"]
+    assert (
+        server["url"] == "http://192.168.1.20:1234/v1"
+        and "isn't on this computer" in (server["error"])
+    )
+    assert "isn't on this computer" in apply({"server": "qwen3-8b"})["error"]
+
+
+def test_the_servers_models_are_read_from_its_list_with_sizes_where_it_says(monkeypatch):
+    asked = []
+    listed = {
+        "object": "list",
+        "data": [
+            {"id": "gemma-3-12b-it-Q4_K_M.gguf", "object": "model", "meta": {"size": 7 * GB}},
+            {"id": "qwen3-8b", "object": "model", "owned_by": "organization_owner"},
+        ],
+    }
+
+    def opened(url, timeout):
+        asked.append((url, timeout))
+        return io.BytesIO(json.dumps(listed).encode())
+
+    monkeypatch.setattr(setup.llm, "_direct", opened)
+    assert _real_server_models() == {"gemma-3-12b-it-Q4_K_M.gguf": 7 * GB, "qwen3-8b": None}
+    assert asked == [("http://127.0.0.1:1234/v1/models", 2)]
+
+    monkeypatch.setenv("PROXENOS_LOCAL_URL", "http://example.com/v1")
+    assert _real_server_models() is None and len(asked) == 1  # never asked another host
 
 
 def test_secrets_are_replaced_and_removed_and_never_shown(home, fake_keychain, monkeypatch):

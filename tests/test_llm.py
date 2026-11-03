@@ -383,3 +383,262 @@ def test_a_schema_holds_the_local_model_as_it_writes_where_ollama_can(monkeypatc
     assert ["format" in body for body in sent] == [False]  # not asked with one again
     texts = local(monkeypatch, "hello")  # a text answer is held to nothing
     assert llm.ask("text") == "hello" and "format" not in texts[0][1]
+
+
+class Events(Stream):
+    """An OpenAI-compatible server's answer as it streams in: server-sent events, each a data:
+    line and a blank one, then `then` raised, if given."""
+
+    def __iter__(self):
+        for chunk in self.lines:
+            yield b"data: " + (chunk if isinstance(chunk, bytes) else json.dumps(chunk).encode())
+            yield b"\n"
+        if self.then:
+            raise self.then
+
+
+def piece(delta, finish=None):
+    return {"choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+
+def evented(content, finish="stop"):
+    """`content` as such a server streams it: thinking parted out, the words in pieces, why it
+    stopped, the tokens, and [DONE]."""
+    return [
+        piece({"role": "assistant", "content": "", "reasoning_content": "Hm."}),
+        *(piece({"content": content[i : i + 4]}) for i in range(0, len(content), 4)),
+        piece({}, finish),
+        {"choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 5}},
+        b"[DONE]",
+    ]
+
+
+def served(monkeypatch, content, finish="stop", *, chunks=None, then=None, model="qwen3-8b"):
+    """A fake server on this computer: records each request and streams `content` back, or
+    `chunks`. Ollama's way is never taken."""
+    sent = []
+
+    def opened(request, timeout):
+        sent.append((request.full_url, json.loads(request.data), timeout))
+        return Events(evented(content, finish) if chunks is None else chunks, then)
+
+    monkeypatch.setenv("PROXENOS_MODEL", f"local:{model}")
+    monkeypatch.setattr(llm, "_direct", opened)
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda *_, **__: pytest.fail("Ollama"))
+    return sent
+
+
+def test_a_model_on_another_server_answers_through_its_openai_api_with_the_schema(monkeypatch):
+    sent = served(monkeypatch, '```json\n{"x": 1}\n```', model="qwen3-8b@q4_k_m")
+    monkeypatch.setattr(llm, "_get_client", lambda: pytest.fail("called the API"))
+    schema = {"type": "object", "required": ["x"]}
+
+    assert llm.ask("hi", system="sys", schema=schema, effort="high", max_tokens=900) == {"x": 1}
+
+    url, body, timeout = sent[0]
+    assert url == "http://127.0.0.1:1234/v1/chat/completions" and timeout == llm._LOCAL_TIMEOUT
+    assert body["model"] == "qwen3-8b@q4_k_m" and body["stream"] is True
+    assert body["max_tokens"] == 900 and body["stream_options"] == {"include_usage": True}
+    assert body["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "answer", "schema": schema},
+    }
+    system, user = body["messages"]
+    assert user == {"role": "user", "content": "hi"}
+    assert system["content"].startswith("sys") and '"required": ["x"]' in system["content"]
+    assert "think" not in body and "options" not in body  # Ollama's own
+    assert llm.configured()  # a local model needs no key
+    assert llm.fit(400_000) == llm.prompt_chars() - 30_000 < 400_000  # trimmed as Ollama's are
+
+
+def test_a_servers_address_is_its_own_setting_and_images_go_as_data_urls(monkeypatch):
+    sent = served(monkeypatch, "a cat")
+    monkeypatch.setenv("PROXENOS_LOCAL_URL", "http://localhost:8080/v1/")  # llama-server's
+    image = {"type": "image/png", "data": "aGVsbG8="}
+
+    assert llm.ask("what is it?", images=[image]) == "a cat"
+
+    url, body, _ = sent[0]
+    assert url == "http://localhost:8080/v1/chat/completions" and "response_format" not in body
+    assert body["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}},
+                {"type": "text", "text": "what is it?"},
+            ],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1.example.com:1234/v1",  # named like loopback, but another host
+        "http://127.0.0.1@evil.example/v1",  # user info: the host is evil.example
+        "http://evil.example@127.0.0.1:1234/v1",  # user info, either way round
+        "http://evil.example#@127.0.0.1/v1",
+        "http://evil.example?@127.0.0.1/v1",
+        "http://127.0.0.1\\@evil.example/v1",
+        "http://localhost.evil.example/v1",
+        "http://192.168.1.20:1234/v1",
+        "http://10.0.0.1/v1",
+        "http://0.0.0.0:1234/v1",
+        "http://[::ffff:8.8.8.8]/v1",
+        "http://[2001:db8::1]/v1",
+        "http://2130706433/v1",  # a number some read as 127.0.0.1: refused all the same
+        "http://127.1/v1",
+        "http://127.0.0.1:port/v1",
+        "http://127.0.0.1 .evil.example/v1",
+        "http://127.0.0.1\t.evil.example/v1",
+        "ftp://127.0.0.1/v1",
+        "file:///etc/passwd",
+        "127.0.0.1:1234/v1",
+        "http:///v1",
+    ],
+)
+def test_a_server_anywhere_but_this_computer_is_refused_before_anything_is_sent(monkeypatch, url):
+    sent = served(monkeypatch, "ok")
+    monkeypatch.setenv("PROXENOS_LOCAL_URL", url)
+    with pytest.raises(llm.ModelError, match="isn't on this computer"):
+        llm.ask("a private prompt")
+    assert not sent
+
+
+@pytest.mark.parametrize(
+    ("url", "kept"),
+    [
+        ("", "http://127.0.0.1:1234/v1"),  # LM Studio's, when none is set
+        ("http://127.0.0.1:8080/v1", "http://127.0.0.1:8080/v1"),  # llama-server's
+        ("http://localhost:8000/v1/", "http://localhost:8000/v1"),  # vLLM's
+        ("HTTP://LOCALHOST:1337/v1", "HTTP://LOCALHOST:1337/v1"),
+        ("http://127.8.9.10:1234/v1", "http://127.8.9.10:1234/v1"),  # all of 127.0.0.0/8
+        ("http://[::1]:1234/v1", "http://[::1]:1234/v1"),
+        ("https://localhost/v1", "https://localhost/v1"),
+    ],
+)
+def test_a_server_on_this_computer_is_used_where_it_is(url, kept):
+    assert llm.local_url(url) == kept
+
+
+def test_a_servers_requests_go_through_no_proxy_and_follow_no_redirect(monkeypatch):
+    import urllib.request
+
+    def proxied(opener):
+        return any(isinstance(h, urllib.request.ProxyHandler) for h in opener.handlers)
+
+    monkeypatch.setenv("http_proxy", "http://proxy.example:3128")
+    assert proxied(urllib.request.build_opener())  # as urlopen would go: through the proxy
+    assert not proxied(llm._opener()) and not proxied(llm._direct.__self__)
+    handlers = llm._direct.__self__.handlers
+    redirects = [h for h in handlers if isinstance(h, urllib.request.HTTPRedirectHandler)]
+    assert redirects and all(isinstance(h, llm._Stay) for h in redirects)
+    request = urllib.request.Request("http://127.0.0.1:1234/v1/models")
+    assert redirects[0].redirect_request(request, None, 302, "Found", {}, "http://x.ex") is None
+
+
+def test_a_servers_answer_leaves_its_line_in_the_log_as_this_computers(monkeypatch, tmp_path):
+    log = tmp_path / "state" / "model-calls.jsonl"
+    monkeypatch.setattr(llm, "_calls_path", lambda: log)
+    sent = served(monkeypatch, "<think>\nShe asked about the 3rd.\n</think>\n\nSee you then.")
+
+    assert llm.ask(SAID, system=SYSTEM) == "See you then."  # its thinking isn't the answer
+
+    system, user = sent[0][1]["messages"]
+    assert (system["content"], user["content"]) == (SYSTEM, SAID)  # nothing left this computer
+    line = json.loads(log.read_text())
+    assert line["where"] == "this computer" and line["model"] == "local:qwen3-8b"
+    assert line["redacted"] is None and (line["tokens_in"], line["tokens_out"]) == (12, 5)
+    assert line["answer_chars"] == len("See you then.") and line["ok"] is True
+    for secret in ("482913", "hunter2", "See you"):
+        assert secret not in log.read_text()
+
+
+def test_a_server_that_cant_hold_a_schema_is_asked_again_without_one(monkeypatch):
+    import io
+    from urllib.error import HTTPError
+
+    sent = []
+    schema = {"type": "object", "required": ["x"]}
+
+    def opened(request, timeout):
+        body = json.loads(request.data)
+        sent.append(body)
+        if "response_format" in body and body["model"] == "plain":
+            said = b"{\"error\":\"'response_format.type' must be 'json_schema' or 'text'\"}"
+            raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(said))
+        return Events(evented('{"x": 1}'))
+
+    monkeypatch.setattr(llm, "_direct", opened)
+    monkeypatch.setattr(llm, "_NO_GRAMMAR", set())
+    monkeypatch.setenv("PROXENOS_MODEL", "local:held")
+    assert llm.ask("hi", schema=schema) == {"x": 1}
+    assert "response_format" in sent[-1]
+
+    monkeypatch.setenv("PROXENOS_MODEL", "local:plain")
+    sent.clear()
+    assert llm.ask("hi", schema=schema) == {"x": 1}
+    assert ["response_format" in body for body in sent] == [True, False]
+    sent.clear()
+    assert llm.ask("again", schema=schema) == {"x": 1}
+    assert ["response_format" in body for body in sent] == [False]  # not asked with one again
+    assert llm._NO_GRAMMAR == {"local:plain"}
+
+    def missing(request, timeout):  # any other refusal is the answer
+        said = io.BytesIO(b'{"error":"model gone not found"}')
+        raise HTTPError(request.full_url, 404, "Not Found", {}, said)
+
+    monkeypatch.setattr(llm, "_direct", missing)
+    monkeypatch.setenv("PROXENOS_MODEL", "local:gone")
+    with pytest.raises(llm.ModelError, match="not found"):
+        llm.ask("hi", schema=schema)
+    assert "local:gone" not in llm._NO_GRAMMAR
+
+
+def test_a_servers_answer_cut_off_stalled_or_failing_fails_rather_than_truncates(monkeypatch):
+    sent = served(monkeypatch, "partial", "length")
+    with pytest.raises(llm.ModelError, match="too long"):
+        llm.ask("x" * llm.LOCAL_CONTEXT * 3)
+    assert not sent  # never sent
+    with pytest.raises(llm.ModelError, match="cut off"):
+        llm.ask("hi")
+
+    served(monkeypatch, "", chunks=evented("a long")[:2], then=TimeoutError("timed out"))
+    with pytest.raises(llm.ModelError, match="isn't answering.*http://127.0.0.1:1234/v1"):
+        llm.ask("hi")
+    served(monkeypatch, "", chunks=evented("a long")[:2])  # the stream ended with no reason
+    with pytest.raises(llm.ModelError, match="stopped mid-answer"):
+        llm.ask("hi")
+    served(monkeypatch, "", chunks=[{"error": {"message": "the model crashed"}}])
+    with pytest.raises(llm.ModelError, match="the model crashed"):
+        llm.ask("hi")
+    served(monkeypatch, "", chunks=[b"{not json"])
+    with pytest.raises(llm.ModelError, match="stopped mid-answer"):
+        llm.ask("hi")
+
+    def down(request, timeout):
+        raise llm.urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(llm, "_direct", down)
+    with pytest.raises(llm.ModelError, match="isn't answering"):
+        llm.ask("hi")
+
+    monkeypatch.setattr(llm, "_LOCAL_DEADLINE", -1)  # past the deadline, still going
+    served(monkeypatch, "a long answer")
+    with pytest.raises(llm.ModelError, match="still answering"):
+        llm.ask("hi")
+
+
+def test_a_voice_model_on_another_server(monkeypatch):
+    sent = served(monkeypatch, "yaa")
+    monkeypatch.setenv("PROXENOS_VOICE_MODEL", "local:tess-voice")
+    assert llm.ask_voice("the chat", "You are Tess.") == "yaa"
+    body = sent[0][1]
+    assert body["model"] == "tess-voice" and body["max_tokens"] == llm.VOICE_TOKENS
+    assert "response_format" not in body
+
+
+def test_a_models_name_without_where_it_runs():
+    assert llm.bare("ollama:gemma4:26b") == "gemma4:26b"
+    assert llm.bare("local:qwen/qwen3-8b") == "qwen/qwen3-8b"
+    assert llm.bare("claude-opus-5-5") == "claude-opus-5-5"

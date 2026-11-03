@@ -82,8 +82,8 @@ KINDS = ("draft", "project", "day", "person", "free")
 THREAD_ID = re.compile(r"think-\d{8}T\d{6}Z(?:-\d{1,3})?")
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 NO_MODEL = (
-    "Think needs a model: set one up in Settings, a local one through Ollama or an Anthropic "
-    "API key."
+    "Think needs a model: set one up in Settings, a local one (through Ollama or a server such "
+    "as LM Studio) or an Anthropic API key."
 )
 
 # What each part of the self-model is, as the page says where a line comes from.

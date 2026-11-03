@@ -1,18 +1,22 @@
 """`proxenos setup`: the page's first-run setup and its Settings, as JSON in and out.
 
 `proxenos setup` prints where things stand: your name, the vault, the model, the folders read on
-every sync, whether Ollama is running and with which models, which secure store keeps secrets
-here, and which secrets are set and where each comes from. Never a secret's value: only whether
-it's set.
+every sync, the models on this computer (Ollama's, and those of an OpenAI-compatible server at
+PROXENOS_LOCAL_URL, such as LM Studio's) with which fit its memory (proxenos.machine), which
+secure store keeps secrets here, and which secrets are set and where each comes from. Never a
+secret's value: only whether it's set.
 
 `proxenos setup --apply` takes one change as JSON on stdin and prints {"ok", "message" or
 "error", "status"}:
 - {"settings": {"name": ..., "vault": ..., "docs_dirs": ...}} saves those settings; "" removes
   one. The vault folder is made if it isn't there, and has to be outside this repo. A voice model
-  (for reply drafts, see proxenos.voicemodel) is "mlx", "mlx:<port>" or "ollama:<name>".
+  (for reply drafts, see proxenos.voicemodel) is "mlx", "mlx:<port>", "ollama:<name>" or
+  "local:<name>". The local server's address ("local_url") has to be this computer's own.
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
   it would use) and saves it, and the model is then Anthropic's.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
+- {"server": "qwen3-8b"} checks that the server at PROXENOS_LOCAL_URL serves that model, and
+  uses it, as "local:qwen3-8b".
 - {"secret": NAME, "value": ...} replaces a secret; {"forget": NAME} removes one.
 Secrets come in on stdin, never as arguments, and never go back out.
 """
@@ -24,13 +28,14 @@ from pathlib import Path
 
 import anthropic
 
-from proxenos import config, keychain, llm, notify
+from proxenos import config, keychain, llm, machine, notify
 
 # What the page can change, by its key in the settings file, and how many folders each takes.
 SETTINGS = {
     "name": "NAME",
     "vault": "VAULT",
     "model": "MODEL",
+    "local_url": "LOCAL_URL",
     "voice_model": "VOICE_MODEL",
     "docs_dirs": "DOCS_DIRS",
     "website_repo": "WEBSITE_REPO",
@@ -60,8 +65,9 @@ SECRETS = (
     "NTFY_TOPIC",
     "NTFY_TOKEN",
 )
-_MODEL = re.compile(r"[\w.:/-]{1,100}")
-_VOICE = re.compile(r"mlx(:\d{1,5})?|ollama:[\w.:/-]{1,100}")
+# A model's name: LM Studio's may name a quantization after an @ (qwen3-8b@q4_k_m).
+_MODEL = re.compile(r"[\w.:/@+-]{1,200}")
+_VOICE = re.compile(r"mlx(:\d{1,5})?|(ollama|local):[\w.:/@+-]{1,200}")
 _KEY = re.compile(r"sk-ant-[\w-]{10,500}")
 _MAX_NAME = 100
 _KEY_CHECK_SECONDS = 20
@@ -73,10 +79,19 @@ def status() -> dict:
     model = config.env("MODEL", llm.DEFAULT_MODEL)
     held = config.secrets()
     if model.startswith(llm.LOCAL):
-        kind, name = "local", model.removeprefix(llm.LOCAL)
+        kind, name = "local", llm.bare(model)
+        via = "ollama" if model.startswith(llm.OLLAMA) else "server"
     else:
-        kind, name = ("api" if "ANTHROPIC_API_KEY" in held else "none"), model
-    pulled = _ollama_models()
+        kind, name, via = ("api" if "ANTHROPIC_API_KEY" in held else "none"), model, None
+    memory = machine.memory()
+    # The model to pull when there's none yet, unless it's known not to fit.
+    get = None if machine.fits(machine.SUGGESTED_BYTES, memory) is False else machine.SUGGESTED
+    pulled = _chat_models(_ollama_models())
+    served = _chat_models(_server_models())
+    try:
+        url, refused = llm.local_url(), None
+    except llm.ModelError as e:
+        url, refused = config.env("LOCAL_URL"), str(e)
     return {
         "needed": needed(),
         "saves_to": config.saves_to(),
@@ -94,8 +109,20 @@ def status() -> dict:
             "exists": vault.is_dir(),
             "cloud": cloud(vault),
         },
-        "model": {"kind": kind, "name": name},
-        "ollama": {"running": pulled is not None, "models": _chat_models(pulled or [])},
+        "model": {"kind": kind, "name": name, "via": via},
+        "computer": {
+            "memory": memory,
+            "advice": machine.advice(memory),
+            "rule": machine.RULE,
+            "get": get,
+        },
+        "ollama": _listed(pulled, memory),
+        "server": {
+            **_listed(served, memory),
+            "url": url,
+            "error": refused,
+            "context": llm.LOCAL_CONTEXT,  # what to load a model with there
+        },
         "keychain": keychain.available(),
         "secret_store": keychain.store(),
         "secrets": secrets(),
@@ -153,6 +180,8 @@ def _apply(request: object) -> str:
         return _save_key(str(request["key"]).strip())
     if "ollama" in request:
         return _use_ollama(str(request["ollama"]).strip())
+    if "server" in request:
+        return _use_server(str(request["server"]).strip())
     if "secret" in request:
         name, value = str(request["secret"]), str(request.get("value", "")).strip()
         if name == "ANTHROPIC_API_KEY":
@@ -187,7 +216,8 @@ def _save_settings(changes: dict) -> str:
         raise ValueError("That isn't a model's name.")
     if values.get("voice_model") and not _VOICE.fullmatch(values["voice_model"]):
         raise ValueError(
-            "A voice model is mlx (as `proxenos voice serve` runs it) or ollama:<name>."
+            "A voice model is mlx (as `proxenos voice serve` runs it), ollama:<name> or "
+            "local:<name>."
         )
     if values.get("ntfy_server"):
         try:
@@ -199,6 +229,11 @@ def _save_settings(changes: dict) -> str:
             notify.parse_quiet(values["quiet_hours"])
         except ValueError:
             raise ValueError("Give quiet hours as 22:00-08:00, or off.") from None
+    if values.get("local_url"):
+        try:
+            values["local_url"] = llm.local_url(values["local_url"])
+        except llm.ModelError as e:
+            raise ValueError(str(e)) from None
     if "vault" in values:
         values["vault"] = _make_vault(values["vault"])
 
@@ -271,7 +306,7 @@ def _check_key(key: str, model: str) -> str | None:
 
 
 def _use_ollama(model: str) -> str:
-    model = model.removeprefix(llm.LOCAL)
+    model = model.removeprefix(llm.OLLAMA)
     if not _MODEL.fullmatch(model):
         raise ValueError("Name a model, e.g. gemma4:26b.")
     pulled = _ollama_models()
@@ -279,23 +314,74 @@ def _use_ollama(model: str) -> str:
         raise ValueError("Ollama isn't running. Open the Ollama app (ollama.com), then try again.")
     if model not in pulled and f"{model}:latest" not in pulled:
         raise ValueError(f"Ollama doesn't have {model} yet. Run: ollama pull {model}")
-    where = config.save_setting("MODEL", llm.LOCAL + model)
-    return f"Using {model} on this Mac. Saved in {_place(where)}."
+    where = config.save_setting("MODEL", llm.OLLAMA + model)
+    return f"Using {model} on this computer, through Ollama. Saved in {_place(where)}."
 
 
-def _ollama_models() -> list[str] | None:
-    """The models Ollama has pulled, or None when it isn't running."""
+def _use_server(model: str) -> str:
+    model = model.removeprefix(llm.SERVER)
+    if not _MODEL.fullmatch(model):
+        raise ValueError("Name a model the server lists.")
+    try:
+        url = llm.local_url()
+    except llm.ModelError as e:
+        raise ValueError(str(e)) from None
+    served = _server_models()
+    if served is None:
+        raise ValueError(
+            f"Nothing answers at {url}. Start the server (in LM Studio, its Developer tab), "
+            "then try again."
+        )
+    if model not in served:
+        raise ValueError(f"The server at {url} doesn't have {model}. Load it there first.")
+    where = config.save_setting("MODEL", llm.SERVER + model)
+    return f"Using {model} on this computer, through the server at {url}. Saved in {_place(where)}."
+
+
+def _ollama_models() -> dict[str, int | None] | None:
+    """The models Ollama has pulled, with each one's size in bytes, or None when it isn't
+    running."""
     try:
         with urllib.request.urlopen(f"{llm._OLLAMA}/api/tags", timeout=2) as response:
             listed = json.load(response).get("models", [])
-        return sorted(str(m["name"]) for m in listed)
+        return {str(m["name"]): _size(m.get("size")) for m in listed}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
 
 
-def _chat_models(names: list[str]) -> list[str]:
-    """The pulled models that can write, not the ones that only embed text for search."""
-    return [n for n in names if "embed" not in n]
+def _server_models() -> dict[str, int | None] | None:
+    """The models the OpenAI-compatible server at PROXENOS_LOCAL_URL serves (its /models), with
+    each one's size where the server says (llama-server does, in `meta`), or None when nothing
+    answers there or the address isn't this computer's own."""
+    try:
+        with llm._direct(f"{llm.local_url()}/models", timeout=2) as response:
+            listed = json.load(response).get("data", [])
+        return {
+            str(m["id"]): _size(m.get("size") or (m.get("meta") or {}).get("size")) for m in listed
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, llm.ModelError):
+        return None
+
+
+def _size(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def _chat_models(models: dict[str, int | None] | None) -> dict[str, int | None] | None:
+    """The models that can write, not the ones that only embed text for search."""
+    if models is None:
+        return None
+    return {name: size for name, size in models.items() if "embed" not in name}
+
+
+def _listed(models: dict[str, int | None] | None, memory: int | None) -> dict:
+    """A server's models as the page lists them: whether it answers, each model with its size
+    and whether it fits this computer, and the one to suggest."""
+    return {
+        "running": models is not None,
+        "models": machine.marked(models or {}, memory),
+        "suggested": machine.best(models or {}, memory),
+    }
 
 
 def _known_secret(name: str) -> None:

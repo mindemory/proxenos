@@ -196,7 +196,7 @@ def sent(vault: Path, now: datetime) -> dict:
         by_step.setdefault(call["step"], []).append(call)
     return {
         "model": {
-            "name": name.removeprefix(llm.LOCAL),
+            "name": llm.bare(name),
             "kind": "local" if local else "api" if llm.configured() else "none",
             "voice": config.env("VOICE_MODEL").strip() or None,
         },

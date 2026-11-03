@@ -968,6 +968,7 @@ export const SETTING_KEYS = [
   "name",
   "vault",
   "model",
+  "local_url",
   "docs_dirs",
   "website_repo",
   "spotify_export",
@@ -1001,12 +1002,30 @@ export interface SetupStatus {
   home: string; // the home folder, to tell which typed paths iCloud syncs
   settings: Record<SettingKey, SettingValue>;
   vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
-  /** A model on this Mac, Anthropic's with a key, or none yet. */
-  model: { kind: "local" | "api" | "none"; name: string };
-  ollama: { running: boolean; models: string[] };
+  /** A model on this computer (through Ollama or another server), Anthropic's with a key, or none yet. */
+  model: { kind: "local" | "api" | "none"; name: string; via: "ollama" | "server" | null };
+  /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, and the model to pull unless it's too big. */
+  computer: { memory: number | null; advice: string; rule: string; get: string | null };
+  ollama: LocalModels;
+  /** An OpenAI-compatible server on this computer (LM Studio, llama-server, ...) at `url`; `error` when that isn't this computer's own. */
+  server: LocalModels & { url: string; error: string | null; context: number };
   keychain: boolean; // whether this computer's secure store can keep secrets
   secretStore: string; // that store's name, after "the": "Keychain", "Credential Manager" or "Secret Service"
   secrets: SecretState[];
+}
+
+/** A model a local server has: its size where the server says, and whether it fits this computer (null: unknown). */
+export interface LocalModel {
+  name: string;
+  bytes: number | null;
+  fits: boolean | null;
+}
+
+/** What a local server has: whether it answers, its models, and the largest that fits, to pick first. */
+export interface LocalModels {
+  running: boolean;
+  models: LocalModel[];
+  suggested: string | null;
 }
 
 export interface SetupResponse {
@@ -1015,11 +1034,12 @@ export interface SetupResponse {
   error: string | null;
 }
 
-/** One change: settings ("" removes one), an Anthropic key to check and keep, a local model, a secret replaced or removed. */
+/** One change: settings ("" removes one), an Anthropic key to check and keep, a model in Ollama or on another local server, a secret replaced or removed. */
 export type SetupChange =
   | { settings: Partial<Record<SettingKey, string>> }
   | { key: string }
   | { ollama: string }
+  | { server: string }
   | { secret: string; value: string }
   | { forget: string };
 

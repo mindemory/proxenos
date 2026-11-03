@@ -1,34 +1,42 @@
 """The one place Proxenos talks to a model.
 
-PROXENOS_MODEL picks it. "ollama:<name>" runs an open model on this Mac through Ollama
-(ollama.com), so nothing leaves the computer and no account or key is needed: the prompt is
-everything the model knows, built in code from the vault each time. Any other name calls the
-Anthropic API with a personal key (ANTHROPIC_API_KEY, in the Keychain or .env), kept apart from
-any work or university account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the
-Claude desktop app sets one) never reroutes the key. Everything goes through `ask`.
+PROXENOS_MODEL picks it. A model on this computer needs no account or key, and nothing leaves the
+computer: the prompt is everything the model knows, built in code from the vault each time.
+"ollama:<name>" runs an open model through Ollama (ollama.com). "local:<name>" runs one through
+any other server on this computer that speaks OpenAI's chat API, at PROXENOS_LOCAL_URL: LM Studio
+(http://127.0.0.1:1234/v1, the default), llama.cpp's llama-server (http://127.0.0.1:8080/v1),
+vLLM (http://127.0.0.1:8000/v1), Jan or LocalAI. That address has to be this computer's own
+(localhost, 127.0.0.0/8 or ::1), and the request goes through no proxy and follows no redirect,
+so nothing leaves the computer that way either. Any other name calls the Anthropic API with a
+personal key (ANTHROPIC_API_KEY, in the Keychain or .env), kept apart from any work or university
+account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the Claude desktop app sets
+one) never reroutes the key. Everything goes through `ask`.
 
 PROXENOS_VOICE_MODEL, off when empty, names a voice model for reply drafts (proxenos.voicemodel): "mlx"
 for `proxenos voice serve` on this computer ("mlx:<port>" on another port), or "ollama:<name>"
-for one imported into Ollama. It goes through `ask_voice`.
+or "local:<name>" for one served the ways above. It goes through `ask_voice`.
 
 What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
 (proxenos.redact).
 
 Every call leaves one line in <vault>/state/model-calls.jsonl, for the privacy screen and for
-seeing what a night costs: when, which step asked, the model, where it ran (this Mac or
+seeing what a night costs: when, which step asked, the model, where it ran (this computer or
 Anthropic), how many characters went in and came back, the tokens where the model counts them,
 how many numbers and secrets were blanked, how long it took and whether it worked. Never the
 words, nor what was blanked.
 """
 
 import http.client
+import ipaddress
 import json
 import os
+import re
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
@@ -46,8 +54,13 @@ _API = "https://api.anthropic.com"
 # On a policy decline the API reruns the request on a fallback model inside the same call.
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
-LOCAL = "ollama:"
+OLLAMA = "ollama:"
+SERVER = "local:"  # an OpenAI-compatible server on this computer: LM Studio, llama-server, ...
+# Either runs on this computer. A tuple, so `model.startswith(LOCAL)` asks about both.
+LOCAL = (OLLAMA, SERVER)
 _OLLAMA = "http://127.0.0.1:11434"
+# LM Studio's server; PROXENOS_LOCAL_URL names another, such as llama-server's on port 8080.
+DEFAULT_LOCAL_URL = "http://127.0.0.1:1234/v1"
 # Tokens a local model reads and writes at once: room for a reply's chat and pages, within
 # what a 32 GB Mac holds beside the model. A prompt past it fails rather than being cut.
 LOCAL_CONTEXT = 65536
@@ -59,9 +72,13 @@ LOCAL_CONTEXT = 65536
 _LOCAL_TIMEOUT = 900
 _LOCAL_DEADLINE = 3600
 _JSON_ONLY = "Answer with one JSON object and nothing else, matching this JSON schema:"
-# What Ollama says when its build can't hold a model to a schema, and the models it said it of.
+# What Ollama says when its build can't hold a model to a schema, what another server's refusal
+# of `response_format` names, and the models (as PROXENOS_MODEL names them) either was said of.
 _UNGRAMMATICAL = "structured output is unavailable"
+_NO_SCHEMA = re.compile(r"response_format|schema|grammar|guided|structured", re.IGNORECASE)
 _NO_GRAMMAR: set[str] = set()
+# Thinking a server leaves in the words, where it doesn't part it out as reasoning_content.
+_THINKING = re.compile(r"\A\s*<think>.*?</think>\s*", re.DOTALL)
 # A local model answers one request at a time, so a question someone is waiting on (an Ask)
 # marks itself here, and other calls, a sync's drafts or the night's notes, wait until it's
 # answered: for at most FOREGROUND_MAX seconds, past which a mark counts as left behind.
@@ -117,9 +134,7 @@ def _ask(
     keep: Iterable[str] = (),
 ) -> str | dict:
     if model.startswith(LOCAL):
-        return _ask_local(
-            model.removeprefix(LOCAL), prompt, system, schema, effort, max_tokens, images
-        )
+        return _ask_local(model, prompt, system, schema, effort, max_tokens, images)
     # Leaving this computer: the numbers and secrets no draft needs are blanked first, and the
     # log keeps only how many. Images go as they are; nothing here reads the text in them.
     prompt, blanked = redact.redact(prompt, keep)
@@ -199,6 +214,66 @@ def fit(limit: int, overhead: int = 30_000) -> int:
     return limit if room is None else max(10_000, min(limit, room - overhead))
 
 
+def bare(model: str) -> str:
+    """A model's name without what says where it runs: "gemma4:26b" for "ollama:gemma4:26b"."""
+    for prefix in LOCAL:
+        if model.startswith(prefix):
+            return model.removeprefix(prefix)
+    return model
+
+
+def local_url(url: str | None = None) -> str:
+    """The OpenAI-compatible server's address (`url`, else PROXENOS_LOCAL_URL, else LM Studio's),
+    without a trailing slash, once it's sure to be this computer's own. Anything else is refused,
+    so a "local:" model never sends a prompt off the computer, nor does setup ask another host."""
+    url = (env("LOCAL_URL") if url is None else url).strip().rstrip("/") or DEFAULT_LOCAL_URL
+    if not _loopback(url):
+        raise ModelError(
+            f"{url} isn't on this computer. A local model's server has to be at localhost, "
+            f"127.0.0.1 or [::1], like {DEFAULT_LOCAL_URL}, so nothing leaves the computer."
+        )
+    return url
+
+
+def _loopback(url: str) -> bool:
+    """Whether `url` is plain http(s) to localhost, 127.0.0.0/8 or ::1. A user name, query or
+    fragment is refused outright, as each can make a URL read as one host and reach another
+    (http://127.0.0.1@example.com goes to example.com), and so is a host only named like
+    loopback (127.0.0.1.example.com)."""
+    if any(c <= " " or c in "@?#\\" for c in url):
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+        parts.port  # noqa: B018 - a port that isn't a number raises here
+    except ValueError:
+        return False
+    host = parts.hostname
+    if parts.scheme not in ("http", "https") or not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+class _Stay(urllib.request.HTTPRedirectHandler):
+    """Follows no redirect: the server on this computer answers itself, or the request fails."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _opener() -> urllib.request.OpenerDirector:
+    """How a request reaches the server on this computer: through no proxy, even one the
+    environment names, and following no redirect, so it goes there and nowhere else."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _Stay())
+
+
+_direct = _opener().open
+
+
 def _content(prompt: str, images: list[dict] | None) -> str | list[dict]:
     """The prompt, after any images ({type: "image/png", data: base64}) for the model to see."""
     if not images:
@@ -219,49 +294,83 @@ def _ask_local(
     max_tokens: int,
     images: list[dict] | None = None,
 ) -> str | dict:
-    """`ask`, answered by a model on this Mac through Ollama's API. A schema goes in the system
-    prompt and in `format`, which holds the model to it as it writes, thinking first or not.
-    Ollama installed from Homebrew can't (its build leaves out the grammar library, so it answers
-    "structured output is unavailable"): then the request goes again without `format`, and that
-    model isn't asked with one again in this process. Either way the answer is held to the schema
-    here (`_object`), with one more try when it isn't the JSON asked for."""
+    """`ask`, answered by a model on this computer: "ollama:<name>" through Ollama's API, and
+    "local:<name>" through the OpenAI-compatible server's (`_complete`). A schema goes in the
+    system prompt and in the request (Ollama's `format`, the server's `response_format`), which
+    holds the model to it as it writes, thinking first or not. Some can't: Ollama installed from
+    Homebrew answers "structured output is unavailable" (its build leaves out the grammar
+    library), and another server may refuse `response_format` with an error that names it. Then
+    the request goes again without it, and that model isn't asked with one again in this process.
+    Either way the answer is held to the schema here (`_object`), with one more try when it isn't
+    the JSON asked for."""
+    served, name = model.startswith(SERVER), bare(model)
     answer_room = min(max_tokens, LOCAL_CONTEXT // 4)
     if schema is not None:
         system = f"{system or ''}\n\n{_JSON_ONLY}\n{json.dumps(schema)}".strip()
     if (len(prompt) + len(system or "")) // 3 > LOCAL_CONTEXT - answer_room:  # ~3 chars a token
         raise ModelError(f"prompt too long for the local model's {LOCAL_CONTEXT}-token context")
     messages = [{"role": "system", "content": system}] if system else []
-    body = {
-        "model": model,
-        "messages": [
-            *messages,
-            {"role": "user", "content": prompt}
-            | ({"images": [i["data"] for i in images]} if images else {}),
-        ],
-        "stream": True,
-        # Thinking first is for the hard jobs; a draft doesn't need it and is ten times faster.
-        "think": effort in ("high", "xhigh", "max"),
-        "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
-    }
+    if served:
+        chat, held, cant = _complete, "response_format", _NO_SCHEMA.search
+        body = _served_body(name, messages, prompt, images, answer_room)
+        holds: dict | None = {
+            "type": "json_schema",
+            "json_schema": {"name": "answer", "schema": schema},
+        }
+    else:
+        chat, held, cant = _chat, "format", lambda said: _UNGRAMMATICAL in said
+        body = {
+            "model": name,
+            "messages": [
+                *messages,
+                {"role": "user", "content": prompt}
+                | ({"images": [i["data"] for i in images]} if images else {}),
+            ],
+            "stream": True,
+            # Thinking first is for the hard jobs; a draft doesn't need it and is ten times faster.
+            "think": effort in ("high", "xhigh", "max"),
+            "options": {"num_ctx": LOCAL_CONTEXT, "num_predict": answer_room},
+        }
+        holds = schema
     if schema is not None and model not in _NO_GRAMMAR:
-        body["format"] = schema
+        body[held] = holds
     deadline = time.monotonic() + FOREGROUND_MAX
     while waiting() and time.monotonic() < deadline:
         time.sleep(2)
     for _ in range(2):
         try:
-            text = _chat(model, body, answer_room)
+            text = chat(name, body, answer_room)
         except ModelError as e:
-            if "format" not in body or _UNGRAMMATICAL not in str(e):
+            if held not in body or not cant(str(e)):
                 raise
             _NO_GRAMMAR.add(model)
-            body.pop("format")
-            text = _chat(model, body, answer_room)
+            body.pop(held)
+            text = chat(name, body, answer_room)
         if schema is None:
             return text
         if (answer := _object(text, schema)) is not None:
             return answer
-    raise ModelError(f"local model {model} didn't answer with the JSON asked for")
+    raise ModelError(f"local model {name} didn't answer with the JSON asked for")
+
+
+def _served_body(
+    model: str, messages: list[dict], prompt: str, images: list[dict] | None, answer_room: int
+) -> dict:
+    """A chat request as OpenAI's API has it, for the server on this computer. The context is
+    the server's own, set when it loads the model, so it isn't asked for here as Ollama's is;
+    nor is thinking, which each server turns on its own way, if at all."""
+    seen = [
+        {"type": "image_url", "image_url": {"url": f"data:{i['type']};base64,{i['data']}"}}
+        for i in images or []
+    ]
+    content = [*seen, {"type": "text", "text": prompt}] if seen else prompt
+    return {
+        "model": model,
+        "messages": [*messages, {"role": "user", "content": content}],
+        "stream": True,
+        "stream_options": {"include_usage": True},  # the tokens, in a last piece of their own
+        "max_tokens": answer_room,
+    }
 
 
 def _object(text: str, schema: dict) -> dict | None:
@@ -363,6 +472,59 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     return "".join(words)
 
 
+def _complete(model: str, body: dict, answer_room: int) -> str:
+    """The answer to one chat request to the OpenAI-compatible server, read as it streams in:
+    server-sent events, each a `data:` line with a piece of the words, until one says why it
+    stopped and `data: [DONE]` ends them. Thinking the server parts out (`reasoning_content`) is
+    left out, and so is a <think> block a model leaves at the start of its words."""
+    url = f"{local_url()}/chat/completions"
+    request = urllib.request.Request(
+        url, json.dumps(body).encode(), {"Content-Type": "application/json"}
+    )
+    deadline = time.monotonic() + _LOCAL_DEADLINE
+    words: list[str] = []
+    stopped, usage = None, {}
+    try:
+        with _direct(request, timeout=_LOCAL_TIMEOUT) as response:
+            for line in response:
+                field, _, data = line.strip().partition(b":")
+                if field != b"data" or not data.strip():
+                    continue  # a blank line between events, a comment, or another field
+                data = data.strip()
+                if data == b"[DONE]":
+                    stopped = stopped or "stop"
+                    break
+                chunk = json.loads(data)
+                if not isinstance(chunk, dict):
+                    continue
+                if chunk.get("error"):
+                    raise ModelError(f"local model {model}: {str(chunk['error'])[:300]}")
+                usage = chunk.get("usage") or usage
+                for choice in chunk.get("choices") or []:
+                    words.append((choice.get("delta") or {}).get("content") or "")
+                    stopped = choice.get("finish_reason") or stopped
+                if time.monotonic() > deadline:
+                    raise ModelError(
+                        f"local model {model} was still answering after "
+                        f"{_LOCAL_DEADLINE // 60} minutes"
+                    )
+    except urllib.error.HTTPError as e:  # a redirect, too, which is followed no further
+        said = e.read().decode(errors="replace")[:300] or f"HTTP {e.code} {e.reason}"
+        raise ModelError(f"local model {model}: {said}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise ModelError(
+            f"the local model isn't answering ({e}); is its server running at {url}?"
+        ) from e
+    except (OSError, ValueError, AttributeError, http.client.HTTPException) as e:
+        raise ModelError(f"local model {model} stopped mid-answer ({e})") from e
+    if stopped is None:
+        raise ModelError(f"local model {model} stopped mid-answer")
+    _usage.tokens = (usage.get("prompt_tokens"), usage.get("completion_tokens"))
+    if stopped == "length":
+        raise ModelError(f"answer cut off at {answer_room} tokens")
+    return _THINKING.sub("", "".join(words), count=1)
+
+
 def voice_on() -> bool:
     """Whether reply drafts go to a voice model."""
     return bool(env("VOICE_MODEL").strip())
@@ -380,10 +542,12 @@ def ask_voice(prompt: str, system: str, max_tokens: int = VOICE_TOKENS) -> str:
 
 def _ask_voice(model: str, prompt: str, system: str, max_tokens: int) -> str:
     if model.startswith(LOCAL):
-        return _ask_local(model.removeprefix(LOCAL), prompt, system, None, "low", max_tokens)
+        return _ask_local(model, prompt, system, None, "low", max_tokens)
     kind, _, port = model.partition(":")
     if kind != "mlx" or not (port or str(VOICE_PORT)).isdigit():
-        raise ModelError(f"{model} isn't a voice model: give mlx, mlx:<port> or ollama:<name>")
+        raise ModelError(
+            f"{model} isn't a voice model: give mlx, mlx:<port>, ollama:<name> or local:<name>"
+        )
     body = {
         "model": "default_model",  # the one `proxenos voice serve` started with, adapter and all
         "messages": [
@@ -427,7 +591,7 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
         answer = got.get("answer")
         size = len(answer if isinstance(answer, str) else json.dumps(answer)) if got else 0
         tokens_in, tokens_out = getattr(_usage, "tokens", (None, None))
-        here = model.startswith((LOCAL, "voice:mlx", "voice:ollama"))
+        here = model.startswith((*LOCAL, *(f"voice:{p}" for p in (*LOCAL, "mlx"))))
         record = {
             "at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "step": _step(),

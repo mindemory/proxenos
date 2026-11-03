@@ -338,7 +338,7 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
                       <span className={c.where === "Anthropic" ? "text-ink" : "text-muted"}>
                         {c.where === "Anthropic" ? "Anthropic" : "This computer"}
                       </span>
-                      <span className="num ml-2 text-xs text-faint">{c.model.replace(/^ollama:/, "")}</span>
+                      <span className="num ml-2 text-xs text-faint">{c.model.replace(/^(ollama|local):/, "")}</span>
                     </td>
                     <td className="num px-3 py-2 text-right text-muted">
                       {compact(c.sentChars)}

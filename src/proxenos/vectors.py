@@ -5,7 +5,10 @@ finds an editor's note that says "the second draft is due by 7th Oct").
 The units come from the full-text index (memory.py): a chat's messages of one day together
 (WhatsApp, Slack, LinkedIn, Messenger, Instagram, X), and each email, note, event and document on
 its own, up to CHARS characters. A small embedding model on this Mac turns each into a vector
-through Ollama (PROXENOS_EMBED_MODEL), so nothing leaves the computer. They go in
+through Ollama (PROXENOS_EMBED_MODEL), so nothing leaves the computer. It stays on Ollama when
+the model that writes is on another server (llm's "local:"): Ollama is asked for a small context
+with each request (EMBED_CONTEXT), which an OpenAI-compatible /v1/embeddings can't be, and
+without it the embedding model takes enough memory to push the writing model out. They go in
 vault/memory/vectors.sqlite (0600): one row per unit with its key, a hash of its text, where and
 when it is from, a snippet, and the vector, normalized, as float16. Like the index, it is derived
 data: delete it and it is built again.

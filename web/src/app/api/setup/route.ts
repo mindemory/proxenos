@@ -12,7 +12,8 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/setup makes one change: {settings: {name, vault, ...}}, {key} (an Anthropic API key,
- * checked with one call, then kept), {ollama: model}, {secret: NAME, value} or {forget: NAME}. A
+ * checked with one call, then kept), {ollama: model}, {server: model} (one an OpenAI-compatible
+ * server on this computer serves), {secret: NAME, value} or {forget: NAME}. A
  * key or token goes to `proxenos setup --apply` on its stdin and nowhere else; no answer from
  * here holds one. Answers with what was done and the new status, or why not.
  */

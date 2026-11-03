@@ -4,8 +4,9 @@
 # <vault>/logs/night.log. Running this again rewrites the job and reloads it. A job installed
 # under the project's earlier label is stopped and removed, so only one runs.
 #
-# It refuses to install without a model: a local one (PROXENOS_MODEL=ollama:<name> in .env) or
-# ANTHROPIC_API_KEY. Every step after the sync needs one, so a night without would only sync.
+# It refuses to install without a model: a local one (PROXENOS_MODEL=ollama:<name>, or
+# local:<name> for another server on this computer, in .env) or ANTHROPIC_API_KEY. Every step
+# after the sync needs one, so a night without would only sync.
 #
 #   scripts/install-night.sh                                 install or update the job
 #   launchctl kickstart gui/$(id -u)/local.proxenos.night    run it once, now
@@ -21,10 +22,10 @@ label="local.proxenos.night"
 old_label="local.digital-twin.night"
 
 case "$(env_value PROXENOS_MODEL)" in
-  ollama:*) ;;
+  ollama:* | local:*) ;;
   *)
     [ -n "$(env_value ANTHROPIC_API_KEY)" ] ||
-      fail "$env_file names no model (PROXENOS_MODEL=ollama:<name>, or ANTHROPIC_API_KEY), so a night run could only sync."
+      fail "$env_file names no model (PROXENOS_MODEL=ollama:<name> or local:<name>, or ANTHROPIC_API_KEY), so a night run could only sync."
     ;;
 esac
 refuse_worktree
