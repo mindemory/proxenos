@@ -12,12 +12,22 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
 - "<name> - manuscript.docx": the manuscript (proxenos.manuscript.find) at its branch's tip,
   read from git, never the user's checkout, with the files beside it that it includes and shows.
   Markdown converts as it is. LaTeX converts with its citations and references written out from
-  the .bib files beside it, so it goes one way: its changes never come back. A PDF of the same
-  name committed beside it comes too.
+  the .bib files beside it, so it goes one way: its changes never come back.
+- "<name> - manuscript.pdf": the same version, made in the same checkout, so the two always
+  match: LaTeX by tectonic (PROXENOS_TECTONIC, else the one on the PATH), Markdown by pandoc with
+  tectonic, else another engine it can use. Only where there's none is the PDF committed beside
+  the manuscript copied instead, as "About this folder" says. Both are made again together, only
+  when the manuscript or the files beside it changed: a LaTeX build takes tens of seconds, and
+  one that failed isn't tried again until they change.
+- Supplement/: the tables, figures and data files the manuscript names, copied from git. When
+  it names a table or a figure, "Supplementary information.docx" and its PDF show them too:
+  each table (.csv, .tsv, and .xlsx where openpyxl is installed) cut to ROWS rows and COLUMNS
+  columns, and each figure, under the caption the manuscript gives it, and the data files by
+  name. It's made from Markdown, as the notes are.
 - "Where it stands", "What's known, and the question", "Drafts" and "About this project": the
   project's status.md and brief.md, its drafts still open, and what projects.json says of it.
-- "About this folder": when the manuscript was made, from which branch and commit, and what
-  comes back and what doesn't.
+- "About this folder": when the manuscript was made, from which branch and commit, what its
+  PDF is, and what comes back and what doesn't.
 A paused project gets one only when it has something to show, and one marked "cloud": false on
 the list (an immigration petition, say) never gets one: what it had there is left as it was.
 
@@ -47,6 +57,7 @@ and who sees it is the user's choice. No model is used.
 """
 
 import argparse
+import csv
 import hashlib
 import io
 import json
@@ -59,6 +70,7 @@ import tarfile
 import tempfile
 import zipfile
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
@@ -77,17 +89,26 @@ OTHER = "Other"  # the group of a project with none
 NAME_CHARS = 60  # of a group's or project's name, so paths stay short enough for Windows
 PAPER_FILES = 200  # beside the manuscript, written out of git with it
 PAPER_BYTES = 100 * 1024 * 1024
-# What pandoc reads beside a manuscript: what it includes, cites and shows.
+# What pandoc reads beside a manuscript: what it includes, cites and shows; and what LaTeX reads
+# too, making its PDF (its figures as PDFs, its bibliography's styles and the like).
 PAPER = {".md", ".markdown", ".txt", ".tex", ".bib", ".sty", ".cls", ".bst"}
 PAPER |= {".png", ".jpg", ".jpeg", ".gif", ".svg"}
+PAPER |= {".pdf", ".eps", ".bbl", ".bbx", ".cbx", ".lbx", ".def", ".cfg", ".clo", ".tikz", ".pgf"}
 KINDS = {".md": "markdown", ".markdown": "markdown", ".txt": "markdown", ".tex": "latex"}
 BASELINE = "baseline.md"
 PANDOC_SECONDS = 300
+BUILD_SECONDS = 600  # of a PDF: the first LaTeX build fetches what it uses
 NO_PANDOC = (
     "pandoc makes the Word files, and it isn't installed: `brew install pandoc` on a Mac, else "
     "pandoc.org/installing (or set PROXENOS_PANDOC to where it is)"
 )
+NO_ENGINE = "nothing on this computer makes PDFs: `brew install tectonic` on a Mac"
 _PANDOC_PLACES = ("/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc")
+_TECTONIC_PLACES = ("/opt/homebrew/bin/tectonic", "/usr/local/bin/tectonic")
+# The engines pandoc makes a PDF from Markdown with, where there's no tectonic, and where MacTeX
+# puts them, which a job's PATH may not have.
+_ENGINES = ("xelatex", "lualatex", "pdflatex", "typst")
+_TEXBIN = "/Library/TeX/texbin"
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
 _RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"{d}{n}" for d in ("COM", "LPT") for n in range(10)}
 _ESCAPED_CITE = re.compile(r"\\\[(-?@[^\]\n]*?)\\\]")  # [@key] as pandoc reads it from Word
@@ -200,7 +221,7 @@ def refresh(
         BRIEF: brief or None,
         DRAFTS: _drafts_note(project, drafts, DRAFTS in files),
         PROJECT: _about_project(project),
-        FOLDER: _about_folder(project, docx, files.get(docx)),
+        FOLDER: _about_folder(project, docx, files),
     }
     for name, text in notes.items():
         if text is not None:
@@ -394,66 +415,124 @@ def _write_paper(
     now: datetime,
     stats: Counter,
 ) -> None:
-    """The manuscript at its branch's tip as a Word file, and its PDF beside it, when either
-    changed in git. The user's copy of an older version moves to Earlier/ first, unless it
-    holds changes still to come back (`how`, from _bring_back): then it stays as it is."""
+    """The manuscript at its branch's tip as a Word file, and as a PDF made in the same checkout
+    beside it, each when it changed in git. The user's copy of an older version moves to
+    Earlier/ first, unless it holds changes still to come back (`how`, from _bring_back): then
+    it stays as it is, and so does the PDF, so the two still match."""
     files = record["files"]
     repo, tip, path, kind = paper["repo"], paper["tip"], paper["path"], paper["kind"]
     target = where / f"{where.name} - manuscript.docx"
+    pdf = target.with_suffix(".pdf")
     listed = _paper_files(repo, tip, path)
     source = _digest(LOOK, kind, path, *(" ".join(f) for f in listed))
     found = _found(target, files.get(target.name), source)
-    if found == "theirs" and how in ("waiting", "held"):
+    held = found == "theirs" and how in ("waiting", "held")
+    pdf_source, committed = _pdf_plan(repo, tip, path, kind, source)
+    build = not held and not committed and _due(pdf, files, pdf_source)
+    if pdf_source is None and not held and pdf.name in files:
+        files[pdf.name]["made"] = "none"  # nothing makes this version's: About this folder says
+    if held:
         stats["kept_as_edited"] += 1
-    elif found != "same":
+    elif found != "same" or build:
         with tempfile.TemporaryDirectory() as tmp:
             made, out = Path(tmp) / "made.docx", Path(tmp) / "paper"
             _write_out(repo, tip, listed, out)
-            to_docx(out.joinpath(*path.split("/")), made, kind)
-            baseline = to_markdown(made) if kind == "markdown" else None
-            if found == "theirs":
-                _set_aside(target, now)
-                stats["moved_to_earlier"] += 1
-            files[target.name] = {
-                "source": source,
-                "written": _put(made.read_bytes(), target),
-                "at": steps._iso(now),
-                "path": path,
-                "branch": paper["branch"],
-                "commit": tip,
-                "kind": kind,
-            }
-        stats["files_written"] += 1
-        if baseline is None:
-            record.pop("pull", None)  # LaTeX goes one way
-        else:
-            _save(vault, BASELINE, baseline, project["id"])
-            waiting = (record.get("pull") or {}).get("step")  # a step brought back still counts
-            record["pull"] = {
-                "from": tip,
-                "path": path,
-                "branch": paper["branch"],
-                "step": waiting,
-                "head": None,
-            }
+            main = out.joinpath(*path.split("/"))
+            if found != "same":
+                to_docx(main, made, kind)
+                baseline = to_markdown(made) if kind == "markdown" else None
+                about = {"path": path, "branch": paper["branch"], "commit": tip, "kind": kind}
+                _replace(target, target.name, files, source, made.read_bytes(), now, stats, **about)
+                if baseline is None:
+                    record.pop("pull", None)  # LaTeX goes one way
+                else:
+                    _save(vault, BASELINE, baseline, project["id"])
+                    waiting = (record.get("pull") or {}).get("step")  # one brought back counts
+                    record["pull"] = {
+                        "from": tip,
+                        "path": path,
+                        "branch": paper["branch"],
+                        "step": waiting,
+                        "head": None,
+                    }
+            if build:  # after the Word file, from the same checkout
+                _build(pdf, files, pdf_source, lambda o: to_pdf(main, o, kind), now, stats)
+    if not held and committed and _due(pdf, files, pdf_source):
+        data = manuscript._blob(repo, tip, committed)
+        if data is not None:
+            _replace(pdf, pdf.name, files, pdf_source, data, now, stats, made="committed")
 
-    _write_supplement(repo, tip, path, where, files, now, stats)
-    pdf = str(PurePosixPath(path).with_suffix(".pdf"))
-    blob = manuscript._git(repo, "rev-parse", "-q", "--verify", f"{tip}:{pdf}")
+    _write_supplement(repo, tip, path, where, files, project["name"], now, stats)
+
+
+def _pdf_plan(
+    repo: Path, tip: str, path: str, kind: str, source: str
+) -> tuple[str | None, str | None]:
+    """What the manuscript's PDF is made from, as (its source, the PDF committed beside the
+    manuscript to copy): made from the same version as the Word file where this computer can
+    make one; else that committed PDF, when there is one; else nothing, (None, None)."""
+    if pdf_engine(kind):
+        return _digest(source, "pdf"), None
+    committed = str(PurePosixPath(path).with_suffix(".pdf"))
+    blob = manuscript._git(repo, "rev-parse", "-q", "--verify", f"{tip}:{committed}")
     if not blob:
-        return
-    target = target.with_suffix(".pdf")
-    source = _digest("pdf", pdf, blob)
-    found = _found(target, files.get(target.name), source)
-    if found == "same":
-        return
-    data = manuscript._blob(repo, tip, pdf)
-    if data is None:
-        return
-    if found == "theirs":
+        return None, None
+    return _digest(source, "pdf", committed, blob), committed
+
+
+def _due(target: Path, files: dict, source: str | None) -> bool:
+    """Whether a file is to be made from `source`: not when it was, whether the user changed it
+    since or not, nor when making it from that failed (a LaTeX build takes a while: it's tried
+    again once its source changes)."""
+    if source is None:
+        return False
+    entry = files.get(target.name)
+    if entry and entry.get("unmade") == source:
+        return False
+    return _found(target, entry, source) != "same"
+
+
+def _build(
+    target: Path,
+    files: dict,
+    source: str,
+    make: Callable[[Path], None],
+    now: datetime,
+    stats: Counter,
+) -> None:
+    """What `make` makes at the path it's given, put at `target` as _replace does. When it
+    can't be made, what was there stays, and the failure is kept, for About this folder and so
+    it isn't tried again until its source changes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / f"made{target.suffix}"
+        try:
+            make(out)
+            data = out.read_bytes()
+        except (ConvertError, OSError) as e:
+            why = " ".join(str(e).split())[:200]
+            files[target.name] = (files.get(target.name) or {}) | {"unmade": source, "why": why}
+            stats["skipped"] += 1
+            print(f"folders: {target.name} wasn't made ({why})", file=sys.stderr)
+            return
+    _replace(target, target.name, files, source, data, now, stats, made="built")
+
+
+def _replace(
+    target: Path,
+    key: str,
+    files: dict,
+    source: str,
+    data: bytes,
+    now: datetime,
+    stats: Counter,
+    **about: str,
+) -> None:
+    """`data`, made from `source`, written at `target`, after the user's copy of an older
+    version, if it's theirs, moves to Earlier/ beside it."""
+    if _found(target, files.get(key), source) == "theirs":
         _set_aside(target, now)
         stats["moved_to_earlier"] += 1
-    files[target.name] = {"source": source, "written": _put(data, target), "at": steps._iso(now)}
+    files[key] = {"source": source, "written": _put(data, target), "at": steps._iso(now), **about}
     stats["files_written"] += 1
 
 
@@ -469,13 +548,22 @@ _NAMED = re.compile(
 
 
 def _write_supplement(
-    repo: Path, tip: str, path: str, where: Path, files: dict, now: datetime, stats: Counter
+    repo: Path,
+    tip: str,
+    path: str,
+    where: Path,
+    files: dict,
+    project_name: str,
+    now: datetime,
+    stats: Counter,
 ) -> None:
     """The files the manuscript names by name or path (S1_table.csv, figures/fig2.png), found in
     its repository at `tip`, in Supplement/ beside the copy, each when it changed in git and
-    never over one the user changed. The manuscript's own PDF is copied on its own."""
-    text = manuscript._blob(repo, tip, path) or b""
-    named = {m.group(0).strip("./") for m in _NAMED.finditer(text.decode("utf-8", "replace"))}
+    never over one the user changed, and its tables and figures in a document of their own. The
+    manuscript's own PDF is made on its own."""
+    text = (manuscript._blob(repo, tip, path) or b"").decode("utf-8", "replace")
+    text = text.replace("\\_", "_")  # S01\_sites.csv, as LaTeX writes it, and Markdown can
+    named = {m.group(0).strip("./") for m in _NAMED.finditer(text)}
     own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
     if not named:
         return
@@ -488,7 +576,7 @@ def _write_supplement(
             tree.setdefault(PurePosixPath(name).name.lower(), []).append(
                 (name, int(fields[3]), fields[2])
             )
-    chosen: dict[str, tuple[str, str]] = {}
+    chosen: dict[str, tuple[str, str, str]] = {}
     total = 0
     for ref in sorted(named):
         found = tree.get(PurePosixPath(ref).name.lower()) or []
@@ -496,29 +584,251 @@ def _write_supplement(
         exact = [f for f in found if f[0].lower().endswith(ref.lower())] or found[:1]
         if not exact:
             continue
-        name, size, blob = exact[0]
-        base = PurePosixPath(name).name
-        if name == own_pdf or base in chosen or size > FILE_BYTES:
+        kept, size, blob = exact[0]
+        base = PurePosixPath(kept).name
+        if kept == own_pdf or base in chosen or size > FILE_BYTES:
             continue
         if len(chosen) >= SUPPLEMENT_FILES or total + size > SUPPLEMENT_BYTES:
             break
-        chosen[base] = (name, blob)
+        chosen[base] = (kept, blob, ref)
         total += size
-    for base, (name, blob) in chosen.items():
+    for base, (kept, blob, _) in chosen.items():
         target = where / SUPPLEMENT / base
         key = f"{SUPPLEMENT}/{base}"
-        source = _digest("supplement", name, blob)
-        found = _found(target, files.get(key), source)
-        if found == "same":
+        source = _digest("supplement", kept, blob)
+        if _found(target, files.get(key), source) == "same":
             continue
-        data = manuscript._blob(repo, tip, name)
-        if data is None:
+        data = manuscript._blob(repo, tip, kept)
+        if data is not None:
+            _replace(target, key, files, source, data, now, stats)
+    items = _supplementary_items(text, chosen)
+    if any(how != "data" for how, *_ in items):
+        _write_supplementary(repo, tip, items, where, files, project_name, now, stats)
+
+
+# The supplement as a document beside the manuscript: its title, then each table and figure the
+# manuscript names under the caption it gives it, in the order it names them, each table cut to
+# ROWS rows and COLUMNS columns, then the data files by name.
+SUPPLEMENTARY = "Supplementary information.docx"
+ROWS = 40
+COLUMNS = 12
+CELL = 80  # characters of a cell
+_DELIMITERS = {".csv": ",", ".tsv": "\t"}  # tables; .xlsx too, where openpyxl is installed
+_FIGURES = {".png", ".jpg", ".jpeg", ".svg", ".pdf"}
+# "Table S4", "Figure 2", "Fig. S1", "Supplementary Data 3": what a caption starts with.
+_LABEL = re.compile(
+    r"(?:Supplementary\s+|Suppl?\.\s*)?(?:Table|Figure|Fig\.|Fig|Data|Dataset|File)\s+S?\d+[a-z]?",
+    re.IGNORECASE,
+)
+_LISTED = re.compile(r"\s*(?:[-*+]|\d+[.)]|\\item)\s")  # a list's item
+_IMAGE = re.compile(r"!\[([^\]\n]*)\]\(([^)\n]*)\)")
+_FLOAT = re.compile(r"\\(begin|end)\{(?:figure|table)\*?\}")
+_LEAD = re.compile(r"^(?:[\s#>|*+-]+|\d+[.)]\s+)+")
+_MARKUP = re.compile(r"\\(?:label|ref|cite[a-z]*)\{[^}]*\}|\\[A-Za-z]+\*?|[`{}]|\*\*|__")
+_SPECIAL = re.compile(r"([\\`*_\[\]<>|$^~@#])")  # what Markdown would read as more than text
+_UNSHOWN = (
+    "_An SVG, which this PDF can't show without rsvg-convert (`brew install librsvg` on a Mac): "
+    "it's in {file}, and the Word file shows it._"
+)
+
+
+def _supplementary_items(
+    text: str, chosen: dict[str, tuple[str, str, str]]
+) -> list[tuple[str, str, str, str, str]]:
+    """The files chosen for Supplement/, as the document shows them: (how, its name, its path in
+    the repository, its blob, its caption), in the order the manuscript names them, `how`
+    "table" (.csv, .tsv, and .xlsx where openpyxl is installed), "figure" or "data"."""
+    items = []
+    for base, (kept, blob, ref) in chosen.items():
+        suffix = PurePosixPath(base).suffix.lower()
+        if suffix in _DELIMITERS or (suffix == ".xlsx" and _openpyxl()):
+            how = "table"
+        else:
+            how = "figure" if suffix in _FIGURES else "data"
+        items.append((text.find(ref), (how, base, kept, blob, _caption(text, ref))))
+    return [item for _, item in sorted(items)]
+
+
+def _caption(text: str, ref: str) -> str:
+    """What the manuscript calls the file it names as `ref`, where it first gives it a caption:
+    the text of the image it shows it in; in LaTeX, the \\caption of the figure or table it's
+    in; else on a line naming it, the text before the parenthesis it's named in, when that
+    starts with "Table S4" or the like or is an item in a list, or the "Table S1" just before
+    the parenthesis or inside it. "" when it gives none."""
+    at = text.find(ref)
+    while at >= 0:
+        if caption := _caption_at(text, at):
+            return caption
+        at = text.find(ref, at + len(ref))
+    return ""
+
+
+def _caption_at(text: str, at: int) -> str:
+    start = text.rfind("\n", 0, at) + 1
+    end = text.find("\n", at)
+    line = text[start : len(text) if end < 0 else end]
+    i = at - start
+    for image in _IMAGE.finditer(line):
+        if image.start(2) <= i < image.end(2) and image.group(1).strip():
+            return _clean(image.group(1))
+    if caption := _float_caption(text, at):
+        return caption
+    paren = line.rfind("(", 0, i)
+    if paren < 0 or ")" in line[paren:i]:
+        return ""  # not named in parentheses
+    before, inside = line[:paren], line[paren + 1 : i]
+    head = _clean(before)
+    if head and (_LABEL.match(head) or _LISTED.match(before)):
+        return head
+    labels = [m for m in _LABEL.finditer(head) if m.end() == len(head)]  # "in Table S1 (...)"
+    label = labels[-1] if labels else _LABEL.search(inside)  # "(Table S1, ...)"
+    return _clean(label.group(0)) if label else ""
+
+
+def _float_caption(text: str, at: int) -> str:
+    """The \\caption of the LaTeX figure or table `at` is in, or ""."""
+    opened = list(_FLOAT.finditer(text, 0, at))
+    closed = _FLOAT.search(text, at)
+    if not opened or opened[-1].group(1) != "begin" or not closed or closed.group(1) != "end":
+        return ""
+    body = text[opened[-1].end() : closed.start()]
+    start = body.find("\\caption")
+    brace = body.find("{", start) if start >= 0 else -1
+    if brace < 0:
+        return ""
+    depth = 0
+    for end in range(brace, len(body)):
+        depth += {"{": 1, "}": -1}.get(body[end], 0)
+        if depth == 0:
+            return _clean(body[brace + 1 : end])
+    return ""
+
+
+def _clean(text: str) -> str:
+    """A caption as plain text: no LaTeX commands, list markers, bold or code marks."""
+    text = _MARKUP.sub(lambda m: " " if m.group(0).startswith("\\") else "", text)
+    return _LEAD.sub("", " ".join(text.split())).strip(" -–—:;,(")
+
+
+def _write_supplementary(
+    repo: Path,
+    tip: str,
+    items: list[tuple[str, str, str, str, str]],
+    where: Path,
+    files: dict,
+    project_name: str,
+    now: datetime,
+    stats: Counter,
+) -> None:
+    """The supplement as a Word file and a PDF beside the manuscript, each made again only when
+    what it's made from changed, and never over a copy the user changed: that moves to Earlier/
+    first. An SVG figure is only named in the PDF where pandoc has nothing to draw it with."""
+    title = f"{project_name}: supplementary information"
+    source = _digest(LOOK, "supplementary", f"{ROWS} {COLUMNS} {CELL}", title, *map(str, items))
+    docx = where / SUPPLEMENTARY
+    pdf = docx.with_suffix(".pdf")
+    svg = any(how == "figure" and base.lower().endswith(".svg") for how, base, *_ in items)
+    shown = not svg or bool(shutil.which("rsvg-convert"))
+    pdf_source = _digest(source, "pdf", str(shown)) if pdf_engine("markdown") else None
+    make_docx, make_pdf = _due(docx, files, source), _due(pdf, files, pdf_source)
+    if not make_docx and not make_pdf:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        md = Path(tmp) / "supplementary.md"
+        md.write_text(_supplementary(repo, tip, items, title, md.parent), encoding="utf-8")
+        if make_docx:
+            _build(docx, files, source, lambda o: to_docx(md, o, "markdown"), now, stats)
+        if make_pdf:
+            if not shown:
+                text = _supplementary(repo, tip, items, title, md.parent, svg=False)
+                md.write_text(text, encoding="utf-8")
+            _build(pdf, files, pdf_source, lambda o: to_pdf(md, o, "markdown"), now, stats)
+
+
+def _supplementary(
+    repo: Path,
+    tip: str,
+    items: list[tuple[str, str, str, str, str]],
+    title: str,
+    into: Path,
+    svg: bool = True,
+) -> str:
+    """The supplement's Markdown, its figures written beside it under `into`; without `svg`,
+    an SVG figure named, not shown."""
+    lines, listed = [f"# {title}", ""], []
+    for how, base, kept, _, caption in items:
+        data = manuscript._blob(repo, tip, kept) if how != "data" else None
+        table = _table(base, data) if how == "table" and data is not None else None
+        if data is None or (how == "table" and table is None):
+            listed.append(base)  # by name, as a data file
             continue
-        if found == "theirs":
-            _set_aside(target, now)
-            stats["moved_to_earlier"] += 1
-        files[key] = {"source": source, "written": _put(data, target), "at": steps._iso(now)}
-        stats["files_written"] += 1
+        lines += [f"## {caption or _escape(base)}", ""]
+        if how == "figure" and not svg and base.lower().endswith(".svg"):
+            lines += [_UNSHOWN.format(file=f"{SUPPLEMENT}/{_escape(base)}"), ""]
+            continue
+        if how == "figure":
+            figure = into / "figures" / base
+            figure.parent.mkdir(exist_ok=True)
+            figure.write_bytes(data)
+            lines += [f"![](<figures/{base}>)", ""]
+            continue
+        rows, height, width = table
+        cells = [[_escape(_cut(" ".join(c.split()), CELL)) for c in r] for r in rows]
+        wide = max(len(r) for r in cells)
+        cells = [r + [""] * (wide - len(r)) for r in cells]
+        lines += [f"| {' | '.join(cells[0])} |", "|" + "---|" * wide]
+        lines += [f"| {' | '.join(r)} |" for r in cells[1:]] + [""]
+        cut = [f"{ROWS} of its {height} rows"] if height > ROWS else []
+        cut += [f"{COLUMNS} of its {width} columns"] if width > COLUMNS else []
+        if cut:
+            full = f"the full table is in {SUPPLEMENT}/{_escape(base)}"
+            lines += [f"_This is the first {' and '.join(cut)}: {full}._", ""]
+    if listed:
+        lines += ["## Data files", "", f"In {SUPPLEMENT}/, beside this file:", ""]
+        lines += [f"- {_escape(base)}" for base in listed] + [""]
+    return "\n".join(lines)
+
+
+def _table(base: str, data: bytes) -> tuple[list[list[str]], int, int] | None:
+    """A table file's header and its first ROWS rows, at most COLUMNS wide, with how many rows
+    under the header and columns it has in all; None when it can't be read as one."""
+    suffix = PurePosixPath(base).suffix.lower()
+    if suffix in _DELIMITERS:
+        text = data.decode("utf-8-sig", errors="replace")
+        rows = csv.reader(io.StringIO(text, newline=""), delimiter=_DELIMITERS[suffix])
+    elif suffix == ".xlsx" and (openpyxl := _openpyxl()):
+        try:
+            book = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            sheet = book.worksheets[0].iter_rows(values_only=True)
+        except Exception:  # noqa: BLE001 - a workbook it can't read is listed by name
+            return None
+        rows = (["" if v is None else str(v) for v in row] for row in sheet)
+    else:
+        return None
+    kept, height, width = [], -1, 0
+    try:
+        for row in rows:
+            if not any(cell.strip() for cell in row):
+                continue  # a blank line
+            height, width = height + 1, max(width, len(row))
+            if len(kept) <= ROWS:
+                kept.append(row[:COLUMNS])
+    except Exception:  # noqa: BLE001 - csv's or openpyxl's, partway through
+        return None
+    return (kept, height, width) if kept else None
+
+
+def _openpyxl():
+    """openpyxl, which reads .xlsx files, where it's installed; else None."""
+    try:
+        import openpyxl
+    except ImportError:
+        return None
+    return openpyxl
+
+
+def _escape(text: str) -> str:
+    return _SPECIAL.sub(r"\\\1", text)
 
 
 def _paper_files(repo: Path, tip: str, path: str) -> list[tuple[str, str]]:
@@ -531,11 +841,14 @@ def _paper_files(repo: Path, tip: str, path: str) -> list[tuple[str, str]]:
         repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip, "--", *under
     )
     first, rest, total = None, [], 0
+    own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
     for line in listed.split("\0"):
         meta, _, name = line.partition("\t")
         fields = meta.split()
         if len(fields) != 4 or fields[:2] == ["120000", "blob"] or fields[1] != "blob":
             continue  # not a file: a link, a folder or a submodule
+        if name == own_pdf:
+            continue  # what's made from it, not what it's made from
         size = int(fields[3]) if fields[3].isdigit() else PAPER_BYTES
         if name == path:
             first = (name, fields[2])
@@ -681,6 +994,25 @@ _MOVES_ON = (
     "When the paper moves on in git, a newer copy takes this one's place. If you'd changed this "
     f"one, it moves to {EARLIER}/ first, with the date, so your changes and comments stay."
 )
+_COMMITTED = (
+    "**{pdf}** is {committed} as it's committed in git, which may not be the version above: "
+    "nothing on this computer makes PDFs. Install tectonic (`brew install tectonic` on a Mac) "
+    "and the next run makes it from the same version as the Word file."
+)
+_NO_PDF = (
+    "There's no PDF of this version: nothing on this computer makes PDFs, and none is committed "
+    "beside it. Install tectonic (`brew install tectonic` on a Mac) and the next run makes one "
+    "from the same version as the Word file."
+)
+_UNMADE = (
+    "**{pdf}** couldn't be made from this version ({why}), so whatever was here stays as it was. "
+    "It's tried again when the paper changes."
+)
+_SUPPLEMENTARY = (
+    f"**{SUPPLEMENTARY}**, and its PDF, hold the tables and figures the manuscript names, under "
+    "the captions it gives them, and list its data files; a long table is cut short there. The "
+    f"files themselves are in {SUPPLEMENT}/, copied from the same version."
+)
 _THE_NOTES = (
     "Where it stands, What's known and the question, Drafts and the two About files are "
     "Proxenos's own, written again when what they come from changes. Change one and it's left as "
@@ -692,25 +1024,42 @@ _NOTHING_ELSE = (
 )
 
 
-def _about_folder(project: dict, docx: str, made: dict | None) -> str:
-    """What the folder is, when its manuscript was made and from where, and what comes back."""
+def _about_folder(project: dict, docx: str, files: dict) -> str:
+    """What the folder is, when its manuscript was made and from where, what its PDF is, and
+    what comes back."""
     keeps = (
         f"Proxenos keeps this folder for {project['name']}, from your vault and the project's "
         "git, and brings it up to date each night. Git stays the source of truth."
     )
     paper = [_NO_PAPER if project["repo"] else _NO_REPO]
-    if made:
+    if made := files.get(docx):
         at = f"{made['path']} at {made['commit'][:7]} on {made['branch']}"
+        pdf = str(PurePosixPath(docx).with_suffix(".pdf"))
         paper = [
             f"**{docx}** is {at}, made {made['at'][:10]}.",
+            *_about_pdf(pdf, files.get(pdf), made["path"]),
             _COMES_BACK if made["kind"] == "markdown" else _ONE_WAY.format(path=made["path"]),
             _MOVES_ON,
         ]
+        if (files.get(SUPPLEMENTARY) or {}).get("written"):
+            paper.append(_SUPPLEMENTARY)
     parts = ["# About this folder", keeps, "## The manuscript", *paper]
     return "\n\n".join([*parts, "## The notes", _THE_NOTES, _NOTHING_ELSE]) + "\n"
 
 
-# Converting, by pandoc: the two functions tests replace.
+def _about_pdf(pdf: str, made: dict | None, path: str) -> list[str]:
+    """What the manuscript's PDF is: made from the same version as the Word file, copied from
+    git, not made this time, or not there."""
+    if made and made.get("unmade"):
+        return [_UNMADE.format(pdf=pdf, why=made.get("why") or "it failed")]
+    if made and made.get("made") == "committed":
+        return [_COMMITTED.format(pdf=pdf, committed=str(PurePosixPath(path).with_suffix(".pdf")))]
+    if made and made.get("made") == "built":
+        return [f"**{pdf}** is made from the same version, so the two match."]
+    return [_NO_PDF] if not made or made.get("made") == "none" else []
+
+
+# Converting, by pandoc and tectonic: the functions tests replace.
 
 
 def to_docx(source: Path, out: Path, kind: str) -> None:
@@ -725,6 +1074,44 @@ def to_docx(source: Path, out: Path, kind: str) -> None:
         for bib in sorted(source.parent.glob("*.bib")):
             args += ["--bibliography", bib.name]
     _pandoc(*args, source.name, cwd=source.parent)
+
+
+def to_pdf(source: Path, out: Path, kind: str) -> None:
+    """`source`, Markdown or LaTeX (`kind`), as a PDF at `out`, made in its folder as the Word
+    file is: LaTeX typeset by tectonic as it is, with its own bibliography, its shell escape
+    off; Markdown by pandoc with tectonic, else another engine it can use, in its serif body
+    with Word's one-inch margins."""
+    engine = pdf_engine(kind)
+    if engine is None:
+        raise ConvertError(NO_ENGINE)
+    if kind == "markdown":
+        args = ["-f", "markdown", "-o", str(out), f"--pdf-engine={engine}"]
+        args += ["-V", "geometry:margin=1in", source.name]
+        _pandoc(*args, cwd=source.parent, seconds=BUILD_SECONDS)
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        args = ["-X", "compile", "--untrusted", "--outdir", tmp, source.name]
+        _run(engine, *args, cwd=source.parent, seconds=BUILD_SECONDS)
+        made = Path(tmp) / f"{source.stem}.pdf"
+        if not made.is_file():
+            raise ConvertError(f"tectonic made no {made.name}")
+        shutil.copyfile(made, out)
+
+
+def pdf_engine(kind: str) -> str | None:
+    """What makes a PDF of a `kind` file: tectonic (PROXENOS_TECTONIC, else the one on the PATH
+    or where Homebrew puts it); for Markdown, else XeLaTeX, LuaLaTeX, pdfLaTeX or Typst, through
+    pandoc. None when there's none."""
+    for place in (env("TECTONIC"), shutil.which("tectonic"), *_TECTONIC_PLACES):
+        if place and os.access(path := os.path.expanduser(place), os.X_OK):
+            return path
+    if kind != "markdown":
+        return None
+    for name in _ENGINES:
+        for place in (shutil.which(name), os.path.join(_TEXBIN, name)):
+            if place and os.access(place, os.X_OK):
+                return place
+    return None
 
 
 # The Word files' look: FONT throughout, which Word, Google Docs and Drive's viewer all have
@@ -806,10 +1193,16 @@ def pandoc() -> str | None:
     return None
 
 
-def _pandoc(*args: str, cwd: Path) -> str:
+def _pandoc(*args: str, cwd: Path, seconds: int = PANDOC_SECONDS) -> str:
     command = pandoc()
     if command is None:
         raise ConvertError(NO_PANDOC)
+    return _run(command, *args, cwd=cwd, seconds=seconds)
+
+
+def _run(command: str, *args: str, cwd: Path, seconds: int) -> str:
+    """What `command` printed; ConvertError with what it said went wrong when it failed."""
+    what = Path(command).name
     try:
         done = subprocess.run(
             [command, *args],
@@ -817,15 +1210,32 @@ def _pandoc(*args: str, cwd: Path) -> str:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=PANDOC_SECONDS,
+            errors="replace",
+            timeout=seconds,
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        raise ConvertError(f"pandoc didn't run: {e}") from None
+        raise ConvertError(f"{what} didn't run: {e}") from None
     if done.returncode:
-        said = [line for line in done.stderr.splitlines() if line.strip()]
-        raise ConvertError(f"pandoc: {said[-1][:300] if said else done.returncode}")
+        raise ConvertError(f"{what}: {_why(done.stderr) or done.returncode}"[:300])
     return done.stdout
+
+
+_GENERIC = re.compile(r"something bad happened|its output follows|halted on potentially")
+
+
+def _why(said: str) -> str:
+    """What went wrong, from what a command said: TeX's first error (a line starting "!" or
+    "error:"), with the cause tectonic gives under it, else its last line."""
+    lines = [line.strip() for line in said.splitlines() if line.strip()]
+    lines = [line for line in lines if not _GENERIC.search(line)]
+    for n, line in enumerate(lines):
+        if line.startswith(("!", "error:")):
+            cause = lines[n + 1] if n + 1 < len(lines) else ""
+            if cause.startswith("caused by:"):
+                return f"{line} ({cause.removeprefix('caused by:').strip()})"
+            return line
+    return lines[-1] if lines else ""
 
 
 # What's kept.

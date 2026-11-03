@@ -1,12 +1,15 @@
 """Each project as a folder in a cloud drive, against a folder and a small git repository made
-here and a fake pandoc. No network, no model, no pandoc, no real document and no real drive."""
+here and a fake pandoc and tectonic. No network, no model, no pandoc, no tectonic, no real
+document and no real drive."""
 
 import json
 import os
 import stat
 import subprocess
+import sys
 import zipfile
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +21,8 @@ LATER = datetime(2026, 3, 11, 2, 0, tzinfo=UTC)
 LATEST = datetime(2026, 3, 12, 2, 0, tzinfo=UTC)
 FOLDER = "PhD/Calls the paper"  # "Calls: the paper?", made safe
 DOCX = "Calls the paper - manuscript.docx"
+PDF = "Calls the paper - manuscript.pdf"
+SUPPLEMENTARY = "Supplementary information.docx"
 
 PAPER = (
     "# Birdsong at dawn\n\n"
@@ -35,21 +40,34 @@ LATEX = (
 
 
 class FakePandoc:
-    """pandoc as these tests see it. A Word file it makes is a line naming what it was made from,
-    then the text; read back, emphasis and lists come in Word's reading of them (_x_, * x), so
-    the Markdown that comes back differs from the manuscript's own, as pandoc's does, and lines
-    that are comments in Word ("COMMENT: ...") aren't text. It keeps what each conversion was
-    given, with the files beside it."""
+    """pandoc, and tectonic, as these tests see them. A Word file or PDF it makes is a line
+    naming what it was made from, then the text; read back, emphasis and lists come in Word's
+    reading of them (_x_, * x), so the Markdown that comes back differs from the manuscript's
+    own, as pandoc's does, and lines that are comments in Word ("COMMENT: ...") aren't text. It
+    keeps what each conversion was given, with the folder it was made in and the files there:
+    Word files in `made`, PDFs in `pdfs`. `fails`, when set, is why a PDF can't be made."""
 
     def __init__(self):
         self.made = []
+        self.pdfs = []
+        self.fails = ""
 
-    def to_docx(self, source, out, kind):
+    @staticmethod
+    def _given(source, kind):
         beside = sorted(
             p.relative_to(source.parent).as_posix() for p in source.parent.rglob("*") if p.is_file()
         )
-        self.made.append({"name": source.name, "kind": kind, "beside": beside})
+        return {"name": source.name, "kind": kind, "beside": beside, "in": str(source.parent)}
+
+    def to_docx(self, source, out, kind):
+        self.made.append(self._given(source, kind))
         out.write_bytes(f"DOCX from {kind}\n".encode() + source.read_bytes())
+
+    def to_pdf(self, source, out, kind):
+        self.pdfs.append(self._given(source, kind))
+        if self.fails:
+            raise folders.ConvertError(self.fails)
+        out.write_bytes(f"PDF from {kind}\n".encode() + source.read_bytes())
 
     def to_markdown(self, docx):
         head, _, body = docx.read_bytes().decode().partition("\n")
@@ -59,7 +77,7 @@ class FakePandoc:
 
 
 def text_of(path):
-    """What a Word file the fake made says, without its first line."""
+    """What a Word file or PDF the fake made says, without its first line."""
     return path.read_bytes().decode().partition("\n")[2]
 
 
@@ -124,8 +142,8 @@ def draft(vault, draft_id, title, body, status):
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    """A drive's folder, a fake pandoc, a vault, and a project's repository checked out on main
-    with its paper, a figure and a PDF of it on a side branch."""
+    """A drive's folder, a fake pandoc and tectonic, a vault, and a project's repository checked
+    out on main with its paper, a figure and a PDF of it on a side branch."""
     monkeypatch.setenv("PROXENOS_WORKTREES", str(tmp_path / "worktrees"))
     monkeypatch.setenv("PROXENOS_NAME", "Joe")
     vault = tmp_path / "vault"
@@ -136,7 +154,9 @@ def setup(tmp_path, monkeypatch):
     fake = FakePandoc()
     monkeypatch.setattr(folders, "to_docx", fake.to_docx)
     monkeypatch.setattr(folders, "to_markdown", fake.to_markdown)
+    monkeypatch.setattr(folders, "to_pdf", fake.to_pdf)
     monkeypatch.setattr(folders, "pandoc", lambda: "/usr/local/bin/pandoc")
+    monkeypatch.setattr(folders, "pdf_engine", lambda kind: "/usr/local/bin/tectonic")
     repo = tmp_path / "code"
     repo.mkdir()
     git(repo, "init", "-q", "-b", "main")
@@ -242,7 +262,9 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
 
     assert stats == {
         "folders_written": 3,
-        "files_written": 7 + 3 + 3,  # the paper's folder: its six and the figure it names
+        # The paper's folder: the manuscript and its PDF, the five notes, the figure it names
+        # and the supplement it makes, as a Word file and a PDF.
+        "files_written": 10 + 2 + 3,
         "kept_as_edited": 0,
         "manuscripts_brought_back": 0,
         "steps_made": 0,
@@ -254,22 +276,25 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
     assert sorted(p.name for p in where.iterdir()) == sorted(
         [
             DOCX,
-            "Calls the paper - manuscript.pdf",
+            PDF,
             "Where it stands.docx",
             "What's known, and the question.docx",
             "Drafts.docx",
             "About this project.docx",
             "About this folder.docx",
             "Supplement",
+            SUPPLEMENTARY,
+            "Supplementary information.pdf",
         ]
     )
     assert [p.name for p in (where / "Supplement").iterdir()] == ["fig.png"]
     # The manuscript at its branch's tip, converted where the files beside it are, and nothing
-    # else of the repository; its PDF as committed.
-    assert text_of(where / DOCX) == PAPER
+    # else of the repository, not even the PDF committed beside it; its PDF made there too.
+    assert text_of(where / DOCX) == text_of(where / PDF) == PAPER
     made = next(m for m in fake.made if m["name"] == "paper.md")
     assert made["kind"] == "markdown" and made["beside"] == ["fig.png", "paper.md"]
-    assert (where / "Calls the paper - manuscript.pdf").read_bytes() == b"%PDF-1.7 the paper"
+    [pdf, _] = fake.pdfs
+    assert pdf == made  # the same checkout, at the same commit
     assert "The draft is out." in text_of(where / "Where it stands.docx")
     assert text_of(where / "What's known, and the question.docx") == "What's known: birds sing."
     drafts = text_of(where / "Drafts.docx")
@@ -280,7 +305,9 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
     assert "When birds sing" in about and "Ana Lee" in about and "F*.py" in about
     folder = text_of(where / "About this folder.docx")
     assert f"docs/paper/paper.md at {tip[:7]} on paper-storyline, made 2026-03-10" in folder
+    assert f"**{PDF}** is made from the same version, so the two match." in folder
     assert "comes back to the project's git as a step" in folder
+    assert f"**{SUPPLEMENTARY}**, and its PDF, hold the tables and figures" in folder
 
     # A project with no group goes under Other; with no code, it has no manuscript.
     hobby = drive / "Other" / "Birdhouses"
@@ -316,10 +343,11 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
         assert os.name == "nt" or stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert checkout_of(repo) == before
 
-    # Again with nothing changed: nothing written.
+    # Again with nothing changed: nothing written, nothing converted, nothing typeset.
+    made, pdfs = len(fake.made), len(fake.pdfs)
     again = run(vault, LATER)
     assert again["files_written"] == 0 and again["folders_written"] == 0
-    assert len(fake.made) == 11  # the 12 files the first time, but for the PDF, copied as it is
+    assert (made, pdfs) == (12, 2) and (len(fake.made), len(fake.pdfs)) == (made, pdfs)
 
 
 def test_the_command_runs_one_project(setup, capsys):
@@ -437,6 +465,7 @@ def test_the_owners_changes_come_back_as_a_step_with_the_rest_as_it_was(setup):
     assert stats["waiting_on_you"] == 1 and stats["kept_as_edited"] == 1
     assert stats["steps_made"] == 0 and "moved_to_earlier" not in stats
     assert (where / DOCX).read_bytes() == mine
+    assert text_of(where / PDF) == PAPER.replace("Thanks", "Our thanks")  # it waits with it
     assert len(projects.steps_taken(vault, "calls")) == 1
 
     # Accepted, it merges; the next run brings the waiting change back from where it was made.
@@ -497,10 +526,13 @@ def test_latex_goes_one_way_with_its_citations_from_the_bib_beside_it(setup):
     where = drive / FOLDER
     made = next(m for m in fake.made if m["name"] == "main.tex")
     assert made["kind"] == "latex"
-    # Converted from its folder as git has it, with what it includes and the .bib beside it.
+    # Converted from its folder as git has it, with what it includes and the .bib beside it,
+    # and typeset there, from the same commit: not the PDF committed beside it.
     assert made["beside"] == ["main.tex", "refs.bib", "sections/methods.tex"]
-    assert text_of(where / DOCX) == LATEX
-    assert (where / "Calls the paper - manuscript.pdf").read_bytes() == b"%PDF-1.7 typeset"
+    assert fake.pdfs == [made]
+    assert text_of(where / DOCX) == text_of(where / PDF) == LATEX
+    assert state(vault)["projects"]["calls"]["files"][PDF]["made"] == "built"
+    assert not (where / SUPPLEMENTARY).exists()  # it names no table or figure
     folder = text_of(where / "About this folder.docx")
     assert "goes one way" in folder and "Change paper/main.tex itself" in folder
     assert "pull" not in state(vault)["projects"]["calls"]
@@ -512,6 +544,7 @@ def test_latex_goes_one_way_with_its_citations_from_the_bib_beside_it(setup):
     stats = run(vault, LATER)
     assert stats["manuscripts_brought_back"] == 0 and projects.steps_taken(vault, "calls") == []
     assert (where / DOCX).read_bytes() == mine
+    assert len(fake.pdfs) == 1  # nothing changed: nothing typeset
     git(repo, "checkout", "-q", "paper-storyline")
     commit(repo, {"paper/sections/methods.tex": "We listened twice.\n"}, "Listen again", 4)
     git(repo, "checkout", "-q", "main")
@@ -519,6 +552,111 @@ def test_latex_goes_one_way_with_its_citations_from_the_bib_beside_it(setup):
     assert stats["moved_to_earlier"] == 1 and stats["steps_made"] == 0
     assert (where / "Earlier" / "Calls the paper - manuscript 2026-03-12.docx").read_bytes() == mine
     assert text_of(where / DOCX) == LATEX
+    # Typeset again with it, from the same checkout.
+    [*_, made] = [m for m in fake.made if m["name"] == "main.tex"]
+    assert len(fake.pdfs) == 2 and fake.pdfs[-1] == made != fake.pdfs[0]
+    assert text_of(where / PDF) == LATEX
+
+
+def test_the_pdf_moves_on_with_the_word_file_never_over_the_owners_copy(setup):
+    vault, repo, drive, fake = setup
+    run(vault, NOW)
+    where = drive / FOLDER
+    (where / PDF).write_bytes(b"%PDF the owner's annotated copy")
+
+    # Nothing changed: their copy stays, and nothing is typeset.
+    stats = run(vault, LATER)
+    assert stats["files_written"] == 0 and len(fake.pdfs) == 2
+    assert (where / PDF).read_bytes() == b"%PDF the owner's annotated copy"
+
+    # The paper moves on: both are made again from the new commit, in one checkout, and their
+    # copy of the PDF moves to Earlier/ first.
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"docs/paper/paper.md": PAPER.replace("Thanks", "Our thanks")}, "Thank", 3)
+    git(repo, "checkout", "-q", "main")
+    stats = run(vault, LATEST)
+    assert stats["moved_to_earlier"] == 1
+    assert text_of(where / DOCX) == text_of(where / PDF) == PAPER.replace("Thanks", "Our thanks")
+    [*_, made] = [m for m in fake.made if m["name"] == "paper.md"]
+    assert fake.pdfs[-1] == made
+    assert (where / "Earlier" / "Calls the paper - manuscript 2026-03-12.pdf").read_bytes() == (
+        b"%PDF the owner's annotated copy"
+    )
+    files = state(vault)["projects"]["calls"]["files"]
+    assert files[PDF]["source"] == folders._digest(files[DOCX]["source"], "pdf")
+
+
+def test_with_nothing_to_make_pdfs_the_committed_one_comes_and_the_folder_says_so(
+    setup, monkeypatch
+):
+    vault, repo, drive, fake = setup
+    engine = None
+    monkeypatch.setattr(folders, "pdf_engine", lambda kind: engine)
+
+    run(vault, NOW)
+
+    where = drive / FOLDER
+    assert fake.pdfs == []
+    assert (where / PDF).read_bytes() == b"%PDF-1.7 the paper"
+    assert not (where / "Supplementary information.pdf").exists()  # none is committed
+    assert (where / SUPPLEMENTARY).exists()
+    folder = text_of(where / "About this folder.docx")
+    assert f"**{PDF}** is docs/paper/paper.pdf as it's committed in git" in folder
+    assert "brew install tectonic" in folder
+    assert run(vault, LATER)["files_written"] == 0
+
+    # tectonic installed: the PDF is made from the Word file's version, which isn't made again.
+    engine = "/opt/homebrew/bin/tectonic"
+    made = len(fake.made)
+    stats = run(vault, LATEST)
+    assert text_of(where / PDF) == PAPER and len(fake.pdfs) == 2  # and the supplement's
+    assert len(fake.made) == made + 1  # only the About this folder note, which says so
+    assert stats["files_written"] == 3 and "moved_to_earlier" not in stats
+    assert "so the two match" in text_of(where / "About this folder.docx")
+
+    # Neither a way to make one nor one committed: none, and the folder says why.
+    engine = None
+    git(repo, "checkout", "-q", "paper-storyline")
+    git(repo, "rm", "-q", "docs/paper/paper.pdf")
+    git(repo, "commit", "-q", "-m", "No PDF")
+    git(repo, "checkout", "-q", "main")
+    (where / PDF).unlink()
+    run(vault, LATEST.replace(hour=3))
+    assert not (where / PDF).exists()
+    assert "There's no PDF of this version" in text_of(where / "About this folder.docx")
+
+
+def test_a_pdf_that_cant_be_made_isnt_tried_again_until_the_paper_changes(setup, capsys):
+    vault, repo, drive, fake = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"paper/main.tex": LATEX, "paper/refs.bib": "@article{a, title={A}}\n"}, "Tex", 3)
+    git(repo, "rm", "-q", "docs/paper/paper.md")
+    git(repo, "commit", "-q", "-m", "Drop the Markdown")
+    git(repo, "checkout", "-q", "main")
+    fake.fails = "tectonic: error: main.tex:3: Undefined control sequence"
+
+    stats = run(vault, NOW)
+
+    where = drive / FOLDER
+    assert stats["skipped"] == 1 and len(fake.pdfs) == 1
+    assert text_of(where / DOCX) == LATEX and not (where / PDF).exists()
+    assert "manuscript.pdf wasn't made (tectonic: error: main.tex:3" in capsys.readouterr().err
+    folder = text_of(where / "About this folder.docx")
+    assert f"**{PDF}** couldn't be made from this version (tectonic: error: main.tex:3" in folder
+
+    # A LaTeX build takes a while: not again for the same version.
+    stats = run(vault, LATER)
+    assert len(fake.pdfs) == 1 and stats["skipped"] == 0 and stats["files_written"] == 0
+
+    # Once the paper changes, it's tried again, and made.
+    fake.fails = ""
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"paper/main.tex": LATEX.replace("dawn", "dusk")}, "Dusk", 4)
+    git(repo, "checkout", "-q", "main")
+    run(vault, LATEST)
+    assert len(fake.pdfs) == 2 and text_of(where / PDF) == LATEX.replace("dawn", "dusk")
+    entry = state(vault)["projects"]["calls"]["files"][PDF]
+    assert entry["made"] == "built" and "unmade" not in entry
 
 
 def test_an_edit_says_where_its_text_came_from(setup):
@@ -677,3 +815,208 @@ def test_the_files_a_manuscript_names_go_to_its_supplement(setup):
     stats = run(vault, NOW + timedelta(days=1))
     assert (supplement / "fig2.png").read_bytes() == b"their annotated figure"
     assert stats.get("files_written", 0) == 0
+
+
+SUPPLEMENTED = (
+    "# Calls\n\n"
+    "Birds sing at dawn (Table S1, `results/S01_tableS1_sites.csv`), as counted in\n"
+    "data/counts.json.\n\n"
+    "![Calls by hour](figures/fig2.png)\n\n"
+    "Wrens and robins differ (S02_tableS4_note_types_by_species.csv).\n\n"
+    "## Supplementary material\n\n"
+    "**Table S4.** Note types by species (S02_tableS4_note_types_by_species.csv)\n\n"
+    "- The workbook (results/S03_book.xlsx)\n"
+)
+
+
+def wide(rows, columns):
+    head = ",".join(f"c{j}" for j in range(columns))
+    body = "".join(",".join(f"r{i}c{j}" for j in range(columns)) + "\n" for i in range(rows))
+    return f"{head}\n{body}"
+
+
+def test_the_supplement_is_a_document_of_its_tables_and_figures_under_their_captions(
+    setup, monkeypatch
+):
+    vault, repo, drive, fake = setup
+    monkeypatch.setitem(sys.modules, "openpyxl", None)  # not installed: .xlsx is listed by name
+    git(repo, "checkout", "-q", "paper-storyline")
+    files = {
+        "docs/paper/paper.md": SUPPLEMENTED,
+        "results/S01_tableS1_sites.csv": "site,n\nA,3\nB|C,*4*\n",
+        "results/S02_tableS4_note_types_by_species.csv": wide(50, 15),
+        "results/S03_book.xlsx": b"PK not read",
+        "figures/fig2.png": b"\x89PNG fake",
+        "data/counts.json": "{}\n",
+    }
+    commit(repo, files, "Tables, a figure and data", 3)
+    git(repo, "checkout", "-q", "main")
+
+    run(vault, NOW)
+
+    where = drive / FOLDER
+    assert sorted(p.name for p in (where / "Supplement").iterdir()) == [
+        "S01_tableS1_sites.csv",
+        "S02_tableS4_note_types_by_species.csv",
+        "S03_book.xlsx",
+        "counts.json",
+        "fig2.png",
+    ]
+    text = text_of(where / SUPPLEMENTARY)
+    assert text == text_of(where / "Supplementary information.pdf")
+    [made] = [m for m in fake.made if m["name"] == "supplementary.md"]
+    assert made["beside"] == ["figures/fig2.png", "supplementary.md"]
+    assert fake.pdfs[-1] == made  # the same Markdown, figures beside it
+    head, s1, figure, s4, data = text.split("\n## ")
+    assert head == "# Calls: the paper?: supplementary information\n"
+    # Each table under the caption the manuscript gives it, in the order it names them: the
+    # "Table S1" it's named with, or the line that names it, from its label.
+    assert s1 == "Table S1\n\n| site | n |\n|---|---|\n| A | 3 |\n| B\\|C | \\*4\\* |\n"
+    assert figure == "Calls by hour\n\n![](<figures/fig2.png>)\n"
+    caption, _, table = s4.partition("\n\n")
+    assert caption == "Table S4. Note types by species"
+    rows = table.strip().split("\n")
+    assert rows[0] == "| " + " | ".join(f"c{j}" for j in range(12)) + " |"
+    assert len(rows) == 2 + 40 + 2 and rows[-3].startswith("| r39c0 | ") and rows[-2] == ""
+    assert rows[-1] == (
+        "_This is the first 40 of its 50 rows and 12 of its 15 columns: the full table is in "
+        "Supplement/S02\\_tableS4\\_note\\_types\\_by\\_species.csv._"
+    )
+    # The data files, and a workbook with nothing here to read it, by name.
+    assert data == (
+        "Data files\n\nIn Supplement/, beside this file:\n\n- counts.json\n- S03\\_book.xlsx\n"
+    )
+
+    # Nothing changed: nothing made again.
+    made, pdfs = len(fake.made), len(fake.pdfs)
+    assert run(vault, LATER)["files_written"] == 0
+    assert (len(fake.made), len(fake.pdfs)) == (made, pdfs)
+
+    # One the owner changed stays as they left it while nothing changes, and moves to Earlier/
+    # once a table it shows does.
+    edit(where / SUPPLEMENTARY, "Table S1", "Table S1 (checked)")
+    mine = (where / SUPPLEMENTARY).read_bytes()
+    stats = run(vault, LATEST)
+    assert stats["files_written"] == 0 and (where / SUPPLEMENTARY).read_bytes() == mine
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"results/S01_tableS1_sites.csv": "site,n\nA,5\n"}, "Recount", 4)
+    git(repo, "checkout", "-q", "main")
+    stats = run(vault, LATEST.replace(hour=3))
+    assert stats["moved_to_earlier"] == 1
+    earlier = where / "Earlier" / "Supplementary information 2026-03-12.docx"
+    assert earlier.read_bytes() == mine
+    assert "| A | 5 |" in text_of(where / SUPPLEMENTARY)
+    assert "| A | 5 |" in text_of(where / "Supplementary information.pdf")
+
+
+def test_an_svg_figure_is_named_in_the_pdf_until_pandoc_can_draw_it(setup, monkeypatch):
+    vault, repo, drive, fake = setup
+    rsvg = None
+    monkeypatch.setattr(folders.shutil, "which", lambda name: rsvg)
+    git(repo, "checkout", "-q", "paper-storyline")
+    paper = "# Calls\n\n![Calls by hour](figures/fig2.svg)\n"
+    commit(repo, {"docs/paper/paper.md": paper, "figures/fig2.svg": "<svg/>"}, "SVG", 3)
+    git(repo, "checkout", "-q", "main")
+
+    run(vault, NOW)
+
+    where = drive / FOLDER
+    assert "## Calls by hour\n\n![](<figures/fig2.svg>)\n" in text_of(where / SUPPLEMENTARY)
+    pdf = text_of(where / "Supplementary information.pdf")
+    assert "![](" not in pdf and "it's in Supplement/fig2.svg, and the Word file shows it" in pdf
+
+    # rsvg-convert installed: the PDF is made again, showing it; the Word file isn't.
+    rsvg = "/opt/homebrew/bin/rsvg-convert"
+    made = len(fake.made)
+    run(vault, LATER)
+    assert "![](<figures/fig2.svg>)" in text_of(where / "Supplementary information.pdf")
+    assert len(fake.made) == made
+
+
+def test_a_paper_naming_only_data_gets_no_supplement_document(setup):
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(
+        repo, {"docs/paper/paper.md": "# Calls\n\nIn counts.json.\n", "counts.json": "{}"}, "D", 3
+    )
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW)
+    assert (drive / FOLDER / "Supplement" / "counts.json").exists()
+    assert not (drive / FOLDER / SUPPLEMENTARY).exists()
+
+
+def test_a_latex_paper_names_its_files_as_latex_writes_them(setup):
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    latex = (
+        "\\documentclass{article}\n\\begin{document}\nBirds sing at dawn.\n"
+        "\\begin{table}\n\\caption{Sites and counts.}\n"
+        "\\csvautotabular{results/S01\\_sites.csv}\n\\end{table}\n\\end{document}\n"
+    )
+    commit(repo, {"paper/main.tex": latex, "results/S01_sites.csv": "site,n\nA,3\n"}, "Tex", 3)
+    git(repo, "rm", "-q", "docs/paper/paper.md")
+    git(repo, "commit", "-q", "-m", "Drop the Markdown")
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW)
+    where = drive / FOLDER
+    assert (where / "Supplement" / "S01_sites.csv").read_text() == "site,n\nA,3\n"
+    assert "## Sites and counts.\n\n| site | n |" in text_of(where / SUPPLEMENTARY)
+
+
+def test_what_went_wrong_is_the_line_that_says_so():
+    tex = (
+        "error: main.tex:3: Missing $ inserted\n"
+        "error: something bad happened inside XeTeX; its output follows:\n\n===\n"
+        "! Missing $ inserted.\n===\n"
+        "error: the XeTeX engine had an unrecoverable error\n"
+        "caused by: halted on potentially-recoverable error as specified\n"
+    )
+    assert folders._why(tex) == "error: main.tex:3: Missing $ inserted"
+    image = (
+        "warning: 8-byte read failed\ncaused by: failed to fill whole buffer\n"
+        "error: something bad happened inside xdvipdfmx; its output follows:\n===\n"
+        "error: the xdvipdfmx engine had an unrecoverable error\n"
+        "caused by: error reading PNG\nError producing PDF.\n"
+    )
+    assert folders._why(image) == (
+        "error: the xdvipdfmx engine had an unrecoverable error (error reading PNG)"
+    )
+    assert folders._why("[WARNING] slow\npandoc: paper.md: does not exist\n") == (
+        "pandoc: paper.md: does not exist"
+    )
+    assert folders._why("") == ""
+
+
+def test_captions_come_from_where_the_manuscript_names_the_file():
+    latex = (
+        "Calls rise at dawn (Fig.~\\ref{fig:3}).\n"
+        "\\begin{figure}\n\\includegraphics[width=\\linewidth]{figures/fig3.pdf}\n"
+        "\\caption[Short]{Calls by \\emph{hour}, at three sites.\\label{fig:3}}\n\\end{figure}\n"
+        "\\begin{itemize}\n\\item Site coordinates (sites.tsv)\n\\end{itemize}\n"
+    )
+    assert folders._caption(latex, "figures/fig3.pdf") == "Calls by hour, at three sites."
+    assert folders._caption(latex, "sites.tsv") == "Site coordinates"
+    prose = (
+        "We counted wrens (counts.csv), as before.\n\n"
+        "As Table S2 shows, robins sing later (robins.csv).\n\n"
+        "Supplementary Table S3: Robins by hour (robins.csv)\n"
+    )
+    assert folders._caption(prose, "counts.csv") == ""  # its name stands in
+    # A label in the middle of a sentence doesn't make it a caption; a later line that is one does.
+    assert folders._caption(prose, "robins.csv") == "Supplementary Table S3: Robins by hour"
+    assert folders._caption(prose, "missing.csv") == ""
+    cited = "Birds sing \\cite{a}. The counts are in Table S1 (\\texttt{results/S01_sites.csv}).\n"
+    assert folders._caption(cited, "results/S01_sites.csv") == "Table S1"
+
+
+def test_a_workbook_is_a_table_where_openpyxl_is_installed(monkeypatch):
+    sheet = [("site", "n", None), ("A", 3, 0.5), (None, None, None), ("B", 4, None)]
+    book = SimpleNamespace(worksheets=[SimpleNamespace(iter_rows=lambda values_only: iter(sheet))])
+    fake = SimpleNamespace(load_workbook=lambda data, read_only, data_only: book)
+    monkeypatch.setattr(folders, "_openpyxl", lambda: fake)
+    assert folders._table("book.xlsx", b"PK") == (
+        [["site", "n", ""], ["A", "3", "0.5"], ["B", "4", ""]],
+        2,
+        3,
+    )
+    assert folders._table("notes.json", b"{}") is None
