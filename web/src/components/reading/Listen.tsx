@@ -3,16 +3,17 @@
 import { useEffect } from "react";
 import { Pause, Play, Square, Volume2 } from "lucide-react";
 
-import { pause, play, resume, stopIf, stop, useSpeech } from "@/lib/speech";
+import { useReading } from "@/lib/reading";
+import { pause, play, resume, stopIf, stop, useSpeech, warm } from "@/lib/speech";
 import { cn } from "@/lib/utils";
 
 const PILL =
   "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.8125rem] leading-none whitespace-nowrap transition-colors";
 
 /**
- * Listen: reads `text` aloud with this device's own voice, with Pause and Stop while it reads.
- * Shows nothing where the browser can't read aloud on the device, and stops when it goes away
- * (another view opened), so speech never outlives what it reads.
+ * Listen: reads `text` aloud with the voice chosen in Settings (one made on this Mac, or this
+ * device's own), with Pause and Stop while it reads. Shows nothing where there's no voice to read
+ * with, and stops when it goes away (another view opened), so speech never outlives what it reads.
  */
 export function Listen({
   id,
@@ -29,8 +30,12 @@ export function Listen({
   className?: string;
 }) {
   const speech = useSpeech();
+  const { engine } = useReading();
   useEffect(() => () => stopIf(id), [id]);
-  if (!speech.available || !text.trim()) return null;
+  useEffect(() => {
+    if (engine !== "device") warm();
+  }, [engine]);
+  if (!(speech.available || engine !== "device") || !text.trim()) return null;
 
   if (speech.playing !== id) {
     return (
@@ -47,7 +52,12 @@ export function Listen({
   }
 
   return (
-    <span role="group" aria-label={what ? `Reading ${what} aloud` : "Reading aloud"} className={cn("inline-flex items-center gap-1.5", className)}>
+    <span
+      role="group"
+      aria-label={what ? `Reading ${what} aloud` : "Reading aloud"}
+      aria-busy={speech.waiting}
+      className={cn("inline-flex items-center gap-1.5", className)}
+    >
       <button
         type="button"
         onClick={() => (speech.paused ? resume() : pause())}
@@ -60,6 +70,7 @@ export function Listen({
         <Square size={12} strokeWidth={2.5} aria-hidden="true" />
         Stop
       </button>
+      {speech.waiting && !speech.paused && <span className="text-xs text-muted">Getting the voice ready…</span>}
     </span>
   );
 }

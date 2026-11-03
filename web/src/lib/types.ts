@@ -1072,6 +1072,67 @@ export interface NoticeTest {
   message: string;
 }
 
+// ── Listening: a natural voice, or the user's own, made on this Mac (state/speech/) ──
+
+/** What Listen reads with: a voice made on this Mac (natural, or the user's own from a clip), or the device's. */
+export type SpeechEngine = "natural" | "own";
+
+/** One of the natural voices Settings offers. */
+export interface NaturalVoice {
+  id: string;
+  name: string;
+  accent: string;
+}
+
+/** The clip of the user's voice kept in the vault, without its sound. */
+export interface VoiceClip {
+  seconds: number | null;
+  at: string | null;
+  /** What the clip says, which the voice is made from with it. */
+  text: string | null;
+}
+
+/** The last model download asked for, and how far it got. */
+export interface SpeechDownload {
+  engine: SpeechEngine | null;
+  state: "running" | "done" | "failed";
+  done: number | null;
+  total: number | null;
+  message: string | null;
+  at: string | null;
+}
+
+/** What `proxenos speech status` says: whether this Mac can make the voices and what each needs. */
+export interface SpeechStatus {
+  /** A Mac with Apple silicon. */
+  supported: boolean;
+  /** The speech extra is installed. */
+  installed: boolean;
+  missing: string[];
+  /** The line that installs it. */
+  install: string;
+  engines: Record<SpeechEngine, { downloaded: boolean; size: string; model: string }>;
+  voices: NaturalVoice[];
+  default_voice: string;
+  clip: VoiceClip | null;
+  /** What to read for the clip. */
+  passage: string;
+  download: SpeechDownload | null;
+  running: boolean;
+}
+
+/** GET /api/speech: the status, or why it couldn't be read. */
+export interface SpeechStatusResponse {
+  status: SpeechStatus | null;
+  error: string | null;
+}
+
+/** What a change to the clip or a download said. */
+export interface SpeechChange {
+  ok: boolean;
+  message: string;
+}
+
 // ── Compare: which of two models writes like you (state/compare/) ──────────
 
 /** What the reader can pick for a reply: one draft, both, or neither. */

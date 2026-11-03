@@ -106,7 +106,7 @@ function ReadingGroup() {
       <Group
         kicker="Listening"
         title="Read aloud"
-        note="Listen on Home, Care and Drafts reads with a voice on this device. Nothing is sent anywhere to do it."
+        note="Listen on Home, Care and Drafts reads with a natural voice or your own, made on this Mac, or with this device's voice. Nothing is sent anywhere to do it."
       >
         <div className="card p-4 sm:p-5">
           <VoiceControls />

@@ -1,9 +1,9 @@
 "use client";
 
 // How the page reads on this device: text size, typeface, spacing, theme, contrast, motion, and
-// how it reads aloud. Kept in localStorage, so each device keeps its own, and applied as
-// attributes on <html> that globals.css turns into its variables, so every view follows. The
-// defaults set no attribute at all, which leaves the page exactly as designed.
+// how it reads aloud, with which voice. Kept in localStorage, so each device keeps its own, and
+// applied as attributes on <html> that globals.css turns into its variables, so every view
+// follows. The defaults set no attribute at all, which leaves the page exactly as designed.
 
 import { useSyncExternalStore } from "react";
 
@@ -13,6 +13,8 @@ export type TextSize = "default" | "large" | "larger";
 export type Face = "default" | "hyperlegible";
 export type Spacing = "normal" | "relaxed";
 export type Theme = "dark" | "light" | "system";
+/** What Listen reads with: a natural voice or the user's own, both made on this Mac, or the device's. */
+export type Engine = "device" | "natural" | "own";
 
 export interface Reading {
   size: TextSize;
@@ -25,8 +27,12 @@ export interface Reading {
   calm: boolean;
   /** How fast Listen reads, 1 being the voice's own pace. */
   rate: number;
-  /** The voice Listen reads with, by its voiceURI, or null for the system's. */
+  /** The device's voice Listen reads with, by its voiceURI, or null for the system's. */
   voice: string | null;
+  /** Which voice Listen reads with. The device's, too, whenever one made on this Mac can't. */
+  engine: Engine;
+  /** The natural voice, by its id (Kokoro's), or null for the first offered. */
+  natural: string | null;
 }
 
 export const DEFAULT_READING: Reading = {
@@ -38,6 +44,8 @@ export const DEFAULT_READING: Reading = {
   calm: false,
   rate: 1,
   voice: null,
+  engine: "device",
+  natural: null,
 };
 
 export const RATE_MIN = 0.6;
@@ -47,6 +55,7 @@ const SIZES: readonly TextSize[] = ["default", "large", "larger"];
 const FACES: readonly Face[] = ["default", "hyperlegible"];
 const SPACINGS: readonly Spacing[] = ["normal", "relaxed"];
 const THEMES: readonly Theme[] = ["dark", "light", "system"];
+const ENGINES: readonly Engine[] = ["device", "natural", "own"];
 
 function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(v as T) ? (v as T) : fallback;
@@ -65,6 +74,8 @@ export function parseReading(raw: unknown): Reading {
     calm: r.calm === true,
     rate: Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(rate * 20) / 20)),
     voice: typeof r.voice === "string" && r.voice ? r.voice.slice(0, 300) : null,
+    engine: pick(r.engine, ENGINES, DEFAULT_READING.engine),
+    natural: typeof r.natural === "string" && /^[a-z_]{1,30}$/.test(r.natural) ? r.natural : null,
   };
 }
 

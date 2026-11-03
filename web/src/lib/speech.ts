@@ -1,15 +1,23 @@
 "use client";
 
-// Reading aloud with the browser's own speech (speechSynthesis), so the words are spoken on this
-// device and never sent anywhere. Some browsers also offer voices that are made on a server
-// (Chrome's "Google" voices, Edge's "Online" ones), so only voices the browser marks as local
-// (localService) are used; with none, Listen doesn't show. One thing is read at a time, a
-// sentence or two per utterance: long utterances stall in some browsers, and pausing then
+// Reading aloud, one thing at a time, a sentence or two at a time.
+//
+// With a voice made on this Mac (Settings, Listening: the natural voice or the user's own, by
+// proxenos.speech), each sentence goes to the page's own server, which has the speech server on
+// 127.0.0.1 make it, and comes back as sound. The next AHEAD are asked for while one plays, so a
+// long text starts after its first sentence and runs on without waiting. Whenever that voice
+// can't (not installed, not downloaded, no clip, or it fails), Listen goes on with the browser's
+// own speech from the sentence it was on, and keeps to it for RETRY_MS before asking again.
+//
+// The browser's own speech (speechSynthesis) speaks on this device too. Some browsers also offer
+// voices that are made on a server (Chrome's "Google" voices, Edge's "Online" ones), so only
+// voices the browser marks as local (localService) are used; with none, and no voice made on this
+// Mac chosen, Listen doesn't show. Long utterances stall in some browsers, and pausing then
 // starting again from the current sentence works everywhere, which speechSynthesis.pause doesn't.
 
 import { useSyncExternalStore } from "react";
 
-import { readingNow } from "./reading";
+import { type Engine, readingNow } from "./reading";
 
 export interface Voice {
   id: string; // its voiceURI
@@ -27,9 +35,11 @@ export interface SpeechState {
   /** What's being read: the id its Listen control gave, or null. */
   playing: string | null;
   paused: boolean;
+  /** Waiting for a voice made on this Mac to make the sentence it's on. */
+  waiting: boolean;
 }
 
-const NONE: SpeechState = { available: false, voices: [], playing: null, paused: false };
+const NONE: SpeechState = { available: false, voices: [], playing: null, paused: false, waiting: false };
 
 const synth = (): SpeechSynthesis | null =>
   typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window ? window.speechSynthesis : null;
@@ -115,6 +125,8 @@ let queue: string[] = [];
 let at = 0;
 // Bumped by every start, pause and stop, so an utterance cut short doesn't move the queue on.
 let turn = 0;
+// What's reading this queue: the device's speech, or a voice made on this Mac.
+let via: Engine = "device";
 
 function set(change: Partial<SpeechState>) {
   state = { ...state, ...change };
@@ -144,6 +156,8 @@ function subscribe(listener: () => void) {
   };
 }
 
+// ── The device's own speech ────────────────────────────────────────────────
+
 function speakNext(mine: number) {
   const s = synth();
   const voice = voiceFor(readingNow().voice);
@@ -164,10 +178,159 @@ function speakNext(mine: number) {
   s.speak(u);
 }
 
+// ── A voice made on this Mac ───────────────────────────────────────────────
+
+const AHEAD = 2;
+const RETRY_MS = 60_000;
+let downUntil = 0;
+let player: HTMLAudioElement | null = null;
+let playingUrl: string | null = null;
+let asking: AbortController | null = null;
+const made = new Map<number, Promise<Blob | null>>();
+// Where in its sentence a pause stopped, to resume from there.
+let resumeFrom = 0;
+
+/** The voice this reading starts with: the one chosen, unless it failed a moment ago. */
+function engineNow(): Engine {
+  const chosen = readingNow().engine;
+  return chosen !== "device" && Date.now() < downUntil ? "device" : chosen;
+}
+
+const WARM_MS = 10 * 60_000; // under the speech server's own 15 minutes idle
+const warmed = new Map<Engine, number>();
+
+/**
+ * Have the voice chosen loaded on this Mac, as a view with Listen opens, so its first sentence
+ * comes in a moment rather than after the model loads. Once in WARM_MS at most.
+ */
+export function warm() {
+  const engine = engineNow();
+  if (engine === "device" || Date.now() - (warmed.get(engine) ?? 0) < WARM_MS) return;
+  warmed.set(engine, Date.now());
+  void fetch("/api/speech", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ warm: engine, voice: engine === "natural" ? readingNow().natural : null }),
+  }).catch(() => {});
+}
+
+/** Sentence `i` as sound, asked for once per reading; null when the voice couldn't make it. */
+function sound(i: number): Promise<Blob | null> {
+  let p = made.get(i);
+  if (!p) {
+    const r = readingNow();
+    p = fetch("/api/speech/say", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: queue[i], engine: via, voice: via === "natural" ? r.natural : null }),
+      signal: asking?.signal,
+    })
+      .then((res) => (res.ok ? res.blob() : null))
+      .catch(() => null);
+    made.set(i, p);
+  }
+  return p;
+}
+
+/** A hundredth of a second of silence, as a WAV. */
+function silence(): string {
+  const samples = 240;
+  const view = new DataView(new ArrayBuffer(44 + samples * 2));
+  const text = (offset: number, s: string) => [...s].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  text(0, "RIFF");
+  view.setUint32(4, 36 + samples * 2, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, 24000, true);
+  view.setUint32(28, 48000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  text(36, "data");
+  view.setUint32(40, samples * 2, true);
+  return URL.createObjectURL(new Blob([view], { type: "audio/wav" }));
+}
+
+/** Play a moment of silence from the click itself, so the browser lets the sentences that follow play. */
+function unlock() {
+  player ??= new Audio();
+  const url = silence();
+  player.src = url;
+  player
+    .play()
+    .catch(() => {})
+    .finally(() => URL.revokeObjectURL(url));
+}
+
+/** Stop the sound and forget what was made for this reading. */
+function release() {
+  asking?.abort();
+  asking = null;
+  made.clear();
+  if (player) {
+    player.onended = null;
+    player.onerror = null;
+    player.onloadedmetadata = null;
+    player.pause();
+  }
+  if (playingUrl) URL.revokeObjectURL(playingUrl);
+  playingUrl = null;
+}
+
+/** The voice made on this Mac couldn't: go on with the device's, from this sentence. */
+function fallBack(mine: number) {
+  downUntil = Date.now() + RETRY_MS;
+  via = "device";
+  release();
+  set({ waiting: false });
+  if (synth() && voiceFor(readingNow().voice)) speakNext(mine);
+  else stop();
+}
+
+async function playMade(mine: number) {
+  if (at >= queue.length) return stop();
+  const blob = await sound(at);
+  if (mine !== turn) return;
+  if (!blob) return fallBack(mine);
+  for (let i = at + 1; i <= at + AHEAD && i < queue.length; i++) void sound(i);
+  const p = (player ??= new Audio());
+  if (playingUrl) URL.revokeObjectURL(playingUrl);
+  playingUrl = URL.createObjectURL(blob);
+  const from = resumeFrom;
+  resumeFrom = 0;
+  p.onloadedmetadata = () => {
+    p.playbackRate = readingNow().rate;
+    if (from > 0 && from < p.duration) p.currentTime = from;
+  };
+  p.onended = () => {
+    if (mine !== turn) return;
+    at += 1;
+    void playMade(mine);
+  };
+  p.onerror = () => {
+    if (mine === turn) fallBack(mine);
+  };
+  p.preservesPitch = true;
+  p.src = playingUrl;
+  p.playbackRate = readingNow().rate;
+  set({ waiting: false });
+  p.play().catch(() => {
+    if (mine === turn) fallBack(mine);
+  });
+}
+
+// ── Reading ────────────────────────────────────────────────────────────────
+
 function begin() {
-  const s = synth();
-  if (!s) return;
   const mine = ++turn;
+  if (via !== "device") {
+    set({ waiting: true });
+    void playMade(mine);
+    return;
+  }
+  const s = synth();
+  if (!s) return stop();
   if (s.speaking || s.pending) {
     s.cancel();
     // Some browsers drop an utterance queued in the same moment as a cancel.
@@ -180,19 +343,33 @@ function begin() {
 /** Read `text` aloud as `id`, from the start, stopping anything else being read. */
 export function play(id: string, text: string) {
   const parts = chunks(speakable(text));
-  if (!synth() || parts.length === 0) return;
+  if (parts.length === 0) return;
+  release();
+  via = engineNow();
+  if (via === "device" && !synth()) return;
+  if (via !== "device") {
+    synth()?.cancel();
+    asking = new AbortController();
+    unlock();
+  }
   queue = parts;
   at = 0;
+  resumeFrom = 0;
   set({ playing: id, paused: false });
   begin();
 }
 
-/** Stop where it is; resuming starts again from the sentence it was on. */
+/** Pause where it is: a voice made on this Mac resumes mid-sentence, the device's from the sentence's start. */
 export function pause() {
   if (state.playing === null || state.paused) return;
   turn += 1;
-  synth()?.cancel();
-  set({ paused: true });
+  if (via !== "device") {
+    if (player && playingUrl && !player.ended) resumeFrom = player.currentTime;
+    player?.pause();
+  } else {
+    synth()?.cancel();
+  }
+  set({ paused: true, waiting: false });
 }
 
 export function resume() {
@@ -205,8 +382,10 @@ export function stop() {
   turn += 1;
   queue = [];
   at = 0;
+  resumeFrom = 0;
+  release();
   synth()?.cancel();
-  if (state.playing !== null || state.paused) set({ playing: null, paused: false });
+  if (state.playing !== null || state.paused || state.waiting) set({ playing: null, paused: false, waiting: false });
 }
 
 /** Stop, if what's being read is `id`: its control is going away. */

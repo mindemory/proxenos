@@ -2,8 +2,10 @@
 
 import { Segmented } from "@/components/layout/Segmented";
 import { Listen } from "@/components/reading/Listen";
+import { NaturalVoice, OwnVoice } from "@/components/reading/MadeVoices";
 import { useMedia } from "@/lib/hooks";
 import {
+  type Engine,
   type Face,
   RATE_MAX,
   RATE_MIN,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/reading";
 import { DEVICE_CALM, DEVICE_CONTRAST } from "@/lib/readingScript";
 import { useSpeech } from "@/lib/speech";
+import { useSpeechStatus } from "@/lib/speechClient";
 import { cn } from "@/lib/utils";
 
 const SIZES: { id: TextSize; label: string }[] = [
@@ -39,8 +42,14 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: "system", label: "Match device" },
 ];
 
+const ENGINES: { id: Engine; label: string }[] = [
+  { id: "natural", label: "Natural" },
+  { id: "own", label: "Your voice" },
+  { id: "device", label: "This device's" },
+];
+
 const SAMPLE =
-  "This is how Listen sounds. It reads with a voice on this device, and nothing you hear is sent anywhere.";
+  "This is how Listen sounds. It reads with a voice made on this computer, and nothing you hear is sent anywhere.";
 
 /**
  * One setting: its name and what it does on the left, its control on the right (below, when
@@ -158,21 +167,48 @@ export function ReadingControls({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** How Listen reads: its speed and its voice, with a sentence to try them on. */
+/**
+ * How Listen reads: with which voice (a natural one or the user's own, made on this Mac, or this
+ * device's), at what speed, with a sentence to try them on.
+ */
 export function VoiceControls() {
   const r = useReading();
   const speech = useSpeech();
-  if (!speech.available) {
-    return (
-      <p className="text-sm leading-relaxed text-muted">
-        This browser has no voice that reads on this device, so Listen doesn&apos;t show. Safari, and Chrome or Edge with the
-        system&apos;s voices, have one.
-      </p>
-    );
-  }
+  const local = useSpeechStatus();
   const known = r.voice !== null && speech.voices.some((v) => v.id === r.voice);
   return (
     <div className="space-y-5">
+      <Row
+        label="Voice"
+        hint="Natural and Your voice are made on this Mac; This device's is the browser's own. Nothing is sent anywhere, and when one made here can't read, this device's does."
+      >
+        <Segmented label="Voice" tabs={ENGINES} value={r.engine} onChange={(engine) => setReading({ engine })} />
+      </Row>
+      {r.engine === "natural" && <NaturalVoice local={local} />}
+      {r.engine === "own" && <OwnVoice local={local} />}
+      {r.engine === "device" &&
+        (speech.available ? (
+          <Row label="Device voice" hint="Only voices on this device are listed, so what's read never leaves it.">
+            <select
+              value={known ? (r.voice ?? "") : ""}
+              onChange={(e) => setReading({ voice: e.target.value || null })}
+              aria-label="Device voice"
+              className="w-full max-w-[16rem] rounded-lg border border-line-strong bg-bg px-3 py-2 text-sm text-ink"
+            >
+              <option value="">This device&apos;s voice</option>
+              {speech.voices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </Row>
+        ) : (
+          <p className="text-sm leading-relaxed text-muted">
+            This browser has no voice that reads on this device, so Listen doesn&apos;t show. Safari, and Chrome or Edge with the
+            system&apos;s voices, have one; or pick Natural.
+          </p>
+        ))}
       <Row label="Reading speed" hint="Slower gives more time to take each sentence in.">
         <div className="flex items-center gap-3">
           <input
@@ -188,21 +224,6 @@ export function VoiceControls() {
           />
           <span className="num w-12 text-right text-sm text-ink">{r.rate.toFixed(2)}×</span>
         </div>
-      </Row>
-      <Row label="Voice" hint="Only voices on this device are listed, so what's read never leaves it.">
-        <select
-          value={known ? (r.voice ?? "") : ""}
-          onChange={(e) => setReading({ voice: e.target.value || null })}
-          aria-label="Voice"
-          className="w-full max-w-[16rem] rounded-lg border border-line-strong bg-bg px-3 py-2 text-sm text-ink"
-        >
-          <option value="">This device&apos;s voice</option>
-          {speech.voices.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name} ({v.lang})
-            </option>
-          ))}
-        </select>
       </Row>
       <Listen id="reading-sample" text={SAMPLE} label="Try it" what="a sentence in this voice, at this speed" />
     </div>
