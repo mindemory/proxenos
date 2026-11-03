@@ -270,6 +270,7 @@ def test_the_results_as_json_for_the_page(tmp_path, models, monkeypatch, capsys)
     vault = many_chats(tmp_path, 2)
     monkeypatch.setenv("PROXENOS_VAULT", str(vault))
 
+    monkeypatch.setenv("PROXENOS_VOICE_MODEL", "mlx")
     cli.main(["compare", "results"])
     assert json.loads(capsys.readouterr().out) == {
         "round": None,
@@ -277,11 +278,17 @@ def test_the_results_as_json_for_the_page(tmp_path, models, monkeypatch, capsys)
         "results": None,
         "pooled": None,
         "items": [],
+        "set_up": {
+            "drafting": LOCAL,
+            "hosted": llm.DEFAULT_MODEL,
+            "key": False,
+            "voice": "voice:mlx",
+        },
     }
 
     cli.main(["compare", "start", "--model", OTHER, "-n", "2"])
     shown = json.loads(capsys.readouterr().out)
-    assert set(shown) == {"round", "rounds", "results", "pooled", "items"}
+    assert set(shown) == {"round", "rounds", "results", "pooled", "items", "set_up"}
     assert shown["round"] | {"id": "", "started": "", "updated": ""} == {
         "id": "",
         "started": "",
@@ -397,6 +404,27 @@ def test_a_hosted_model_needs_a_key_and_two_models_must_differ(tmp_path, models)
     with pytest.raises(ValueError, match="Both are"):
         compare.start(vault, LOCAL, now=NOW)
     assert models.calls == [] and not (vault / "state" / "compare").exists()
+
+
+def test_a_round_stopped_partway_says_so_and_frees_its_replies(tmp_path, models, monkeypatch):
+    vault = many_chats(tmp_path, 2)
+    asked = models.ask
+
+    def stopped(model, *rest, **kw):
+        if model == LOCAL:
+            raise KeyboardInterrupt
+        return asked(model, *rest, **kw)
+
+    monkeypatch.setattr(llm, "_ask", stopped)
+    with pytest.raises(KeyboardInterrupt):
+        compare.start(vault, OTHER, n=2, now=NOW, rng=random.Random(1))
+
+    shown = compare.results(vault)
+    assert shown["round"]["status"] == "failed" and shown["round"]["error"] == "It was stopped."
+    assert shown["round"]["drafted"] == 2 and {i["state"] for i in shown["items"]} == {"drafting"}
+    monkeypatch.setattr(llm, "_ask", asked)
+    again = compare.start(vault, OTHER, n=2, now=NOW, rng=random.Random(1))
+    assert [i["name"] for i in again["items"]] == [i["name"] for i in shown["items"]]
 
 
 def _model_of(vault, round_id, n, side):

@@ -925,10 +925,10 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
 
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
- * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, and a thought
- * being thought through.
+ * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, a thought
+ * being thought through, and a round of drafts comparing two models.
  */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think";
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think" | "compare";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -1054,6 +1054,129 @@ export interface SetupResult {
 export interface NoticeTest {
   ok: boolean;
   message: string;
+}
+
+// ── Compare: which of two models writes like you (state/compare/) ──────────
+
+/** What the reader can pick for a reply: one draft, both, or neither. */
+export type ComparePick = "A" | "B" | "both" | "neither";
+export const COMPARE_PICKS: readonly ComparePick[] = ["A", "B", "both", "neither"];
+/** Replies a round drafts unless asked for another number, and the most it may. */
+export const COMPARE_ROUND = 10;
+export const COMPARE_MAX_ROUND = 50;
+/** Picks under which the intervals are too wide to tell much (the command's MIN_PICKS). */
+export const COMPARE_MIN_PICKS = 20;
+
+export interface CompareModel {
+  name: string; // as a round names it: "ollama:<name>", Anthropic's, or "voice:<setting>"
+  label: string; // as the page shows it
+  where: ModelWhere;
+}
+
+/** One message of a conversation as the drafts saw it. */
+export interface CompareMessage {
+  ts: string;
+  mine: boolean;
+  sender: string | null;
+  text: string;
+}
+
+/**
+ * One held-out reply. Blind until picked: its drafts are A and B, and which model wrote each, how close each came and
+ * what the reader sent are there only once they've picked.
+ */
+export interface CompareItem {
+  n: number;
+  source: string;
+  name: string;
+  replied: string; // when the reader answered
+  recent: CompareMessage[];
+  waiting: CompareMessage[];
+  /** ready: both drafts are there; failed: one couldn't be written, and it can't be picked. */
+  state: "ready" | "drafting" | "failed";
+  a: string | null;
+  b: string | null;
+  pick: ComparePick | null;
+  picked: string | null;
+  revealed: {
+    a: string; // the model that wrote A, by its label
+    b: string;
+    aCloseness: number | null; // 0 to 1: how much of the draft was in what was sent
+    bCloseness: number | null;
+    sent: string;
+  } | null;
+}
+
+export interface CompareFared {
+  name: string;
+  label: string;
+  where: ModelWhere;
+  won: number;
+  share: number | null;
+  /** The Wilson 95% interval of the share. */
+  low: number | null;
+  high: number | null;
+  closeness: number | null; // its drafts' mean
+  drafted: number;
+  failed: number;
+}
+
+export interface CompareResults {
+  picks: number;
+  both: number;
+  neither: number;
+  models: CompareFared[];
+  note: string;
+}
+
+export interface CompareRound {
+  id: string;
+  started: string;
+  updated: string;
+  /** drafting; ready; failed; or stopped: still drafting by its file, with nothing drafting it any more. */
+  status: "drafting" | "ready" | "failed" | "stopped";
+  error: string | null;
+  models: CompareModel[];
+  n: number; // replies
+  drafted: number; // drafts written or failed, of 2n
+}
+
+export interface CompareRoundListed {
+  id: string;
+  started: string;
+  status: CompareRound["status"];
+  models: string[]; // labels
+  n: number;
+  picked: number;
+}
+
+/** The models set up now, for the page to offer. */
+export interface CompareSetUp {
+  drafting: string;
+  hosted: string; // Anthropic's model, by default
+  key: boolean; // whether there's an Anthropic API key
+  voice: string | null; // "voice:<setting>", when a voice model is set up
+}
+
+export interface CompareJob {
+  state: "running" | "done" | "failed" | "stopped";
+  message: string;
+  started: string;
+  finished: string | null;
+}
+
+export interface CompareResponse {
+  now: string;
+  vault: VaultInfo;
+  round: CompareRound | null;
+  rounds: CompareRoundListed[];
+  results: CompareResults | null;
+  /** Every round of the same two models together, when there's more than one. */
+  pooled: (CompareResults & { rounds: number }) | null;
+  items: CompareItem[];
+  setUp: CompareSetUp | null;
+  job: CompareJob | null;
+  error: string | null;
 }
 
 // ── Ask ─────────────────────────────────────────────────────────────────────

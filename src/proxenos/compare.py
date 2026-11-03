@@ -127,11 +127,12 @@ def start(
                 f"There's no Anthropic API key to draft with {name}: add one in Settings."
             )
     folder = vault / FOLDER
-    done = {
+    done = {  # replies these two have both drafted already; one a round didn't finish is free
         item["key"]
         for r in _rounds(folder)
         if sorted(r["models"]) == sorted(models)
         for item in r["items"]
+        if all(d["text"] is not None for d in item["drafts"].values())
     }
     found = held_out(vault, max(1, min(n, MAX_ROUND)), skip=done)
     if not found:
@@ -321,7 +322,8 @@ def pick(vault: Path, round_id: str, n: int, choice: str, now: datetime | None =
 def results(vault: Path, round_id: str | None = None) -> dict:
     """A round, the newest unless named, as the page shows it: each reply blind until it's been
     picked, then which model wrote A and B and what the user sent; how each model fared in it,
-    and in every round of the same two models together; and the rounds there are."""
+    and in every round of the same two models together; the rounds there are; and the models set
+    up now, for the page to offer."""
     folder = vault / FOLDER
     rounds = _rounds(folder)
     doc = _round(folder, round_id) if round_id else (rounds[0] if rounds else None)
@@ -336,8 +338,16 @@ def results(vault: Path, round_id: str | None = None) -> dict:
         }
         for r in rounds[:LISTED]
     ]
+    voice_model = env("VOICE_MODEL").strip()
+    set_up = {
+        "drafting": env("MODEL", llm.DEFAULT_MODEL),
+        "hosted": llm.DEFAULT_MODEL,  # Anthropic's, by default
+        "key": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "voice": VOICE + voice_model if setup._VOICE.fullmatch(voice_model) else None,
+    }
     if doc is None:
-        return {"round": None, "rounds": listed, "results": None, "pooled": None, "items": []}
+        none = {"round": None, "results": None, "pooled": None, "items": []}
+        return none | {"rounds": listed, "set_up": set_up}
     same = [r for r in rounds if sorted(r["models"]) == sorted(doc["models"])]
     drafted = sum(d["text"] is not None or d["error"] is not None for d in _drafts([doc]))
     return {
@@ -357,6 +367,7 @@ def results(vault: Path, round_id: str | None = None) -> dict:
         "results": fared(doc["models"], [doc]),
         "pooled": fared(doc["models"], same) | {"rounds": len(same)} if len(same) > 1 else None,
         "items": [_shown(item, doc["picks"].get(item["n"])) for item in doc["items"]],
+        "set_up": set_up,
     }
 
 

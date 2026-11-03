@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { PrimaryButton, StatePill } from "@/components/connect/parts";
 import { ErrorBanner } from "@/components/EmptyState";
+import { Compare } from "@/components/views/Compare";
 import { ReadingControls, VoiceControls } from "@/components/reading/ReadingControls";
 import {
   type Apply,
@@ -165,6 +166,10 @@ export function Settings() {
         <div className="card p-4 sm:p-5">
           <ModelChoice status={status} apply={apply} onReload={reload} />
         </div>
+      </Group>
+
+      <Group kicker="Model" title="Which writes like you?">
+        <Compare status={status} />
       </Group>
 
       <Group
