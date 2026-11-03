@@ -165,6 +165,8 @@ function toReport(raw: unknown): PrivacyReport | null {
     fetched: {
       sources: list(fetched.sources).flatMap((s) => toSource(s) ?? []),
       links: fetched.links === true,
+      // An older proxenos doesn't say: it looked nothing up.
+      music: { on: rec(fetched.music).on === true, artists: count(rec(fetched.music).artists) ?? 0 },
     },
     notices: {
       on: notices.on === true,

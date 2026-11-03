@@ -1895,6 +1895,8 @@ export interface PrivacyReport {
     sources: FetchedSource[];
     /** Whether links in chats waiting on a reply are read: whenever a model is set up. */
     links: boolean;
+    /** Whether artists' names are looked up at MusicBrainz for their genres, and how many have been. */
+    music: { on: boolean; artists: number };
   };
   /** Notices on the phone through ntfy: whether they're on, the server's host (never the topic), the quiet hours and what one carries. */
   notices: { on: boolean; server: string; quiet: string | null; sends: string };
@@ -1956,11 +1958,102 @@ export interface RhythmsLine {
   text: string;
 }
 
+/** One day of a month card: the mood of the user's own writing beside what they listened to. */
+export interface RhythmsMonthDay {
+  day: string; // YYYY-MM-DD
+  /** VADER's mean over the day's sentences with a feeling, -1 to 1; null with too few of them. */
+  valence: number | null;
+  scored: number;
+  emotions: string[]; // up to three, by the model on this computer only
+  words: number;
+  music_hours: number;
+  /** Shares of the day's music with moods that are upbeat or energetic, and melancholic. */
+  upbeat: number | null;
+  melancholic: number | null;
+}
+
+/** A genre, kind or mood of music, by the hours behind it and its share of those labelled. */
+export interface RhythmsShare {
+  name: string;
+  hours: number;
+  share: number;
+}
+
+export interface RhythmsMoodWeek {
+  start: string; // its Monday, or the month's first day
+  valence: number;
+  days: number;
+  emotion: string | null;
+}
+
+/** How a month's mood and music moved together: Pearson's r over the days, said in a sentence. */
+export interface RhythmsRelation {
+  kind: "same day" | "music then mood" | "mood then music" | "with" | "next day with";
+  music: string;
+  r: number;
+  n: number;
+  /** How often chance alone would give an r this strong (Fisher's z); null with too few days. */
+  p: number | null;
+  notable: boolean;
+  text: string;
+}
+
+/** A month's card: how it felt in the user's own writing, what they listened to and wrote. */
+export interface RhythmsMonthCard {
+  month: string; // YYYY-MM
+  generated: string;
+  complete: boolean; // false while the month is still going
+  mood: {
+    days: number; // days with a valence
+    valence: number | null;
+    labelled_days: number;
+    top: { name: string; days: number; share: number; bright: boolean }[];
+    tone: { brighter: number; mixed: number; heavier: number };
+    arc: { weeks: RhythmsMoodWeek[]; best: RhythmsMoodWeek | null; hardest: RhythmsMoodWeek | null };
+    variability: { sd: number | null; word: string | null };
+    usual_sd: number | null;
+    by_model: boolean;
+  };
+  music: {
+    hours: number;
+    music_hours: number;
+    spoken_hours: number;
+    plays: number;
+    artists: number;
+    top_artists: { name: string; hours: number }[];
+    genres: RhythmsShare[]; // the model's labels, from the artists' names
+    kinds: RhythmsShare[]; // MusicBrainz's genres
+    moods: RhythmsShare[];
+    labelled: number; // the share of music with a label
+  };
+  writing: {
+    words: number;
+    channels: { name: string; words: number; pieces: number }[];
+    notes: { count: number; words: number };
+    documents: { count: number; words: number }; // changed that month: not added to the words
+    usual: number | null; // the median month of the year before
+    usual_by_now: number | null; // the same share of it, for a month still going
+    beside_usual: number | null; // 0.2: a fifth more
+  };
+  relations: RhythmsRelation[]; // the notable first
+  story: { by: "model" | "numbers"; text: string };
+  waits_on_model: boolean;
+  days: RhythmsMonthDay[];
+}
+
+export interface RhythmsMonths {
+  held: string[]; // months with messages, mail or plays, newest first
+  cards: RhythmsMonthCard[]; // newest first
+  local_model: boolean; // a model on this computer names each day's emotions
+  musicbrainz: boolean; // artists' names are looked up there for genres
+}
+
 export interface RhythmsResponse {
   now: string;
   vault: VaultInfo;
   today: string;
   weeks: RhythmsWeek[]; // oldest first, from the first week with a record to this one
+  months: RhythmsMonths;
   /** People and chats written to in each two weeks and month, by period: weeks can't be added up for it. */
   people: { "2w": Record<string, number>; "1m": Record<string, number> };
   channels: string[]; // the most messages first

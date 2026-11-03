@@ -398,7 +398,7 @@ function Fetched({ fetched, now }: { fetched: PrivacyReport["fetched"]; now: str
       icon={Globe}
       kicker="Fetched from elsewhere"
       title="From elsewhere"
-      lead="The services you connected, read with your own sign-in, and the downloads and folders you gave it. Nothing else is read from outside, apart from the links below."
+      lead="The services you connected, read with your own sign-in, and the downloads and folders you gave it. Nothing else is read from outside, apart from the links and the music genres below."
     >
       {live.length > 0 ? (
         <div className="card divide-y divide-line">
@@ -435,6 +435,17 @@ function Fetched({ fetched, now }: { fetched: PrivacyReport["fetched"]; now: str
           {fetched.links
             ? "To draft a reply, the pages linked in a chat waiting on you are read, only from hosts on the public internet, never this computer or your local network."
             : "No model is set up, so no replies are drafted and no links are opened."}
+        </p>
+      </div>
+      <div className="card space-y-1.5 p-4 sm:p-5">
+        <StatePill
+          on={fetched.music.on}
+          label={fetched.music.on ? "Artists' names go to MusicBrainz" : "MusicBrainz isn't asked"}
+        />
+        <p className="text-sm leading-relaxed text-muted">
+          {fetched.music.on
+            ? `For Rhythms' kinds of music, the night looks up the artists you play most at MusicBrainz, one name a request and nothing else: no track, time or anything about you. ${fetched.music.artists ? `${fetched.music.artists.toLocaleString("en-US")} looked up so far.` : "None looked up yet."} PROXENOS_MUSICBRAINZ=off stops it.`
+            : "PROXENOS_MUSICBRAINZ is off, so no artist's name is looked up; kinds of music stay empty."}
         </p>
       </div>
     </Section>

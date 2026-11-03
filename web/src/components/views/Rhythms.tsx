@@ -6,6 +6,7 @@ import { AudioWaveform, Bike, Headphones, MessageSquare, Smile, type LucideIcon 
 import { Columns } from "@/components/charts/Columns";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
+import { Months } from "@/components/rhythms/Months";
 import { ProseSkeleton } from "@/components/Skeleton";
 import { useRhythms } from "@/lib/client";
 import { periods, UNLABELLED, type Period } from "@/lib/rhythmsPeriods";
@@ -226,7 +227,8 @@ function Table({ ps, picked, onPick }: { ps: Period[]; picked: number; onPick: (
  * rode, ran and walked, and how many messages you sent on each channel, a week, two weeks or a month
  * at a time, over three months, a year or everything. The counts come from the rhythms clone with no
  * model; an artist's genre and moods are the model's, given only their name. What stands out is
- * written in plain words from the counts, and says what happened, never why.
+ * written in plain words from the counts, and says what happened, never why. Below the charts, a
+ * card for each month says how it felt in the user's own writing beside what they listened to.
  */
 export function Rhythms() {
   const { data, error, clearError } = useRhythms();
@@ -366,6 +368,8 @@ export function Rhythms() {
           Point at a {unit} or pick a row below to see it. Each chart has its own scale; the channels share one.
         </p>
       </section>
+
+      <Months months={data.months} />
 
       <Table ps={ps} picked={picked} onPick={(i) => setPick({ key: filterKey, i })} />
     </div>
