@@ -138,7 +138,7 @@ def export(token: str, doc_id: str, mime: str, fetch: Fetch | None = None) -> st
         f"{FILES}/{_checked(doc_id)}/export?{query}", headers={"Authorization": f"Bearer {token}"}
     )
     text = _call(request, fetch).decode("utf-8", errors="replace")
-    return text.removeprefix("﻿").replace("\r\n", "\n")
+    return text.removeprefix("\ufeff").replace("\r\n", "\n")
 
 
 def comments(token: str, doc_id: str, fetch: Fetch | None = None) -> list[dict]:
