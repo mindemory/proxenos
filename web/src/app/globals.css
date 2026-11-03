@@ -303,6 +303,48 @@
 }
 
 /* ---------------------------------------------------------------------------
+   The sidebar. Labels beside its icons, or icons only (the rail-icons:
+   variant), as the reader last picked on this device (data-rail on <html>,
+   lib/rail.ts), else icons only on a window under 1100px (RAIL_NARROW in
+   lib/railScript.ts).
+--------------------------------------------------------------------------- */
+
+@custom-variant rail-icons {
+  :root[data-rail="collapsed"] & {
+    @slot;
+  }
+  @media (width < 1100px) {
+    :root:not([data-rail]) & {
+      @slot;
+    }
+  }
+}
+
+/* A list that scrolls fades out at an edge with more past it, so it's plain there's more. The
+   component sets data-above and data-below as it scrolls. */
+@layer components {
+  .scroll-fade {
+    --fade-above: 0px;
+    --fade-below: 0px;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-above),
+      #000 calc(100% - var(--fade-below)),
+      transparent
+    );
+  }
+
+  .scroll-fade[data-above] {
+    --fade-above: 1.75rem;
+  }
+
+  .scroll-fade[data-below] {
+    --fade-below: 1.75rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Reading. What the reader picks in Settings, Reading, per device, set as
    attributes on <html> by lib/reading.ts. With none set the page is as
    designed above.

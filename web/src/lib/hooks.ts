@@ -30,3 +30,29 @@ export function useBox<T extends HTMLElement>(): [(el: T | null) => void, { w: n
   }, [el]);
   return [setEl, size];
 }
+
+/**
+ * Whether a scrolling element has more above and below what shows, kept current as it scrolls,
+ * resizes or its content grows, so it can fade out at those edges (`scroll-fade` in globals.css).
+ */
+export function useScrollEdges(el: HTMLElement | null): { above: boolean; below: boolean } {
+  const [edges, setEdges] = useState({ above: false, below: false });
+  useEffect(() => {
+    if (!el) return;
+    const measure = () => {
+      const above = el.scrollTop > 1;
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+      setEdges((e) => (e.above === above && e.below === below ? e : { above, below }));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    for (const child of el.children) watch.observe(child);
+    el.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      watch.disconnect();
+      el.removeEventListener("scroll", measure);
+    };
+  }, [el]);
+  return edges;
+}

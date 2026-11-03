@@ -6,7 +6,7 @@ import { ArrowUp } from "lucide-react";
 
 import { Feed, type Tab } from "@/components/feed/Feed";
 import { MobileNav } from "@/components/layout/MobileNav";
-import { NAV_ITEMS, NETWORK_TABS, type NavCounts, type NetworkTab, type View } from "@/components/layout/nav";
+import { groupLabel, NAV_ITEMS, NETWORK_TABS, type NavCounts, type NetworkTab, type View } from "@/components/layout/nav";
 import { Rail } from "@/components/layout/Rail";
 import { Segmented } from "@/components/layout/Segmented";
 import { TopBar } from "@/components/layout/TopBar";
@@ -290,7 +290,7 @@ export default function AppPage() {
 
   const navItem = NAV_ITEMS.find((n) => n.id === view);
   const title = navItem?.label;
-  const group = navItem?.group === "you" ? "You" : navItem?.group === "home" ? "Your twin" : "Clones";
+  const group = navItem ? groupLabel(navItem.group) : "";
   const tabs =
     view === "feed" ? (
       <Segmented label="Feed" tabs={TABS} value={tab} onChange={setTab} />
@@ -328,6 +328,7 @@ export default function AppPage() {
             <div className={`min-w-0 ${tabs ? "hidden sm:block" : ""}`}>
               <p className="smallcaps text-faint">{group}</p>
               <h1 className="title-2 truncate text-2xl">{title}</h1>
+              {navItem?.blurb && <p className="mt-0.5 text-sm text-muted">{navItem.blurb}</p>}
             </div>
             {tabs}
           </div>

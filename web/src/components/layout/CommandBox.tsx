@@ -13,7 +13,7 @@ import { plain } from "@/lib/memoryMarks";
 import type { MemoryHit, MemorySearchResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { NAV_ITEMS, type NetworkTab, type View } from "./nav";
+import { groupLabel, NAV_ITEMS, type NetworkTab, type View } from "./nav";
 
 export interface CommandBoxProps {
   onNavigate: (view: View) => void;
@@ -151,12 +151,13 @@ export function CommandBox({ onNavigate, onFind, onNetworkTab, onMemory, onRefre
   }, [open, text]);
 
   const commands = useMemo<Command[]>(() => {
+    // Each view by its name and the other words people use for what's in it.
     const go: Command[] = NAV_ITEMS.map((item) => ({
       id: `go:${item.id}`,
       label: item.label,
-      hint: "view",
+      hint: groupLabel(item.group),
       icon: item.icon,
-      words: `go to open ${item.id}`,
+      words: `go to open ${item.id} ${item.words}`,
       section: "Go to",
       run: () => onNavigate(item.id),
     }));

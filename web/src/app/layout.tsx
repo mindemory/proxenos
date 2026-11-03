@@ -10,6 +10,7 @@ import {
 
 import { ServiceWorker } from "@/components/ServiceWorker";
 import { ToastProvider } from "@/components/Toasts";
+import { RAIL_SCRIPT } from "@/lib/railScript";
 import { READING_SCRIPT } from "@/lib/readingScript";
 
 import "./globals.css";
@@ -70,6 +71,8 @@ export default function RootLayout({
       <head>
         {/* Runs before the page paints: this device's reading settings, from the first frame. */}
         <script dangerouslySetInnerHTML={{ __html: READING_SCRIPT }} />
+        {/* And the sidebar's width, as last picked on this device. */}
+        <script dangerouslySetInnerHTML={{ __html: RAIL_SCRIPT }} />
       </head>
       <body suppressHydrationWarning className="antialiased bg-bg text-ink font-sans">
         <ToastProvider>{children}</ToastProvider>

@@ -64,8 +64,8 @@ function Count({
 }
 
 /**
- * The top bar: the name wherever the rail doesn't show it (the mark too on a phone, which has no
- * rail), the command box, the open counts, when things last synced, and Aa for reading.
+ * The top bar: the name wherever the sidebar doesn't show it (the mark too on a phone, which has
+ * no sidebar), the command box, the open counts, when things last synced, and Aa for reading.
  */
 export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetworkTab, onMemory, onRefresh }: TopBarProps) {
   const sync = syncState(home);
@@ -73,7 +73,7 @@ export function TopBar({ home, counts, refreshing, onNavigate, onFind, onNetwork
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-line bg-bg/85 px-3 backdrop-blur-md sm:px-5">
       <button
         onClick={() => onNavigate("home")}
-        className="flex flex-shrink-0 items-center gap-2 rounded-full p-1 xl:hidden"
+        className="flex flex-shrink-0 items-center gap-2 rounded-full p-1 md:hidden md:rail-icons:flex"
         aria-label="Proxenos, home"
       >
         <Logo size={26} className="text-accent md:hidden" />

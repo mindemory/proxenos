@@ -42,4 +42,4 @@ Dependabot proposes newer packages weekly and merges its minor and patch updates
 
 - A source: [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-source).
 - A clone: [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-clone).
-- A view on the page: a component in `web/src/components/views/`, an API route under `web/src/app/api/`, and its types in `web/src/lib/types.ts`.
+- A view on the page: a component in `web/src/components/views/`, an API route under `web/src/app/api/`, its types in `web/src/lib/types.ts`, and its entry in `web/src/components/layout/nav.ts`, in one of the sidebar's groups, with the other words the ⌘K box should find it by.
