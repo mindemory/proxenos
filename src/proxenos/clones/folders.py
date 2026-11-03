@@ -540,10 +540,16 @@ def to_docx(source: Path, out: Path, kind: str) -> None:
 
 
 # The Word files' look: FONT throughout, which Word, Google Docs and Drive's viewer all have
-# (pandoc's own template uses Aptos, which Drive shows as another font), and headings in black.
+# (pandoc's own template uses Aptos, which Drive shows as another font), headings in black, and
+# tables ruled in a thin grid (pandoc's draws only a line under the header).
 # Bump LOOK when it changes, and each file still as Proxenos wrote it is written again.
 FONT = "Arial"
-LOOK = "arial-black-1"
+LOOK = "arial-black-grid-1"
+_BORDERS = "".join(
+    f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV")
+)
+_TABLE = re.compile(r'(w:styleId="Table">.*?<w:tblPr>)', re.DOTALL)
 _COLOURED = re.compile(r'(<w:color w:val=")(0F4761|365F91|4F81BD|1F3763|2F5496)(")')
 
 
@@ -573,7 +579,9 @@ def _reference() -> Path | None:
                         rb'<a:latin typeface="[^"]*"', f'<a:latin typeface="{FONT}"'.encode(), data
                     )
                 elif item.filename == "word/styles.xml":
-                    data = _COLOURED.sub(r"\g<1>000000\g<3>", data.decode("utf-8")).encode("utf-8")
+                    styles = _COLOURED.sub(r"\g<1>000000\g<3>", data.decode("utf-8"))
+                    styles = _TABLE.sub(rf"\g<1><w:tblBorders>{_BORDERS}</w:tblBorders>", styles, 1)
+                    data = styles.encode("utf-8")
                 dst.writestr(item, data)
         part = made.with_suffix(".part")
         part.write_bytes(out.getvalue())

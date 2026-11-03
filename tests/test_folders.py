@@ -555,7 +555,11 @@ def test_the_word_files_are_in_arial_with_black_headings(tmp_path, monkeypatch):
             "word/theme/theme1.xml",
             '<a:latin typeface="Aptos Display"/><a:latin typeface="Aptos"/>',
         )
-        z.writestr("word/styles.xml", '<w:color w:val="0F4761"/><w:color w:val="595959"/>')
+        z.writestr(
+            "word/styles.xml",
+            '<w:color w:val="0F4761"/><w:color w:val="595959"/>'
+            '<w:style w:styleId="Table"><w:tblPr><w:tblInd/></w:tblPr></w:style>',
+        )
         z.writestr("word/document.xml", "<w:document/>")
     asked = []
 
@@ -570,8 +574,10 @@ def test_the_word_files_are_in_arial_with_black_headings(tmp_path, monkeypatch):
     with zipfile.ZipFile(reference) as z:
         assert z.read("word/theme/theme1.xml").decode().count('typeface="Arial"') == 2
         assert (
-            z.read("word/styles.xml").decode()
+            z.read("word/styles.xml").decode().split("<w:style ")[0]
             == '<w:color w:val="000000"/><w:color w:val="595959"/>'
         )
+        table = z.read("word/styles.xml").decode().split("<w:style ")[1]
+        assert '<w:tblPr><w:tblBorders><w:top w:val="single"' in table and "insideV" in table
         assert z.read("word/document.xml") == b"<w:document/>"
     assert folders._reference() == reference and len(asked) == 1  # made once
