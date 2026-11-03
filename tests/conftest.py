@@ -125,6 +125,12 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setattr("proxenos.llm.waiting", lambda vault=None: False)
     # Nor the real vault's log of model calls: a test that checks the log points it elsewhere.
     monkeypatch.setattr("proxenos.llm._calls_path", lambda: None)
+
+    # Nor MusicBrainz, which the night asks for artists' genres: a test that needs it fakes it.
+    def no_network(request):
+        raise OSError("no MusicBrainz in tests")
+
+    monkeypatch.setattr("proxenos.musicbrainz._fetch", no_network)
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)

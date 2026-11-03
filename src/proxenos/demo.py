@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
-from proxenos import memory, outbox, store, think
+from proxenos import memory, mood, outbox, store, think
 from proxenos.clones import (
     advisor,
     care,
@@ -42,6 +42,7 @@ from proxenos.clones import (
     journal,
     life,
     network,
+    portrait,
     recall,
     rhythms,
     tasks,
@@ -918,22 +919,22 @@ def _listening(c: _Clock) -> list[dict]:
 # Everyday chatter, months back: (what someone says, what Joe says back). Nothing to act on, and
 # Joe has the last word in each, so none of it waits on him.
 _SMALL_TALK = (
-    ("Are you around this weekend?", "Out on the bike Saturday, free Sunday"),
-    ("Photos from the lake are up", "Love them"),
-    ("Did the bowls survive the kiln?", "All three!"),
-    ("Running ten minutes late", "No rush"),
-    ("Thursday's class is at 7 as usual", "See you there"),
-    ("How's the garden plot?", "Tomatoes everywhere"),
+    ("Are you around this weekend?", "Out on the bike Saturday, can't wait. Free Sunday!"),
+    ("Photos from the lake are up", "Love them! Such a happy day."),
+    ("Did the bowls survive the kiln?", "All three! So relieved."),
+    ("Running ten minutes late", "No rush. Long day here, I'm tired."),
+    ("Thursday's class is at 7 as usual", "See you there. Glad it's on again."),
+    ("How's the garden plot?", "Tomatoes everywhere! It's wonderful."),
 )
 _REUNION = (
-    ("Which weekend works for the reunion?", "The 14th works for me"),
-    ("Who's bringing the tent?", "I'll bring ours"),
-    ("Mum wants a photo of everyone", "We'll do one by the lake"),
+    ("Which weekend works for the reunion?", "The 14th works for me, so excited!"),
+    ("Who's bringing the tent?", "I'll bring ours. Can't wait to see everyone."),
+    ("Mum wants a photo of everyone", "We'll do one by the lake, lovely idea."),
 )
 _WORK_TALK = (
     ("Truck for the north route is booked", "Thanks, noted on the schedule"),
-    ("Can someone check the dock 3 count?", "On it"),
-    ("Pallets from Delta arrive at 2", "I'll be at the dock"),
+    ("Can someone check the dock 3 count?", "On it. Stressful morning, sorry for the wait."),
+    ("Pallets from Delta arrive at 2", "I'll be at the dock. Ugh, another late one."),
 )
 
 
@@ -2789,9 +2790,28 @@ def _life(vault: Path, c: _Clock) -> None:
         )
 
 
+def _feelings(days: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Each day's emotions as a model on this computer might name them, made up for the demo from
+    how bright Joe's own words were that day."""
+    found = {}
+    for day, texts in days.items():
+        valence = mood.day(texts)["valence"] or 0
+        found[day] = (
+            ["joyful", "grateful"]
+            if valence >= 0.5
+            else ["excited", "hopeful"]
+            if valence >= 0.3
+            else ["calm"]
+            if valence >= 0
+            else ["tired", "stressed"]
+        )
+    return found
+
+
 def _rhythms(vault: Path, c: _Clock) -> None:
     """The artists' genres and moods as the night labels them, all but one, then the weeks over
-    time counted from the demo's records, as the night would."""
+    time counted from the demo's records, as the night would, and a card for each month, its
+    emotions made up and its story written from its numbers."""
     rhythms._save(
         rhythms._labels_path(vault),
         {
@@ -2806,6 +2826,9 @@ def _rhythms(vault: Path, c: _Clock) -> None:
         },
     )
     rhythms.build(vault, 0, c.now)
+    files = portrait.inputs(vault)
+    for month in reversed(portrait.held(files, f"{c.local:%Y-%m}")):  # oldest first, for usual
+        portrait.make(vault, month, c.now, files, label=_feelings)
 
 
 def _load(path: Path) -> list[dict]:

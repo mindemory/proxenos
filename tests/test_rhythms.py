@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from proxenos import cli, llm, memory
+from proxenos import cli, llm, memory, musicbrainz
 from proxenos.clones import rhythms
 
 NOW = datetime(2026, 3, 20, 12, 0, tzinfo=UTC)
@@ -318,10 +318,13 @@ def test_the_command_prints_counts_or_the_series(vault, monkeypatch, capsys):
     assert all(set(by) == set(rhythms.RESOLUTIONS) for by in data["stands_out"].values())
 
     monkeypatch.setattr(llm, "ask", answer_with({}, []))
-    cli.main(["clone", "rhythms", "--weeks", "3", "--label", "0"])
+    cli.main(["clone", "rhythms", "--weeks", "3", "--label", "0", "--look-up", "0"])
     line = capsys.readouterr().out.strip()
     assert line.startswith("rhythms: 0 files counted, ") and " rides, " in line
-    assert cli._defaults(rhythms) == argparse.Namespace(weeks=None, label=rhythms.LABEL, json=False)
+    assert " month cards, " in line  # December's and March's, made with no model
+    assert cli._defaults(rhythms) == argparse.Namespace(
+        weeks=None, label=rhythms.LABEL, look_up=musicbrainz.LOOK_UP, month=None, json=False
+    )
 
 
 # What stands out

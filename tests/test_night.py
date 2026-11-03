@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from proxenos import cli, llm, master, voice, voicemodel
+from proxenos import cli, llm, master, musicbrainz, voice, voicemodel
 from proxenos.clones import (
     advisor,
     care,
@@ -131,7 +131,13 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
     assert args["errands"] == {"goal": None}  # no new errand: the waiting ones look again
     assert args["choices"] == args["watch"] == {"force": False}  # once a week
     assert args["steps"] == {"request": None, "project": None}  # each project with a repo
-    assert args["rhythms"] == {"weeks": None, "label": rhythms.LABEL, "json": False}
+    assert args["rhythms"] == {
+        "weeks": None,
+        "label": rhythms.LABEL,
+        "look_up": musicbrainz.LOOK_UP,  # artists' genres, by name only
+        "month": None,  # the month cards due, not one named
+        "json": False,
+    }
 
 
 def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, capsys):

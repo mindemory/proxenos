@@ -17,6 +17,7 @@ dependencies = [
     "pypdf>=6.21.4",
     "python-dotenv>=1.2.4",
     "tzdata; sys_platform == 'win32'",  # zoneinfo has no time zones of its own on Windows
+    "vaderSentiment>=3.3.2",  # the valence of the user's own writing, with no model (mood.py)
 ]
 
 [project.optional-dependencies]

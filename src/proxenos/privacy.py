@@ -16,7 +16,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import config, connect, keychain, llm, notify, setup
+from proxenos import config, connect, keychain, llm, musicbrainz, notify, setup
 
 DAYS = 30
 NEWEST = 50  # calls listed one by one
@@ -134,8 +134,13 @@ SENDS = (
     ),
     (
         "Rhythms",
-        ("rhythms",),
-        "Only the names of the artists you listen to, to label each with a genre and moods.",
+        ("rhythms", "portrait", "mood"),
+        (
+            "The names of the artists you listen to, to label each with a genre and moods. Only "
+            "to a model on this computer, never a hosted one: your own messages and the mail you "
+            "sent, a month's days at a time, to name each day's feelings, and a month's numbers "
+            "and artists' names, to write its card. Never other people's messages."
+        ),
     ),
     (
         "Life",
@@ -233,8 +238,9 @@ def sent(vault: Path, now: datetime) -> dict:
 
 def fetched(vault: Path) -> dict:
     """What's read from elsewhere: each connected source with its accounts' names and addresses,
-    and whether links in chats are read. They are whenever a model is set up, as replies are then
-    drafted, and only from public hosts (links.py)."""
+    whether links in chats are read, and whether artists' names are looked up at MusicBrainz for
+    their genres (musicbrainz.py), with how many have been. Links are read whenever a model is set
+    up, as replies are then drafted, and only from public hosts (links.py)."""
     sources = [
         {
             "id": str(source["id"]),
@@ -249,7 +255,11 @@ def fetched(vault: Path) -> dict:
         for source in connect.report(vault)["sources"]
         if source.get("connected")
     ]
-    return {"sources": sources, "links": llm.configured()}
+    return {
+        "sources": sources,
+        "links": llm.configured(),
+        "music": {"on": musicbrainz.on(), "artists": musicbrainz.asked(vault)},
+    }
 
 
 def filevault() -> bool | None:

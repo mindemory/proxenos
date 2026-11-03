@@ -51,7 +51,7 @@ NIGHT_WAIT = 3600  # seconds a night waits for a running sync before it gives up
 # waiting on a way to reach someone, the drafts of them all, a step of each project's own work,
 # which takes longest, the journal of the day that just ended, which reads them all, the stories
 # of the months, which read the journal, and last the weeks over time, counted, with more artists
-# labelled for their genres and moods.
+# labelled and looked up for their genres and moods, and the month cards due.
 NIGHT_CLONES = (
     "tracker",
     "tasks",

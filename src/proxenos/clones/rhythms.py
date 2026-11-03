@@ -30,6 +30,11 @@ mixes are all "unlabelled".
 What stands out (`stands_out`) is written here, with no model, for each range and resolution the
 page offers: the period with the most listening, the longest run of weeks with a ride, the busiest
 week of messages, and how the top mood moved. It says what happened, never why.
+
+The night also looks artists up at MusicBrainz by name (proxenos.musicbrainz, LOOK_UP of them,
+the most played first) for their genres, and makes the months' cards (clones/portrait.py): how
+each month felt in the user's own writing, what they listened to and wrote, and how the two
+moved together. --json reads the cards made and asks nothing of a model or the network.
 """
 
 import argparse
@@ -42,8 +47,8 @@ from contextlib import closing
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory, untrusted
-from proxenos.clones import work
+from proxenos import llm, memory, mood, musicbrainz, untrusted
+from proxenos.clones import portrait, work
 from proxenos.config import env
 
 LABEL = 300  # artists a night labels, the most played first
@@ -451,9 +456,12 @@ def _labels_path(vault: Path) -> Path:
 # The series
 
 
-def build(vault: Path, label_up_to: int = 0, now: datetime | None = None) -> tuple[dict, dict]:
-    """Count what changed, label up to `label_up_to` artists, and write weeks.json: the weekly
-    series, coverage, and what stands out. The series, and counts of what was done."""
+def build(
+    vault: Path, label_up_to: int = 0, now: datetime | None = None, look_up: int = 0
+) -> tuple[dict, dict]:
+    """Count what changed, label up to `label_up_to` artists, look up to `look_up` at
+    MusicBrainz, and write weeks.json: the weekly series, coverage, and what stands out. The
+    series, and counts of what was done."""
     now = now or datetime.now(UTC)
     totals, recounted = update(vault)
     played: Counter = Counter()
@@ -462,6 +470,8 @@ def build(vault: Path, label_up_to: int = 0, now: datetime | None = None) -> tup
     stats = {"files counted": recounted}
     if label_up_to > 0:
         stats |= label(vault, dict(played), label_up_to, now)
+    if look_up > 0:
+        stats |= musicbrainz.look_up(vault, dict(played), look_up, now)
     named = labels(vault)
     today = now.astimezone().date()
     weeks = series(totals, named, today)
@@ -855,6 +865,19 @@ def _iso(when: datetime) -> str:
     return when.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def months(vault: Path, now: datetime | None = None) -> dict:
+    """The month cards for the page, newest first, with the months that have none yet, and
+    whether a model on this computer names the moods and MusicBrainz is asked for genres."""
+    this = f"{(now or datetime.now(UTC)).astimezone():%Y-%m}"
+    made = portrait.cards(vault)
+    return {
+        "held": portrait.held(portrait.inputs(vault), this),
+        "cards": [portrait.shown(made[m]) for m in sorted(made, reverse=True)],
+        "local_model": mood.local(),
+        "musicbrainz": musicbrainz.on(),
+    }
+
+
 # The command
 
 
@@ -870,20 +893,45 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"label up to N more artists with a genre and moods (default {LABEL}; 0 for none)",
     )
     parser.add_argument(
-        "--json", action="store_true", help="print the weekly series as JSON for the page; no model"
+        "--look-up",
+        type=int,
+        metavar="N",
+        default=musicbrainz.LOOK_UP,
+        help=f"look up to N more artists' genres at MusicBrainz, by name only (default "
+        f"{musicbrainz.LOOK_UP}; 0 for none)",
+    )
+    parser.add_argument(
+        "--month", help="make that month's card now, YYYY-MM: its mood, music and writing"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print the weekly series and the month cards as JSON for the page; no model",
     )
 
 
 def run(vault: Path, args: argparse.Namespace) -> dict[str, int] | None:
-    """The night's run with no options: count what changed and label more artists. With --json,
-    the series is the whole answer, counted again where it changed, with no model."""
+    """The night's run with no options: count what changed, label and look up more artists,
+    and make the month cards that are due. With --json, the series and the cards made are the
+    whole answer, counted again where it changed, with no model and no lookups."""
     if args.weeks is not None and args.weeks < 1:
         raise SystemExit("rhythms: --weeks takes a number of weeks, 1 or more")
-    data, stats = build(vault, 0 if args.json else args.label)
+    if args.month:
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", args.month):
+            raise SystemExit(f"rhythms: --month takes YYYY-MM, not {args.month!r}")
+        made = portrait.make(vault, args.month)
+        return {
+            "days with a mood": made["mood"]["days"],
+            "hours of music": round(made["music"]["music_hours"]),
+            "words written": made["writing"]["words"],
+        }
+    look_up = 0 if args.json else args.look_up
+    data, stats = build(vault, 0 if args.json else args.label, look_up=look_up)
     last = data["weeks"][-args.weeks :] if args.weeks else data["weeks"]
     if args.json:
-        print(json.dumps(data | {"weeks": last}, ensure_ascii=False))
+        print(json.dumps(data | {"weeks": last, "months": months(vault)}, ensure_ascii=False))
         return None
+    stats |= portrait.night(vault)
     if args.weeks:
         stats |= {
             "hours listened": round(sum(w["listening"]["hours"] for w in last)),
