@@ -48,4 +48,4 @@ If you add code or data from another project, keep its licence and copyright not
 |---|---|---|
 | [XERJ](https://github.com/xerj-org/xerj) | Apache-2.0 | Proxenos is a corpus on the XERJ Corpus Hub, the open reference memory AI coding agents search before they write code; `AGENTS.md` and `llms.txt` follow that idea |
 | [Synthea](https://github.com/synthetichealth/synthea) | Apache-2.0 | The shape of the synthetic health records used in tests |
-| Odysseus | AGPL-3.0 | The idea of pushing a notice to the phone through ntfy when something waits on you. Only the idea: `proxenos/notify.py` is written anew and holds none of its code or text |
+| [Odysseus](https://github.com/odysseus-dev/odysseus) | AGPL-3.0 | The idea of pushing a notice to the phone through ntfy when something waits on you. Only the idea: `proxenos/notify.py` is written anew and holds none of its code or text |
