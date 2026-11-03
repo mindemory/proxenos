@@ -242,10 +242,18 @@ def cared(vault):
     return vault
 
 
+# Paragraphs a blank line apart, one cut across lines, and one mainly about the ride.
+ESSAY = (
+    "March began in the garden. I planned the beds with Asha\nand sent Ben the slides.\n\n"
+    f"{RODE}\n\n  \n\nThen I went to urgent care with chest pain, and the ECG came back normal."
+)
+
+
 def answer(prompt, *, system=None, schema=None, **kw):
     """A model that writes about the ride Strava recorded, as a local one did."""
     return {
         "summary": f"March was the garden, and a scare at urgent care. {RODE}",
+        "essay": ESSAY,
         "entries": [
             {"day": "2026-03-12", "text": "I went to urgent care with chest pain. They did an ECG."},
             {"day": "2026-03-10", "text": "I  planned the garden with Asha. Then I went for a long ride by the river."},
@@ -307,6 +315,10 @@ def test_a_month_s_diary_reads_care_told_notes_and_days_never_anyone_else_s_word
 
     # Sentences about a workout go, and so do days outside the month; a day's two are one.
     assert entry["summary"] == "March was the garden, and a scare at urgent care."
+    assert entry["essay"] == (
+        "March began in the garden. I planned the beds with Asha and sent Ben the slides.\n\n"
+        "Then I went to urgent care with chest pain, and the ECG came back normal."
+    )
     assert entry["entries"] == [
         {"day": "2026-03-10", "text": "I planned the garden with Asha. I sent Ben the slides."},
         {"day": "2026-03-12", "text": "I went to urgent care with chest pain. They did an ECG."},
@@ -338,6 +350,7 @@ def test_a_workout_stays_when_the_user_s_own_words_that_day_were_about_it(cared,
     assert {"day": "2026-03-07", "text": RODE} in entry["entries"]
     assert "Mar 7: A 42 km ride" in entry["highlights"]
     assert entry["summary"].endswith(RODE)
+    assert RODE in entry["essay"].split("\n\n")
     # Only that day's: the ride on the 10th still goes.
     assert entry["entries"][1]["text"] == "I planned the garden with Asha. I sent Ben the slides."
 
@@ -366,6 +379,7 @@ def test_the_schema_holds_each_entry_to_a_day_and_its_text():
     held = llm._conform(
         {
             "summary": "s",
+            "essay": "e",
             "entries": [{"day": "2026-03-10", "text": "t", "mood": "x"}, {"day": "2026-03-11"}],
             "highlights": ["Mar 10: t"],
         },
@@ -406,7 +420,7 @@ def ledger(tmp_path, monkeypatch):
 
 
 def diary(month, generated):
-    return {"month": month, "generated": generated, "summary": "s", "entries": []}
+    return {"month": month, "generated": generated, "summary": "s", "essay": "e", "entries": []}
 
 
 def test_the_night_writes_the_month_just_ended_this_one_then_backfills_newest_first(
@@ -512,3 +526,210 @@ def test_a_backfill_now_writes_every_month_waiting_newest_first(ledger, new_york
         "2025-06",
     ]
     assert stats["months left"] == 0  # never January 2025's single day
+
+
+def append(path, *lines):
+    """Lines appended to a file, as the page appends them to told, edits and corrections."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        f.write("".join(json.dumps(line) + "\n" for line in lines))
+
+
+def test_a_month_is_an_abstract_and_an_essay_or_not_written(cared, monkeypatch):
+    assert life._SCHEMA["required"] == ["summary", "essay", "entries", "highlights"]
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, **kw):
+        asked.append(system)
+        return answer(prompt)
+
+    monkeypatch.setattr(llm, "ask", ask)
+    entry = life.write(cared, "2026-03", NOW)
+
+    assert "the month's abstract, two to four sentences" in asked[0]
+    assert "several paragraphs, about 600 to 1,200 words" in asked[0]
+    assert entry["summary"] and entry["essay"].count("\n\n") == 1
+    # A model that writes no essay writes no diary, and the one before stays.
+    monkeypatch.setattr(llm, "ask", lambda *a, **k: answer("") | {"essay": f"{RODE}\n\n "})
+    with pytest.raises(llm.ModelError, match="no diary"):
+        life.write(cared, "2026-03", NOW)
+    assert life.stories(cared)["2026-03"] == entry
+
+
+def test_a_fact_the_user_told_is_a_milestone_of_its_month(cared, monkeypatch):
+    append(
+        cared / "state" / "told.jsonl",
+        {"at": "2026-03-03T15:00:00+00:00", "text": "I got the fellowship at Kestrel Labs",
+         "always": False},
+    )  # fmt: skip
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, **kw):
+        asked.append((prompt, system))
+        return answer(prompt)
+
+    monkeypatch.setattr(llm, "ask", ask)
+    entry = life.write(cared, "2026-03", NOW)
+
+    prompt, system = asked[0]
+    milestones = prompt.index("# Milestones: what you told Proxenos this month")
+    assert milestones < prompt.index("- Tue Mar 3: I got the fellowship at Kestrel Labs")
+    assert milestones < prompt.index("# Health and care")
+    assert "Each must be in the summary, the essay and the highlights." in prompt
+    assert "The milestones they told Proxenos are the month's biggest events" in system
+    assert "GONE" not in prompt  # a fact the user removed is no milestone
+    # The model's highlights left it out, so one in the user's own words leads the card; the
+    # fear before the scan, which a highlight is about, isn't added again.
+    assert entry["highlights"][0] == "Mar 3: I got the fellowship at Kestrel Labs"
+    assert sum("scan" in h.casefold() for h in entry["highlights"]) == 1
+
+
+def test_a_month_told_or_marked_since_it_was_written_is_due_the_next_night(ledger, new_york):
+    vault, written, _ = ledger
+    life.save(vault, diary("2026-03", "2026-03-18T09:00:00Z"))  # fresh: a week isn't up
+    life.save(vault, diary("2026-02", "2026-03-01T09:00:00Z"))  # once it ended
+    night = datetime(2026, 3, 20, 6, 30, tzinfo=UTC)
+    assert life.night(vault, night, backfill=0)["months due"] == 0
+
+    told_at = vault / "state" / "told.jsonl"
+    append(
+        told_at,
+        {"at": "2026-03-19T21:00:00+00:00", "text": "We moved into the new flat", "always": False},
+        {"at": "2026-03-19T21:05:00+00:00", "text": "A rule", "always": True},
+        {"at": "2026-02-10T12:00:00+00:00", "text": "Told before it was written", "always": False},
+    )
+    append(
+        vault / life.CORRECTIONS,
+        {"at": "2026-03-19T22:00:00Z", "month": "2025-12", "item": "highlight", "text": "s"},
+    )
+    life.night(vault, night, backfill=0)
+    # This month, whatever the week says; December, marked not true; not February, written since.
+    assert written == ["2026-03", "2025-12"]
+
+    written.clear()
+    append(told_at, {"at": "2026-03-20T08:00:00+00:00", "forget": "2026-02-10T12:00:00+00:00"})
+    life.night(vault, datetime(2026, 3, 21, 6, 30, tzinfo=UTC), backfill=0)
+    assert written == ["2026-02"]  # what it was told is taken back
+
+    # A month with no other records is written for what the user told Proxenos about it.
+    written.clear()
+    append(told_at, {"at": "2026-04-01T14:00:00+00:00", "text": "I started", "always": False})
+    life.night(vault, datetime(2026, 4, 2, 6, 30, tzinfo=UTC), backfill=0)
+    assert written[:2] == ["2026-03", "2026-04"]
+
+
+def test_an_edit_is_the_user_s_and_survives_the_nights(vault, monkeypatch):
+    monkeypatch.setattr(llm, "configured", lambda: True)
+    monkeypatch.setattr(llm, "ask", lambda *a, **k: pytest.fail("a model call"))
+    old = {"month": "2026-03", "generated": "2026-03-01T09:00:00Z", "summary": "s",
+           "entries": [], "highlights": []}  # fmt: skip
+    life.save(vault, old)  # from before there was an essay: due, but for the edit
+    mine = "I planted the garden with Asha.\n\nThe scan was nothing in the end."
+    append(
+        vault / life.EDITS,
+        {"at": "2026-03-02T10:00:00Z", "month": "2026-03", "summary": "Older", "essay": "x"},
+        {"at": "2026-03-05T10:00:00Z", "month": "2026-03", "summary": " Mine,  now ",
+         "essay": mine},
+        {"at": "2026-03-05T10:00:00Z", "month": "March", "summary": "bad", "essay": "bad"},
+    )  # fmt: skip
+    append(
+        vault / "state" / "told.jsonl",
+        {"at": "2026-03-19T15:00:00+00:00", "text": "Told after the edit", "always": False},
+    )
+    assert life.edits(vault) == {
+        "2026-03": {"at": "2026-03-05T10:00:00Z", "summary": "Mine, now", "essay": mine}
+    }
+
+    assert life.night(vault, NOW)["months due"] == 0
+    assert life.stories(vault)["2026-03"] == old
+
+    # Writing it again, which the page asks about first, reads the edit as the strongest guide.
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, **kw):
+        asked.append((prompt, system))
+        return answer(prompt)
+
+    monkeypatch.setattr(llm, "ask", ask)
+    life.write(vault, "2026-03", NOW)
+    prompt, system = asked[0]
+    own = prompt.index("# Your own account of the month")
+    assert prompt.index("Abstract: Mine, now") > own
+    assert prompt.index(mine) > own and own < prompt.index("# Milestones")
+    assert "is the strongest guide to what's true" in system
+    # Written after the edit, it's no longer the user's text, and the nights go on as before.
+    monkeypatch.setattr(llm, "ask", lambda *a, **k: pytest.fail("a model call"))
+    assert life.night(vault, NOW)["months due"] == 0
+
+
+def test_what_the_user_marked_not_true_leads_the_next_write_and_stays_out(cared, monkeypatch):
+    entry = "I planned the garden with Asha. I sent Ben the slides."
+    line = {"at": "2026-03-19T10:00:00Z", "month": "2026-03", "item": "entry:2026-03-10",
+            "text": entry, "correction": "It was  Ravi, not Asha."}  # fmt: skip
+    append(
+        cared / life.CORRECTIONS,
+        line,
+        line,  # sent twice: one
+        {"at": "2026-03-19T10:01:00Z", "month": "2026-03", "item": "highlight",
+         "text": "Mar 16: The ECG result"},
+        {"at": "2026-03-19T10:02:00Z", "month": "2026-03", "item": "essay",
+         "text": "Then I went to urgent care with chest pain, and the ECG came back normal."},
+        {"at": "2026-03-19T10:03:00Z", "month": "2026-03", "item": "highlight",
+         "text": "Mar 1: x"},
+        {"at": "2026-03-19T10:04:00Z", "month": "2026-03", "item": "highlight",
+         "text": "Mar 1: x", "undo": True},
+        {"at": "2026-03-19T10:05:00Z", "month": "2026-02", "item": "highlight", "text": "Feb"},
+        {"at": "2026-03-19T10:06:00Z", "month": "2026-03", "item": "entry:2026-02-01",
+         "text": "Another month's day"},
+        {"at": "2026-03-19T10:07:00Z", "month": "2026-03", "item": "summary", "text": "No"},
+    )  # fmt: skip
+    found = life.corrections(cared, "2026-03")
+    assert [(m["item"], m["correction"]) for m in found] == [
+        ("entry:2026-03-10", "It was Ravi, not Asha."),
+        ("highlight", ""),
+        ("essay", ""),
+    ]
+    assert len(life.corrections(cared)) == 4  # February's too
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, **kw):
+        asked.append((prompt, system))
+        return answer(prompt)
+
+    monkeypatch.setattr(llm, "ask", ask)
+    written = life.write(cared, "2026-03", NOW)
+
+    prompt, system = asked[0]
+    wrong = prompt.index("# What you said isn't true")
+    assert wrong < prompt.index("# Milestones") < prompt.index("# Health and care")
+    assert (
+        f'- The entry for Tue Mar 10 said: "{entry}" Not true. What\'s true, in your words: '
+        '"It was Ravi, not Asha."' in prompt
+    )
+    assert '- A highlight said: "Mar 16: The ECG result" Not true.' in prompt
+    assert "Mar 1: x" not in prompt[wrong : prompt.index("# Milestones")]  # taken back
+    assert "overrides everything else" in system
+    # The model wrote them again word for word: they go, and the rest stays.
+    assert [e["day"] for e in written["entries"]] == ["2026-03-12"]
+    assert "Mar 16: The ECG result" not in written["highlights"]
+    assert "Mar 1: x" in written["highlights"]
+    assert "ECG came back normal" not in written["essay"]
+    assert written["essay"].startswith("March began in the garden.")
+    # Think, which reads a day's entry, doesn't read one marked not true.
+    assert life.entry_on(cared, "2026-03-12").startswith("I went to urgent care")
+    life.save(cared, written | {"entries": [{"day": "2026-03-10", "text": entry}]})
+    assert life.entry_on(cared, "2026-03-10") == ""
+
+
+def test_a_diary_from_before_there_was_an_essay_is_written_again(ledger, new_york):
+    vault, written, _ = ledger
+    no_essay = {"month": "2026-03", "generated": "2026-03-18T09:00:00Z", "summary": "s",
+                "entries": [], "highlights": []}  # fmt: skip
+    life.save(vault, no_essay)  # fresh, but in the old form
+    life.save(vault, no_essay | {"month": "2025-12"})
+    life.save(vault, diary("2026-02", "2026-03-01T09:00:00Z"))
+    stats = life.night(vault, datetime(2026, 3, 20, 6, 30, tzinfo=UTC))
+
+    assert written == ["2026-03", "2026-01", "2025-12", "2025-11", "2025-10"]
+    assert stats["months left"] == 4
+    assert life.stories(vault)["2025-12"]["essay"] == "e"

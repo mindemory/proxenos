@@ -141,7 +141,8 @@ SENDS = (
         "Life",
         ("life",),
         (
-            "A month's care timeline, what you told Proxenos, the notes about you and its days: "
+            "What you marked not true in a month's diary and your own text where you edited it, "
+            "what you told Proxenos, its care timeline, the notes about you and its days: "
             "who you wrote to, with the opening of your own words, and who wrote to you, events, "
             "notes' titles, activity (walks and listening only as counts), health records' titles "
             "and the journal's briefs, never other people's messages."

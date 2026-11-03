@@ -2756,10 +2756,10 @@ _SUMMARIES = {
 
 
 def _life(vault: Path, c: _Clock) -> None:
-    """The diaries of the last three months as the night writes them: a summary, an entry for
-    each day with a moment, and three or more highlights, from what the demo's records hold, and
-    each day counted for the page. A month with too little (the start of one) is left for "Write
-    this month"."""
+    """The diaries of the last three months as the night writes them: an abstract, an essay of a
+    paragraph for each thing its moments are about, an entry for each day with a moment, and
+    three or more highlights, from what the demo's records hold, and each day counted for the
+    page. A month with too little (the start of one) is left for "Write this month"."""
     life.calendar(vault)
     this = f"{c.local:%Y-%m}"
     for back in range(3):
@@ -2768,9 +2768,10 @@ def _life(vault: Path, c: _Clock) -> None:
         if sum(1 for m in moments if m[3]) < 3:
             continue
         entries: dict[str, list[str]] = {}
-        for days, _, sentence, _ in moments:
+        about: dict[str, list[str]] = {}
+        for days, part, sentence, _ in moments:
             entries.setdefault(c.day(days), []).append(sentence)
-        about = {part for _, part, _, _ in moments}
+            about.setdefault(part, []).append(sentence)
         ended = datetime.fromisoformat(f"{life._shift(month, 1)}-01T01:30:00").astimezone()
         life.save(
             vault,
@@ -2778,6 +2779,9 @@ def _life(vault: Path, c: _Clock) -> None:
                 "month": month,
                 "generated": c.ago(20) if back == 0 else _iso(ended),
                 "summary": " ".join(s for part, s in _SUMMARIES.items() if part in about),
+                "essay": "\n\n".join(
+                    " ".join([s, *about[part]]) for part, s in _SUMMARIES.items() if part in about
+                ),
                 "entries": [{"day": d, "text": " ".join(t)} for d, t in sorted(entries.items())],
                 "highlights": [f"{c.said(days)}: {h}" for days, _, _, h in moments if h][:5],
                 "days_with_records": len(life.days(vault, month)),

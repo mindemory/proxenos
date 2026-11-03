@@ -11,7 +11,8 @@ Removing a note appends {at, forget: <the note's at>}, so the file only grows, a
 Every drafting prompt gets both (`prompt`): the work clone's drafts and care's messages and
 scripts. The tasks clone reads the facts as something the user said (`conversation`), so a task
 or plan they settle here closes the way one settled in a chat does, and the calendar follows.
-A month's diary (clones/life) reads the facts told that month, as what happened then.
+A month's diary (clones/life) reads the facts told that month as its milestones, and a fact told
+or removed since a month was written (`changed`) has the night write it again.
 The notes are the user's own words, sent to the model only with the prompts above.
 """
 
@@ -51,6 +52,29 @@ def notes(vault: Path, now: datetime | None = None, fade: bool = True) -> list[d
         if text and (always or not fade or now - at <= timedelta(days=FACT_DAYS)):
             found[str(note["at"])] = {"at": str(note["at"]), "text": text, "always": always}
     return sorted(found.values(), key=lambda n: n["at"])
+
+
+def changed(vault: Path) -> dict[str, str]:
+    """When each fact last changed, by the fact's own at: when it was told, or when it was
+    removed, since what was written from it is out of date then too. Removed facts stay here;
+    rules don't, which say how drafts go rather than what happened."""
+    found: dict[str, str] = {}
+    try:
+        lines = (vault / TOLD).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    for line in lines:
+        try:
+            note = json.loads(line)
+            datetime.fromisoformat(str(note["at"]))
+        except (ValueError, KeyError, TypeError):
+            continue
+        if note.get("forget"):
+            if str(note["forget"]) in found:
+                found[str(note["forget"])] = str(note["at"])
+        elif str(note.get("text") or "").strip() and note.get("always") is not True:
+            found[str(note["at"])] = str(note["at"])
+    return found
 
 
 def prompt(vault: Path, person: str, now: datetime | None = None) -> str:

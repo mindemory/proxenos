@@ -408,10 +408,7 @@ def _day(vault: Path, ref: str) -> tuple[str, str]:
         day = None
     if day is None:
         raise SystemExit("A day is YYYY-MM-DD.")
-    story = life.stories(vault).get(ref[:7]) or {}
-    entry = next(
-        (str(e.get("text") or "") for e in story.get("entries") or [] if e.get("day") == ref), ""
-    )
+    entry = life.entry_on(vault, ref)  # not one the user marked not true
     digest = life._render(life.day(vault, day))
     body = (f"The diary's entry for it: {entry}\n\n" if entry else "") + digest
     return f"{day:%A}, {day.day} {day:%B %Y}", body

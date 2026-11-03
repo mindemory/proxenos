@@ -38,6 +38,13 @@ def test_rules_stay_facts_fade_and_removed_ones_go(tmp_path):
     assert "- Keep replies to my manager short." in text
     assert "- 2026-03-09: Not going to Tuesday's visit." in text and "Old news" not in text
     assert told.prompt(tmp_path / "none", "Tess", NOW) == ""
+    # When each fact last changed, the one removed too, for the diary of its month; no rule.
+    assert told.changed(tmp_path) == {
+        "2026-02-01T09:00:00Z": "2026-02-01T09:00:00Z",
+        "2026-03-09T09:00:00Z": "2026-03-09T09:00:00Z",
+        "2026-03-09T10:00:00Z": "2026-03-09T10:05:00Z",
+    }
+    assert told.changed(tmp_path / "none") == {}
 
 
 def test_the_tasks_clone_reads_the_facts_as_something_the_user_said(tmp_path):
