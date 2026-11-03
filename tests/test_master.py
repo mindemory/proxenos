@@ -261,11 +261,15 @@ def test_sync_brings_the_tasks_up_to_date_when_they_are_due(tmp_path, monkeypatc
 
     monkeypatch.setattr(master.tasks, "due", lambda v: True)
     done = {"messages": 9, "open": 2, "waiting": 0, "done": 1, "new": 1, "overtaken": 3}
-    monkeypatch.setattr(master.tasks, "plan", lambda v: done | {"plans": 1})
+    read = []
+    monkeypatch.setattr(
+        master.tasks, "plan", lambda v, days: read.append(days) or done | {"plans": 1}
+    )
     stats = master.sync(vault)
     assert (stats["tasks_new"], stats["drafts_overtaken"], stats["plans"]) == (1, 3, 1)
+    assert read == [master.tasks.SYNC_DAYS] < [master.tasks.DAYS]  # the night reads them all
 
-    def broken(vault):
+    def broken(vault, days):
         raise llm.ModelError("model declined")
 
     monkeypatch.setattr(master.tasks, "plan", broken)

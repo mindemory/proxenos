@@ -193,7 +193,7 @@ def sync(vault: Path) -> dict[str, int]:
         # marked sent, not overtaken.
         try:
             if tasks.due(vault):
-                done = tasks.plan(vault)
+                done = tasks.plan(vault, days=tasks.SYNC_DAYS)
                 stats |= {"tasks_new": done["new"], "drafts_overtaken": done["overtaken"]}
                 stats["plans"] = done["plans"]
         except (Exception, SystemExit) as e:  # noqa: BLE001 - tasks are extra, not the sync

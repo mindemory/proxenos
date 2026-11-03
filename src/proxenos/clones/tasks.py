@@ -26,8 +26,9 @@ Each gets status overtaken and why in its front matter, and the page folds it aw
 reason, unless the user said to keep it there (clones/drafts/feedback.jsonl), which holds for good.
 A reply draft tied to its chat is left to fidelity and the work clone, which already follow it.
 
-The night job runs it, and so does the sync, at most once in EVERY and only when something was
-said since the last run (`due`), so the list and the drafts keep up during the day.
+The night job runs it over DAYS, and so does the sync, at most once in EVERY and only when
+something was said since the last run (`due`), over SYNC_DAYS beside the list it keeps, so the
+list and the drafts keep up during the day without reading two weeks of messages each time.
 """
 
 import argparse
@@ -53,7 +54,10 @@ MESSAGE_CHARS = 2000  # long mails and pasted documents are clipped to this
 DONE_KEEP = timedelta(days=30)  # how long a done task stays on the list
 CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at least
 ADDRESS_MONTHS = 6  # newest months searched for the user's own mail addresses and Slack ids
-EVERY = timedelta(hours=1)  # the soonest the sync brings the list up to date again
+EVERY = timedelta(hours=2)  # the soonest the sync brings the list up to date again
+# The sync's pass reads this many days of messages, beside the list it keeps: it catches up on
+# what's new, and the night's pass reads all DAYS. A local model reads a long prompt for minutes.
+SYNC_DAYS = 2
 DRAFT_CHARS = 300  # of each waiting draft's text the model reads
 MAX_DRAFTS = 60  # the newest waiting drafts it weighs; older ones wait for the next run
 
