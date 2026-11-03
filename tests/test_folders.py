@@ -231,7 +231,9 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
         {"id": "hobby", "name": "Birdhouses"},  # no group, no code
         {"id": "old", "name": "Old thing", "paused": True},  # paused, nothing to show
         {"id": "resting", "name": "Resting", "paused": True},  # paused, with a status
+        {"id": "petition", "name": "The petition", "group": "Life", "cloud": False},  # kept out
     )
+    note(vault, "petition", "status.md", "# The petition\n\nFiled.\n")
     note(vault, "resting", "status.md", "# Resting\n\nOn hold until June.\n")
     before = checkout_of(repo)
 
@@ -244,7 +246,9 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
         "manuscripts_brought_back": 0,
         "steps_made": 0,
         "skipped": 1,
+        "kept_out": 1,
     }
+    assert not (drive / "Life").exists()
     where = drive / "PhD" / "Calls the paper"
     assert sorted(p.name for p in where.iterdir()) == sorted(
         [

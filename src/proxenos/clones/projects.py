@@ -180,6 +180,8 @@ def listed_projects(vault: Path) -> list[dict]:
                 "people": _strings(p.get("people")),
                 "terms": _strings(p.get("terms")),
                 "paused": p.get("paused") is True,
+                # False keeps it out of the folder a cloud drive syncs (clones/folders).
+                "cloud": p.get("cloud") is not False,
                 # Where its work is, for the steps clone (proxenos.clones.steps).
                 "repo": str(p.get("repo") or "").strip(),
                 "data": _strings(p.get("data")),

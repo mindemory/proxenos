@@ -18,7 +18,8 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
   project's status.md and brief.md, its drafts still open, and what projects.json says of it.
 - "About this folder": when the manuscript was made, from which branch and commit, and what
   comes back and what doesn't.
-A paused project gets one only when it has something to show.
+A paused project gets one only when it has something to show, and one marked "cloud": false on
+the list (an immigration petition, say) never gets one: what it had there is left as it was.
 
 Nothing the user does there is lost. For each file written, clones/folders/state.json keeps the
 SHA-256 of what it was made from and of the bytes written. A note whose source changed is
@@ -118,11 +119,15 @@ def folders(
         manuscripts_brought_back=0,
         steps_made=0,
         skipped=0,
+        kept_out=0,
     )
     state = _state(vault, root)
     places = _places(listed)
     for project in listed:
         if only and project["id"] != only:
+            continue
+        if not project["cloud"]:
+            stats["kept_out"] += 1
             continue
         record = state["projects"].setdefault(project["id"], {})
         if record.get("folder") != places[project["id"]]:
