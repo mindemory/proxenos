@@ -250,3 +250,59 @@ def test_the_pages_request_keeps_only_what_is_well_formed():
             think.read_request(json.dumps(bad))
     with pytest.raises(SystemExit, match="Not a thread's id"):
         think.show(Path("."), "../../secrets")
+
+
+class Redrafting(Model):
+    """Answers as Model does, and writes the draft anew when asked."""
+
+    def __call__(self, prompt, *, system=None, schema=None, **kw):
+        answer = super().__call__(prompt, system=system, schema=schema, **kw)
+        if "reply" in answer:
+            answer["draft"] = "Hi Ana, yes, I'd love to lead it from April. Tess"
+        return answer
+
+
+def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
+    drafts = vault / "clones" / "drafts"
+    draft = {
+        "id": "reply-ana",
+        "title": "Reply to Ana about the studio",
+        "kind": "reply",
+        "for": "reply",
+        "channel": "email",
+        "to": "Ana Lee",
+        "created": "2026-03-09T10:00:00Z",
+        "status": "draft",
+        "body": "Hi Ana, yes. Tess",
+    }
+    work._write(drafts / "reply-ana.md", work.render(draft))
+    model = Redrafting()
+
+    thread = think.say(
+        vault,
+        None,
+        "Update the draft with all of it",
+        {"kind": "draft", "id": "reply-ana"},
+        NOW,
+        model,
+    )
+
+    assert "change, update, redo or write it" in model.calls[-1]["system"]
+    saved = (drafts / "reply-ana.md").read_text()
+    assert saved.startswith("---\n") and 'to: "Ana Lee"' in saved
+    assert saved.rstrip().endswith("I'd love to lead it from April. Tess")
+    (edit,) = [json.loads(line) for line in (drafts / "feedback.jsonl").read_text().splitlines()]
+    assert edit["action"] == "edit" and edit["draft_id"] == "reply-ana" and edit["via"] == "think"
+    assert edit["before"] == "Hi Ana, yes. Tess" and edit["after"].endswith("April. Tess")
+    assert "updated the draft" in thread["messages"][-1]["text"]
+    assert "draft" not in thread["messages"][-1]  # the thread keeps the reply, not a copy
+
+    # One already sent stays as it was sent; the new version is only in the thread.
+    work._write(drafts / "reply-ana.md", work.render(draft | {"status": "sent"}))
+    again = think.say(vault, thread["id"], "Once more", None, NOW, model)
+    assert "Hi Ana, yes. Tess" in (drafts / "reply-ana.md").read_text()
+    assert "already sent" in again["messages"][-1]["text"]
+
+    # A thread that didn't start from a draft changes none.
+    think.say(vault, None, "A thought", {"kind": "free", "text": "Studio or not."}, NOW, model)
+    assert len((drafts / "feedback.jsonl").read_text().splitlines()) == 1

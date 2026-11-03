@@ -41,6 +41,7 @@ The thread's id is the last line printed, for the page's job runner.
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections.abc import Callable
@@ -131,6 +132,13 @@ rather than guess or fill in.
 - For anything about health, law, money or immigration, make one of the next steps asking the \
 right professional (a doctor, a lawyer, an accountant or financial adviser, an immigration \
 lawyer), without a lecture.
+- When this conversation started from a draft and {person} asks you to change, update, redo or \
+write it, do it: put the whole new message in draft, written as {person}, in their own voice, \
+ready to send, built from what their records, their history with the person it's to and what \
+they told you actually say. Then say in reply, in a sentence or two, what you changed. Don't ask \
+them to look anything up, and don't ask what the records already answer; if something only they \
+know is missing, write the best message you can and name it in one question. Otherwise draft \
+is "".
 - Refer to other people by name as given, and don't assume anyone's pronouns beyond what \
 {person} used.
 - Don't moralise, and don't praise.
@@ -172,6 +180,8 @@ def say(
     try:
         with llm.foreground(vault):
             reply = answer(vault, thread, now, asked)
+        if redrafted := reply.pop("draft", ""):
+            reply["text"] += "\n\n" + _redraft(vault, thread["context"]["id"], redrafted, now)
         thread["messages"].append({"role": "proxenos", "at": "", **reply})
         thread["status"] = "done"
     except Exception as e:  # noqa: BLE001 - the page shows why it failed, rather than spinning
@@ -192,7 +202,9 @@ def answer(vault: Path, thread: dict, now: datetime, model: Callable[..., object
     reply = str(raw.get("reply") or "").strip()
     if not reply:
         raise llm.ModelError("the model gave no reply")
-    return {"text": reply, "parts": _parts(raw, refs)}
+    ctx = thread.get("context") or {}
+    draft = str(raw.get("draft") or "").strip() if ctx.get("kind") == "draft" else ""
+    return {"text": reply, "parts": _parts(raw, refs), "draft": draft}
 
 
 def build(
@@ -242,6 +254,14 @@ def build(
             f"# What {person}'s memory holds on this (cite as r<n>)\n\n"
             + untrusted.wrap("\n".join(lines), fence)
         )
+    ctx = thread.get("context") or {}
+    to = _draft_to(vault, ctx["id"]) if ctx.get("kind") == "draft" else ""
+    if to and (history := research.person(vault, to, person)):
+        parts.append(
+            f"# What {person}'s memory holds with {to}, the person the draft is to "
+            f"(cite as with)\n\n" + untrusted.wrap(work._clip(history, CONTEXT_CHARS), fence)
+        )
+        refs["with"] = _ref("context", f"From your history with {to}")
     if ctx := thread.get("context"):
         body = ctx["text"] if ctx["kind"] == "free" else untrusted.wrap(ctx["text"], fence)
         parts.append(
@@ -272,6 +292,8 @@ def _found(
     who = ctx["id"] if ctx.get("kind") == "person" else None
     try:
         lists = [research._search(vault, q, who) for q in dict.fromkeys(q for q in queries if q)]
+        if ctx.get("kind") == "draft" and (to := _draft_to(vault, ctx["id"])):
+            lists.append(research._search(vault, said[:2000], to))
         if words := _keywords(" ".join(queries)):
             lists.append(memory.search(words, match="any", limit=research.DEPTH, vault=vault))
         hits = memory.fuse(lists, limit=RECORDS, keep=2)
@@ -317,8 +339,9 @@ def _schema(refs: list[str]) -> dict:
             "matters": items({"text": text, "ref": ref}),
             "questions": {"type": "array", "items": text},
             "next": items({"step": text, "draft_to": text}),
+            "draft": text,
         },
-        "required": ["reply", "matters", "questions", "next"],
+        "required": ["reply", "matters", "questions", "next", "draft"],
         "additionalProperties": False,
     }
 
@@ -374,10 +397,66 @@ def context(vault: Path, kind: str, ref: str, text: str = "") -> dict:
     return {"kind": kind, "id": ref, "title": title, "text": work._clip(body, CONTEXT_CHARS)}
 
 
+def _draft_file(vault: Path, ref: str) -> tuple[Path, str] | None:
+    """The draft's file and its status, or None when there's no such draft."""
+    if not work._ID.fullmatch(ref):
+        return None
+    return work._existing(vault / "clones" / "drafts").get(ref)
+
+
+def _redraft(vault: Path, ref: str, body: str, now: datetime) -> str:
+    """Put the new message in the draft the thread started from, as an edit of the user's (as
+    the page saves one, so no run writes over it and later drafts learn from it), and say so.
+    A draft already sent or set aside is left as it was."""
+    found = _draft_file(vault, ref)
+    if not found:
+        return "The draft is gone, so the new version is only here."
+    path, status = found
+    if status in ("sent", "discarded"):
+        return f"That draft was already {status}, so it's left as it was; the new version is here:\n\n{body}"
+    raw = path.read_text(encoding="utf-8").removeprefix("\ufeff")
+    match = work._FRONT.match(raw)
+    if not match:
+        return "That draft has no header Proxenos can keep, so the new version is only here."
+    before = raw[match.end() :].strip()
+    fields = work._front(raw) or {}
+    _write_private(path, raw[: match.end()].rstrip("\n") + "\n\n" + body.strip() + "\n")
+    edit = {
+        "draft_id": ref,
+        "action": "edit",
+        "ts": _iso(now),
+        "before": before,
+        "after": body.strip(),
+        "channel": work._one_line(fields.get("channel")),
+        "to": work._one_line(fields.get("to")),
+        "via": "think",
+    }
+    log = path.parent / "feedback.jsonl"
+    fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(json.dumps(edit, ensure_ascii=False) + "\n")
+    return "I've updated the draft with this: it's in Drafts, ready for you to read and send."
+
+
+def _write_private(path: Path, text: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def _draft_to(vault: Path, ref: str) -> str:
+    """Whom the draft is to, as its file says, or ""."""
+    found = _draft_file(vault, ref)
+    if not found:
+        return ""
+    raw = found[0].read_text(encoding="utf-8").removeprefix("﻿")
+    return work._one_line((work._front(raw) or {}).get("to"))
+
+
 def _draft(vault: Path, ref: str, person: str) -> tuple[str, str]:
-    found = (
-        work._existing(vault / "clones" / "drafts").get(ref) if work._ID.fullmatch(ref) else None
-    )
+    found = _draft_file(vault, ref)
     if not found:
         raise SystemExit(f"No draft {ref}.")
     raw = found[0].read_text(encoding="utf-8").removeprefix("﻿")
