@@ -61,6 +61,19 @@ const STEP_WORDS: Record<StepStatus, string> = {
 };
 
 /** A project at a glance: what it is, whether it's a paper, and how its steps stand. Opens it. */
+/**
+ * The projects under their groups, in the order each group first comes on the list, those with none last.
+ * With no groups at all it's one untitled list.
+ */
+function groups(projects: WorkProject[]): [string, WorkProject[]][] {
+  const by = new Map<string, WorkProject[]>();
+  for (const p of projects) by.set(p.group, [...(by.get(p.group) ?? []), p]);
+  const named = [...by].filter(([g]) => g);
+  const rest = by.get("") ?? [];
+  if (!named.length) return [["", rest]];
+  return rest.length ? [...named, ["Other projects", rest]] : named;
+}
+
 function ProjectCard({ project, now, open, onOpen }: { project: WorkProject; now: string; open: boolean; onOpen: () => void }) {
   const waiting = project.steps.filter((s) => s.status === "ready").length;
   const last = project.steps[0];
@@ -178,6 +191,12 @@ function ProjectSection({
       {project.status && (
         <Fold label={`Where it stands${project.statusDate ? `, ${project.statusDate}` : ""}`} start>
           <Markdown source={project.status} compact />
+        </Fold>
+      )}
+
+      {project.brief && (
+        <Fold label="What's known, and the question" start={!project.status}>
+          <Markdown source={project.brief} compact />
         </Fold>
       )}
 
@@ -368,11 +387,16 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
         <>
           <section aria-label="Projects and papers" className="space-y-3">
             <p className="max-w-2xl text-sm text-muted">Open one to read its paper, its steps and where it stands.</p>
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {data.projects.map((p) => (
-                <ProjectCard key={p.id} project={p} now={data.now} open={current?.id === p.id} onOpen={() => choose(p.id)} />
-              ))}
-            </ul>
+            {groups(data.projects).map(([group, ps]) => (
+              <div key={group} className="space-y-2">
+                {group && <h2 className="smallcaps text-muted">{group}</h2>}
+                <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {ps.map((p) => (
+                    <ProjectCard key={p.id} project={p} now={data.now} open={current?.id === p.id} onOpen={() => choose(p.id)} />
+                  ))}
+                </ul>
+              </div>
+            ))}
           </section>
           {current && data.projects.length > 1 && (
             <div>

@@ -1690,6 +1690,10 @@ export interface WorkProject {
   id: string;
   name: string;
   about: string;
+  /** Which part of the user's work it belongs to ("PhD", "Postdoc"), from projects.json; "" for none. */
+  group: string;
+  /** What's known around it, the question and first analyses: clones/projects/<id>/brief.md, markdown, or "". */
+  brief: string;
   paused: boolean;
   /** The folder of its code, with ~ for home; "" when steps aren't taken on it. */
   repo: string;

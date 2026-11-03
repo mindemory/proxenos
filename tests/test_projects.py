@@ -171,6 +171,34 @@ def test_the_status_knows_the_work_done_and_what_the_user_made_of_it(tmp_path):
     assert projects.listed_projects(tmp_path)[0]["repo"] == "~/cookbook"
 
 
+def test_the_status_is_told_against_the_group_notes_and_brief(tmp_path):
+    write_list(
+        tmp_path,
+        {
+            "id": "pupil",
+            "name": "Pupil in the learning task",
+            "group": "Postdoc",
+            "notes": "Gaze is someone else's; only pupil here.",
+        },
+        {"id": "plain", "name": "No brief"},
+    )
+    brief = tmp_path / "clones" / "projects" / "pupil" / "brief.md"
+    brief.parent.mkdir(parents=True)
+    brief.write_text("## The question\nDoes pupil track the learning rate?\n" + "x" * 9000)
+    model = Model()
+
+    projects.projects(tmp_path, now=NOW, model=model)
+
+    pupil, plain = (c["prompt"] for c in model.calls)
+    assert "Part of: Postdoc" in pupil
+    assert "What the user wants known about it: Gaze is someone else's" in pupil
+    assert "Does pupil track the learning rate?" in pupil
+    assert "x" * (projects.BRIEF_CHARS + 1) not in pupil  # a long brief is cut
+    assert "Part of:" not in plain and "What's known" not in plain
+    listed = {p["id"]: p for p in projects.listed_projects(tmp_path)}
+    assert listed["pupil"]["group"] == "Postdoc" and listed["plain"]["brief"] == ""
+
+
 def test_a_project_s_status_sees_its_code_on_every_branch(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()

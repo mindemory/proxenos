@@ -197,7 +197,7 @@ proxenos master                 # notes per month, then the self-model
 proxenos clone tracker          # also: tasks, care, advisor, network, choices, jobs, watch, recall, projects, work
 ```
 
-Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it. Each night Proxenos writes where each one stands, from what your messages say and, given its code's folder, the commits on every branch since the last run. Give one its data folders too, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
+Your long-running projects are a list you keep in the vault, `clones/projects/projects.json`: each with an id, a name, what it's about, its people and the words that name it, and a group if you like ("PhD", "Postdoc"), which the page lists them under. A `brief.md` in the project's folder says what's known around it, the question and the first analyses; the night reads it, and the project's page shows it. Each night Proxenos writes where each one stands, from what your messages say and, given its code's folder, the commits on every branch since the last run. Give one its data folders too, and it also does the work, a step a night, on a branch of its own, and brings it back for you to accept on the page's Projects view:
 
 ```json
 {"id": "calls-paper", "name": "The calls paper", "about": "...", "people": ["Ana Lee"],

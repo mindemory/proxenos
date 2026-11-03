@@ -325,6 +325,8 @@ export async function getProjects(): Promise<ProjectsResponse> {
       id,
       name,
       about: str(r.about).trim(),
+      group: str(r.group).trim(),
+      brief: ((await readPlain(path.join(folder, "brief.md"), MAX_STATUS_BYTES)) ?? "").trim(),
       paused: r.paused === true,
       repo: str(r.repo).trim() ? displayPath(path.resolve(expandHome(str(r.repo).trim()))) : "",
       paper: paperPath(r.manuscript),

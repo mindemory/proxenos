@@ -8,6 +8,11 @@ The projects are the user's own list, clones/projects/projects.json, which only 
                    "people": ["Ana Lee"], "terms": ["cookbook", "recipes"], "paused": false,
                    "repo": "~/Documents/cookbook", "data": ["~/Documents/cookbook-data"]}]}
 
+A "group" says which part of the user's work it belongs to ("PhD", "Postdoc"), and the page
+lists the projects under their groups. clones/projects/<id>/brief.md, when there is one, is
+what's known around it: what others have done, the question to focus on, the first analyses.
+A run reads it, with "notes", so where the project stands is told against it.
+
 A project with a "repo", the folder of its code (a git repository on this computer), also gets
 its work done, a step at a time, by the steps clone (proxenos.clones.steps), which reads its data
 folders ("data") but never writes them, runs Python with "python" and MATLAB with "matlab" when
@@ -54,6 +59,7 @@ NEW_HITS = 8  # newest records kept from each term's and each person's search
 NEAR_HITS = 4  # nearest records kept from each meaning-and-words search
 FIRST_DAYS = 60  # what counts as new on a project's first run
 STATUS_CHARS = 6000  # of the last status the model reads
+BRIEF_CHARS = 5000  # of the project's brief
 LOG_CHARS = 3000  # of the end of the log
 DRAFTS = 2
 _PROJECT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
@@ -169,6 +175,8 @@ def listed_projects(vault: Path) -> list[dict]:
                 "id": pid,
                 "name": p["name"].strip(),
                 "about": str(p.get("about") or "").strip(),
+                "group": str(p.get("group") or "").strip(),
+                "brief": _read(vault / "clones" / "projects" / pid / "brief.md")[:BRIEF_CHARS],
                 "people": _strings(p.get("people")),
                 "terms": _strings(p.get("terms")),
                 "paused": p.get("paused") is True,
@@ -383,8 +391,16 @@ def _about(project: dict) -> str:
     lines = [f"The project: {project['name']}"]
     if project["about"]:
         lines.append(f"What it is: {project['about']}")
+    if project.get("group"):
+        lines.append(f"Part of: {project['group']}")
     if project["people"]:
         lines.append(f"With: {', '.join(project['people'])}")
+    if project.get("notes"):
+        lines.append(f"What the user wants known about it: {project['notes']}")
+    if project.get("brief"):
+        lines.append(
+            f"\nWhat's known around it, the question and first analyses:\n{project['brief']}"
+        )
     return "\n".join(lines)
 
 
