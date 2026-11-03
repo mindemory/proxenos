@@ -132,13 +132,14 @@ rather than guess or fill in.
 - For anything about health, law, money or immigration, make one of the next steps asking the \
 right professional (a doctor, a lawyer, an accountant or financial adviser, an immigration \
 lawyer), without a lecture.
-- When this conversation started from a draft and {person} asks you to change, update, redo or \
-write it, do it: put the whole new message in draft, written as {person}, in their own voice, \
-ready to send, built from what their records, their history with the person it's to and what \
-they told you actually say. Then say in reply, in a sentence or two, what you changed. Don't ask \
-them to look anything up, and don't ask what the records already answer; if something only they \
-know is missing, write the best message you can and name it in one question. Otherwise draft \
-is "".
+- When this conversation started from a draft, what {person} says is how they want that message \
+to be, even when it's only a correction or a fact ("not silence, my emails bounced"). Always put \
+the whole message in draft, written as {person}, in their own voice, ready to send, with \
+everything they've said in this conversation and what their records, their history with the \
+person it's to and what they told you actually say. In reply, say in a sentence or two what you \
+changed. Never ask them to look anything up or to draft it themselves. Ask at most one question, \
+only about something neither they nor their records say, and give no next steps. Otherwise, \
+when it didn't start from a draft, draft is "".
 - Refer to other people by name as given, and don't assume anyone's pronouns beyond what \
 {person} used.
 - Don't moralise, and don't praise.
@@ -180,8 +181,10 @@ def say(
     try:
         with llm.foreground(vault):
             reply = answer(vault, thread, now, asked)
-        if redrafted := reply.pop("draft", ""):
-            reply["text"] += "\n\n" + _redraft(vault, thread["context"]["id"], redrafted, now)
+        if (redrafted := reply.pop("draft", "")) and (
+            said := _redraft(vault, thread["context"]["id"], redrafted, now)
+        ):
+            reply["text"] += "\n\n" + said
         thread["messages"].append({"role": "proxenos", "at": "", **reply})
         thread["status"] = "done"
     except Exception as e:  # noqa: BLE001 - the page shows why it failed, rather than spinning
@@ -203,8 +206,12 @@ def answer(vault: Path, thread: dict, now: datetime, model: Callable[..., object
     if not reply:
         raise llm.ModelError("the model gave no reply")
     ctx = thread.get("context") or {}
-    draft = str(raw.get("draft") or "").strip() if ctx.get("kind") == "draft" else ""
-    return {"text": reply, "parts": _parts(raw, refs), "draft": draft}
+    parts = _parts(raw, refs)
+    draft = ""
+    if ctx.get("kind") == "draft":  # the draft is the answer: one question at most, no steps
+        draft = str(raw.get("draft") or "").strip()
+        parts |= {"questions": parts["questions"][:1], "next": []}
+    return {"text": reply, "parts": parts, "draft": draft}
 
 
 def build(
@@ -419,6 +426,8 @@ def _redraft(vault: Path, ref: str, body: str, now: datetime) -> str:
     if not match:
         return "That draft has no header Proxenos can keep, so the new version is only here."
     before = raw[match.end() :].strip()
+    if before == body.strip():
+        return ""
     fields = work._front(raw) or {}
     _write_private(path, raw[: match.end()].rstrip("\n") + "\n\n" + body.strip() + "\n")
     edit = {
@@ -435,7 +444,43 @@ def _redraft(vault: Path, ref: str, body: str, now: datetime) -> str:
     fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as f:
         f.write(json.dumps(edit, ensure_ascii=False) + "\n")
-    return "I've updated the draft with this: it's in Drafts, ready for you to read and send."
+    others = _set_aside(
+        vault, ref, work._one_line(fields.get("to")), work._one_line(fields.get("title"))
+    )
+    also = f" The {_plural(others, 'other open draft')} to them went aside." if others else ""
+    return (
+        f"I've updated the draft with this: it's in Drafts, ready for you to read and send.{also}"
+    )
+
+
+def _set_aside(vault: Path, ref: str, to: str, title: str) -> int:
+    """The other drafts still open to the same person, ones the user hasn't touched, filed as
+    overtaken by the one they're working on, so they don't have two messages to the same person
+    to choose between. How many."""
+    if not to:
+        return 0
+    folder = vault / "clones" / "drafts"
+    edited = work._latest(folder / "feedback.jsonl", "draft_id", ("edit",))
+    why = json.dumps(f"Set aside for {title or ref}, the draft to them you're working on.")
+    moved = 0
+    for other, (path, status) in work._existing(folder).items():
+        if other == ref or other in edited or status != "draft":
+            continue
+        raw = path.read_text(encoding="utf-8").removeprefix("\ufeff")
+        match = work._FRONT.match(raw)
+        fields = work._front(raw) or {}
+        if not match or work._one_line(fields.get("to")).casefold() != to.casefold():
+            continue
+        lines = raw[: match.end()].rstrip("\n").split("\n")  # its front matter, "---" last
+        lines = ["status: overtaken" if ln.startswith("status:") else ln for ln in lines]
+        lines.insert(len(lines) - 1, f"overtaken: {why}")
+        _write_private(path, "\n".join(lines) + "\n" + raw[match.end() :])
+        moved += 1
+    return moved
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
 def _write_private(path: Path, text: str) -> None:

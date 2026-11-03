@@ -276,6 +276,8 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
         "body": "Hi Ana, yes. Tess",
     }
     work._write(drafts / "reply-ana.md", work.render(draft))
+    work._write(drafts / "task-ana.md", work.render(draft | {"id": "task-ana", "for": "task"}))
+    work._write(drafts / "task-ben.md", work.render(draft | {"id": "task-ben", "to": "Ben"}))
     model = Redrafting()
 
     thread = think.say(
@@ -287,7 +289,7 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
         model,
     )
 
-    assert "change, update, redo or write it" in model.calls[-1]["system"]
+    assert "is how they want that message" in model.calls[-1]["system"]
     saved = (drafts / "reply-ana.md").read_text()
     assert saved.startswith("---\n") and 'to: "Ana Lee"' in saved
     assert saved.rstrip().endswith("I'd love to lead it from April. Tess")
@@ -295,6 +297,12 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
     assert edit["action"] == "edit" and edit["draft_id"] == "reply-ana" and edit["via"] == "think"
     assert edit["before"] == "Hi Ana, yes. Tess" and edit["after"].endswith("April. Tess")
     assert "updated the draft" in thread["messages"][-1]["text"]
+    assert "1 other open draft to them went aside" in thread["messages"][-1]["text"]
+    aside = (drafts / "task-ana.md").read_text()
+    assert "status: overtaken" in aside and "overtaken: " in aside.split("---")[1]
+    assert "status: draft" in (drafts / "task-ben.md").read_text()
+    assert thread["messages"][-1]["parts"]["next"] == []
+    assert len(thread["messages"][-1]["parts"]["questions"]) <= 1
     assert "draft" not in thread["messages"][-1]  # the thread keeps the reply, not a copy
 
     # One already sent stays as it was sent; the new version is only in the thread.
