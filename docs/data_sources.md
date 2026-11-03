@@ -98,6 +98,27 @@ Not a source: nothing is read from it on a sync. It's how a project's manuscript
 
 `proxenos project gdocs ID [open|fresh|pull|comments]` does the same from a terminal.
 
+### Your projects in a cloud drive
+
+Not a source either: nothing is read from it on a sync. It keeps each project as a folder in a cloud drive you already sync on this computer, for you to read, edit, comment on and share in Word or Google Docs, and brings what you change in a Markdown manuscript back to git.
+
+1. Install pandoc, which makes the Word files: `brew install pandoc` on a Mac, else [pandoc.org/installing](https://pandoc.org/installing.html). `PROXENOS_PANDOC` says where it is when it isn't on the PATH.
+2. Pick a folder your drive syncs and set it in Settings, under Projects, or as `PROXENOS_PROJECT_FOLDER`. On a Mac, Google Drive for desktop's is under `~/Library/CloudStorage/GoogleDrive-<you>/My Drive/`, Dropbox's and OneDrive's are under `~/Library/CloudStorage/` too, and iCloud Drive's is `~/Library/Mobile Documents/com~apple~CloudDocs/`. It has to be there already: Proxenos doesn't make it, so a drive that isn't running gets nothing.
+3. Each night, after the projects and their steps (or `proxenos clone folders` by hand), every project gets `<folder>/<group>/<name>/`, under `Other` when it has no group, its names made safe for Windows too. A paused project gets one only when it has something to show.
+
+| File | What it is |
+|---|---|
+| `<name> - manuscript.docx` | The manuscript at its branch's tip, read from git, never your checkout, with the figures beside it. A PDF of the same name committed beside it comes as `<name> - manuscript.pdf` |
+| `Where it stands.docx` | The project's status, as the night wrote it |
+| `What's known, and the question.docx` | Its brief |
+| `Drafts.docx` | Its drafts still open, each with its title |
+| `About this project.docx` | What `projects.json` says of it: what it's about, its people, your notes, whether it's paused |
+| `About this folder.docx` | When the manuscript was made, from which branch and commit, and what comes back |
+
+**What comes back.** What you change in a Markdown manuscript, in Word or in Google Docs (editing the `.docx` itself: a copy saved as a Google Doc isn't read), comes back the next night as a step on a branch of its own, from the commit the copy was made from, for you to accept or discard on the Projects view. It's converted back to Markdown and merged as the Google Doc's changes are: only the paragraphs you changed change, and the rest keeps its own Markdown to the byte. Tracked changes count as accepted; comments stay in the file. While that step waits, newer changes wait in the copy. A LaTeX manuscript is made with its citations and references written out from the `.bib` files beside it, so it goes one way: change the `.tex` itself. The notes never come back.
+
+**What's never lost.** Proxenos keeps, in the vault (`clones/folders/state.json`), what each file was made from and what it wrote. A note whose source changed is written again only while it's still exactly as Proxenos wrote it; one you edited or commented on stays as you left it, until you delete it. When the paper moves on in git, a copy of the manuscript you changed moves to `Earlier/<name> - manuscript <date>.docx` before the newer one is written, so your comments stay. Proxenos reads nothing else in the folder and shares nothing.
+
 ## Folder settings
 
 Three sources live in folders Proxenos can't guess, so each has a setting, in the page's Settings or in `.env`. A leading `~` is expanded.
