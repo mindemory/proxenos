@@ -158,3 +158,15 @@ def test_a_day_the_clocks_change_runs_to_its_own_midnight(tmp_path, new_york):
     assert [line for line in lines["next"] if "Calendar" in line] == [
         "Calendar Mon Nov 02 10:00: Lab meeting"
     ]
+
+
+def test_a_project_with_no_code_folder_moves_nothing(tmp_path, monkeypatch):
+    """Not the commits of whichever repository the journal happens to run in."""
+    vault = tmp_path / "vault"
+    projects = [{"id": "sale", "name": "The sale"}, {"id": "shed", "name": "Shed", "repo": " "}]
+    write(vault / "clones" / "projects" / "projects.json", json.dumps({"projects": projects}))
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(journal, "_git", lambda *a: pytest.fail("no code to read"))
+
+    assert journal.lines(vault, DAY)["moved"] == []

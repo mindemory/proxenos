@@ -5,6 +5,8 @@ import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from proxenos import voice
 from proxenos.clones import projects
 
@@ -227,3 +229,13 @@ def test_a_project_s_status_sees_its_code_on_every_branch(tmp_path):
     assert "draft | Write the draft" in text and "Start" in text
     assert text.endswith("paper.md")
     assert projects._code({"repo": str(tmp_path / "none")}, datetime.now(UTC)) == ""
+
+
+def test_a_project_with_no_code_folder_has_no_code(tmp_path, monkeypatch):
+    """Not the code of whichever repository the clone happens to run in."""
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("no code to read"))
+
+    assert projects._code({"repo": ""}, datetime.now(UTC)) == ""
+    assert projects._code({}, datetime.now(UTC)) == ""

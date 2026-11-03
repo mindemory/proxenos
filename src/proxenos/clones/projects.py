@@ -349,8 +349,10 @@ def _code(project: dict, since: datetime) -> str:
     """What happened in the project's code since `since`, on any branch: the commits, the branch
     the user's checkout is on, and the documents changed (a draft on a branch the checkout isn't
     on is easy to lose), so the status says where the work is. "" without a repo."""
-    repo = Path(str(project.get("repo") or "")).expanduser()
-    if not (repo / ".git").exists():
+    named = str(project.get("repo") or "").strip()
+    repo = Path(named).expanduser()
+    # "" would be the folder this runs in, and its code isn't the project's.
+    if not named or not (repo / ".git").exists():
         return ""
 
     def git(*args: str) -> str:

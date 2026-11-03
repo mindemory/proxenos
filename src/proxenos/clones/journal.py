@@ -174,8 +174,10 @@ def _moved(vault: Path, start: datetime, end: datetime) -> list[str]:
     listed = _json(vault / "clones" / "projects" / "projects.json")
     found = []
     for project in listed.get("projects", []) if isinstance(listed, dict) else []:
-        repo = Path(str(project.get("repo") or "")).expanduser()
-        if not (repo / ".git").exists():
+        named = str(project.get("repo") or "").strip()
+        repo = Path(named).expanduser()
+        # A project with no code folder has none: "" would be the folder this runs in.
+        if not named or not (repo / ".git").exists():
             continue
         log = _git(
             repo,
