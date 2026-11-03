@@ -100,6 +100,10 @@ VOICE_TOKENS = 600
 _VOICE_TIMEOUT = 120
 
 _client: anthropic.Anthropic | None = None
+# Inside `foreground`: this process answers someone who is waiting, so PROXENOS_ASK_MODEL, when
+# it's set and can answer, takes over from PROXENOS_MODEL (Claude for Ask and Think, say, with
+# the night on the model on this computer).
+_waited_on = False
 
 
 class ModelError(RuntimeError):
@@ -197,20 +201,40 @@ def using(
 
 
 def current() -> str:
-    """The model `ask` goes to: PROXENOS_MODEL, unless `using` names another."""
-    return getattr(_using, "model", None) or env("MODEL", DEFAULT_MODEL)
+    """The model `ask` goes to: PROXENOS_MODEL, unless `using` names another, or someone is
+    waiting on the answer and PROXENOS_ASK_MODEL can give it (`foreground`)."""
+    return (
+        getattr(_using, "model", None)
+        or (_waited_on and _ask_model())
+        or env("MODEL", DEFAULT_MODEL)
+    )
+
+
+def _ask_model() -> str:
+    """PROXENOS_ASK_MODEL, when it's set and can answer: a local one, or Claude with a key."""
+    model = env("ASK_MODEL")
+    if model and (model.startswith(LOCAL) or os.environ.get("ANTHROPIC_API_KEY")):
+        return model
+    return ""
 
 
 @contextmanager
 def foreground(vault: Path) -> Iterator[None]:
-    """While this runs, other processes' local model calls hold off (see `waiting`)."""
-    mark = vault / _FOREGROUND
-    mark.parent.mkdir(parents=True, exist_ok=True)
-    mark.write_text(str(os.getpid()))
+    """While this runs, someone is waiting on its answer: it goes to PROXENOS_ASK_MODEL when that
+    can answer, and while its model is the local one, other processes' local calls let it go
+    first and hold off (see `waiting` and `_turn`)."""
+    global _waited_on
+    saved, _waited_on = _waited_on, True
+    mark = vault / _FOREGROUND if current().startswith(LOCAL) else None
+    if mark:
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        mark.write_text(str(os.getpid()))
     try:
         yield
     finally:
-        mark.unlink(missing_ok=True)
+        _waited_on = saved
+        if mark:
+            mark.unlink(missing_ok=True)
 
 
 def waiting(vault: Path | None = None) -> bool:

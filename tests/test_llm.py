@@ -222,8 +222,10 @@ def test_steps_trim_to_what_a_local_model_takes(monkeypatch):
     assert llm.fit(50_000) == 50_000
 
 
-def test_a_question_being_answered_holds_other_processes_off(tmp_path):
+def test_a_question_being_answered_holds_other_processes_off(tmp_path, monkeypatch):
     from proxenos.llm import foreground
+
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")  # the model it holds them off
 
     waiting = _real_waiting
     assert not waiting(tmp_path)
@@ -269,6 +271,23 @@ def test_local_calls_take_turns_and_a_question_goes_first(tmp_path, monkeypatch)
     (tmp_path / "state" / "asking").write_text(str(os.getpid()))
     wanted.append("Think")
     assert llm.ask("the question") == "ok" and asked == [1, 1]
+
+
+def test_what_someone_waits_on_goes_to_the_ask_model_and_the_rest_stays(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    monkeypatch.setenv("PROXENOS_ASK_MODEL", "claude-opus-5-5")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with llm.foreground(tmp_path):
+        assert llm.current() == "ollama:gemma4:26b"  # no key: Claude can't answer, so the local
+        assert (tmp_path / "state" / "asking").exists()  # model does, and goes first
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert llm.current() == "ollama:gemma4:26b"  # the night's calls
+    with llm.foreground(tmp_path):
+        assert llm.current() == "claude-opus-5-5"
+        assert not (tmp_path / "state" / "asking").exists()  # the local model isn't held up
+        with llm.using(model="ollama:qwen3"):
+            assert llm.current() == "ollama:qwen3"
+    assert llm.current() == "ollama:gemma4:26b"
 
 
 def test_a_voice_model_answers_from_the_server_on_this_computer(monkeypatch):
