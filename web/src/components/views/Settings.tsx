@@ -67,6 +67,16 @@ const FOLDERS: { key: SettingKey; label: string; hint: string; placeholder: stri
   },
 ];
 
+/** Where each project's folder goes: written each night, never read but for the manuscript's changes. */
+const PROJECT_FOLDER: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "project_folder",
+    label: "Your projects' folder",
+    hint: "A folder your cloud drive syncs: Google Drive for desktop, Dropbox, OneDrive or iCloud Drive. Empty: none.",
+    placeholder: "~/Library/CloudStorage/GoogleDrive-…/My Drive/Projects",
+  },
+];
+
 function Group({ kicker, title, note, children }: { kicker: string; title: string; note?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
@@ -116,7 +126,7 @@ function ReadingGroup() {
   );
 }
 
-/** Your settings, the model, the keys and sign-ins (whether each is set, never what it is), and the folders read on every sync. */
+/** Your settings, the model, the keys and sign-ins (whether each is set, never what it is), the folders read on every sync, and the one your projects go to. */
 export function Settings() {
   const { status, error, reload, apply } = useSetup();
   if (!status) {
@@ -195,7 +205,15 @@ export function Settings() {
       </Group>
 
       <Group kicker="Folders" title="Read on every sync">
-        <FoldersForm status={status} apply={apply} />
+        <FoldersForm status={status} apply={apply} fields={FOLDERS} button="Save folders" />
+      </Group>
+
+      <Group
+        kicker="Projects"
+        title="In your cloud drive"
+        note="Each night, each project's manuscript and Proxenos's notes on it go here as Word files, to read, edit, comment on and share in Word or Google Docs. Your drive uploads them; Proxenos shares nothing and reads nothing else there. What you change in a Markdown manuscript comes back as a step for you to accept; LaTeX goes one way. Needs pandoc (brew install pandoc)."
+      >
+        <FoldersForm status={status} apply={apply} fields={PROJECT_FOLDER} button="Save folder" />
       </Group>
     </div>
   );
@@ -488,14 +506,24 @@ function TestNotice({ ready }: { ready: boolean }) {
   );
 }
 
-function FoldersForm({ status, apply }: { status: SetupStatus; apply: Apply }) {
+function FoldersForm({
+  status,
+  apply,
+  fields,
+  button,
+}: {
+  status: SetupStatus;
+  apply: Apply;
+  fields: typeof FOLDERS;
+  button: string;
+}) {
   const savedOf = (key: SettingKey) => status.settings[key].value ?? "";
   const [values, setValues] = useState<Partial<Record<SettingKey, string>>>(() =>
-    Object.fromEntries(FOLDERS.map((f) => [f.key, savedOf(f.key)])),
+    Object.fromEntries(fields.map((f) => [f.key, savedOf(f.key)])),
   );
   const { busy, said, run } = useChange(apply);
   const changed = Object.fromEntries(
-    FOLDERS.flatMap((f) => (values[f.key]?.trim() !== savedOf(f.key) ? [[f.key, values[f.key]?.trim() ?? ""]] : [])),
+    fields.flatMap((f) => (values[f.key]?.trim() !== savedOf(f.key) ? [[f.key, values[f.key]?.trim() ?? ""]] : [])),
   );
 
   return (
@@ -506,7 +534,7 @@ function FoldersForm({ status, apply }: { status: SetupStatus; apply: Apply }) {
       }}
       className="card space-y-4 p-4 sm:p-5"
     >
-      {FOLDERS.map((f) => (
+      {fields.map((f) => (
         <Field key={f.key} label={f.label} hint={f.hint}>
           <input
             value={values[f.key] ?? ""}
@@ -517,13 +545,13 @@ function FoldersForm({ status, apply }: { status: SetupStatus; apply: Apply }) {
           />
         </Field>
       ))}
-      <FromShell values={FOLDERS.map((f) => status.settings[f.key])} />
+      <FromShell values={fields.map((f) => status.settings[f.key])} />
       <div className="flex items-center justify-between gap-3">
         <SaidLine said={said} />
         <span className="ml-auto">
           <PrimaryButton type="submit" disabled={busy || !Object.keys(changed).length}>
             <Save size={14} aria-hidden="true" />
-            Save folders
+            {button}
           </PrimaryButton>
         </span>
       </div>

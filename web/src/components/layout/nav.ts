@@ -114,7 +114,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { icon: Brain, label: "Memory", id: "memory", group: "life", words: "search records history archive messages" },
   { icon: UserRound, label: "Profile", id: "profile", group: "life", words: "self-model about you interests" },
   { icon: Plug, label: "Connect", id: "connect", group: "setup", words: "sources accounts import add set up" },
-  { icon: SlidersHorizontal, label: "Settings", id: "settings", group: "setup", words: "preferences options reading text size theme" },
+  { icon: SlidersHorizontal, label: "Settings", id: "settings", group: "setup", words: "preferences options reading text size theme folders cloud drive dropbox onedrive word" },
   { icon: ShieldCheck, label: "Privacy", id: "privacy", group: "setup", words: "data local models what leaves delete" },
   { icon: Activity, label: "Status", id: "status", group: "setup", words: "sync synced last jobs errors" },
 ];

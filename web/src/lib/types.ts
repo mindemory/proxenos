@@ -1060,6 +1060,7 @@ export const SETTING_KEYS = [
   "spotify_export",
   "slackdump_dir",
   "cv_dirs",
+  "project_folder",
   "ntfy_server",
   "quiet_hours",
 ] as const;
