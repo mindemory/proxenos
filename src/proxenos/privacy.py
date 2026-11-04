@@ -206,6 +206,16 @@ SENDS = (
         ),
     ),
     (
+        "Checking a paper's references",
+        ("preprint",),
+        (
+            "Nothing to a model. Only when you check a paper's references: each one's DOI or "
+            "arXiv id, or its title and first author's surname, go to Crossref, DataCite, arXiv "
+            "and OpenAlex, and a web page it cites is fetched at its own address. Nothing about "
+            "you, and none of the paper's text."
+        ),
+    ),
+    (
         "Project folders",
         ("folders",),
         (

@@ -140,6 +140,13 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
 
     monkeypatch.setattr("proxenos.lookup._fetch", no_web)
     monkeypatch.setattr("proxenos.lookup.PACE", 0)
+
+    # Nor Crossref, arXiv, OpenAlex or a reference's page, which a preprint's references are
+    # checked against: a test brings a fake.
+    def no_indexes(url):
+        raise OSError("no scholarly indexes in tests")
+
+    monkeypatch.setattr("proxenos.preprint._fetch", no_indexes)
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)

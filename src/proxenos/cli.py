@@ -32,6 +32,7 @@ from proxenos import (
     observe,
     paperdoc,
     phone,
+    preprint,
     privacy,
     schedule,
     setup,
@@ -181,6 +182,10 @@ def main(argv: list[str] | None = None) -> None:
             "gdocs", help="it as a Google Doc: make it, bring back its changes, read its comments"
         )
     )
+    posting = commands.add_parser(
+        "preprint", help="a LaTeX paper ready for arXiv: its references checked, its source bundled"
+    )
+    preprint.add_arguments(posting)
     commands.add_parser("connect", help="which sources are connected, as JSON for the page")
     commands.add_parser(
         "privacy", help="what stays here, what went to a model and what's read, as JSON"
@@ -254,6 +259,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "call":  # a call can go on while a sync runs, so it takes no lock
         callserver.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "preprint":  # sends only references' DOIs, titles and links; no model
+        preprint.run(vault_path(), args)  # the vault, when there is one, keeps what was found
         return
     if args.command == "project":  # reads the code's history; writes only what the user asks for
         module = paperdoc if args.what == "gdocs" else manuscript
