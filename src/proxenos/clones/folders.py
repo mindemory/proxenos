@@ -471,7 +471,8 @@ def _write_paper(
         if data is not None:
             _replace(pdf, pdf.name, files, pdf_source, data, now, stats, made="committed")
 
-    _write_supplement(repo, tip, path, where, files, project["name"], now, stats)
+    labels = record.setdefault("labels", {})
+    _write_supplement(repo, tip, path, where, files, project["name"], now, stats, labels)
 
 
 def _pdf_plan(
@@ -577,6 +578,7 @@ def _write_supplement(
     project_name: str,
     now: datetime,
     stats: Counter,
+    labels: dict | None = None,
 ) -> None:
     """The files the manuscript names, by name or path (S1_table.csv, figures/fig2.png) or by a
     label their names carry ("Table S4" for S02_tableS4_types.csv, "Fig. S2" for FigS2.png),
@@ -585,7 +587,8 @@ def _write_supplement(
     own. Not the figures it shows itself, which its copy has, nor its own PDF, made on its own."""
     text = (manuscript._blob(repo, tip, path) or b"").decode("utf-8", "replace")
     text = text.replace("\\_", "_")  # S01\_sites.csv, as LaTeX writes it, and Markdown can
-    chosen = _choose(repo, tip, text, str(PurePosixPath(path).with_suffix(".pdf")))
+    own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
+    chosen = _choose(repo, tip, text, own_pdf, labels if labels is not None else {})
     for base, (kept, blob, _, _) in chosen.items():
         target = where / SUPPLEMENT / base
         key = f"{SUPPLEMENT}/{base}"
@@ -605,11 +608,17 @@ def _write_supplement(
         _drop(where, files, [k for k in made if k in files], stats)
 
 
-def _choose(repo: Path, tip: str, text: str, own_pdf: str) -> dict[str, tuple[str, str, int, str]]:
+def _choose(
+    repo: Path, tip: str, text: str, own_pdf: str, labels: dict
+) -> dict[str, tuple[str, str, int, str]]:
     """The files for Supplement/, by name: (its path in the repository, its blob, where the
     manuscript first names it, its caption). Those it names by name or path, then those it
     calls by a label that no file it names carries; none it shows itself, nor its own PDF, nor
-    one bigger than FILE_BYTES, and at most SUPPLEMENT_FILES, SUPPLEMENT_BYTES in all."""
+    one bigger than FILE_BYTES, and at most SUPPLEMENT_FILES, SUPPLEMENT_BYTES in all.
+
+    `labels` remembers, from one run to the next, the file each label went with while the
+    manuscript named both ("Table S13. Stability (S08_median_stability.csv)"), so a label whose
+    file name was later taken out of the text, and whose file doesn't carry it, still finds it."""
     named = sorted({m.group(0).strip("./") for m in _NAMED.finditer(text)})
     called = _called(text)
     if not named and not called:
@@ -628,10 +637,14 @@ def _choose(repo: Path, tip: str, text: str, own_pdf: str) -> dict[str, tuple[st
         # A path that ends the same way as the one named, else the file of that name.
         exact = [f for f in found if f[0].lower().endswith(ref.lower())] or found[:1]
         if exact:
-            labels = _carried(exact[0][0]) & called.keys()
-            covered |= labels
-            caption = _caption(text, ref) or next((called[k][1] for k in sorted(labels)), "")
+            carried = _carried(exact[0][0]) & called.keys()
+            covered |= carried
+            caption = _caption(text, ref) or next((called[k][1] for k in sorted(carried)), "")
             wanted.append((*exact[0], text.find(ref), caption))
+            for m in _CALLED.finditer(caption):  # the label this file goes with, for later
+                kind = "table" if (m.group(1) or m.group(2)).lower() == "table" else "figure"
+                labels[f"{kind}:{int(m.group(3))}"] = exact[0][0]
+                covered.add((kind, int(m.group(3))))
     carriers: dict[tuple[str, int], list[tuple[str, int, str]]] = {}
     for entry in tree if called.keys() - covered else ():
         suffix = PurePosixPath(entry[0]).suffix.lower()
@@ -646,6 +659,9 @@ def _choose(repo: Path, tip: str, text: str, own_pdf: str) -> dict[str, tuple[st
             carriers.get(key, []) if key not in covered else [],
             key=lambda f: (kinds.index(PurePosixPath(f[0]).suffix.lower()), f[0].count("/"), f[0]),
         )
+        remembered = labels.get(f"{key[0]}:{key[1]}")
+        if not found and key not in covered and remembered:
+            found = [e for e in tree if e[0] == remembered]
         if found:
             wanted.append((*found[0], at, caption))
     shown = _shown(text)

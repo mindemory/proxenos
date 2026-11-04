@@ -1190,3 +1190,35 @@ def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
     assert [p.name for p in supplement.iterdir()] == ["S1.csv"]  # theirs stays
     assert not (drive / FOLDER / SUPPLEMENTARY).exists()
     assert not any(k.startswith("Supplement/") for k in state(vault)["projects"]["calls"]["files"])
+
+
+def test_a_label_keeps_its_file_after_the_file_name_leaves_the_text(setup):
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    named = "# Calls\n\n## Supplementary tables\n\n- Table S13. Stability of medians (`S08_median_stability.csv`)\n"
+    commit(
+        repo,
+        {"docs/paper/paper.md": named, "results/S08_median_stability.csv": "m\n1\n"},
+        "Named",
+        3,
+    )
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW)
+    supplement = drive / FOLDER / "Supplement"
+    assert (supplement / "S08_median_stability.csv").exists()
+
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(
+        repo,
+        {"docs/paper/paper.md": named.replace(" (`S08_median_stability.csv`)", "")},
+        "No file names",
+        4,
+    )
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW + timedelta(days=1))
+
+    assert (supplement / "S08_median_stability.csv").exists()  # still found, by what it was
+    assert (
+        state(vault)["projects"]["calls"]["labels"]["table:13"]
+        == "results/S08_median_stability.csv"
+    )
