@@ -16,7 +16,7 @@ step" on the page. A step:
    on the user ("revise this step"), which it builds on, so Accept merges both;
 3. is done by a runner (proxenos.agent): Claude Code where it's installed, which runs the code
    in a sandbox that can't write outside the worktree, else the local model, which can only
-   write;
+   write. Each runner's run, worked or not, is a line in the model-call log (agent.logged);
 4. ends in a commit on its branch of what it changed, its figures and tables kept in the vault,
    and a report: what it did, what it found, the files changed, what it couldn't do and what's
    next. Each is clones/projects/<id>/steps/<when>.json, with what it made in the folder beside
@@ -35,6 +35,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -189,14 +190,18 @@ def _carry(vault: Path, project: dict, step: dict, tried: list) -> None:
             if step["asked"]
             else "To pick the next step from where the project stands, and do it.",
         )
+        began, ok = time.monotonic(), False
         try:
             report = runner(task)
+            ok = True
         except agent.AgentUnavailable as e:
             if _changed(worktree):
                 raise
             _note(vault, step, f"{runner.label} couldn't start", str(e))
             reasons.append(f"{runner.label} couldn't start: {e}")
             continue
+        finally:  # the run, worked or not, in the model-call log
+            agent.logged(runner, project["id"], time.monotonic() - began, ok)
         step["runner"] = runner.name
         break
     if report is None:

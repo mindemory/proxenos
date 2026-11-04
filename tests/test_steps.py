@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import agent
+from proxenos import agent, llm, privacy
 from proxenos.clones import projects, steps
 
 NOW = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)
@@ -245,6 +245,53 @@ def test_when_claude_code_cant_start_the_local_model_takes_the_step(setup):
         "Handed it to the local model",
     ]
     assert step["thread"][2]["detail"] == "Credit balance is too low"
+
+
+def test_each_runners_run_is_a_line_in_the_model_call_log_without_words(
+    setup, monkeypatch, tmp_path
+):
+    vault, _, _ = setup
+    log = tmp_path / "state" / "model-calls.jsonl"
+    monkeypatch.setattr(llm, "_calls_path", lambda: log)
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:qwen3")
+
+    def out_of_credit(task):
+        raise agent.AgentUnavailable("Credit balance is too low")
+
+    out_of_credit.name, out_of_credit.label = "claude", "Claude Code"
+    local = Runner()
+    local.name, local.label = "local", "the local model"
+
+    steps.take(vault, project(vault), NOW, [out_of_credit, local])
+
+    claude, mine = (json.loads(line) for line in log.read_text().splitlines())
+    assert {k: claude[k] for k in ("step", "model", "where", "ok", "runner", "project")} == {
+        "step": "steps",
+        "model": "claude-code",
+        "where": "Anthropic",
+        "ok": False,
+        "runner": "claude",
+        "project": "calls",
+    }
+    assert (mine["model"], mine["where"], mine["ok"], mine["runner"]) == (
+        "ollama:qwen3",
+        "this computer",
+        True,
+        "local",
+    )
+    assert (
+        set(mine)
+        == set(claude)
+        == {
+            *("at", "step", "model", "where", "sent_chars", "images", "redacted"),
+            *("answer_chars", "tokens_in", "tokens_out", "seconds", "ok", "runner", "project"),
+        }
+    )
+    assert isinstance(mine["seconds"], float) and mine["sent_chars"] is None
+    for words in ("Credit balance", "median", "analysis", "Calls"):
+        assert words not in log.read_text()
+    shown = privacy._call(mine)
+    assert (shown["step"], shown["where"], shown["ok"]) == ("steps", "this computer", True)
 
 
 def test_a_step_that_fails_before_changing_anything_leaves_nothing_behind(setup):

@@ -17,7 +17,8 @@ it's installed, then the local model.
   says plainly that nothing was run, and names any edit it couldn't make.
 
 Each takes a Task and returns the report REPORT describes. Neither commits, merges or pushes;
-proxenos.clones.steps does what comes after.
+proxenos.clones.steps does what comes after. Each run, either runner's, leaves one line in the
+model-call log as every model call does (`logged`), since Claude Code's goes through no llm.ask.
 """
 
 import json
@@ -159,6 +160,18 @@ def runners(model: Callable[..., object] = llm.ask) -> list:
     if choice:
         raise SystemExit(f"steps: PROXENOS_STEP_RUNNER is {choice!r}: give claude or local")
     return [ClaudeCode(claude), Local(model)] if claude else [Local(model)]
+
+
+def logged(runner: Runner, project: str, seconds: float, ok: bool) -> None:
+    """A run of `runner` on `project` as one line in the model-call log (llm.log_run), never
+    any words: Claude Code on the model PROXENOS_STEP_MODEL names, or its own default, at
+    Anthropic; the local runner on the model llm.ask goes to, wherever that runs. The local
+    runner's own calls through llm.ask leave their lines too."""
+    if runner.name == "claude":
+        model = "claude-code" + (f":{chosen}" if (chosen := env("STEP_MODEL").strip()) else "")
+    else:
+        model = llm.current()
+    llm.log_run("steps", model, seconds, ok, runner=runner.name, project=project)
 
 
 def claude_bin() -> str | None:

@@ -26,7 +26,8 @@ Every call leaves one line in <vault>/state/model-calls.jsonl, for the privacy s
 seeing what a night costs: when, which step asked, the model, where it ran (this computer or
 Anthropic), how many characters went in and came back, the tokens where the model counts them,
 how many numbers and secrets were blanked, how long it took and whether it worked. Never the
-words, nor what was blanked.
+words, nor what was blanked. A project step leaves one line of the same shape for its run
+(`log_run`): Claude Code takes one on the account it's signed in to, through no `ask`.
 """
 
 import http.client
@@ -682,12 +683,11 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
         answer = got.get("answer")
         size = len(answer if isinstance(answer, str) else json.dumps(answer)) if got else 0
         tokens_in, tokens_out = getattr(_usage, "tokens", (None, None))
-        here = model.startswith((*LOCAL, *(f"voice:{p}" for p in (*LOCAL, "mlx"))))
         record = {
-            "at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "at": _now(),
             "step": _step(),
             "model": model,
-            "where": "this computer" if here else "Anthropic",
+            "where": _where(model),
             "sent_chars": sent,
             "images": images,
             "redacted": getattr(_usage, "redacted", None),  # None where nothing left
@@ -698,6 +698,40 @@ def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object],
             "ok": bool(got),
         }
         _log(record)
+
+
+def log_run(step: str, model: str, seconds: float, ok: bool, **about: str) -> None:
+    """One line in the calls log for model work that doesn't go through `ask`, such as a project
+    step Claude Code takes (proxenos.clones.steps): a call's line, where it ran by its model,
+    the sizes and tokens nothing here counted left None, and `about` beside them (the runner,
+    the project). Never any words."""
+    _log(
+        {
+            "at": _now(),
+            "step": step,
+            "model": model,
+            "where": _where(model),
+            "sent_chars": None,
+            "images": None,
+            "redacted": None,
+            "answer_chars": None,
+            "tokens_in": None,
+            "tokens_out": None,
+            "seconds": round(seconds, 1),
+            "ok": ok,
+            **about,
+        }
+    )
+
+
+def _where(model: str) -> str:
+    """Where a model runs, as the calls log says it."""
+    here = model.startswith((*LOCAL, *(f"voice:{p}" for p in (*LOCAL, "mlx"))))
+    return "this computer" if here else "Anthropic"
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _step() -> str:
