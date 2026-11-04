@@ -44,7 +44,10 @@ If you add code or data from another project, keep its licence and copyright not
 | [espeak-ng](https://github.com/espeak-ng/espeak-ng), through [phonemizer-fork](https://pypi.org/project/phonemizer-fork/) and [espeakng-loader](https://github.com/thewh1teagle/espeakng-loader), which carries espeak-ng's library | GPL-3.0 (espeak-ng, phonemizer-fork), MIT (espeakng-loader's own code) | Sounding out words not in misaki's dictionary, such as a medicine's name. Installed into the env by the `speech` extra and used as a library from there; not included in Proxenos or the desktop app. Kept there by decision (November 2026): without it those words go unsaid |
 | [slackdump](https://github.com/rusq/slackdump) | AGPL-3.0 | Reading Slack. Run as a separate program, not included in Proxenos |
 | [Beeper Desktop API](https://www.beeper.com) | Beeper's terms | Instagram, Messenger, X and LinkedIn chats |
-| [OpenAlex](https://openalex.org) | CC0 data | Papers and mentions |
+| [OpenAlex](https://openalex.org) | CC0 data | Papers and mentions, and checking a paper's references by title |
+| [Crossref](https://www.crossref.org)'s REST API | Open metadata, no restrictions on reuse | Checking a paper's references by DOI and title (`proxenos preprint refs`) |
+| [DataCite](https://datacite.org)'s REST API | CC0 metadata | Checking a reference whose DOI Crossref doesn't hold, such as software or data |
+| [arXiv](https://arxiv.org)'s API | CC0 metadata | The research feed, and checking a reference by its arXiv id. Thank you to arXiv for use of its open access interoperability |
 | [MusicBrainz](https://musicbrainz.org), from the MetaBrainz Foundation | CC0 core data; tags and genres CC BY-NC-SA 3.0 | Kinds of music for Rhythms, looked up by artist name and kept in your vault for your own use, never shipped here |
 | [Tailscale](https://tailscale.com) | BSD-3-Clause client | Reaching the page from your own phone |
 | [Pillow](https://github.com/python-pillow/Pillow), [Zopfli](https://github.com/google/zopfli) | MIT-CMU, Apache-2.0 | Shrinking the README's pictures |
@@ -55,4 +58,5 @@ If you add code or data from another project, keep its licence and copyright not
 |---|---|---|
 | [XERJ](https://github.com/xerj-org/xerj) | Apache-2.0 | Proxenos is a corpus on the XERJ Corpus Hub, the open reference memory AI coding agents search before they write code; `AGENTS.md` and `llms.txt` follow that idea |
 | [Synthea](https://github.com/synthetichealth/synthea) | Apache-2.0 | The shape of the synthetic health records used in tests |
+| [arxiv_latex_cleaner](https://github.com/google-research/arxiv-latex-cleaner), from Google Research | Apache-2.0 | What a paper's source for arXiv should leave out: its comments, and files it doesn't use. Only the idea: `proxenos/preprint.py` is written anew and holds none of its code |
 | [Odysseus](https://github.com/odysseus-dev/odysseus) | AGPL-3.0 | The idea of pushing a notice to the phone through ntfy when something waits on you. Only the idea: `proxenos/notify.py` is written anew and holds none of its code or text |

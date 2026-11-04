@@ -46,7 +46,7 @@ Setup asks your name, where to keep the vault and which model to use, then Conne
 
 **It drafts, you send.** A reply for each chat waiting on you, written the way you write to that person, and emails, plans, call scripts and filled-in forms. You press send. The two exceptions are yours to start: an outbox you switch on per app, only where its drafts have gone out nearly unchanged many times ([docs/memory.md](docs/memory.md#the-outbox)), and a phone call you place, where it says it's automated and never agrees to pay ([docs/calls.md](docs/calls.md)).
 
-**Your work and your life.** For each project or paper it writes where things stand and, given the code, does the next step on a branch for you to accept. It also keeps your job leads, offers side by side with what to ask each, a journal of each day, a diary of your life by month, and your weeks of listening, movement and messages over time.
+**Your work and your life.** For each project or paper it writes where things stand and, given the code, does the next step on a branch for you to accept; a LaTeX paper gets its references checked against the real record and its source bundled for arXiv. It also keeps your job leads, offers side by side with what to ask each, a journal of each day, a diary of your life by month, and your weeks of listening, movement and messages over time.
 
 **Local by default.** With a model on your computer, no prompt leaves it, apart from a call's audio. If you choose, Claude takes what you wait on (Ask, Think, errands, calls) and the rest stays local. Each model call is logged, never its words. Which local model drafts well on a 16 GB Mac is still open.
 
@@ -58,7 +58,7 @@ Many tools keep a memory for you or act for you. What Proxenos does that they do
 
 ## Privacy
 
-Everything personal stays in a vault on your computer, outside this repository, readable only by you, and keys go to your system's secure store. Each part sends a model only what its job needs, picked out in code. With a local model none of it leaves the computer, and before a prompt goes to Claude, card numbers, passwords and keys are blanked. Other services get little: artist names to MusicBrainz, counts to ntfy if you turn on phone notices, a manuscript to your Google Drive or cloud folder if you choose, and a person's name and organization to a search engine when you need their public email address. The page answers only this computer, or your phone over your own Tailscale network. There's no telemetry. Every part, in full: [docs/privacy.md](docs/privacy.md).
+Everything personal stays in a vault on your computer, outside this repository, readable only by you, and keys go to your system's secure store. Each part sends a model only what its job needs, picked out in code. With a local model none of it leaves the computer, and before a prompt goes to Claude, card numbers, passwords and keys are blanked. Other services get little: artist names to MusicBrainz, counts to ntfy if you turn on phone notices, a manuscript to your Google Drive or cloud folder if you choose, a person's name and organization to a search engine when you need their public email address, and a paper's references to Crossref, arXiv and OpenAlex when you check them. The page answers only this computer, or your phone over your own Tailscale network. There's no telemetry. Every part, in full: [docs/privacy.md](docs/privacy.md).
 
 ## Status and contributing
 
