@@ -430,6 +430,28 @@ def test_a_draft_i_rewrote_on_the_page_teaches_the_next_one(tmp_path):
     assert "<sent>\nhey asha!! all good?\n</sent>" in shown and "Same." not in shown
 
 
+def test_a_rewrite_think_made_is_no_change_of_mine_but_my_edit_after_it_is(tmp_path):
+    vault = chat_vault(tmp_path)
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True)
+    edits = [
+        {"draft_id": "a", "action": "edit", "ts": "2026-03-09T10:00:00Z", "channel": "whatsapp",
+         "to": "Asha", "before": "hi asha, see you", "after": "Dear Asha, I trust you are well.",
+         "via": "think"},
+        {"draft_id": "a", "action": "edit", "ts": "2026-03-09T11:00:00Z", "channel": "whatsapp",
+         "to": "Asha", "before": "Dear Asha, I trust you are well.", "after": "heyy asha all good?"},
+    ]  # fmt: skip
+    (folder / "feedback.jsonl").write_text("".join(json.dumps(e) + "\n" for e in edits))
+
+    (pair,) = voice.Writing(vault).corrections
+
+    assert (pair["draft_text"], pair["sent_text"]) == (
+        "Dear Asha, I trust you are well.",
+        "heyy asha all good?",
+    )
+    assert "hi asha, see you" not in voice.corrections(voice.Writing(vault), "whatsapp", "Asha")
+
+
 # Rules learned from drafts I changed
 
 SENT = [  # what Tess sent instead of six drafts to Aai, the first also a message in their chat

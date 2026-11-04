@@ -33,7 +33,8 @@ reply drafted as of an earlier time, to compare it with what the user sent then 
 Then what they changed. A draft they rewrote says more about how they write than any example:
 fidelity keeps each measured draft beside what they sent instead (clones/drafts/fidelity.json),
 the page keeps each draft they edited there beside their version (an edit's before and after
-in clones/drafts/feedback.jsonl), and every draft gets those whose closeness was under CHANGED,
+in clones/drafts/feedback.jsonl, but not one a model made, such as Think's rewrite of a draft at
+their asking: MODEL_EDITS), and every draft gets those whose closeness was under CHANGED,
 newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
 write like what was sent and never like what was drafted. So a change counts from the next draft
 on, without training anything.
@@ -89,6 +90,9 @@ SAMPLE_CHARS = 600  # of one: its start and its end, where greetings and sign-of
 HOLDS = 3  # of those a rule must hold on, and on more than it breaks on, to be kept
 QUOTE_WORDS = 4  # the longest quote a rule may carry: a greeting, a sign-off, a filler
 LEARNED = 2000  # pairs remembered as read
+# Edits of a draft a model made, by the `via` their line in feedback.jsonl names: Think's rewrite
+# (proxenos.think), which the user asked for but didn't write. None is the user's correction.
+MODEL_EDITS = frozenset({"think"})
 # Where the user's own posts are, under raw/.
 POSTS = (
     "bluesky/posts",
@@ -349,7 +353,8 @@ def longer(written: Writing, first: str = "email") -> str:
 
 
 def _edits(path: Path) -> list[dict]:
-    """The drafts the user rewrote on the page, as fidelity lists a draft and what was sent."""
+    """The drafts the user rewrote on the page, as fidelity lists a draft and what was sent. Not
+    a model's rewrite (MODEL_EDITS): only what the user changed, before it or after it."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -361,6 +366,8 @@ def _edits(path: Path) -> list[dict]:
         except ValueError:
             continue
         if not (isinstance(event, dict) and event.get("action") == "edit"):
+            continue
+        if event.get("via") in MODEL_EDITS:
             continue
         before, after = _tidy(event.get("before")), _tidy(event.get("after"))
         if before and after and before != after:

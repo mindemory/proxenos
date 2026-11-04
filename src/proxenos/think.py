@@ -423,9 +423,10 @@ def _draft_file(vault: Path, ref: str) -> tuple[Path, str] | None:
 
 
 def _redraft(vault: Path, ref: str, body: str, now: datetime) -> str:
-    """Put the new message in the draft the thread started from, as an edit of the user's (as
-    the page saves one, so no run writes over it and later drafts learn from it), and say so.
-    A draft already sent or set aside is left as it was."""
+    """Put the new message in the draft the thread started from, logged as an edit, as the page
+    saves one, so no run writes over it, and say so. It's marked via think: the model wrote it,
+    so it's never learned from as the user's correction (proxenos.voice.MODEL_EDITS); an edit
+    the user makes to it after is. A draft already sent or set aside is left as it was."""
     found = _draft_file(vault, ref)
     if not found:
         return "The draft is gone, so the new version is only here."

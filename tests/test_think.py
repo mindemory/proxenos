@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from proxenos import llm, lookup, research, think
+from proxenos import llm, lookup, research, think, voice
 from proxenos.clones import work
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
@@ -296,6 +296,7 @@ def test_asked_to_change_the_draft_it_starts_from_it_does(vault):
     (edit,) = [json.loads(line) for line in (drafts / "feedback.jsonl").read_text().splitlines()]
     assert edit["action"] == "edit" and edit["draft_id"] == "reply-ana" and edit["via"] == "think"
     assert edit["before"] == "Hi Ana, yes. Tess" and edit["after"].endswith("April. Tess")
+    assert voice.Writing(vault).corrections == []  # the model's rewrite, not Tess's change
     assert "updated the draft" in thread["messages"][-1]["text"]
     assert "1 other open draft to them went aside" in thread["messages"][-1]["text"]
     aside = (drafts / "task-ana.md").read_text()
