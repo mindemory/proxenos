@@ -215,19 +215,60 @@ def current() -> str:
 def default() -> str:
     """The model when PROXENOS_MODEL names none: local first, so nothing leaves the computer
     unless the user chose it. The model Ollama has pulled that fits this computer's memory (the
-    largest, as setup suggests it), else Claude, which answers only with a key. Asked once a
-    process, since it takes a call to Ollama."""
+    largest, as setup suggests it), kept in the vault as it's found. While Ollama isn't
+    answering (after a reboot, or at night before the app is up), the one it last found, so the
+    calls fail and are tried again later rather than going to Claude. Claude, which answers only
+    with a key, only when no model on this computer was ever found. Asked once a process, since
+    it takes a call to Ollama."""
     global _default
     if _default is None:
         from proxenos import machine  # only here: machine reads the computer, and llm needn't
 
         pulled = {n: s for n, s in (_pulled() or {}).items() if "embed" not in n}
         best = machine.best(pulled, machine.memory())
-        _default = OLLAMA + best if best else DEFAULT_MODEL
+        if best:
+            _remember(OLLAMA + best)
+        _default = OLLAMA + best if best else _remembered() or DEFAULT_MODEL
     return _default
 
 
 _default: str | None = None
+_LAST_LOCAL = "state/local-model"  # the model on this computer `default` last found
+
+
+def _remembered() -> str:
+    """The local model `default` last found, or "" when none was, or there's no vault."""
+    path = _last_local_path()
+    try:
+        name = path.read_text(encoding="utf-8").strip() if path else ""
+    except OSError:
+        return ""
+    return name if name.startswith(OLLAMA) and len(name) <= 200 else ""
+
+
+def _remember(model: str) -> None:
+    """Keep `model` as the local one last found, private to the user. A vault that can't take
+    it costs only the memory, never the call."""
+    path = _last_local_path()
+    if path is None or _remembered() == model:
+        return
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(model + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def _last_local_path() -> Path | None:
+    try:
+        vault = vault_path()
+    except ValueError:
+        return None
+    return vault / _LAST_LOCAL if vault.is_dir() else None
 
 
 def _pulled() -> dict[str, int | None] | None:

@@ -315,6 +315,50 @@ def test_with_no_model_set_one_on_this_computer_goes_first(tmp_path, monkeypatch
         assert llm.current() == "ollama:gemma4:e4b"
 
 
+def test_with_ollama_down_the_local_model_last_found_stays_rather_than_claude(
+    tmp_path, monkeypatch
+):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
+    monkeypatch.delenv("PROXENOS_MODEL", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr("proxenos.machine.memory", lambda: 32 * 2**30)
+    monkeypatch.setattr(llm, "_pulled", lambda: {"gemma4:26b": 17 * 10**9})
+    assert llm.current() == "ollama:gemma4:26b"
+    kept = vault / "state" / "local-model"
+    assert kept.read_text() == "ollama:gemma4:26b\n"
+    if os.name != "nt":
+        assert kept.stat().st_mode & 0o777 == 0o600
+        assert kept.parent.stat().st_mode & 0o777 == 0o700
+
+    # The night's next process starts before Ollama is up: the same local model, whose calls
+    # fail and come again, never Claude with the key.
+    monkeypatch.setattr(llm, "_default", None)
+    monkeypatch.setattr(llm, "_pulled", lambda: None)
+    assert llm.current() == "ollama:gemma4:26b" and llm.configured()
+    # A larger one pulled since is found and kept the next time Ollama answers.
+    monkeypatch.setattr(llm, "_default", None)
+    monkeypatch.setattr(llm, "_pulled", lambda: {"gemma4:31b": 20 * 10**9})
+    assert llm.current() == "ollama:gemma4:31b"
+    assert kept.read_text() == "ollama:gemma4:31b\n"
+
+
+def test_with_no_local_model_ever_found_a_saved_key_answers(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
+    monkeypatch.delenv("PROXENOS_MODEL", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert llm.current() == llm.DEFAULT_MODEL and llm.configured()
+    assert not (vault / "state" / "local-model").exists()
+    # Nor does anything but a local model's name, written by hand, count.
+    (vault / "state").mkdir()
+    (vault / "state" / "local-model").write_text("claude-opus-5-5\n")
+    monkeypatch.setattr(llm, "_default", None)
+    assert llm.current() == llm.DEFAULT_MODEL
+
+
 def test_a_voice_model_answers_from_the_server_on_this_computer(monkeypatch):
     import io
     import json
