@@ -99,9 +99,10 @@ Return:
 - who: who the person is and {person}'s history with them, in one to three sentences said to \
 {person} as "you", from what you were given only; "" when it holds nothing on them.
 - subject: the email's subject line, always, for an email; "" only for a chat message.
-- body: the message itself, as it would be sent: in {person}'s voice, shaped like their earlier \
-emails of this kind (their length, how they open and close, how they mention the CV and sign \
-off). No subject line in it. No [placeholder] unless something truly can't be known; never one \
+- body: the message itself, as it would be sent: in {person}'s voice. An email is shaped like \
+their earlier emails of this kind (their length, how they open and close, how they mention the \
+CV and sign off); a chat message like their own chat messages, with no email greeting, sign-off \
+or signature. No subject line in it. No [placeholder] unless something truly can't be known; never one \
 for the person's address.
 - cv_notes: each fact in the CV that is no longer true of {person}, against who they are now \
 below: what the CV says, word for word, and what is true now. Only a fact that changed: a title, \
@@ -292,6 +293,8 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         max_tokens=4000,
     )
     body = str(answer.get("body") or "").strip()
+    if goes != "email":
+        body = _chat_body(body, person)
     if not body:
         raise ValueError("the model wrote no message")
     errand["who"] = _text(answer.get("who"))
@@ -750,6 +753,36 @@ def _message(
         "state": "ready" if route else "waiting",
         "sent_at": "",
     }
+
+
+_SIGN_OFF = re.compile(
+    r"(?i)(best|best wishes|kind regards|regards|thanks|thank you|cheers|warmly|sincerely),?"
+)
+_DEGREES = r"(?:,?\s*(?:PhD|Ph\.D\.?|MD|MSc?|MA|BSc?|BA))*"
+
+
+def _chat_body(body: str, person: str) -> str:
+    """A chat message without the signature block a model shaping it like an email puts under
+    it (the person's name and titles, ending the message), nor the closing word above that."""
+    lines, words = body.rstrip().splitlines(), person.split()
+    if not words:
+        return body.strip()
+    name = re.compile(
+        rf"(?i)[-–—~ ]*{re.escape(words[0])}"
+        + "".join(rf"(?:\s+{re.escape(w)})?" for w in words[1:])
+        + _DEGREES
+        + r"\.?"
+    )
+    tail = range(max(len(lines) - 6, 1), len(lines))  # a signature is the last few lines
+    start = next((i for i in tail if name.fullmatch(lines[i].strip())), None)
+    if start is None:
+        return body.strip()
+    lines = lines[:start]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and _SIGN_OFF.fullmatch(lines[-1].strip()):
+        lines.pop()
+    return "\n".join(lines).strip()
 
 
 def _stale(notes: object) -> list[str]:

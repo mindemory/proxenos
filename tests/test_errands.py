@@ -305,6 +305,26 @@ def test_a_wechat_message_is_written_to_copy_there_never_sent_another_way(vault)
     assert errands.recheck(vault, errand, NOW) is False
 
 
+def test_a_chat_message_loses_the_signature_an_email_would_have(vault):
+    class Signed(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            if "body" in answer:
+                answer["body"] += ", PhD\nOperations Manager\nAcme Labs"
+            return answer
+
+    errand = errands.start(vault, "Reach Ben Ode", NOW, Signed("Ben Ode", "Acme Labs"))
+
+    (message,) = errand["messages"]
+    assert message["channel"] == "linkedin"
+    assert message["body"] == "Hi Ben,\n\nI'm writing about the open role."
+    assert errands._chat_body("Can you read it?\n\nThanks!\nJoe", "Joe Bloggs") == (
+        "Can you read it?\n\nThanks!"
+    )
+    kept = "Hey Ben!\nJoe here, I wrote a paper.\nCan you read it?"
+    assert errands._chat_body(kept, "Joe Bloggs") == kept
+
+
 def test_an_errand_that_fails_says_so_and_fails(vault):
     def broken(prompt, **kw):
         raise llm.ModelError("the model fell over")
