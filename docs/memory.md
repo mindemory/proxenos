@@ -98,9 +98,14 @@ That distance can be measured, so it doesn't rest on impressions:
   and per kind of message. Closeness is the share of the draft still in what you sent: Python's
   difflib ratio (Ratcliff/Obershelp) on the words in lower case, the draft first and what you
   sent second, without difflib's autojunk, which would score a text of 200 characters or more
-  by another rule than a short chat. Each sync measures every draft again, and a comparison
-  round's scores are worked out again from its texts whenever it's read, so every score
-  follows the measure as it is now. A draft you send nearly unchanged (closeness 0.9 or more)
+  by another rule than a short chat. The draft is the model's text as you last saw it before
+  you acted on it: an edit on the Drafts page writes your text over the draft, so what the edit
+  replaced (kept with it in `clones/drafts/feedback.jsonl`) is scored, and a rewrite Think made
+  at your asking counts as the model's. A draft edited before the page kept what an edit
+  replaced has no score, rather than your edit scored against itself. Each sync measures every
+  draft again, and a comparison round's scores are worked out again from its texts whenever
+  it's read, so every score follows the measure as it is now. A draft you send nearly
+  unchanged (closeness 0.9 or more)
   comes back as your own message, but its words are the model's, so nothing that learns how you
   write (the examples a draft is shown, the checks on writing rules, the voice model, the
   observers) reads it as yours; one you changed more stays yours, and teaches the change.

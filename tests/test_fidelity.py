@@ -98,6 +98,59 @@ def test_a_draft_sent_nearly_as_written_is_marked_as_the_models_words(tmp_path):
     assert marked["2026-03-10T12:06:00Z"] and not marked["2026-03-10T12:10:00Z"]
 
 
+def test_closeness_scores_the_models_text_never_the_users_edit_of_it(tmp_path):
+    chats_at = {  # each draft's chat, and what the user sent there after it
+        "page": "hey ana, yes count me in for sunday",
+        "think": "Happy to help with the move on Saturday morning.",
+        "both": "sat morning works, bringing boxes",
+        "old": "fine by me",
+    }
+    records = []
+    for n, (chat, sent) in enumerate(chats_at.items()):
+        where = {"chat_id": chat, "chat_name": chat.title()}
+        records += [
+            wa(f"2026-03-10T11:{n:02d}:00Z", "can you?", False) | where | {"id": f"{chat}-q"},
+            wa(f"2026-03-10T12:{n + 1:02d}:00Z", sent, True) | where | {"id": f"{chat}-a"},
+        ]
+    write_jsonl(tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl", records)
+    folder = tmp_path / "clones" / "drafts"
+    model = "Dear Ana, I would be delighted to attend on Sunday. Best wishes."
+    rewrite = "Happy to help with the move on Saturday morning."
+
+    def edit(draft_id, before, after, **more):
+        return {"draft_id": draft_id, "action": "edit", "before": before, "after": after} | more
+
+    # Each file holds the draft's text as it stands: the user's edit where they made one.
+    draft(folder, "page", chats_at["page"], chat="page")
+    draft(folder, "think", rewrite, chat="think")
+    draft(folder, "both", chats_at["both"], chat="both")
+    draft(folder, "old", chats_at["old"], chat="old")
+    events = [
+        edit("page", model, "hey ana, yes count me in"),
+        edit("page", "hey ana, yes count me in", chats_at["page"]),
+        edit("think", model, rewrite, via="think"),
+        edit("both", model, rewrite, via="think"),
+        edit("both", rewrite, chats_at["both"]),
+        {"draft_id": "old", "action": "edit"},  # as the page logged an edit before it kept more
+    ]
+    (folder / "feedback.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+
+    fidelity.measure(tmp_path)
+
+    data = json.loads((folder / "fidelity.json").read_text())
+    by_id = {m["id"]: m for m in data["drafts"]}
+    # Edited on the page twice: scored from the model's own text, not the user's last edit.
+    assert by_id["page"]["draft_text"] == model and by_id["page"]["closeness"] < 0.5
+    # Think's rewrite, sent as is: the model's words, scored as such.
+    assert by_id["think"]["draft_text"] == rewrite and by_id["think"]["closeness"] == 1.0
+    # Think's rewrite, then the user's edit: scored from the rewrite they last saw.
+    assert by_id["both"]["draft_text"] == rewrite and by_id["both"]["closeness"] < 0.9
+    # What an old edit replaced is gone: no closeness, rather than the user's edit scored.
+    assert by_id["old"]["closeness"] is None and by_id["old"]["draft_text"] is None
+    assert data["by_source"]["whatsapp"]["n"] == 3
+    assert chats.drafted(tmp_path) == {("whatsapp", "think-a")}
+
+
 def test_a_draft_still_waiting_is_marked_sent_once_its_chat_was_answered(tmp_path):
     write_jsonl(
         tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",

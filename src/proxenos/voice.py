@@ -193,7 +193,14 @@ class Writing:
             measured = json.loads((folder / "fidelity.json").read_text(encoding="utf-8"))["drafts"]
         except (OSError, ValueError, KeyError, TypeError):
             measured = []
-        measured = [*_edits(folder / "feedback.jsonl"), *(m for m in measured or [] if m)]
+        measured = (
+            [m for m in measured if isinstance(m, dict)] if isinstance(measured, list) else []
+        )
+        # A draft edited on the page and then sent: fidelity pairs the model's text with what
+        # was sent, which already holds the edit, so the edit isn't counted again on its own.
+        sent = {str(m["id"]) for m in measured if m.get("id")}
+        edits = [e for e in _edits(folder / "feedback.jsonl") if e["draft_id"] not in sent]
+        measured = [*edits, *measured]
         # What the user sent after changing a draft stays their writing (only a draft sent
         # nearly as written is the model's, see proxenos.fidelity), and the draft beside it here
         # is how a change is learned from: no other mark is needed.
@@ -378,6 +385,7 @@ def _edits(path: Path) -> list[dict]:
             close = SequenceMatcher(None, before, after, autojunk=False).ratio()
             found.append(
                 {
+                    "draft_id": str(event.get("draft_id") or ""),
                     "source": _SOURCE_OF.get(channel, channel),
                     "to": event.get("to") or "",
                     "ts": str(event.get("ts") or ""),

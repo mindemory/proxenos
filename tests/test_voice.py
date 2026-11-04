@@ -452,6 +452,30 @@ def test_a_rewrite_think_made_is_no_change_of_mine_but_my_edit_after_it_is(tmp_p
     assert "hi asha, see you" not in voice.corrections(voice.Writing(vault), "whatsapp", "Asha")
 
 
+def test_a_draft_i_edited_then_sent_teaches_once_from_the_models_text_to_what_i_sent(tmp_path):
+    vault = chat_vault(tmp_path)
+    folder = vault / "clones" / "drafts"
+    folder.mkdir(parents=True)
+    edits = [
+        {"draft_id": "a", "action": "edit", "ts": "2026-03-09T10:00:00Z", "channel": "whatsapp",
+         "to": "Asha", "before": "Dear Asha, I trust you are well.", "after": "heyy asha all good?"},
+        {"draft_id": "b", "action": "edit", "ts": "2026-03-09T11:00:00Z", "channel": "whatsapp",
+         "to": "Ben", "before": "Dear Ben, kind regards.", "after": "ben!! see you there"},
+    ]  # fmt: skip
+    (folder / "feedback.jsonl").write_text("".join(json.dumps(e) + "\n" for e in edits))
+    measured = {"id": "a", "source": "whatsapp", "to": "Asha", "closeness": 0.3,
+                "sent": "2026-03-09T12:00:00Z", "draft_text": "Dear Asha, I trust you are well.",
+                "sent_text": "heyy asha all good? see you"}  # fmt: skip
+    (folder / "fidelity.json").write_text(json.dumps({"drafts": [measured]}))
+
+    pairs = [(m["draft_text"], m["sent_text"]) for m in voice.Writing(vault).corrections]
+
+    assert pairs == [
+        ("Dear Asha, I trust you are well.", "heyy asha all good? see you"),  # as sent, once
+        ("Dear Ben, kind regards.", "ben!! see you there"),  # edited, not sent yet
+    ]
+
+
 # Rules learned from drafts I changed
 
 SENT = [  # what Tess sent instead of six drafts to Aai, the first also a message in their chat

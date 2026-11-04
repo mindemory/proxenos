@@ -1728,7 +1728,8 @@ export async function getDraftCloseness(vault: string = vaultPath()): Promise<Dr
     drafts?: { closeness?: unknown }[];
     by_source?: Record<string, { n?: unknown; mean?: unknown }>;
   } | null;
-  const drafts = Array.isArray(raw?.drafts) ? raw.drafts : [];
+  // A draft edited before the page kept what an edit replaced has no closeness: it isn't counted.
+  const drafts = (Array.isArray(raw?.drafts) ? raw.drafts : []).filter((d) => typeof d?.closeness === "number");
   if (drafts.length === 0) return null;
   const bySource: DraftCloseness["bySource"] = {};
   for (const [source, s] of Object.entries(raw?.by_source ?? {})) {

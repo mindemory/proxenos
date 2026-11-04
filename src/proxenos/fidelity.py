@@ -8,19 +8,27 @@ matter whether they sent it from the page or typed their own; either way it says
 twin got. A draft still waiting when its chat shows the user wrote there after it is marked sent:
 they've answered, so it no longer waits on them.
 
+The draft's text is the model's, as it last wrote it before the user acted on it (_model_text):
+an edit on the page writes the user's own text over the draft's file, and scoring that would
+score the user against themselves, so the text each edit replaced, which feedback.jsonl keeps
+with it, is scored instead; a rewrite by Think is the model's writing too. A draft edited
+before the page kept what an edit replaced has no closeness (None): it's left out of the means,
+not scored by the user's edit. Each run measures every draft again from the drafts and the
+chats, so fidelity.json always holds the measure as it is now.
+
 A draft with no chat of its own, such as the message a task or an outreach idea asked for, is
 matched by whom it's to, on its channel: the one-to-one chat with someone of that name, or for an
 email, the user's mail to that address. Once they've written to that person there, it's handled
 the same way, whether or not they used the draft.
 
 Written to clones/drafts/fidelity.json: each measured draft {id, source, to, drafted, sent,
-closeness, draft_text, sent_text} and, per source, how many and their mean. The two texts,
-each cut to TEXT_CHARS, are what proxenos.voice shows the drafting model of a draft the user
-changed before sending, beside what they sent instead, so the next draft starts from the
-change, and what proxenos.voice.lessons learns writing rules from; the voice model learns it
-when it's trained again (proxenos.voicemodel.refresh). That's the measure that should decide
-when a kind of reply can go out without asking (docs/memory.md). No model; nothing leaves the
-vault.
+closeness, draft_text, sent_text} and, per source, how many have a closeness and their mean.
+The two texts, each cut to TEXT_CHARS, are what proxenos.voice shows the drafting model of a
+draft the user changed before sending, beside what they sent instead, so the next draft starts
+from the change, and what proxenos.voice.lessons learns writing rules from; the voice model
+learns it when it's trained again (proxenos.voicemodel.refresh). That's the measure that
+should decide when a kind of reply can go out without asking (docs/memory.md). No model;
+nothing leaves the vault.
 
 A draft sent nearly unchanged (closeness NEARLY or more) comes back through the sources as the
 user's own message, but its words are the model's. So the messages it was sent as, by (source,
@@ -40,7 +48,7 @@ from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from proxenos import chats
+from proxenos import chats, voice
 from proxenos.clones import work
 
 WINDOW = timedelta(days=3)
@@ -54,21 +62,7 @@ _CHAT_SOURCES = {"whatsapp", "slack", "linkedin", "facebook", "instagram", "twit
 
 def measure(vault: Path) -> dict[str, int]:
     folder = vault / "clones" / "drafts"
-    wanted: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by chat
-    named: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by whom it's to
-    for path in sorted(folder.glob("*.md")):
-        text = path.read_text(encoding="utf-8")
-        front = work._FRONT.match(text)
-        fields = work._front(text) or {}
-        thread = _json(fields.get("thread"))
-        if not (front and fields.get("created")):
-            continue
-        draft = fields | {"body": text[front.end() :], "path": path}
-        if isinstance(thread, dict):
-            wanted[thread.get("source"), thread.get("chat")].append(draft)
-        elif who := _recipient(fields):
-            named[who].append(draft)
-
+    wanted, named = _drafts(folder)
     measured = []
     answered = 0
     seen: set[Path] = set()  # a draft matched by two chats counts once
@@ -87,9 +81,10 @@ def measure(vault: Path) -> dict[str, int]:
                 if draft.get("status") in ("draft", "approved"):
                     _mark_sent(draft["path"])
                     answered += 1
-                closeness = round(_closeness(draft["body"], sent), 2)
+                theirs = draft["text"]  # the model's, or None when that's gone
+                closeness = None if theirs is None else round(_closeness(theirs, sent), 2)
                 looked |= {(source, m["id"]) for m in sent}
-                if closeness >= NEARLY:
+                if closeness is not None and closeness >= NEARLY:
                     nearly |= {(source, m["id"]) for m in sent}
                 measured.append(
                     {
@@ -99,7 +94,7 @@ def measure(vault: Path) -> dict[str, int]:
                         "drafted": draft["created"],
                         "sent": sent[0]["ts"],
                         "closeness": closeness,
-                        "draft_text": _clip(draft["body"]),
+                        "draft_text": None if theirs is None else _clip(theirs),
                         "sent_text": _clip("\n".join(m["text"] for m in sent)),
                     }
                 )
@@ -111,12 +106,71 @@ def measure(vault: Path) -> dict[str, int]:
     measured.sort(key=lambda m: m["sent"], reverse=True)
     by_source: dict[str, list[float]] = defaultdict(list)
     for m in measured:
-        by_source[m["source"]].append(m["closeness"])
+        if m["closeness"] is not None:
+            by_source[m["source"]].append(m["closeness"])
     summary = {s: {"n": len(v), "mean": round(sum(v) / len(v), 2)} for s, v in by_source.items()}
     out = {"generated": _now(), "by_source": summary, "drafts": measured}
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fidelity.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
     return {"drafts_measured": len(measured), "drafts_answered": answered}
+
+
+def _drafts(folder: Path) -> tuple[dict, dict]:
+    """Each draft with front matter and when it was written, with "text", what the model last
+    wrote of it (_model_text), by the chat it answers (source, chat key) and, for one with no
+    chat, by whom it's to (_recipient)."""
+    edits = _edits(folder / "feedback.jsonl")
+    wanted: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by chat
+    named: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by whom it's to
+    for path in sorted(folder.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        front = work._FRONT.match(text)
+        fields = work._front(text) or {}
+        thread = _json(fields.get("thread"))
+        if not (front and fields.get("created")):
+            continue
+        body = text[front.end() :]
+        mine = edits.get(str(fields.get("id") or path.stem), [])
+        draft = fields | {"body": body, "path": path, "text": _model_text(body, mine)}
+        if isinstance(thread, dict):
+            wanted[thread.get("source"), thread.get("chat")].append(draft)
+        elif who := _recipient(fields):
+            named[who].append(draft)
+    return wanted, named
+
+
+def _model_text(body: str, edits: list[dict]) -> str | None:
+    """The draft as the model last wrote it before the user acted on it. An edit on the page
+    writes the user's text over the draft's file and keeps what it replaced ("before"), so from
+    the text there now, each of the user's edits since a model last wrote it is undone back to
+    the first; a model's rewrite (proxenos.voice.MODEL_EDITS: Think's) is the model's text. None
+    when an edit of the user's kept nothing of what it replaced, as the page's didn't before it
+    logged it: the model's text is gone, and scoring the edit instead would score the user."""
+    text = body
+    for edit in reversed(edits):
+        if edit.get("via") in voice.MODEL_EDITS:
+            break
+        if not isinstance(edit.get("before"), str):
+            return None
+        text = edit["before"]
+    return text
+
+
+def _edits(path: Path) -> dict[str, list[dict]]:
+    """Each draft's edits in feedback.jsonl, the page's and a model's, by draft id, in order."""
+    found: dict[str, list[dict]] = defaultdict(list)
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return found
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("action") == "edit" and event.get("draft_id"):
+            found[str(event["draft_id"])].append(event)
+    return found
 
 
 def _recipient(fields: dict) -> tuple[str, str] | None:
