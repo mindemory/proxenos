@@ -443,3 +443,37 @@ def test_the_page_request_is_checked(vault, monkeypatch):
             offers._request(line)
     assert offers.slug_of("A Lawyer, for my O-1!") == "a-lawyer-for-my-o-1"
     assert offers.slug_of("…") == "offers"
+
+
+def test_an_old_message_about_money_is_read_before_newer_scheduling():
+    theirs = [{"ts": "2026-09-01T10:00:00Z", "text": "A first assessment is at no charge for you."}]
+    theirs += [
+        {"ts": f"2026-09-0{d}T10:00:00Z", "text": f"Could we move it to {d} pm?"}
+        for d in range(2, 10)
+    ]
+    read = offers._priced_first(theirs, 4)
+    assert len(read) == 4 and read[0]["text"].startswith("A first assessment")  # kept, oldest first
+    assert [m["ts"][:10] for m in read[1:]] == ["2026-09-07", "2026-09-08", "2026-09-09"]
+
+
+def test_someone_with_no_offer_is_listed_apart_from_the_table():
+    def row(name, first="", price=""):
+        return {
+            "name": name,
+            "people": [],
+            "first": {"what": first, "price": price},
+            "whole": {"what": "", "price": ""},
+            "prices": [],
+            "credited": "",
+            "terms": [],
+            "last": "2026-11-02T00:00:00Z",
+            "owes": "them",
+            "missing": [],
+            "unconfirmed": [],
+        }
+
+    report = {"rows": [row("Lee Immigration Law", "consultation", "$300"), row("A friend")]}
+    report |= {"since": "2025-11-02", "note": ""}
+    text = offers.table(report)
+    assert "| Lee Immigration Law | consultation, $300 |" in text
+    assert "A friend |" not in text and "Also wrote about it, with no offer: A friend." in text

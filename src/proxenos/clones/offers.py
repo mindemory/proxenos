@@ -59,7 +59,7 @@ from proxenos.config import env
 
 MONTHS = 12
 COUNTERPARTS = 12
-THEIRS = 8  # their newest messages read
+THEIRS = 8  # their messages read: those that speak of money first, then their newest
 MINE = 4  # the user's own to them, as what was asked
 SEEDS = 60  # records the goal's searches keep
 AROUND = 6  # records read on each side of one found, in its conversation
@@ -332,7 +332,7 @@ def find(vault: Path, goal: str, since: str) -> list[dict]:
             "hits": sum(m["id"] in hits for m in group["theirs"] + group["mine"]),
             "last": max(theirs, mine),
             "owes": "them" if mine > theirs else "you",
-            "theirs": group["theirs"][-THEIRS:],
+            "theirs": _priced_first(group["theirs"], THEIRS),
             "mine": group["mine"][-MINE:],
         }
         found.append(group)
@@ -606,12 +606,41 @@ def _row_line(r: dict) -> str:
     return "- " + "; ".join(parts)
 
 
+_SPEAKS_OF_MONEY = re.compile(
+    r"(?i)[$€£₹]\s?\d|\b(?:fee|fees|price|cost|charge|rate|quote|free|retainer|invoice)\b"
+)
+
+
+def _priced_first(theirs: list[dict], limit: int) -> list[dict]:
+    """Their messages to read, oldest first: every one that speaks of money (a fee, a price, a
+    charge, "free"), however old, since an offer is often made once and followed by scheduling,
+    then their newest, up to `limit` in all."""
+    money = [m for m in theirs if _SPEAKS_OF_MONEY.search(str(m.get("text") or ""))][-limit:]
+    rest = (
+        [m for m in theirs if m not in money][-(limit - len(money)) :] if len(money) < limit else []
+    )
+    return sorted(money + rest, key=lambda m: m["ts"])
+
+
+def _offers_something(r: dict) -> bool:
+    """Whether a row holds an offer: a first step, a whole, a price, something credited or a
+    term. Someone who only talked about the goal, a friend or a colleague, holds none."""
+    return bool(
+        _priced(*r["first"].values())
+        or _priced(*r["whole"].values())
+        or r["prices"]
+        or r["credited"]
+        or r["terms"]
+    )
+
+
 def table(report: dict) -> str:
     """The rows as a Markdown table, with the note and what was left out under it."""
     head = ("Who", "First step", "The whole", "Credited", "Terms", "Last contact")
     head += ("Reply owed by", "Still to ask")
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
-    for r in report["rows"]:
+    offering = [r for r in report["rows"] if _offers_something(r)]
+    for r in offering:
         who = r["name"] + (f" ({', '.join(p['name'] for p in r['people'])})" if r["people"] else "")
         cells = [
             who,
@@ -624,9 +653,12 @@ def table(report: dict) -> str:
             "; ".join(r["missing"]) or "nothing",
         ]
         lines.append("| " + " | ".join(_cell(c) for c in cells) + " |")
-    if not report["rows"]:
+    if not offering:
         lines = [f"Nothing in your mail or chats since {report['since']} reads as an offer."]
     parts = ["\n".join(lines)]
+    talked = [r["name"] for r in report["rows"] if not _offers_something(r)]
+    if talked:
+        parts.append("Also wrote about it, with no offer: " + ", ".join(talked) + ".")
     if report["note"]:
         parts.append(f"What to compare on: {report['note']}")
     dropped = [
