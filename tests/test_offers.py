@@ -13,7 +13,7 @@ from proxenos.clones import errands, offers
 
 NOW = datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
 GOAL = "immigration lawyer for my visa"
-PRIVATE = os.name == "nt"  # Windows keeps no Unix modes
+NO_MODES = os.name == "nt"  # Windows keeps no Unix modes
 
 
 def write_month(vault, folder, month, records):
@@ -286,7 +286,7 @@ def test_a_price_the_model_made_up_is_dropped_and_said(vault):
     assert lee["whole"]["price"] == "$6,500"
     assert lee["prices"] == []
     assert lee["terms"] == ["A payment plan in 3 installments."]  # no "30 days" in their mail
-    assert set(lee["unconfirmed"]) == {"the first step's price", "a price's price", "a term"}
+    assert set(lee["unconfirmed"]) == {"the first step's price", "a price", "a term"}
     assert lee["people"] == [{"name": "Ana Lee", "role": "Partner"}]  # not one they never named
     assert lee["name"] == "Lee Immigration Law" and lee["address"] == "ana@leelaw.com"
     sam = next(r for r in report["rows"] if r["key"] == "mail:sam.ruiz@gmail.com")
@@ -424,7 +424,7 @@ def test_files_are_private(vault):
         folder / "immigration-lawyer-for-my-visa.md",
     ]
     assert all(f.exists() for f in files)
-    if PRIVATE:
+    if NO_MODES:
         return
     assert folder.stat().st_mode & 0o777 == 0o700
     assert all(f.stat().st_mode & 0o777 == 0o600 for f in files)

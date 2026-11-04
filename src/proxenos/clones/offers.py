@@ -507,11 +507,11 @@ def row(cp: dict, raw: dict) -> dict:
             return ""
         return text
 
-    def pair(value: object, what: str) -> dict:
+    def pair(value: object, what: str, price: str) -> dict:
         value = value if isinstance(value, dict) else {}
         return {
             "what": held(value.get("what"), what),
-            "price": held(value.get("price"), f"{what}'s price"),
+            "price": held(value.get("price"), price),
         }
 
     def each(values: object, what: str, offer: bool = True) -> list[str]:
@@ -528,7 +528,11 @@ def row(cp: dict, raw: dict) -> dict:
     address = _line(raw.get("address")).lower()
     if address not in cp["addresses"]:
         address = cp["addresses"].most_common(1)[0][0] if cp["addresses"] else ""
-    prices = [pair(p, "a price") for p in raw.get("prices") or [] if isinstance(p, dict)]
+    prices = [
+        pair(p, "what a price covers", "a price")
+        for p in raw.get("prices") or []
+        if isinstance(p, dict)
+    ]
     return {
         "key": cp["key"],
         "kind": cp["kind"],
@@ -538,8 +542,8 @@ def row(cp: dict, raw: dict) -> dict:
         "people": people[:PEOPLE],
         "address": address,
         "how": cp["how"].get(address, ""),
-        "first": pair(raw.get("first_step"), "the first step"),
-        "whole": pair(raw.get("whole"), "the whole"),
+        "first": pair(raw.get("first_step"), "the first step", "the first step's price"),
+        "whole": pair(raw.get("whole"), "the whole", "the price of the whole"),
         "prices": [p for p in prices if p["price"]][:ITEMS],
         "credited": held(raw.get("credited"), "what's credited"),
         "terms": each(raw.get("terms"), "a term"),
@@ -973,7 +977,9 @@ def _domain(address: str) -> str:
 
 def _personal(domain: str) -> bool:
     labels = domain.split(".")
-    return domain in PERSONAL or (labels[0] in _PERSONAL_NAMES and len(labels) <= 3)
+    # yahoo.com, yahoo.co.uk, hotmail.com.au: the name, then a country's or a plain suffix.
+    country = len(labels) == 3 and labels[1] in ("co", "com")
+    return domain in PERSONAL or (labels[0] in _PERSONAL_NAMES and (len(labels) == 2 or country))
 
 
 def _count(n: int, word: str) -> str:
