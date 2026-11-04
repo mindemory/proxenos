@@ -6,7 +6,7 @@ Notes for AI coding agents (and people) working in this repo. The README says wh
 
 - `src/proxenos/`: the Python package and the `proxenos` command (`cli.py`).
   - `ingest/`: one module per source. Each pulls its source into the vault as monthly JSONL files, merged by id, so a re-run changes nothing.
-  - `clones/`: one module per agent (tasks, care, advisor, network, recall, projects, steps, errands, work). Each reads the vault and writes its output under `vault/clones/<name>/`.
+  - `clones/`: one module per agent (tasks, care, advisor, network, recall, projects, steps, errands, offers, work). Each reads the vault and writes its output under `vault/clones/<name>/`.
   - `calls.py`, `callserver.py`, `twilio.py`: phone calls the user starts, through their own Twilio account.
   - `master.py`: sync, observe and the self-model. `chats.py`: conversations waiting on the user. `voice.py`: writing as the user. `fidelity.py`: how close drafts came to what was sent. `compare.py`: which of two models writes replies most like the user, judged blind by them. `llm.py`: the model, local (Ollama) or hosted. `notify.py`: a notice to the user's own phone through ntfy when more waits on them, counts only.
 - `web/`: the local page (Next.js). API routes in `web/src/app/api/` read the vault and run the `proxenos` command; views in `web/src/components/views/`.

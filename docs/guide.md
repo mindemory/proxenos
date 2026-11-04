@@ -38,6 +38,7 @@ Proxenos gathers your own data (messages, email, calendar, notes, documents, act
 - the forms you're handed (a PDF application, an intake form) filled from your records, leaving the ID numbers, account numbers and signature to you;
 - advice grounded in your own patterns;
 - once a week, what's worth taking on (a call for papers, a fellowship, a talk, a piece of writing, with a first step drafted) and what's worth letting go of (a meeting, a thread, an invitation, with the decline drafted), by your own goals;
+- what several people or firms offered for one thing you're choosing (a lawyer, a contractor, a flat, a clinic, a job), side by side from your own mail and chats: the first step and its price, the whole and its price, what's credited, their terms and who owes whom a reply, every price as they wrote it, with a reply to each in your voice asking for what's missing, such as a flat fee for the whole, which may say someone else offers less but never who;
 - where each of your long-running projects stands, from your messages and its code on every branch, and, given its code, the next step of its work done on a branch of its own for you to accept;
 - a map of the people you know and how they connect;
 - a searchable memory that brings the right past messages and notes to mind, by their words and by their meaning;
@@ -98,7 +99,7 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
                                                         clones: feed, tasks, advice,
                                                         choices, jobs, watch,
                                                         network, recall, projects, project
-                                                        steps, errands, drafts,
+                                                        steps, errands, offers, drafts,
                                                         journal, life, rhythms
                                                                 │
                                                         local page (127.0.0.1)

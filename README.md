@@ -46,7 +46,7 @@ Setup asks your name, where to keep the vault and which model to use, then Conne
 
 **It drafts, you send.** A reply for each chat waiting on you, written the way you write to that person, and emails, plans, call scripts and filled-in forms. You press send. The two exceptions are yours to start: an outbox you switch on per app, only where its drafts have gone out nearly unchanged many times ([docs/memory.md](docs/memory.md#the-outbox)), and a phone call you place, where it says it's automated and never agrees to pay ([docs/calls.md](docs/calls.md)).
 
-**Your work and your life.** For each project or paper it writes where things stand and, given the code, does the next step on a branch for you to accept. It also keeps your job leads, a journal of each day, a diary of your life by month, and your weeks of listening, movement and messages over time.
+**Your work and your life.** For each project or paper it writes where things stand and, given the code, does the next step on a branch for you to accept. It also keeps your job leads, offers side by side with what to ask each, a journal of each day, a diary of your life by month, and your weeks of listening, movement and messages over time.
 
 **Local by default.** With a model on your computer, no prompt leaves it, apart from a call's audio. If you choose, Claude takes what you wait on (Ask, Think, errands, calls) and the rest stays local. Each model call is logged, never its words. Which local model drafts well on a 16 GB Mac is still open.
 
@@ -62,4 +62,4 @@ Everything personal stays in a vault on your computer, outside this repository, 
 
 ## Status and contributing
 
-It works, and its author uses it every day: about 83,000 lines of code, with 30,000 more in 1,123 tests, checked on macOS and Windows on every push. It runs best on a Mac, some sign-ins still need a developer account of your own, and it isn't medical advice: what matters belongs with your care team. Help is welcome, from people with medical training especially: see [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions), the [roadmap](docs/roadmap.md), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) and [the website](https://www.mindemory.io/proxenos).
+It works, and its author uses it every day: about 83,000 lines of code, with 30,000 more in 1,123 tests, checked on macOS and Windows on every push. It runs best on a Mac, some sign-ins still need your own developer account, and it isn't medical advice: what matters belongs with your care team. Help is welcome, from people with medical training especially: see [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions), the [roadmap](docs/roadmap.md), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) and [the website](https://www.mindemory.io/proxenos).
