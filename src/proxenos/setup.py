@@ -15,7 +15,9 @@ secret's value: only whether it's set.
   SearXNG's ("searxng_url"), for looking people up (proxenos.lookup), is any web address, and
   "lookup" is on or off.
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
-  it would use) and saves it, and the model is then Anthropic's.
+  it would use) and saves it. Claude then answers what the user waits on (the ask model, set to
+  Claude unless one is set already); the model for the rest stays as it was, a local one theirs.
+  With no model set, one Ollama has on this computer is used first (llm.default).
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
 - {"server": "qwen3-8b"} checks that the server at PROXENOS_LOCAL_URL serves that model, and
   uses it, as "local:qwen3-8b".
@@ -84,7 +86,7 @@ _KEY_CHECK_SECONDS = 20
 def status() -> dict:
     home = Path.home()
     vault = Path(config.env("VAULT", config.DEFAULT_VAULT)).expanduser().resolve()
-    model = config.env("MODEL", llm.DEFAULT_MODEL)
+    model = config.env("MODEL") or llm.default()
     held = config.secrets()
     if model.startswith(llm.LOCAL):
         kind, name = "local", llm.bare(model)
@@ -287,18 +289,26 @@ def _make_vault(typed: str) -> str:
 
 
 def _save_key(key: str) -> str:
+    """Check the key and keep it. Claude then takes what the user waits on (Ask, Think, errands,
+    calls): the ask model, set to Claude unless they chose one already. The rest stays where it
+    was, on the model on this computer when there is one; only with none does Claude take all."""
     if not _KEY.fullmatch(key):
         raise ValueError("That isn't an Anthropic API key: they start with sk-ant-.")
-    model = config.env("MODEL", llm.DEFAULT_MODEL)
-    if model.startswith(llm.LOCAL):
-        model = llm.DEFAULT_MODEL
+    ask = config.env("ASK_MODEL")
+    model = ask if ask and not ask.startswith(llm.LOCAL) else llm.DEFAULT_MODEL
     problem = _check_key(key, model)
     if problem:
         raise ValueError(problem)
     where = config.save_secret("ANTHROPIC_API_KEY", key)
-    if config.env("MODEL").startswith(llm.LOCAL):
-        config.save_setting("MODEL", "")
-    return f"The key works with {model}. Saved in {where}."
+    if not ask:
+        config.save_setting("ASK_MODEL", model)
+    rest = config.env("MODEL") or llm.default()
+    if rest.startswith(llm.LOCAL):
+        return (
+            f"The key works with {model}. Saved in {where}. {model} answers what you wait on "
+            f"(Ask, Think, errands, calls); the rest stays on {llm.bare(rest)}, on this computer."
+        )
+    return f"The key works with {model}. Saved in {where}. With no model on this computer, it answers everything."
 
 
 def _check_key(key: str, model: str) -> str | None:

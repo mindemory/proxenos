@@ -261,7 +261,7 @@ def here(vault: Path) -> dict:
 def sent(vault: Path, now: datetime) -> dict:
     """What went to a model in the last DAYS days, by where it ran and by step, the newest calls
     one by one, and what each part sends."""
-    name = config.env("MODEL", llm.DEFAULT_MODEL)
+    name = config.env("MODEL") or llm.default()
     local = name.startswith(llm.LOCAL)
     since = _iso(now - timedelta(days=DAYS))
     calls = [_call(line) for line in llm.calls(vault, since)]

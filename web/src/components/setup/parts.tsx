@@ -410,7 +410,8 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
         <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-accent hover:underline">
           console.anthropic.com
         </a>
-        , kept apart from any work account. A step that drafts sends what it needs to Anthropic under your key.
+        , kept apart from any work account. Claude then answers what you wait on (Ask, Think, errands, calls), sent to
+        Anthropic under your key; the rest stays on the model on this computer, if you have one.
       </p>
       <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <Field label={saved?.set ? "Replace the key" : "API key"}>

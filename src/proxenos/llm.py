@@ -51,7 +51,9 @@ import anthropic
 from proxenos import lock, redact
 from proxenos.config import env, vault_path
 
-# PROXENOS_MODEL overrides it; read on each call, so a value saved in Settings or .env counts too.
+# Claude, which the user chooses with a key (setup makes it what they wait on, PROXENOS_ASK_MODEL),
+# and the model with nothing else to go to. PROXENOS_MODEL picks another; unset, a model on this
+# computer goes first (`default`). Read on each call, so a value saved in Settings or .env counts.
 DEFAULT_MODEL = "claude-opus-5-5"
 _API = "https://api.anthropic.com"
 # On a policy decline the API reruns the request on a fallback model inside the same call.
@@ -203,17 +205,51 @@ def using(
 
 def current() -> str:
     """The model `ask` goes to: PROXENOS_MODEL, unless `using` names another, or someone is
-    waiting on the answer and PROXENOS_ASK_MODEL can give it (`foreground`)."""
+    waiting on the answer and PROXENOS_ASK_MODEL can give it (`foreground`). With neither set,
+    the `default`."""
     return (
-        getattr(_using, "model", None)
-        or (_waited_on and _ask_model())
-        or env("MODEL", DEFAULT_MODEL)
+        getattr(_using, "model", None) or (_waited_on and _ask_model()) or env("MODEL") or default()
     )
 
 
+def default() -> str:
+    """The model when PROXENOS_MODEL names none: local first, so nothing leaves the computer
+    unless the user chose it. The model Ollama has pulled that fits this computer's memory (the
+    largest, as setup suggests it), else Claude, which answers only with a key. Asked once a
+    process, since it takes a call to Ollama."""
+    global _default
+    if _default is None:
+        from proxenos import machine  # only here: machine reads the computer, and llm needn't
+
+        pulled = {n: s for n, s in (_pulled() or {}).items() if "embed" not in n}
+        best = machine.best(pulled, machine.memory())
+        _default = OLLAMA + best if best else DEFAULT_MODEL
+    return _default
+
+
+_default: str | None = None
+
+
+def _pulled() -> dict[str, int | None] | None:
+    """The models Ollama has pulled, with each one's size in bytes, or None when it isn't
+    running."""
+    try:
+        with _direct(f"{_OLLAMA}/api/tags", timeout=2) as response:
+            listed = json.load(response).get("models", [])
+        return {
+            str(m["name"]): m.get("size") if isinstance(m.get("size"), int) else None
+            for m in listed
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
 def _ask_model() -> str:
-    """PROXENOS_ASK_MODEL, when it's set and can answer: a local one, or Claude with a key."""
-    model = env("ASK_MODEL")
+    """PROXENOS_ASK_MODEL, when it's set and can answer: a local one, or Claude with a key.
+    Unset, with a key and no PROXENOS_MODEL chosen, it's Claude: a key is saved for Claude to
+    take what the user waits on, as setup now says by setting it, and a key saved before that
+    meant all of it."""
+    model = env("ASK_MODEL") or ("" if env("MODEL") else DEFAULT_MODEL)
     if model and (model.startswith(LOCAL) or os.environ.get("ANTHROPIC_API_KEY")):
         return model
     return ""

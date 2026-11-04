@@ -293,6 +293,28 @@ def test_what_someone_waits_on_goes_to_the_ask_model_and_the_rest_stays(tmp_path
     assert llm.current() == "ollama:gemma4:26b"
 
 
+def test_with_no_model_set_one_on_this_computer_goes_first(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROXENOS_MODEL", raising=False)
+    monkeypatch.delenv("PROXENOS_ASK_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # Nothing on this computer: Claude, which answers only with a key.
+    assert llm.current() == llm.DEFAULT_MODEL and not llm.configured()
+
+    monkeypatch.setattr(llm, "_default", None)
+    pulled = {"gemma4:26b": 17 * 10**9, "gemma4:e4b": 4 * 10**9, "nomic-embed-text": 3 * 10**8}
+    monkeypatch.setattr(llm, "_pulled", lambda: pulled)
+    monkeypatch.setattr("proxenos.machine.memory", lambda: 32 * 2**30)
+    assert llm.current() == "ollama:gemma4:26b"  # the largest that fits, never an embedder
+    # A key saved before the ask model was kept goes on taking what the user waits on.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    with llm.foreground(tmp_path):
+        assert llm.current() == llm.DEFAULT_MODEL
+    # But not once they chose the model for everything themselves.
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:e4b")
+    with llm.foreground(tmp_path):
+        assert llm.current() == "ollama:gemma4:e4b"
+
+
 def test_a_voice_model_answers_from_the_server_on_this_computer(monkeypatch):
     import io
     import json

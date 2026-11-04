@@ -163,13 +163,32 @@ def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
     assert result["ok"], result
     assert asked == [
         {"api_key": KEY, "base_url": "https://api.anthropic.com", "max_retries": 0, "timeout": 20},
-        "claude-opus-5-5",  # the model it will use: a local model setting is dropped for it
+        "claude-opus-5-5",  # the model it will use for what the user waits on
     ]
     assert fake_keychain.items == {"ANTHROPIC_API_KEY": KEY}
-    assert result["status"]["model"] == {"kind": "api", "name": "claude-opus-5-5", "via": None}
+    # Claude takes what the user waits on; the rest stays on the model on this computer.
+    assert config.env("ASK_MODEL") == "claude-opus-5-5"
+    assert result["status"]["model"] == {"kind": "local", "name": "gemma4:26b", "via": "ollama"}
+    assert "the rest stays on gemma4:26b" in result["message"]
     key = next(s for s in result["status"]["secrets"] if s["name"] == "ANTHROPIC_API_KEY")
     assert key == {"name": "ANTHROPIC_API_KEY", "set": True, "from": "keychain"}
     assert KEY not in config.SETTINGS_FILE.read_text()
+
+
+def test_a_key_with_no_model_here_has_claude_answer_all_and_keeps_a_chosen_ask_model(
+    home, anthropic_says, fake_keychain
+):
+    asked, _ = anthropic_says
+    result = apply({"key": KEY})
+    assert (
+        result["ok"]
+        and "With no model on this computer, it answers everything" in (result["message"])
+    )
+    assert result["status"]["model"] == {"kind": "api", "name": "claude-opus-5-5", "via": None}
+
+    config.save_setting("ASK_MODEL", "claude-sonnet-5")
+    assert apply({"key": KEY})["ok"]
+    assert asked[-1] == "claude-sonnet-5" and config.env("ASK_MODEL") == "claude-sonnet-5"
 
 
 def test_a_key_anthropic_refuses_is_not_saved(home, anthropic_says, fake_keychain):
@@ -307,9 +326,9 @@ def test_from_source_with_env_changes_go_there(home, tmp_path, monkeypatch, anth
 
     assert apply({"settings": {"vault": "~/v"}})["message"] == "Saved in .env."
     assert apply({"key": KEY})["ok"]
-    assert (
-        env.read_text()
-        == f"PROXENOS_NAME=Ana\nPROXENOS_VAULT=~{os.sep}v\nANTHROPIC_API_KEY={KEY}\n"
+    assert env.read_text() == (
+        f"PROXENOS_NAME=Ana\nPROXENOS_VAULT=~{os.sep}v\nANTHROPIC_API_KEY={KEY}\n"
+        "PROXENOS_ASK_MODEL=claude-opus-5-5\n"
     )
     assert setup.status()["saves_to"] == ".env"
 
