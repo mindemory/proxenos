@@ -19,11 +19,15 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
   the manuscript copied instead, as "About this folder" says. Both are made again together, only
   when the manuscript or the files beside it changed: a LaTeX build takes tens of seconds, and
   one that failed isn't tried again until they change.
-- Supplement/: the tables, figures and data files the manuscript names, copied from git. When
-  it names a table or a figure, "Supplementary information.docx" and its PDF show them too:
-  each table (.csv, .tsv, and .xlsx where openpyxl is installed) cut to ROWS rows and COLUMNS
-  columns, and each figure, under the caption the manuscript gives it, and the data files by
-  name. It's made from Markdown, as the notes are.
+- Supplement/: the tables, figures and data files the manuscript names, copied from git: by
+  file name or path, or by a label their names carry ("Table S4" or "Supplementary Table 4"
+  finds S02_tableS4_note_types.csv, a table's label only a table, and "Fig. S2" FigS2_calls.png,
+  a figure's only a figure), but not the figures it shows itself (Markdown's images, LaTeX's
+  \\includegraphics), which its copies have. When a table or a figure is left,
+  "Supplementary information.docx" and its PDF show them too: each table (.csv, .tsv, and .xlsx
+  where openpyxl is installed) cut to ROWS rows and COLUMNS columns, and each figure, under the
+  caption the manuscript gives it, and the data files by name. It's made from Markdown, as the
+  notes are. With only data files left, there's none.
 - "Where it stands", "What's known, and the question", "Drafts" and "About this project": the
   project's status.md and brief.md, its drafts still open, and what projects.json says of it.
 - "About this folder": when the manuscript was made, from which branch and commit, what its
@@ -541,7 +545,8 @@ def _replace(
     stats["files_written"] += 1
 
 
-# The files a manuscript names, its tables, figures and data, copied into Supplement/ beside it.
+# The files a manuscript names, its tables, figures and data, copied into Supplement/ beside it,
+# but not the figures it shows itself: its own copies have those.
 SUPPLEMENT = "Supplement"
 SUPPLEMENT_FILES = 80
 SUPPLEMENT_BYTES = 200 * 10**6
@@ -550,6 +555,17 @@ _NAMED = re.compile(
     r"[\w./-]*[\w-]\.(?:csv|tsv|xlsx|xls|json|txt|png|jpe?g|svg|pdf|tiff?|mat|npz|nc)\b",
     re.IGNORECASE,
 )
+# "Table S4", "Fig. S2", "Supplementary Table 4": a supplementary table or figure, by its label.
+_CALLED = re.compile(
+    r"\b(?:(?:Supplementary|Suppl?\.?)[\s~]+(Table|Fig(?:ure|\.)?)[\s~]*S?"
+    r"|(Table|Fig(?:ure|\.)?)[\s~]*S)(\d+)",
+    re.IGNORECASE,
+)
+# The same label in a file's name, whatever its case and separators: tableS4, Fig_S2, supp-fig-3.
+_CARRIED = re.compile(
+    r"(supp(?:lementary|l)?[\W_]*)?(tab(?:le)?|fig(?:ure)?)[\W_]*(s)?[\W_]*0*(\d+)", re.IGNORECASE
+)
+_GRAPHICS = re.compile(r"\\includegraphics\*?\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}")
 
 
 def _write_supplement(
@@ -562,43 +578,15 @@ def _write_supplement(
     now: datetime,
     stats: Counter,
 ) -> None:
-    """The files the manuscript names by name or path (S1_table.csv, figures/fig2.png), found in
-    its repository at `tip`, in Supplement/ beside the copy, each when it changed in git and
-    never over one the user changed, and its tables and figures in a document of their own. The
-    manuscript's own PDF is made on its own."""
+    """The files the manuscript names, by name or path (S1_table.csv, figures/fig2.png) or by a
+    label their names carry ("Table S4" for S02_tableS4_types.csv, "Fig. S2" for FigS2.png),
+    found in its repository at `tip`, in Supplement/ beside the copy, each when it changed in
+    git and never over one the user changed, and its tables and figures in a document of their
+    own. Not the figures it shows itself, which its copy has, nor its own PDF, made on its own."""
     text = (manuscript._blob(repo, tip, path) or b"").decode("utf-8", "replace")
     text = text.replace("\\_", "_")  # S01\_sites.csv, as LaTeX writes it, and Markdown can
-    named = {m.group(0).strip("./") for m in _NAMED.finditer(text)}
-    own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
-    if not named:
-        _prune_supplement(where, files, set(), stats)
-        return
-    tree: dict[str, list[tuple[str, int, str]]] = {}
-    listed = manuscript._git(repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip)
-    for line in listed.split("\0"):
-        meta, _, name = line.partition("\t")
-        fields = meta.split()
-        if len(fields) == 4 and fields[1] == "blob" and fields[3].isdigit():
-            tree.setdefault(PurePosixPath(name).name.lower(), []).append(
-                (name, int(fields[3]), fields[2])
-            )
-    chosen: dict[str, tuple[str, str, str]] = {}
-    total = 0
-    for ref in sorted(named):
-        found = tree.get(PurePosixPath(ref).name.lower()) or []
-        # A path that ends the same way as the one named, else the file of that name.
-        exact = [f for f in found if f[0].lower().endswith(ref.lower())] or found[:1]
-        if not exact:
-            continue
-        kept, size, blob = exact[0]
-        base = PurePosixPath(kept).name
-        if kept == own_pdf or base in chosen or size > FILE_BYTES:
-            continue
-        if len(chosen) >= SUPPLEMENT_FILES or total + size > SUPPLEMENT_BYTES:
-            break
-        chosen[base] = (kept, blob, ref)
-        total += size
-    for base, (kept, blob, _) in chosen.items():
+    chosen = _choose(repo, tip, text, str(PurePosixPath(path).with_suffix(".pdf")))
+    for base, (kept, blob, _, _) in chosen.items():
         target = where / SUPPLEMENT / base
         key = f"{SUPPLEMENT}/{base}"
         source = _digest("supplement", kept, blob)
@@ -607,10 +595,138 @@ def _write_supplement(
         data = manuscript._blob(repo, tip, kept)
         if data is not None:
             _replace(target, key, files, source, data, now, stats)
-    _prune_supplement(where, files, set(chosen), stats)
-    items = _supplementary_items(text, chosen)
+    copied = [k for k in files if k.startswith(f"{SUPPLEMENT}/")]
+    _drop(where, files, [k for k in copied if k.split("/", 1)[1] not in chosen], stats)
+    items = _supplementary_items(chosen)
     if any(how != "data" for how, *_ in items):
         _write_supplementary(repo, tip, items, where, files, project_name, now, stats)
+    else:  # nothing to show: no document, not even an earlier version's
+        made = (SUPPLEMENTARY, str(PurePosixPath(SUPPLEMENTARY).with_suffix(".pdf")))
+        _drop(where, files, [k for k in made if k in files], stats)
+
+
+def _choose(repo: Path, tip: str, text: str, own_pdf: str) -> dict[str, tuple[str, str, int, str]]:
+    """The files for Supplement/, by name: (its path in the repository, its blob, where the
+    manuscript first names it, its caption). Those it names by name or path, then those it
+    calls by a label that no file it names carries; none it shows itself, nor its own PDF, nor
+    one bigger than FILE_BYTES, and at most SUPPLEMENT_FILES, SUPPLEMENT_BYTES in all."""
+    named = sorted({m.group(0).strip("./") for m in _NAMED.finditer(text)})
+    called = _called(text)
+    if not named and not called:
+        return {}
+    tree, by_name = [], {}
+    listed = manuscript._git(repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip)
+    for line in listed.split("\0"):
+        meta, _, name = line.partition("\t")
+        fields = meta.split()
+        if len(fields) == 4 and fields[1] == "blob" and fields[3].isdigit():
+            tree.append((name, int(fields[3]), fields[2]))
+            by_name.setdefault(PurePosixPath(name).name.lower(), []).append(tree[-1])
+    wanted, covered = [], set()
+    for ref in named:
+        found = by_name.get(PurePosixPath(ref).name.lower()) or []
+        # A path that ends the same way as the one named, else the file of that name.
+        exact = [f for f in found if f[0].lower().endswith(ref.lower())] or found[:1]
+        if exact:
+            labels = _carried(exact[0][0]) & called.keys()
+            covered |= labels
+            caption = _caption(text, ref) or next((called[k][1] for k in sorted(labels)), "")
+            wanted.append((*exact[0], text.find(ref), caption))
+    carriers: dict[tuple[str, int], list[tuple[str, int, str]]] = {}
+    for entry in tree if called.keys() - covered else ():
+        suffix = PurePosixPath(entry[0]).suffix.lower()
+        for kind, number in _carried(entry[0]):
+            if suffix in (_TABLES if kind == "table" else _FIGURES):
+                carriers.setdefault((kind, number), []).append(entry)
+    for key, (at, caption) in called.items():
+        kinds = _TABLES if key[0] == "table" else _FIGURES
+        # Of the files that carry it, a .csv before a workbook, a PNG before a PDF, then the
+        # one nearest the top.
+        found = sorted(
+            carriers.get(key, []) if key not in covered else [],
+            key=lambda f: (kinds.index(PurePosixPath(f[0]).suffix.lower()), f[0].count("/"), f[0]),
+        )
+        if found:
+            wanted.append((*found[0], at, caption))
+    shown = _shown(text)
+    chosen: dict[str, tuple[str, str, int, str]] = {}
+    total = 0
+    for kept, size, blob, at, caption in wanted:
+        base = PurePosixPath(kept).name
+        if kept == own_pdf or base in chosen or size > FILE_BYTES or _is_shown(kept, shown):
+            continue
+        if len(chosen) >= SUPPLEMENT_FILES or total + size > SUPPLEMENT_BYTES:
+            break
+        chosen[base] = (kept, blob, at, caption)
+        total += size
+    return chosen
+
+
+def _called(text: str) -> dict[tuple[str, int], tuple[int, str]]:
+    """The supplementary tables and figures the manuscript calls by label, as ("table" or
+    "figure", its number): (where it gives its caption, its caption), the caption being the
+    label and what follows it on a line that starts with it, as a caption or an item in a list
+    does ("- **Table S4.** Note types by species" gives "Table S4. Note types by species", as
+    it would with the file named after it); with no such line, (where it first calls it, the
+    label as written there)."""
+    first: dict[tuple[str, int], tuple[int, str]] = {}
+    captions: dict[tuple[str, int], tuple[int, str]] = {}
+    for m in _CALLED.finditer(text):
+        kind = "table" if (m.group(1) or m.group(2)).lower() == "table" else "figure"
+        key = (kind, int(m.group(3)))
+        first.setdefault(key, (m.start(), " ".join(m.group(0).replace("~", " ").split())))
+        if key not in captions and (caption := _label_caption(text, m)):
+            captions[key] = (m.start(), caption)
+    return {key: captions.get(key, found) for key, found in first.items()}
+
+
+def _label_caption(text: str, label: re.Match) -> str:
+    """`label`'s line from the label on, when the line starts with it and goes on as a caption
+    does, after a stop, a colon or a dash, or as an item in a list or a heading: not as a
+    sentence does ("Table S4 shows..."). "" otherwise."""
+    start = text.rfind("\n", 0, label.start()) + 1
+    end = text.find("\n", label.end())
+    end = len(text) if end < 0 else end
+    before = text[start : label.start()]
+    if _clean(before):
+        return ""  # not where its line starts
+    rest = _MARKUP.sub("", text[label.end() : end]).strip()
+    if rest[:1] not in ("", *".:;-–—") and not (_LISTED.match(before) or "#" in before):
+        return ""
+    return _clean(text[label.start() : end].replace("~", " "))
+
+
+def _carried(name: str) -> set[tuple[str, int]]:
+    """The supplementary labels a file's name carries, as ("table" or "figure", its number):
+    S02_tableS4_note_types.csv carries ("table", 4) and FigS2_calls.png ("figure", 2); table4.csv,
+    a table of the paper itself, none. Each starts a word, so config_s2.png carries none."""
+    stem = PurePosixPath(name).stem
+    carried = set()
+    for m in _CARRIED.finditer(stem):
+        before = stem[m.start() - 1 : m.start()]
+        word = not before.isalpha() or (before.islower() and stem[m.start()].isupper())
+        if word and (m.group(1) or m.group(3)):
+            carried.add(("table" if m.group(2)[0] in "tT" else "figure", int(m.group(4))))
+    return carried
+
+
+def _shown(text: str) -> set[str]:
+    """The figures the manuscript shows itself, Markdown's images and LaTeX's \\includegraphics,
+    as the paths it gives them, lowercase, without a leading ./ or ../."""
+    paths = [m.group(1) for m in _GRAPHICS.finditer(text)]
+    for m in _IMAGE.finditer(text):
+        link = m.group(2).strip()
+        paths.append(link[1:].partition(">")[0] if link.startswith("<") else link.partition(" ")[0])
+    return {re.sub(r"^(?:\.\.?/)+", "", p.strip().lower()) for p in paths if p.strip()}
+
+
+def _is_shown(kept: str, shown: set[str]) -> bool:
+    """Whether the file at `kept` in the repository is one the manuscript shows: its path ends
+    with one the manuscript gives, or, for a figure, with one given without its extension, as
+    LaTeX allows."""
+    path = PurePosixPath(kept.lower())
+    ends = {f"/{path}"} | ({f"/{path.with_suffix('')}"} if path.suffix in _FIGURES else set())
+    return any(end.endswith(f"/{p}") for end in ends for p in shown)
 
 
 # The supplement as a document beside the manuscript: its title, then each table and figure the
@@ -621,7 +737,8 @@ ROWS = 40
 COLUMNS = 12
 CELL = 80  # characters of a cell
 _DELIMITERS = {".csv": ",", ".tsv": "\t"}  # tables; .xlsx too, where openpyxl is installed
-_FIGURES = {".png", ".jpg", ".jpeg", ".svg", ".pdf"}
+_TABLES = (*_DELIMITERS, ".xlsx")  # what a table's label finds, first the likeliest
+_FIGURES = (".png", ".jpg", ".jpeg", ".svg", ".pdf")  # and a figure's
 # "Table S4", "Figure 2", "Fig. S1", "Supplementary Data 3": what a caption starts with.
 _LABEL = re.compile(
     r"(?:Supplementary\s+|Suppl?\.\s*)?(?:Table|Figure|Fig\.|Fig|Data|Dataset|File)\s+S?\d+[a-z]?",
@@ -639,44 +756,41 @@ _UNSHOWN = (
 )
 
 
-def _prune_supplement(where: Path, files: dict, keep: set[str], stats: Counter) -> None:
-    """Proxenos's copies in Supplement/ of files the manuscript no longer names: removed while
-    they're still exactly as it wrote them, so a figure taken out of the paper leaves the folder
-    too; one the user changed stays theirs, no longer followed."""
-    for key in [k for k in files if k.startswith(f"{SUPPLEMENT}/")]:
-        base = key.split("/", 1)[1]
-        if base in keep:
-            continue
-        target = where / SUPPLEMENT / base
-        if _sha(target) == files[key].get("written"):
+def _drop(where: Path, files: dict, keys: list[str], stats: Counter) -> None:
+    """Proxenos's copies of what the manuscript no longer calls for, a figure taken out of the
+    paper or a supplement left with nothing to show: removed while they're still exactly as it
+    wrote them; one the user changed stays theirs, no longer followed."""
+    for key in keys:
+        target = where.joinpath(*key.split("/"))
+        written = files.pop(key).get("written")
+        if written and _sha(target) == written:
             target.unlink()
             stats["removed"] += 1
-        del files[key]
 
 
 def _supplementary_items(
-    text: str, chosen: dict[str, tuple[str, str, str]]
+    chosen: dict[str, tuple[str, str, int, str]],
 ) -> list[tuple[str, str, str, str, str]]:
     """The files chosen for Supplement/, as the document shows them: (how, its name, its path in
     the repository, its blob, its caption), in the order the manuscript names them, `how`
     "table" (.csv, .tsv, and .xlsx where openpyxl is installed), "figure" or "data"."""
     items = []
-    for base, (kept, blob, ref) in chosen.items():
+    for base, (kept, blob, at, caption) in chosen.items():
         suffix = PurePosixPath(base).suffix.lower()
         if suffix in _DELIMITERS or (suffix == ".xlsx" and _openpyxl()):
             how = "table"
         else:
             how = "figure" if suffix in _FIGURES else "data"
-        items.append((text.find(ref), (how, base, kept, blob, _caption(text, ref))))
+        items.append((at, (how, base, kept, blob, caption)))
     return [item for _, item in sorted(items)]
 
 
 def _caption(text: str, ref: str) -> str:
     """What the manuscript calls the file it names as `ref`, where it first gives it a caption:
-    the text of the image it shows it in; in LaTeX, the \\caption of the figure or table it's
-    in; else on a line naming it, the text before the parenthesis it's named in, when that
-    starts with "Table S4" or the like or is an item in a list, or the "Table S1" just before
-    the parenthesis or inside it. "" when it gives none."""
+    in LaTeX, the \\caption of the figure or table it's in; else on a line naming it, the text
+    before the parenthesis it's named in, when that starts with "Table S4" or the like or is an
+    item in a list, or the "Table S1" just before the parenthesis or inside it. "" when it
+    gives none."""
     at = text.find(ref)
     while at >= 0:
         if caption := _caption_at(text, at):
@@ -690,9 +804,6 @@ def _caption_at(text: str, at: int) -> str:
     end = text.find("\n", at)
     line = text[start : len(text) if end < 0 else end]
     i = at - start
-    for image in _IMAGE.finditer(line):
-        if image.start(2) <= i < image.end(2) and image.group(1).strip():
-            return _clean(image.group(1))
     if caption := _float_caption(text, at):
         return caption
     paren = line.rfind("(", 0, i)
@@ -1031,9 +1142,10 @@ _UNMADE = (
     "It's tried again when the paper changes."
 )
 _SUPPLEMENTARY = (
-    f"**{SUPPLEMENTARY}**, and its PDF, hold the tables and figures the manuscript names, under "
-    "the captions it gives them, and list its data files; a long table is cut short there. The "
-    f"files themselves are in {SUPPLEMENT}/, copied from the same version."
+    f"**{SUPPLEMENTARY}**, and its PDF, hold the tables and figures the manuscript names, by file "
+    "name or by a label such as Table S4, but doesn't show itself, under the captions it gives "
+    "them, and list its data files; a long table is cut short there. The files themselves are in "
+    f"{SUPPLEMENT}/, copied from the same version."
 )
 _THE_NOTES = (
     "Where it stands, What's known and the question, Drafts and the two About files are "

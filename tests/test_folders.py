@@ -30,6 +30,7 @@ PAPER = (
     "- wrens\n- robins\n\n"
     "![The dawn chorus](fig.png)\n\n"
     "Methods follow.\n\n"
+    "Table S1. Songs by hour.\n\n"
     "Thanks to the lab.\n"
 )
 LATEX = (
@@ -143,7 +144,7 @@ def draft(vault, draft_id, title, body, status):
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     """A drive's folder, a fake pandoc and tectonic, a vault, and a project's repository checked
-    out on main with its paper, a figure and a PDF of it on a side branch."""
+    out on main with its paper, a figure, a PDF of it and its Table S1 on a side branch."""
     monkeypatch.setenv("PROXENOS_WORKTREES", str(tmp_path / "worktrees"))
     monkeypatch.setenv("PROXENOS_NAME", "Joe")
     vault = tmp_path / "vault"
@@ -169,6 +170,7 @@ def setup(tmp_path, monkeypatch):
         "docs/paper/paper.md": PAPER,
         "docs/paper/fig.png": b"\x89PNG dawn",
         "docs/paper/paper.pdf": b"%PDF-1.7 the paper",
+        "results/tableS1.csv": "hour,songs\n5,12\n",
     }
     commit(repo, paper, "Draft the paper", 2)
     git(repo, "checkout", "-q", "main")
@@ -262,8 +264,8 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
 
     assert stats == {
         "folders_written": 3,
-        # The paper's folder: the manuscript and its PDF, the five notes, the figure it names
-        # and the supplement it makes, as a Word file and a PDF.
+        # The paper's folder: the manuscript and its PDF, the five notes, the table it calls
+        # Table S1 and the supplement it makes, as a Word file and a PDF.
         "files_written": 10 + 2 + 3,
         "kept_as_edited": 0,
         "manuscripts_brought_back": 0,
@@ -287,7 +289,8 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
             "Supplementary information.pdf",
         ]
     )
-    assert [p.name for p in (where / "Supplement").iterdir()] == ["fig.png"]
+    # Not the figure it shows: its copies have that.
+    assert [p.name for p in (where / "Supplement").iterdir()] == ["tableS1.csv"]
     # The manuscript at its branch's tip, converted where the files beside it are, and nothing
     # else of the repository, not even the PDF committed beside it; its PDF made there too.
     assert text_of(where / DOCX) == text_of(where / PDF) == PAPER
@@ -807,13 +810,14 @@ def test_the_files_a_manuscript_names_go_to_its_supplement(setup):
 
     run(vault, NOW)
 
+    # Not the figure it shows, nor the other Table S1 it doesn't name.
     supplement = drive / FOLDER / "Supplement"
-    assert sorted(p.name for p in supplement.iterdir()) == ["S01_tableS1_sites.csv", "fig2.png"]
+    assert [p.name for p in supplement.iterdir()] == ["S01_tableS1_sites.csv"]
     assert (supplement / "S01_tableS1_sites.csv").read_text() == "site,n\nA,3\n"
     # One the user changed is never written over; an unchanged one isn't written again.
-    (supplement / "fig2.png").write_bytes(b"their annotated figure")
+    (supplement / "S01_tableS1_sites.csv").write_text("site,n\nA,3\nB,4\n")
     stats = run(vault, NOW + timedelta(days=1))
-    assert (supplement / "fig2.png").read_bytes() == b"their annotated figure"
+    assert (supplement / "S01_tableS1_sites.csv").read_text() == "site,n\nA,3\nB,4\n"
     assert stats.get("files_written", 0) == 0
 
 
@@ -822,9 +826,10 @@ SUPPLEMENTED = (
     "Birds sing at dawn (Table S1, `results/S01_tableS1_sites.csv`), as counted in\n"
     "data/counts.json.\n\n"
     "![Calls by hour](figures/fig2.png)\n\n"
-    "Wrens and robins differ (S02_tableS4_note_types_by_species.csv).\n\n"
+    "Wrens and robins differ (S02_tableS4_note_types_by_species.csv), more at dusk (Fig. S2).\n\n"
     "## Supplementary material\n\n"
     "**Table S4.** Note types by species (S02_tableS4_note_types_by_species.csv)\n\n"
+    "- Figure S2. Calls at dusk, by site\n"
     "- The workbook (results/S03_book.xlsx)\n"
 )
 
@@ -847,32 +852,35 @@ def test_the_supplement_is_a_document_of_its_tables_and_figures_under_their_capt
         "results/S02_tableS4_note_types_by_species.csv": wide(50, 15),
         "results/S03_book.xlsx": b"PK not read",
         "figures/fig2.png": b"\x89PNG fake",
+        "figures/FigS2_dusk.png": b"\x89PNG dusk",
         "data/counts.json": "{}\n",
     }
-    commit(repo, files, "Tables, a figure and data", 3)
+    commit(repo, files, "Tables, figures and data", 3)
     git(repo, "checkout", "-q", "main")
 
     run(vault, NOW)
 
     where = drive / FOLDER
+    # Not the figure it shows, nor the fixture's tableS1.csv: the file it names is its Table S1.
     assert sorted(p.name for p in (where / "Supplement").iterdir()) == [
+        "FigS2_dusk.png",
         "S01_tableS1_sites.csv",
         "S02_tableS4_note_types_by_species.csv",
         "S03_book.xlsx",
         "counts.json",
-        "fig2.png",
     ]
     text = text_of(where / SUPPLEMENTARY)
     assert text == text_of(where / "Supplementary information.pdf")
     [made] = [m for m in fake.made if m["name"] == "supplementary.md"]
-    assert made["beside"] == ["figures/fig2.png", "supplementary.md"]
+    assert made["beside"] == ["figures/FigS2_dusk.png", "supplementary.md"]
     assert fake.pdfs[-1] == made  # the same Markdown, figures beside it
-    head, s1, figure, s4, data = text.split("\n## ")
+    head, s1, s4, figure, data = text.split("\n## ")
     assert head == "# Calls: the paper?: supplementary information\n"
-    # Each table under the caption the manuscript gives it, in the order it names them: the
-    # "Table S1" it's named with, or the line that names it, from its label.
+    # Each under the caption the manuscript gives it, in the order it names them: the
+    # "Table S1" it's named with, or the line that names it, from its label; Figure S2, named
+    # by its label alone, under the line in the list that starts with it.
     assert s1 == "Table S1\n\n| site | n |\n|---|---|\n| A | 3 |\n| B\\|C | \\*4\\* |\n"
-    assert figure == "Calls by hour\n\n![](<figures/fig2.png>)\n"
+    assert figure == "Figure S2. Calls at dusk, by site\n\n![](<figures/FigS2_dusk.png>)\n"
     caption, _, table = s4.partition("\n\n")
     assert caption == "Table S4. Note types by species"
     rows = table.strip().split("\n")
@@ -914,35 +922,131 @@ def test_an_svg_figure_is_named_in_the_pdf_until_pandoc_can_draw_it(setup, monke
     rsvg = None
     monkeypatch.setattr(folders.shutil, "which", lambda name: rsvg)
     git(repo, "checkout", "-q", "paper-storyline")
-    paper = "# Calls\n\n![Calls by hour](figures/fig2.svg)\n"
-    commit(repo, {"docs/paper/paper.md": paper, "figures/fig2.svg": "<svg/>"}, "SVG", 3)
+    paper = "# Calls\n\nFigure S2: Calls by hour\n"
+    commit(repo, {"docs/paper/paper.md": paper, "figures/figS2.svg": "<svg/>"}, "SVG", 3)
     git(repo, "checkout", "-q", "main")
 
     run(vault, NOW)
 
     where = drive / FOLDER
-    assert "## Calls by hour\n\n![](<figures/fig2.svg>)\n" in text_of(where / SUPPLEMENTARY)
+    assert "## Figure S2: Calls by hour\n\n![](<figures/figS2.svg>)\n" in text_of(
+        where / SUPPLEMENTARY
+    )
     pdf = text_of(where / "Supplementary information.pdf")
-    assert "![](" not in pdf and "it's in Supplement/fig2.svg, and the Word file shows it" in pdf
+    assert "![](" not in pdf and "it's in Supplement/figS2.svg, and the Word file shows it" in pdf
 
     # rsvg-convert installed: the PDF is made again, showing it; the Word file isn't.
     rsvg = "/opt/homebrew/bin/rsvg-convert"
     made = len(fake.made)
     run(vault, LATER)
-    assert "![](<figures/fig2.svg>)" in text_of(where / "Supplementary information.pdf")
+    assert "![](<figures/figS2.svg>)" in text_of(where / "Supplementary information.pdf")
     assert len(fake.made) == made
 
 
 def test_a_paper_naming_only_data_gets_no_supplement_document(setup):
     vault, repo, drive, _ = setup
-    git(repo, "checkout", "-q", "paper-storyline")
-    commit(
-        repo, {"docs/paper/paper.md": "# Calls\n\nIn counts.json.\n", "counts.json": "{}"}, "D", 3
-    )
-    git(repo, "checkout", "-q", "main")
     run(vault, NOW)
-    assert (drive / FOLDER / "Supplement" / "counts.json").exists()
-    assert not (drive / FOLDER / SUPPLEMENTARY).exists()
+    where = drive / FOLDER
+    assert (where / SUPPLEMENTARY).exists()  # its Table S1
+    # Now it names data and shows its figures, which stay out: no document, and the one there
+    # was goes, while it's as Proxenos wrote it.
+    paper = "# Calls\n\nIn counts.json.\n\n![Calls](figures/fig2.png)\n\n![Dawn](./fig.png)\n"
+    git(repo, "checkout", "-q", "paper-storyline")
+    files = {"docs/paper/paper.md": paper, "counts.json": "{}", "figures/fig2.png": b"\x89PNG"}
+    commit(repo, files, "D", 3)
+    git(repo, "checkout", "-q", "main")
+    stats = run(vault, LATER)
+    assert [p.name for p in (where / "Supplement").iterdir()] == ["counts.json"]
+    assert not (where / SUPPLEMENTARY).exists()
+    assert not (where / "Supplementary information.pdf").exists()
+    assert stats["removed"] == 3  # the table, and the document as a Word file and a PDF
+    assert "Supplementary information" not in text_of(where / "About this folder.docx")
+
+
+LABELLED = (
+    "# Calls\n\n"
+    "Calls differ by hour (Supplementary Table 2) and by species (Table S1), most at dusk\n"
+    "(Fig. S2), and notes are longer in May (Figure S3).\n\n"
+    "![Figure S3. Notes in May](figures/figS3_may.png)\n\n"
+    "## Supplementary tables\n\n"
+    "- Table S1. Recordings by species\n"
+    "- Supplementary Table 2: Calls by hour\n\n"
+    "## Supplementary figures\n\n"
+    "- Fig. S2 — Calls at dusk\n"
+)
+
+
+def test_a_paper_naming_its_tables_and_figures_by_label_gets_the_files_that_carry_them(setup):
+    vault, repo, drive, fake = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    (repo / "results" / "tableS1.csv").unlink()  # the fixture's
+    files = {
+        "docs/paper/paper.md": LABELLED,
+        "results/S01_tableS1_recordings.csv": "species,n\nwren,12\n",
+        "results/supplementary_table_2.tsv": "hour\tn\n5\t3\n",
+        "figures/FigS2_calls.png": b"\x89PNG dusk",
+        "figures/FigS2_calls.pdf": b"%PDF dusk",  # the same figure: the PNG comes first
+        "figures/figS3_may.png": b"\x89PNG may",  # shown in the paper itself
+        "figures/tableS1_preview.png": b"\x89PNG",  # a table's label finds only tables
+        "results/figS2_counts.csv": "n\n1\n",  # and a figure's only figures
+    }
+    commit(repo, files, "Tables and figures by label", 3)
+    git(repo, "checkout", "-q", "main")
+
+    run(vault, NOW)
+
+    where = drive / FOLDER
+    assert sorted(p.name for p in (where / "Supplement").iterdir()) == [
+        "FigS2_calls.png",
+        "S01_tableS1_recordings.csv",
+        "supplementary_table_2.tsv",
+    ]
+    _, s1, s2, figure = text_of(where / SUPPLEMENTARY).split("\n## ")
+    # Each under the line in the list that starts with its label, in the list's order.
+    assert s1 == "Table S1. Recordings by species\n\n| species | n |\n|---|---|\n| wren | 12 |\n"
+    assert s2 == "Supplementary Table 2: Calls by hour\n\n| hour | n |\n|---|---|\n| 5 | 3 |\n"
+    assert figure == "Fig. S2 — Calls at dusk\n\n![](<figures/FigS2_calls.png>)\n"
+    [made] = [m for m in fake.made if m["name"] == "supplementary.md"]
+    assert made["beside"] == ["figures/FigS2_calls.png", "supplementary.md"]
+
+
+def test_labels_are_read_from_the_paper_and_from_file_names_whatever_their_case():
+    carried = {
+        "results/S02_tableS4_note_types.csv": {("table", 4)},
+        "tableS4.csv": {("table", 4)},
+        "Table_S04.xlsx": {("table", 4)},
+        "figures/FigS2_x.png": {("figure", 2)},
+        "figureS2.pdf": {("figure", 2)},
+        "supp-fig-3.png": {("figure", 3)},
+        "dataFigS2.png": {("figure", 2)},
+        "table4.csv": set(),  # the paper's own Table 4
+        "config_s2.png": set(),
+    }
+    assert {name: folders._carried(name) for name in carried} == carried
+    text = (
+        "As Table S4 shows, robins differ, and Fig.~S2 too.\n"
+        "Supplementary Table 5: Sites\n"
+        "Figure 2 and Table 1 are the paper's own.\n"
+        "- **Table S4.** Note types by species\n"
+    )
+    assert folders._called(text) == {
+        ("table", 4): (text.index("Table S4.**"), "Table S4. Note types by species"),
+        ("figure", 2): (text.index("Fig.~S2"), "Fig. S2"),  # no caption: its label
+        ("table", 5): (text.index("Supplementary"), "Supplementary Table 5: Sites"),
+    }
+
+
+def test_the_figures_a_paper_shows_itself_are_known_by_their_paths():
+    text = (
+        "\\includegraphics[width=\\linewidth]{figures/fig3}\n\\includegraphics{./plots/a.png}\n"
+        '![Dawn](<figures/my dawn.png>)\n![Dusk](../B.svg "Dusk")\n'
+    )
+    shown = folders._shown(text)
+    assert shown == {"figures/fig3", "plots/a.png", "figures/my dawn.png", "b.svg"}
+    assert folders._is_shown("paper/figures/fig3.pdf", shown)  # LaTeX's, found without its type
+    assert folders._is_shown("B.svg", shown) and folders._is_shown("plots/a.png", shown)
+    assert not folders._is_shown("paper/figures/fig3.csv", shown)
+    assert not folders._is_shown("figures/subfig3.pdf", shown)
 
 
 def test_a_latex_paper_names_its_files_as_latex_writes_them(setup):
@@ -1064,7 +1168,7 @@ def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
     commit(
         repo,
         {
-            "docs/paper/paper.md": "# Calls\n\nSee `results/S1.csv` and ![Screens](figures/screen.png).\n",
+            "docs/paper/paper.md": "# Calls\n\nSee `results/S1.csv` and `figures/screen.png`.\n",
             "results/S1.csv": "site,n\nA,3\n",
             "figures/screen.png": b"\x89PNG screen",
         },
@@ -1082,6 +1186,7 @@ def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
     git(repo, "checkout", "-q", "main")
     stats = run(vault, NOW + timedelta(days=1))
 
-    assert stats["removed"] == 1
+    assert stats["removed"] == 3  # the figure, and the document of the two, Word and PDF
     assert [p.name for p in supplement.iterdir()] == ["S1.csv"]  # theirs stays
+    assert not (drive / FOLDER / SUPPLEMENTARY).exists()
     assert not any(k.startswith("Supplement/") for k in state(vault)["projects"]["calls"]["files"])
