@@ -86,14 +86,24 @@ def test_claude_code_works_in_its_sandbox_on_its_own_account(tmp_path, monkeypat
     settings = json.loads(flag["--settings"])
     sandbox = {"enabled": True, "allowUnsandboxedCommands": False, "failIfUnavailable": True}
     assert settings["sandbox"] | sandbox == settings["sandbox"]  # never a command outside it
-    assert settings["sandbox"]["network"] == {"allowedDomains": []}
-    assert settings["sandbox"]["filesystem"]["denyRead"] == [
+    # No host, and no server on this computer either: the page, Ollama, Beeper's API.
+    assert settings["sandbox"]["network"] == {"allowedDomains": [], "allowLocalBinding": False}
+    # The whole home folder is shut to its commands but the worktree and the data, which open
+    # inside it; the hidden folders stay shut wherever they are.
+    files = settings["sandbox"]["filesystem"]
+    assert files["denyRead"] == [
+        str(Path.home().resolve()),
         str(vault.resolve()),
         str(secrets.resolve()),
     ]
+    assert files["allowRead"][:2] == [str(t.folder.resolve()), str(data.resolve())]
     deny = settings["permissions"]["deny"]
     assert f"Read(/{vault.resolve()}/**)" in deny and f"Read(/{secrets.resolve()})" in deny
     assert f"Edit(/{data.resolve()}/**)" in deny and "Bash(git push:*)" in deny
+    # Neither the Keychain nor AppleScript, by name or by path.
+    for command in ("security", "osascript", "/usr/bin/security", "/usr/bin/osascript"):
+        assert f"Bash({command})" in deny and f"Bash({command} *)" in deny
+    assert settings["permissions"]["blockReadsOutsideWorkingDirectories"] is True
     # The brief goes on stdin, never on the command line, which other processes can read.
     assert call["stdin"] == "The project: Calls" and "The project: Calls" not in args
     assert call["timeout"] == agent.MINUTES * 60
@@ -137,6 +147,40 @@ def test_claude_code_works_in_its_sandbox_on_its_own_account(tmp_path, monkeypat
 def test_claude_code_that_stops_short_says_why(tmp_path, answer, error, message):
     with pytest.raises(error, match=message):
         agent.ClaudeCode("/bin/claude", run=Claude(answer))(task(tmp_path))
+
+
+def test_its_commands_read_in_the_home_folder_only_what_a_step_needs(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # where Windows looks instead
+    python = home / "miniforge3" / "envs" / "calls" / "bin" / "python"
+    for place in (python.parent, home / ".claude" / "shell-snapshots", home / "Documents"):
+        place.mkdir(parents=True)
+    python.write_text("")
+    (home / ".gitconfig").write_text("[user]\n\tname = Joe\n")
+    # A worktree of a repository in the home folder, as a step's is.
+    repo, worktree = home / "code", home / "worktrees" / "calls"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=J", "-c", "user.email=j@example.org"]
+        + ["commit", "-q", "--allow-empty", "-m", "start"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "step", str(worktree)], check=True
+    )
+    t = agent.Task(person="Joe", brief="", folder=worktree, python=str(python))
+
+    readable = agent._settings(t)["sandbox"]["filesystem"]["allowRead"]
+
+    assert str(worktree.resolve()) == readable[0]
+    assert str((repo / ".git").resolve()) in readable  # its commits, so git works in it
+    assert str((home / "miniforge3" / "envs" / "calls").resolve()) in readable
+    assert str((home / ".gitconfig").resolve()) in readable
+    assert str((home / ".claude" / "shell-snapshots").resolve()) in readable
+    assert not any(p.startswith(str((home / "Documents").resolve())) for p in readable)
+    assert str(repo.resolve()) not in readable  # the user's own checkout stays shut
 
 
 def test_a_report_given_as_text_is_read_too(tmp_path):

@@ -502,14 +502,26 @@ def test_the_runner_never_reads_keys_mail_messages_or_browsers(tmp_path, monkeyp
         ".kube",
         ".docker",
         ".config/gh",
+        ".ollama",
+        ".claude/projects",
         "Library/Messages",
+        "Library/Calendars",
+        "Library/Group Containers/group.net.whatsapp.WhatsApp.shared",
+        "Library/Containers/com.apple.mail",
+        "Library/CloudStorage/GoogleDrive-joe/My Drive/other",
         "Library/Application Support/Google/Chrome",
-        "Library/Application Support/Firefox",
+        "Library/Application Support/Microsoft Edge",
+        "Library/Application Support/BeeperTexts",
+        "Library/Application Support/Signal",
+        "Library/Application Support/AddressBook",
         "Library/Safari",
     ]
     for place in places:
         (home / place).mkdir(parents=True)
     (home / ".netrc").write_text("machine example.org\n")
+    # A project's data in a cloud drive, as a Drive folder synced to this computer keeps it.
+    data = home / "Library/CloudStorage/GoogleDrive-joe/My Drive/calls-data"
+    data.mkdir(parents=True)
     # As on Linux: Proxenos's settings, and so the steps' worktrees, are in ~/.config.
     settings = home / ".config" / "proxenos" / "settings.json"
     (settings.parent / "worktrees").mkdir(parents=True)
@@ -519,11 +531,21 @@ def test_the_runner_never_reads_keys_mail_messages_or_browsers(tmp_path, monkeyp
     vault = tmp_path / "vault"
     vault.mkdir()
 
-    found = steps.hidden(vault)
+    found = steps.hidden(vault, [data])
 
     # The checkout's own .env is hidden too where it has one, which depends on the checkout.
     found = [p for p in found if p != steps.REPO_ROOT / ".env"]
-    assert {vault, settings, home / ".netrc", *(home / p for p in places)} == set(found)
+    for place in (".ssh", ".ollama", "Library/Messages", "Library/Calendars", "Library/Safari"):
+        assert home / place in found
+    shut = ("Library/Group Containers", "Library/Containers", "Library/Application Support")
+    for place in places:
+        assert any((home / place).is_relative_to(p) for p in found), place
+    assert {home / p for p in shut[:2]} <= set(found)
+    assert home / "Library/Application Support/Google" in found
+    assert {vault, settings, home / ".netrc"} <= set(found)
     assert len(found) == len(set(found))
-    # ~/.config is hidden around the worktrees, so the runner can still read the one it's in.
+    # ~/.config is hidden around the worktrees, so the runner can still read the one it's in,
+    # and a cloud drive around the project's data.
     assert not any(steps.worktrees().is_relative_to(p) for p in found)
+    assert not any(data.is_relative_to(p) for p in found)
+    assert home / "Library/CloudStorage/GoogleDrive-joe/My Drive/other" in found

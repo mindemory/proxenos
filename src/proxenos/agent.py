@@ -6,8 +6,10 @@ it's installed, then the local model.
 - Claude Code, headless (`claude -p`): it reads the code, runs it, changes it and runs it again,
   with only the tools in TOOLS, inside Claude Code's sandbox, which must start or Claude Code
   stops (failIfUnavailable) rather than run a command outside it. Its commands can write only in
-  the worktree and reach no network, and nothing it does can read the vault, the user's keys and
-  credentials, their mail and messages or their browsers' profiles (Task.hidden). It
+  the worktree and reach no network, this computer's own servers included, and read nothing in
+  the home folder but what a step needs (see _settings); nothing it does can read the vault, the
+  user's keys and credentials, their mail and messages or their browsers' profiles (Task.hidden),
+  and it may not run the Keychain's or AppleScript's commands (DENIED_COMMANDS). It
   runs on the account Claude Code is signed in to, never on Proxenos's own API key, which is kept
   from it, within MINUTES, TURNS and a spending budget (PROXENOS_STEP_BUDGET, in dollars).
 - The local model, through llm.ask, for anyone without Claude Code. It can't run anything: it
@@ -42,6 +44,20 @@ MINUTES = 30
 TURNS = 100
 BUDGET_USD = "5"
 TOOLS = "Read,Edit,Write,Glob,Grep,Bash"
+# Commands a step may not run, by name or from /usr/bin: the Keychain's, AppleScript's (which
+# drives other apps, Mail and Messages among them, outside the sandbox), the clipboard's, and
+# opening an app or a page. A rule doesn't catch one run another way (`sh -c`); the sandbox is
+# what holds, and these are a second lock.
+DENIED_COMMANDS = ("security", "osascript", "pbpaste", "open")
+# What a step's commands may read in the home folder, which is otherwise closed to them, when
+# it's there: the toolchains a step runs with, git's own settings, which git stops without, and
+# Claude Code's snapshot of the user's shell, which each of its commands starts from.
+_HOME_TOOLS = ("miniforge3", "miniconda3", "anaconda3", "mambaforge", "micromamba", ".conda")
+_HOME_TOOLS += (".pyenv", ".local/bin", ".local/lib", "Library/Python", ".julia", ".juliaup")
+_HOME_TOOLS += ("Library/R", "Library/TinyTeX", ".TinyTeX", "Library/Fonts")
+_HOME_TOOLS += (".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes")
+_HOME_TOOLS += (".claude/shell-snapshots",)
+_MATLAB_HOME = "Library/Application Support/MathWorks"  # its licence, for a step that runs it
 _CLAUDE_PLACES = ("/opt/homebrew/bin/claude", "/usr/local/bin/claude", "~/.local/bin/claude")
 _CLAUDE_PLACES += ("~/.claude/local/claude",)
 # What Claude Code's environment keeps from Proxenos's: no API key, no host app's settings.
@@ -252,22 +268,85 @@ def _settings(task: Task) -> dict:
     """The sandbox: commands write only in the worktree and reach no network; nothing reads the
     hidden folders, and nothing edits the data or hidden ones. If the sandbox can't start, Claude
     Code stops instead of running commands without it. The hidden folders are denied twice: as
-    Read rules, which bind the Read tool, and to the sandbox itself, which binds commands."""
+    Read rules, which bind the Read tool, and to the sandbox itself, which binds commands.
+
+    Commands also may not read the home folder at all but what a step needs (_readable): a
+    narrower allowRead opens a path inside a denyRead, as Claude Code's sandbox settings document
+    it (since v2.1.77), and a narrower deny inside that stays shut. No host is allowed, and
+    allowLocalBinding stays off, as by default, so on macOS a command can't reach a server on
+    this computer either (the page, Ollama, Beeper's API); on Linux a command's localhost is its
+    own. The Read tool reads only the working folders: in dontAsk mode anything else would ask,
+    so it's refused, and blockReadsOutsideWorkingDirectories says so in every mode (v2.1.257)."""
     hidden = [f"Read({_rule(p)})" for p in task.hidden]
     kept = [f"Edit({_rule(p)})" for p in [*task.data, *task.hidden]]
+    commands = [
+        rule
+        for name in DENIED_COMMANDS
+        for command in (name, f"/usr/bin/{name}")
+        for rule in (f"Bash({command})", f"Bash({command} *)")
+    ]
     return {
         "sandbox": {
             "enabled": True,
             "failIfUnavailable": True,
             "autoAllowBashIfSandboxed": True,
             "allowUnsandboxedCommands": False,
-            "network": {"allowedDomains": []},
-            "filesystem": {"denyRead": [str(p.expanduser().resolve()) for p in task.hidden]},
+            "network": {"allowedDomains": [], "allowLocalBinding": False},
+            "filesystem": {
+                "denyRead": [
+                    str(Path.home().resolve()),
+                    *(str(p.expanduser().resolve()) for p in task.hidden),
+                ],
+                "allowRead": _readable(task),
+            },
         },
         "permissions": {
-            "deny": [*hidden, *kept, "Bash(git push:*)", "Bash(git remote:*)", "WebFetch"],
+            "deny": [
+                *hidden,
+                *kept,
+                *commands,
+                "Bash(git push:*)",
+                "Bash(git remote:*)",
+                "WebFetch",
+            ],
+            "blockReadsOutsideWorkingDirectories": True,
         },
     }
+
+
+def _readable(task: Task) -> list[str]:
+    """What a step's commands may read in the home folder, closed to them otherwise: the
+    worktree, the data folders, the repository's git folders the worktree's commits go to, the
+    project's Python and MATLAB, and the toolchains, git settings and shell snapshot in
+    _HOME_TOOLS. Only what's there."""
+    home = Path.home()
+    found = [task.folder, *task.data, *_git_folders(task.folder)]
+    for tool in (task.python, task.matlab):
+        if tool:  # its install: …/envs/<name>, a venv and the Python it was made from, MATLAB.app
+            path = Path(tool).expanduser()
+            found += [path.parent.parent, path.resolve().parent.parent]
+    found += [home / p for p in _HOME_TOOLS]
+    if task.matlab:
+        found.append(home / _MATLAB_HOME)
+    return list(dict.fromkeys(str(p.resolve()) for p in found if p.exists()))
+
+
+def _git_folders(worktree: Path) -> list[Path]:
+    """Where a worktree's git keeps its state, in the repository it was made from: its own folder
+    under .git/worktrees, and the repository's .git, which holds the commits. None for a whole
+    checkout, whose .git is inside it."""
+    try:
+        line = (worktree / ".git").read_text(encoding="utf-8").strip()
+    except OSError:
+        return []
+    if not line.startswith("gitdir:"):
+        return []
+    own = (worktree / line.removeprefix("gitdir:").strip()).resolve()
+    try:
+        common = (own / (own / "commondir").read_text(encoding="utf-8").strip()).resolve()
+    except OSError:
+        common = own.parent.parent
+    return [own, common]
 
 
 def _rule(path: Path) -> str:

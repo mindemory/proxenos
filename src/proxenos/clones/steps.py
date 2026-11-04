@@ -68,16 +68,52 @@ COMMIT_BYTES = 10 * 1024 * 1024  # a file bigger than this stays out of the comm
 IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".svg"}
 MADE = IMAGES | {".pdf", ".csv", ".tsv", ".txt", ".md", ".json", ".html"}
 _JUNK = ("**/__pycache__/**", "**/*.pyc", "**/.DS_Store", "**/.ipynb_checkpoints/**")
-# What a step's runner may not read: the vault, Proxenos's own settings and secrets (see
-# hidden), keys and other tools' credentials and config, mail and messages, and the browsers'
-# profiles, which hold cookies, saved passwords and history.
+# What a step's runner may not read, by name: the vault, Proxenos's own settings and secrets (see
+# hidden), keys and other tools' credentials, config and shell history, mail, messages and
+# chats, calendars, contacts and call history, cloud drives, and the browsers' profiles, which
+# hold cookies, saved passwords and history. The sandbox closes the whole home folder to a
+# step's commands besides (proxenos.agent), so this is what the Read tool is also kept from.
 _HIDDEN = ("~/.ssh", "~/.gnupg", "~/.aws", "~/.kube", "~/.docker", "~/.netrc", "~/.config")
+_HIDDEN += ("~/.git-credentials", "~/.password-store", "~/.ollama", "~/.mozilla", "~/snap")
+_HIDDEN += ("~/.zsh_history", "~/.bash_history", "~/.python_history")
+_HIDDEN += ("~/.claude.json", "~/.claude/projects", "~/.claude/history.jsonl")
 _HIDDEN += ("~/Library/Keychains", "~/Library/Mail", "~/Library/Messages", "~/Library/Cookies")
+_HIDDEN += ("~/Library/Safari", "~/Library/Accounts", "~/Library/Calendars")
+# Sandboxed apps' own data: Mail's, Notes', WhatsApp's, Telegram's, WeChat's, Signal's, Slack's,
+# Outlook's, Safari's, and Reminders', Contacts' and Calendar's shared stores.
+_HIDDEN += ("~/Library/Containers", "~/Library/Group Containers")
+_HIDDEN += ("~/Library/CloudStorage", "~/Library/Mobile Documents")  # Drive, Dropbox, iCloud
 _HIDDEN += tuple(
-    f"~/Library/Application Support/{browser}"
-    for browser in ("Google/Chrome", "Firefox", "Arc", "BraveSoftware")
+    f"~/Library/Application Support/{app}"
+    for app in (
+        "AddressBook",
+        "CallHistoryDB",
+        "Knowledge",  # what apps were used, when
+        "BeeperTexts",
+        "Signal",
+        "Telegram Desktop",
+        "discord",
+        "Slack",
+        "Claude",
+        "Microsoft",
+        "Microsoft Edge",
+        "Google",
+        "Firefox",
+        "Arc",
+        "BraveSoftware",
+        "Chromium",
+        "Vivaldi",
+        "com.operasoftware.Opera",
+        "Comet",
+        "Perplexity",
+        "1Password",
+        "Bitwarden",
+        "obsidian",
+        "Notion",
+        "Evernote",
+        "zoom.us",
+    )
 )
-_HIDDEN += ("~/Library/Safari", "~/Library/Containers/com.apple.Safari", "~/.mozilla")
 
 
 class GitError(RuntimeError):
@@ -194,7 +230,7 @@ def _carry(vault: Path, project: dict, step: dict, tried: list) -> None:
         brief=brief(vault, project, step, person),
         folder=worktree,
         data=[d for d in data if d.is_dir()],
-        hidden=hidden(vault),
+        hidden=hidden(vault, [d for d in data if d.is_dir()]),
         python=project["python"],
         matlab=project["matlab"],
     )
@@ -312,23 +348,29 @@ def brief(vault: Path, project: dict, step: dict, person: str) -> str:
     return "\n\n".join(parts)
 
 
-def hidden(vault: Path) -> list[Path]:
+def hidden(vault: Path, data: list[Path] | None = None) -> list[Path]:
     """What a step's runner may not read. A hidden folder that holds the steps' worktrees (on
-    Linux ~/.config does, beside Proxenos's settings) is hidden around them, so the runner can
-    still read the worktree it works in."""
+    Linux ~/.config does, beside Proxenos's settings) or one of the project's `data` folders (a
+    cloud drive's, say) is hidden around them, so the runner can still read what it works on."""
     found = [vault, settings_file(), *(Path(p).expanduser() for p in _HIDDEN)]
     if FROM_SOURCE:
         found.append(REPO_ROOT / ".env")
-    return list(dict.fromkeys(q for p in found if p.exists() for q in _around(p, worktrees())))
+    keep = [worktrees(), *(data or [])]
+    return list(dict.fromkeys(q for p in found if p.exists() for q in _around(p, keep)))
 
 
-def _around(path: Path, keep: Path) -> list[Path]:
-    """`path`, or when it holds `keep`, everything in it but the folders on the way to `keep`."""
-    if path.resolve() == keep.resolve():
+def _around(path: Path, keep: list[Path]) -> list[Path]:
+    """`path`, or when it holds any of `keep`, everything in it but the folders on the way."""
+    if any(path.resolve() == k.resolve() for k in keep):
         return []
-    if not path.is_dir() or not keep.resolve().is_relative_to(path.resolve()):
+    inside = [k for k in keep if k.resolve().is_relative_to(path.resolve())]
+    try:
+        children = sorted(path.iterdir()) if path.is_dir() and inside else None
+    except OSError:  # one macOS keeps from this process: hidden whole, the safe way to fail
+        children = None
+    if children is None:
         return [path]
-    return [q for child in sorted(path.iterdir()) for q in _around(child, keep)]
+    return [q for child in children for q in _around(child, inside)]
 
 
 def worktrees() -> Path:
