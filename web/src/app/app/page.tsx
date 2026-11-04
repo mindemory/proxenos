@@ -56,6 +56,9 @@ const Choices = dynamic(() => import("@/components/views/Choices").then((m) => m
 const Jobs = dynamic(() => import("@/components/views/Jobs").then((m) => m.Jobs), {
   loading: () => <ProseSkeleton label="Loading jobs" />,
 });
+const Offers = dynamic(() => import("@/components/views/Offers").then((m) => m.Offers), {
+  loading: () => <ProseSkeleton label="Loading offers" />,
+});
 const Journal = dynamic(() => import("@/components/views/Journal").then((m) => m.Journal), {
   loading: () => <ProseSkeleton label="Loading the journal" />,
 });
@@ -131,6 +134,9 @@ export default function AppPage() {
   // A care item the home page wants the care view to open, the same way.
   const [careIntent, setCareIntent] = useState<string | null>(null);
   const careConsumed = useCallback(() => setCareIntent(null), []);
+  // An errand another view wants Errands to open on (an offer's reply), the same way.
+  const [errandIntent, setErrandIntent] = useState<string | null>(null);
+  const errandConsumed = useCallback(() => setErrandIntent(null), []);
   // A new thread another view wants Think to start, with what it starts from, the same way.
   const [thinkIntent, setThinkIntent] = useState<{ start: ThinkStart | null } | null>(null);
   const thinkConsumed = useCallback(() => setThinkIntent(null), []);
@@ -199,6 +205,11 @@ export default function AppPage() {
     navigate("care");
   };
 
+  const openErrand = (id: string) => {
+    setErrandIntent(id);
+    navigate("errands");
+  };
+
   const openThink = (start: ThinkStart | null) => {
     setThinkIntent({ start });
     navigate("think");
@@ -238,7 +249,7 @@ export default function AppPage() {
       case "think":
         return <Think intent={thinkIntent} onConsumed={thinkConsumed} onAsk={openAsk} onMemory={openMemory} />;
       case "errands":
-        return <Errands />;
+        return <Errands focus={errandIntent} onFocused={errandConsumed} />;
       case "saved":
         return <Saved />;
       case "tasks":
@@ -255,6 +266,8 @@ export default function AppPage() {
         return <Choices onChange={home.reload} onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
       case "jobs":
         return <Jobs onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
+      case "offers":
+        return <Offers onErrand={openErrand} />;
       case "journal":
         return <Journal />;
       case "life":

@@ -9,24 +9,47 @@ import { ErrandCard } from "@/components/errands/ErrandCard";
 import { Bone } from "@/components/Skeleton";
 import { useErrands } from "@/lib/errandsClient";
 import { timeAgo } from "@/lib/format";
+import { scrollBehavior } from "@/lib/reading";
 import { ERRAND_MAX_GOAL } from "@/lib/types";
 
 // What was being written when the view was left, so coming back to it doesn't lose it.
 let kept = "";
 
+interface ErrandsProps {
+  /** An errand to open on, by id, as an offer's reply asks. */
+  focus?: string | null;
+  onFocused?: () => void;
+}
+
 /**
  * Hand the twin something to get done: it carries it as far as it can without you, and stops one
  * tap short, with an account of every step. Nothing goes out until you press Send on it.
  */
-export function Errands() {
+export function Errands({ focus, onFocused }: ErrandsProps = {}) {
   const { data, error, clearError, waiting, start, send, drop } = useErrands();
   const [goal, setGoal] = useState(kept);
   const [starting, setStarting] = useState(false);
+  const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
   const area = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     kept = goal;
   }, [goal]);
+
+  useEffect(() => {
+    if (focus) onFocused?.();
+  }, [focus, onFocused]);
+
+  const found = scrollTo !== null && (data?.errands.some((e) => e.id === scrollTo) ?? false);
+  useEffect(() => {
+    if (!scrollTo || !found) return;
+    // After the errand has rendered; once, so the page doesn't jump back to it on each check.
+    const timer = window.setTimeout(() => {
+      document.getElementById(`errand-${scrollTo}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+      setScrollTo(null);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [scrollTo, found]);
 
   if (data && !data.vault.exists) return <NoVault path={data.vault.path} />;
 

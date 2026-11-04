@@ -21,6 +21,7 @@ import {
   Plug,
   Route,
   Rss,
+  Scale,
   ShieldCheck,
   SlidersHorizontal,
   UserRound,
@@ -37,6 +38,7 @@ export type View =
   | "tasks"
   | "projects"
   | "jobs"
+  | "offers"
   | "care"
   | "drafts"
   | "advice"
@@ -103,6 +105,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: "work",
     words: "job leads roles apply applications recruiters linkedin work at a startup cv resume",
     blurb: "Every job lead: whether to apply, how, with which CV and through whom.",
+  },
+  {
+    icon: Scale,
+    label: "Offers",
+    id: "offers",
+    group: "work",
+    words: "compare quotes negotiate prices fees flat fee bids estimates lawyer contractor apartment",
+    blurb: "What each offered for one goal, side by side, and a reply asking each for what's missing.",
   },
   { icon: Rss, label: "Feed", id: "feed", group: "work", words: "research papers arxiv articles new" },
   { icon: Bookmark, label: "Saved", id: "saved", group: "work", words: "bookmarks kept later" },

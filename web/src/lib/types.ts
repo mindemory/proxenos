@@ -1012,9 +1012,9 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
  * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, a thought
- * being thought through, and a round of drafts comparing two models.
+ * being thought through, a round of drafts comparing two models, and a comparison of offers.
  */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think" | "compare";
+export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think" | "compare" | "offers";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -1613,6 +1613,98 @@ export interface ErrandEdits {
   address?: string;
   subject?: string;
   body?: string;
+}
+
+// ── Offers ──────────────────────────────────────────────────────────────────
+//
+// From clones/offers/<slug>.json, which `proxenos clone offers` writes: what several people or firms
+// offered for one goal, a row each, every price held to their own messages, and the reply to each,
+// kept as an errand waiting on the user's Send.
+
+export const OFFERS_MAX_GOAL = 500;
+export const OFFERS_MONTHS = [3, 6, 12, 24] as const;
+
+export type OffersStatus = "working" | "done" | "failed";
+
+/** Something they offer and its price, each as they wrote it, "" when not said. */
+export interface OfferPrice {
+  what: string;
+  price: string;
+}
+
+export interface OfferPerson {
+  name: string;
+  role: string;
+}
+
+/** The reply to one counterpart, as its errand stands now. */
+export interface OfferReply {
+  errand: string;
+  status: ErrandStatus;
+  to: string;
+  channel: string;
+  /** The address it goes to, or "" while it waits for one. */
+  address: string;
+  subject: string;
+  body: string;
+  state: "ready" | "waiting" | "sent";
+}
+
+export interface OfferRow {
+  key: string;
+  /** A firm, by its mail's domain, or one person. */
+  kind: "org" | "person";
+  name: string;
+  channel: string;
+  people: OfferPerson[];
+  address: string;
+  first: OfferPrice;
+  whole: OfferPrice;
+  prices: OfferPrice[];
+  credited: string;
+  terms: string[];
+  /** What's missing for a fair comparison. */
+  missing: string[];
+  /** When they or the user last wrote. */
+  last: string;
+  /** Who owes the next reply. */
+  owes: "you" | "them";
+  heard: number;
+  /** What the model gave that their messages don't say, so it was left out. */
+  unconfirmed: string[];
+  reply: OfferReply | null;
+  error: string | null;
+}
+
+export interface Offers {
+  slug: string;
+  goal: string;
+  created: string;
+  updated: string;
+  months: number;
+  since: string;
+  project: string;
+  status: OffersStatus;
+  error: string | null;
+  /** What to compare them on, from the rows alone. */
+  note: string;
+  rows: OfferRow[];
+}
+
+export interface OffersResponse {
+  now: string;
+  vault: VaultInfo;
+  comparisons: Offers[];
+  /** The projects whose brief a comparison can go into. */
+  projects: { id: string; name: string }[];
+  /** The comparison being made now, or how the last one ended. */
+  job: ErrandJob | null;
+}
+
+export interface OffersRequest {
+  goal: string;
+  months: number;
+  project: string | null;
 }
 
 // ── Projects ────────────────────────────────────────────────────────────────

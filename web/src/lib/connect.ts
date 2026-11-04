@@ -12,8 +12,8 @@
 // its question on stdin, its last line the id of the ask. connectJobs() leaves it out; askJobs()
 // reports them. So do the Errands page's errands ("errand") and their Sends and Drops ("send"),
 // the Projects page's steps ("step") and the decisions on them ("decide"), the Life page's
-// months written on demand ("life"), the Think page's turns ("think"), and Settings' rounds
-// comparing two models ("compare").
+// months written on demand ("life"), the Think page's turns ("think"), Settings' rounds
+// comparing two models ("compare"), and the Offers page's comparisons ("offers").
 
 import type { ChildProcess } from "node:child_process";
 
@@ -38,10 +38,12 @@ const STATUS_MS = 30_000;
 // and so can an errand; a Send is one email or chat message. A project's step may run for half an
 // hour, with time to commit after; a decision on one is a git merge or a file. A month's story is
 // one long prompt, a few minutes on a laptop's model. A round comparing two models is two drafts
-// of each of up to fifty replies, a minute or two each on a laptop's model.
+// of each of up to fifty replies, a minute or two each on a laptop's model. A comparison of
+// offers reads up to twelve offers and writes a reply to each, a couple of minutes apiece there.
 export const ASK_MS = 15 * 60_000;
 export const STEP_MS = 40 * 60_000;
 export const COMPARE_MS = 4 * 60 * 60_000;
+export const OFFERS_MS = 90 * 60_000;
 const JOB_MS: Record<JobKind, number> = {
   gmail: 6 * 60_000,
   microsoft: 6 * 60_000,
@@ -57,6 +59,7 @@ const JOB_MS: Record<JobKind, number> = {
   life: 20 * 60_000,
   think: ASK_MS,
   compare: COMPARE_MS,
+  offers: OFFERS_MS,
 };
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_MESSAGE = 300;

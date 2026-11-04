@@ -27,7 +27,8 @@ import { nowIso, vaultInfo, vaultPath } from "./vault";
 
 const MAX_ERRANDS = 30;
 const MAX_ERRAND_BYTES = 1024 * 1024;
-const ERRAND_ID = /^errand-\d{8}T\d{6}Z$/;
+// "-n": one of several begun in the same second, as Offers begins its replies.
+const ERRAND_ID = /^errand-\d{8}T\d{6}Z(-\d{1,3})?$/;
 const STATUSES: readonly ErrandStatus[] = ["working", "ready", "waiting", "sent", "failed", "dropped"];
 const ADDRESS = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 
@@ -190,6 +191,12 @@ function toJob(job: Job | null): ErrandJob | null {
       finished: job.finished,
     }
   );
+}
+
+/** One errand by its id, read as the list reads each (Offers shows each reply's this way); null when there's none. */
+export async function getErrand(id: string): Promise<Errand | null> {
+  if (!isErrandId(id)) return null;
+  return toErrand(await readPlainJson(path.join(vaultPath(), "clones", "errands", `${id}.json`)));
 }
 
 /** The newest errands, newest first, leaving out those dropped, and how the jobs stand. */
