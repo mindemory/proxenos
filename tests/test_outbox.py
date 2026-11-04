@@ -368,6 +368,43 @@ def test_drafts_the_user_used_or_the_outbox_sent_dont_count(vault):
     assert not state(vault)["earned"]["whatsapp"]
 
 
+def test_a_draft_whose_chat_went_unanswered_counts_against_the_app(vault):
+    def old_reply(draft_id, created, status="draft"):
+        thread = json.dumps({"source": "whatsapp", "chat": f"{draft_id}@s.whatsapp.net"})
+        write(
+            vault / "clones" / "drafts" / f"{draft_id}.md",
+            f"---\nid: {draft_id}\nkind: reply\nchannel: whatsapp\ncreated: {created}\n"
+            f"status: {status}\nthread: {thread}\n---\n\nsure!\n",
+        )
+
+    old_reply("reply-unanswered01", "2026-03-01T09:00:00Z")
+    old_reply("reply-discarded001", "2026-03-02T09:00:00Z", status="discarded")
+    old_reply("reply-copied000001", "2026-03-02T09:00:00Z")
+    old_reply("reply-notneeded001", "2026-03-02T09:00:00Z", status="overtaken")
+    old_reply("reply-yesterday001", "2026-03-09T09:00:00Z")  # not three days yet
+    write(
+        vault / "clones" / "drafts" / "feedback.jsonl",
+        json.dumps({"draft_id": "reply-copied000001", "action": "copy"}) + "\n",
+    )
+
+    outbox.run(vault, NOW, {"beeper": Sender()})
+
+    # 35 measured and unchanged, and two the outbox would have sent that weren't answered.
+    evidence = state(vault)["evidence"]["whatsapp"]
+    assert (evidence["n"], evidence["unchanged"], evidence["unanswered"]) == (37, 35, 2)
+    assert not state(vault)["earned"]["whatsapp"]
+    # The drafts clone removes an unanswered draft in time; the record keeps it.
+    (vault / "clones" / "drafts" / "reply-unanswered01.md").unlink()
+    outbox.run(vault, NOW + timedelta(minutes=15), {"beeper": Sender()})
+    assert state(vault)["evidence"]["whatsapp"]["n"] == 37
+    kept = (vault / "clones" / "outbox" / "unanswered.jsonl").read_text().splitlines()
+    assert [json.loads(line)["draft_id"] for line in kept] == [
+        "reply-copied000001",
+        "reply-discarded001",
+        "reply-unanswered01",
+    ]
+
+
 def test_a_signed_reply_says_it_was_sent_by_the_assistant(vault):
     rules = {"enabled": True, "channels": {"whatsapp": {"on": True, "sign": True}}}
     write(vault / "clones" / "outbox" / "rules.json", json.dumps(rules))

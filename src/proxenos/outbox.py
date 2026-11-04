@@ -5,11 +5,12 @@ replies have earned it on the evidence that matches what it sends. The outbox se
 touched, so its track record is the app's reply drafts the user didn't act on (didn't copy, open
 in their app, edit, approve, mark sent, keep or think through in Think: proxenos.fidelity measures
 them all, the page's feedback.jsonl and Think's threads say which were used) and that it didn't
-send itself, since its own sends would vouch for themselves. Of those, the share that came out
-nearly unchanged (closeness at least NEARLY) must be at least min_share (0.9) with 95%
-confidence: the Wilson lower bound of that share. With every one unchanged, 0.9 takes 35 drafts.
-At least min_measured of them, too. A rules.json from before keeps its switches, and its
-min_closeness, the old bar on the mean, is read as min_share.
+send itself, since its own sends would vouch for themselves. It would have sent one whose chat
+the user never answered too, so each of those counts as one not sent unchanged. Of them all,
+the share that came out nearly unchanged (closeness at least NEARLY) must be at least min_share
+(0.9) with 95% confidence: the Wilson lower bound of that share. With every one unchanged, 0.9
+takes 35 drafts. At least min_measured of them, too. A rules.json from before keeps its
+switches, and its min_closeness, the old bar on the mean, is read as min_share.
 
 A reply qualifies only when it is a draft nobody has touched, for one person who has heard from
 the user before (never someone new's first email), with no [placeholder] left and nothing it
@@ -42,7 +43,8 @@ and WhatsApp when it's added there, through Beeper Desktop's local API. Slack ha
 
 Files in clones/outbox/: rules.json (the page writes it; read as strictly as the page reads it),
 cancelled.jsonl (the page appends), state.json (written here each sync: routes, track record,
-what has earned sending, the queue) and log.jsonl (every attempt, sent or not). A reply that
+what has earned sending, the queue), log.jsonl (every attempt, sent or not) and unanswered.jsonl
+(the drafts whose chat went unanswered, kept for the track record after the draft is gone). A reply that
 goes out is marked sent, as if the user had pressed Sent on the page.
 
 Nothing goes out from a made-up vault (`proxenos demo`, marked by its DEMO file): it has no routes.
@@ -60,7 +62,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, links, voice
+from proxenos import chats, fidelity, links, voice
 from proxenos.clones import work
 from proxenos.config import env
 from proxenos.ingest import beeper
@@ -109,7 +111,7 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
     rules = read_rules(folder / "rules.json")
     routes = {} if is_demo(vault) else _routes()
     log = _jsonl(folder / "log.jsonl")
-    evidence = _evidence(vault, log)
+    evidence = _evidence(vault, log, _unanswered(vault, now))
     earned = {}
     for ch, rule in rules["channels"].items():
         e = evidence.get(ch, {"n": 0, "unchanged": 0})
@@ -417,19 +419,21 @@ _BEEPER_NETWORKS = {
 }
 
 
-def _evidence(vault: Path, log: list[dict]) -> dict[str, dict]:
+def _evidence(vault: Path, log: list[dict], unanswered: list[dict]) -> dict[str, dict]:
     """The track record per app that matches what the outbox sends, untouched drafts: of the
     reply drafts measured (fidelity.json) that the user didn't act on (USED in the page's
     feedback.jsonl, or a Think thread started from it) and that the outbox didn't send itself
-    (an ok line in `log`), how many (n) and how many came out nearly unchanged (unchanged)."""
+    (an ok line in `log`), how many (n) and how many came out nearly unchanged (unchanged).
+    The outbox would have sent one whose chat the user never answered too, and nothing says
+    they'd have sent it, so each of those (`unanswered`) counts in n as not unchanged."""
     folder = vault / "clones" / "drafts"
     measured = (_json(folder / "fidelity.json") or {}).get("drafts")
+    measured = [m for m in measured if isinstance(m, dict)] if isinstance(measured, list) else []
     used = set(work._latest(folder / "feedback.jsonl", "draft_id", USED)) | _thought(vault)
     used |= {e.get("draft_id") for e in log if e.get("ok")}
     found: dict[str, dict] = {}
-    for m in measured if isinstance(measured, list) else []:
-        draft = m.get("id") if isinstance(m, dict) else None
-        closeness = m.get("closeness") if isinstance(m, dict) else None
+    for m in measured:
+        draft, closeness = m.get("id"), m.get("closeness")
         if not isinstance(draft, str) or not draft.startswith("reply-") or draft in used:
             continue
         if not isinstance(closeness, int | float) or isinstance(closeness, bool):
@@ -437,7 +441,49 @@ def _evidence(vault: Path, log: list[dict]) -> dict[str, dict]:
         e = found.setdefault(_SOURCE_CHANNEL.get(m.get("source"), m.get("source")), {"n": 0})
         e["n"] += 1
         e["unchanged"] = e.get("unchanged", 0) + (closeness >= NEARLY)
+    answered = {m.get("id") for m in measured}
+    for u in unanswered:
+        if u.get("draft_id") in used | answered:
+            continue
+        e = found.setdefault(_SOURCE_CHANNEL.get(u.get("source"), u.get("source")), {"n": 0})
+        e["n"] += 1
+        e["unchanged"] = e.get("unchanged", 0)
+        e["unanswered"] = e.get("unanswered", 0) + 1
     return found
+
+
+def _unanswered(vault: Path, now: datetime) -> list[dict]:
+    """The reply drafts whose chat the user didn't answer within fidelity's WINDOW of the draft,
+    so fidelity never measured them: {draft_id, source, drafted}. Kept in the outbox's own
+    unanswered.jsonl as they're found, since the drafts clone removes such a draft once its chat
+    moves on or a month goes by, and the evidence must not forget them. Fidelity runs just
+    before the outbox in a sync, so a draft answered in time is marked sent by then."""
+    folder = vault / "clones" / "outbox"
+    kept = _jsonl(folder / "unanswered.jsonl")
+    known = {u.get("draft_id") for u in kept}
+    until = _iso(now - fidelity.WINDOW)
+    measured = (_json(vault / "clones" / "drafts" / "fidelity.json") or {}).get("drafts")
+    answered = {m.get("id") for m in measured or [] if isinstance(m, dict)}
+    new = []
+    for path in sorted((vault / "clones" / "drafts").glob("reply-*.md")):
+        try:
+            fields = work._front(path.read_text(encoding="utf-8")) or {}
+        except (OSError, UnicodeDecodeError):
+            continue
+        draft, created = fields.get("id") or path.stem, fields.get("created") or ""
+        thread = fidelity._json(fields.get("thread"))
+        if draft in known | answered or not isinstance(thread, dict) or not created:
+            continue
+        # Only a draft still waiting, or one the user discarded: not one they approved or
+        # marked sent, nor one filed away as needing no reply.
+        if fields.get("status") in ("draft", "discarded") and created <= until:
+            new.append({"draft_id": draft, "source": thread.get("source"), "drafted": created})
+    if new:
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with (folder / "unanswered.jsonl").open("a", encoding="utf-8") as f:
+            f.writelines(json.dumps(u, ensure_ascii=False) + "\n" for u in new)
+        (folder / "unanswered.jsonl").chmod(0o600)
+    return kept + new
 
 
 def _thought(vault: Path) -> set[str]:

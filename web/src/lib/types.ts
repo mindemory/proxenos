@@ -700,8 +700,8 @@ export interface OutboxState {
   closeness: Record<string, { n: number; mean: number }>;
   /**
    * Each channel's record that counts: its measured drafts the reader didn't touch and the
-   * outbox didn't send (n), how many went out nearly unchanged, and the share that shows at 95%
-   * confidence (lower, 0 to 1).
+   * outbox didn't send, with those whose chat went unanswered (n), how many went out nearly
+   * unchanged, and the share that shows at 95% confidence (lower, 0 to 1).
    */
   evidence: Record<string, { n: number; unchanged: number; lower: number }>;
   /** Whether a channel's record meets its rule's thresholds. */

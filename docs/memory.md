@@ -123,9 +123,12 @@ set on the Drafts page. It is off until you switch it on, and then only per app,
 an app whose replies have earned it on the evidence that matches what it sends. It sends drafts
 nobody touched, so what counts is that app's measured reply drafts ([fidelity.py](../src/proxenos/fidelity.py))
 you didn't act on: not copied, opened in their app, edited, approved, marked sent, kept or
-thought through in Think. Of those, the share whose reply went out nearly unchanged (nine tenths
-or more of the draft still in what you sent) must be at least 90% with 95% confidence, the lower
-bound of its Wilson interval. With every one unchanged, that takes 35 drafts; the page says how
+thought through in Think. It would have sent one whose chat you never answered too, so a draft
+like that, left untouched for three days with its chat unanswered, counts as one you'd have
+changed; the outbox keeps them in `clones/outbox/unanswered.jsonl`, since the draft itself goes
+in time. Of them all, the share whose reply went out nearly unchanged (nine tenths or more of the
+draft still in what you sent) must be at least 90% with 95% confidence, the lower bound of its
+Wilson interval. With every one unchanged, that takes 35 drafts; the page says how
 many your setting needs. The replies the outbox sent itself never count, so it can't vouch for
 itself. A rules file from before keeps its switches, and its bar on the mean is read as the bar
 on the share.

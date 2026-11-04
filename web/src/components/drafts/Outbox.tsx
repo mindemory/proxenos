@@ -273,8 +273,8 @@ export function Outbox() {
                   {route && <span className="text-faint"> · via {outboxRouteLabel(route)}</span>}
                 </p>
                 <p className="text-xs text-faint">
-                  Drafts you copied, opened, edited or thought through don&apos;t count, nor what went out on its own.
-                  With every one unchanged, {Math.round(rule.min_share * 100)}% takes {outboxNeeded(rule.min_share)}.
+                  Drafts you copied, opened, edited or thought through don&apos;t count, nor what went out on its own;
+                  one whose chat you didn&apos;t answer within three days counts as changed. With every one unchanged, {Math.round(rule.min_share * 100)}% takes {outboxNeeded(rule.min_share)}.
                 </p>
                 {hint && <p className="text-xs text-faint">{hint}</p>}
               </div>
