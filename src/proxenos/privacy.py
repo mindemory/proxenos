@@ -114,6 +114,17 @@ SENDS = (
         ("errands",),
         "The newest records naming the person to reach, your earlier emails with a CV, and the CV.",
     ),
+    (
+        "Offers",
+        ("offers",),
+        (
+            "Only for a comparison you start: what each person or firm wrote you about it, with "
+            "what you wrote them, to read their offer; the offers as read, to say what to compare "
+            "them on; and, to draft what to ask each, your conversation with them, what they "
+            "offered and what's missing, that someone else offers less (never who), your rules "
+            "and your own writing."
+        ),
+    ),
     ("Ask", ("ask",), "What you type or paste, its screenshots, and the records memory finds."),
     (
         "Think",
@@ -188,7 +199,8 @@ SENDS = (
         "Looking people up",
         ("lookup",),
         (
-            "Nothing to a model. When an errand, Ask or Think needs someone's email address and "
+            "Nothing to a model. When an errand (an offer's reply among them), Ask or Think needs "
+            "someone's email address and "
             "your records have none, only that person's name and where they are go to the search "
             "engine, and only that place's own public pages are read. Nothing about you."
         ),

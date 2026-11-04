@@ -45,7 +45,7 @@ from proxenos import llm, lookup, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 
-ERRAND_ID = re.compile(r"errand-\d{8}T\d{6}Z")
+ERRAND_ID = re.compile(r"errand-\d{8}T\d{6}Z(?:-\d{1,3})?")  # -n: one of several begun at once
 PERSON_HITS = 40  # records naming the person, read for a way to reach them
 LINES = 20  # of those, the newest the model reads
 ORG_PEOPLE = 5  # people the user knows where the person is
