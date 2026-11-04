@@ -6,8 +6,8 @@ For each local month, on this computer:
 - mood, from the user's own writing a day at a time (proxenos.mood): the messages they sent on
   the channels with people (rhythms.CHANNELS), read from the memory index's rows marked as
   theirs, and the mail they sent, of which only what they wrote, never what they quoted or
-  forwarded (proxenos.ingest.email.own_text). Other people's messages are never read for it. Each day's valence comes
-  with no model, its emotions from a model on this computer only.
+  forwarded (proxenos.ingest.email.own_text). Other people's messages are never read for it.
+  Each day's valence comes with no model, its emotions from a model on this computer only.
 - music, from Spotify's month files: each day's hours, and the month's top artists, genres and
   moods from the artists' labels (clones/rhythms/artists.json, the model's, from names) and
   kinds of music from MusicBrainz (proxenos.musicbrainz), each by the hours behind it.
