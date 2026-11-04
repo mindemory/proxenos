@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
 import type { OffersRequest, OffersResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 4000;
 
@@ -74,7 +75,7 @@ export function useOffers() {
       try {
         res = await fetch("/api/offers", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: JSON_HEADERS,
           body: JSON.stringify(request),
         });
       } catch {

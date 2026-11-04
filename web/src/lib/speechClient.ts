@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { SpeechChange, SpeechEngine, SpeechStatus, SpeechStatusResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 1_000;
 export const CLIP_RATE = 24_000;
@@ -17,7 +18,7 @@ export const CLIP_MAX = 30;
 
 async function post(url: string, body: object): Promise<SpeechChange> {
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
     const answer = (await res.json().catch(() => ({}))) as Partial<SpeechChange> & { error?: string };
     return { ok: res.ok && answer.ok !== false, message: answer.message ?? answer.error ?? `It didn't work (${res.status}).` };
   } catch (e) {

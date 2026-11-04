@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
 import { ERRAND_MAX_GOAL, type ErrandEdits, type ErrandsResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 4000;
 
@@ -19,7 +20,7 @@ async function post(body: object): Promise<void> {
   try {
     res = await fetch("/api/errands", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(body),
     });
   } catch {

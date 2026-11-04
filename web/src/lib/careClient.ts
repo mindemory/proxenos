@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toasts";
 import { useFlash, useJson } from "./client";
 import { daysBetween, localDay } from "./format";
 import type { CareAction, CareItemView, CareResponse, CareWaitingOn } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const SAVE_FAILED = "Couldn't save that. Is the vault reachable? Nothing was written.";
 
@@ -22,7 +23,7 @@ export const CARE_TOAST: Record<CareAction, string> = {
 async function sendCareFeedback(itemId: string, action: CareAction): Promise<void> {
   const res = await fetch("/api/care/feedback", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify({ item_id: itemId, action }),
     keepalive: true,
   });

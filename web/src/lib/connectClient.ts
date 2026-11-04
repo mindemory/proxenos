@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toasts";
 import { getJson } from "./client";
 import type { ConnectJob, ConnectJobKind, ConnectJobsResponse, ConnectResponse, SignInKind } from "./types";
 import { SIGN_IN_KINDS } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 2000;
 
@@ -24,7 +25,7 @@ function doneToast(job: ConnectJob): string {
 async function post<T>(url: string, body: object): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   const answer = (await res.json().catch(() => ({}))) as T & { error?: string };

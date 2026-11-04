@@ -10,13 +10,14 @@ import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
 import type { CallsResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 3000;
 
 async function post(url: string, id: string): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+    res = await fetch(url, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ id }) });
   } catch {
     throw new Error("Couldn't reach Proxenos. Is your Mac awake?");
   }

@@ -18,6 +18,7 @@
 import { useSyncExternalStore } from "react";
 
 import { type Engine, readingNow } from "./reading";
+import { JSON_HEADERS } from "./headers";
 
 export interface Voice {
   id: string; // its voiceURI
@@ -209,7 +210,7 @@ export function warm() {
   warmed.set(engine, Date.now());
   void fetch("/api/speech", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify({ warm: engine, voice: engine === "natural" ? readingNow().natural : null }),
   }).catch(() => {});
 }
@@ -221,7 +222,7 @@ function sound(i: number): Promise<Blob | null> {
     const r = readingNow();
     p = fetch("/api/speech/say", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify({ text: queue[i], engine: via, voice: via === "natural" ? r.natural : null }),
       signal: asking?.signal,
     })

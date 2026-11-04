@@ -25,6 +25,7 @@ import { StatusSkeleton } from "@/components/Skeleton";
 import { cloudFor, useSetup } from "@/lib/setupClient";
 import type { NoticeTest, SecretState, SettingKey, SettingValue, SetupStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { JSON_HEADERS } from "@/lib/headers";
 
 /** The secrets phone notices use, shown with them rather than with the keys and sign-ins. */
 const NOTICE_SECRETS = ["NTFY_TOPIC", "NTFY_TOKEN"];
@@ -514,7 +515,7 @@ function TestNotice({ ready }: { ready: boolean }) {
     try {
       const res = await fetch("/api/notify", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ test: true }),
       });
       const answer = (await res.json().catch(() => ({}))) as Partial<NoticeTest> & { error?: string };

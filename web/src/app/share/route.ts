@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
  * the ask is given.
  */
 export async function POST(req: Request) {
-  const denied = rejectNonLocal(req);
+  // The share sheet's form can't carry the page's header; another site's is still refused by
+  // its Origin and Sec-Fetch-Site.
+  const denied = rejectNonLocal(req, { shared: true });
   if (denied) return denied;
   if (Number(req.headers.get("content-length") ?? 0) > ASK_MAX_BODY) {
     return Response.json({ error: "too much to share at once" }, { status: 413 });

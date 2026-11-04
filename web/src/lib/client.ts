@@ -47,6 +47,7 @@ import type {
   ThinkResponse,
   ThinkStart,
 } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 export const POLL_MS = 5 * 60 * 1000;
 
@@ -62,7 +63,7 @@ export async function getJson<T>(url: string): Promise<T> {
 async function postJson(url: string, body: object, keepalive = true): Promise<void> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
     keepalive,
   });
@@ -85,7 +86,7 @@ export function sendNetworkFeedback(itemId: string, action: NetworkAction): Prom
 async function postForJson<T>(url: string, body: object): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${url} returned ${res.status}`);
@@ -443,7 +444,7 @@ export function useJournal(date: string | null) {
     try {
       const res = await fetch("/api/journal", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: "{}",
       });
       const body = await res.json();
@@ -581,7 +582,7 @@ export function useLife(month: string | null) {
 async function postLife(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch("/api/life", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   const answer = (await res.json().catch(() => ({}))) as { error?: string };
@@ -712,7 +713,7 @@ export function useThink(onEnd?: (kept: boolean) => void) {
       try {
         const res = await fetch("/api/think", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: JSON_HEADERS,
           body: JSON.stringify(body),
         });
         const answer = (await res.json().catch(() => ({}))) as { error?: string };
@@ -745,7 +746,7 @@ export function useThink(onEnd?: (kept: boolean) => void) {
   /** Stop the think that's running. */
   const stop = useCallback(() => {
     setStopping(true);
-    fetch("/api/think/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() =>
+    fetch("/api/think/cancel", { method: "POST", headers: JSON_HEADERS, body: "{}" }).catch(() =>
       setStopping(false),
     );
   }, []);

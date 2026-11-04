@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toasts";
 
 import { getJson } from "./client";
 import type { CompareJob, ComparePick, CompareResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 5000;
 
@@ -19,7 +20,7 @@ async function post(body: object): Promise<Record<string, unknown>> {
   try {
     res = await fetch("/api/compare", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(body),
     });
   } catch {

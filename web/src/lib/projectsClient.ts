@@ -23,6 +23,7 @@ import type {
   StepAsk,
   StepChangesResponse,
 } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 5000;
 
@@ -32,7 +33,7 @@ async function post<T = unknown>(body: object, url = "/api/projects"): Promise<T
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(body),
     });
   } catch {

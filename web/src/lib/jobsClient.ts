@@ -9,6 +9,7 @@ import { useToast } from "@/components/Toasts";
 
 import { useFlash, useJson } from "./client";
 import type { Job, JobAction, JobsResponse, JobStatus } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const SAVED: Record<JobAction, string> = {
   new: "Marked new",
@@ -22,7 +23,7 @@ const SAVED: Record<JobAction, string> = {
 async function sendJobStatus(jobId: string, action: JobAction): Promise<void> {
   const res = await fetch("/api/jobs", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify({ job_id: jobId, action }),
     keepalive: true,
   });

@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toasts";
 
 import { getJson, useFlash } from "./client";
 import type { AskEntry, AskImage, AskResponse } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 5000;
 
@@ -28,7 +29,7 @@ export interface Pending {
 async function postJson<T>(url: string, body: object): Promise<{ status: number; answer: T & { error?: string } }> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   return { status: res.status, answer: (await res.json().catch(() => ({}))) as T & { error?: string } };

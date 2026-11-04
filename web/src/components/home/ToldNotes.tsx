@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ActionButton } from "@/components/ActionButton";
 import { shortDate } from "@/lib/format";
 import type { ToldNote } from "@/lib/types";
+import { JSON_HEADERS } from "@/lib/headers";
 
 /**
  * What the reader tells Proxenos that no message shows: a fact for now ("I'm not going to
@@ -30,7 +31,7 @@ export function ToldNotes({ now }: { now: string }) {
     try {
       const res = await fetch("/api/told", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(String(res.status));

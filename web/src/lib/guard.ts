@@ -1,15 +1,25 @@
 // The app binds to 127.0.0.1, but a page on another site can still make the
 // browser send requests here. Only answer requests addressed to a loopback
-// host (blocks DNS rebinding), and refuse cross-origin callers.
+// host (blocks DNS rebinding), and refuse cross-origin callers: a mismatched
+// Origin, and a browser's Sec-Fetch-Site saying another site sent it, which
+// it says even of an image or a script tag, which carry no Origin. And a
+// request that isn't a read must carry the page's own header (headers.ts),
+// which no other site can send without a preflight this server never answers.
+// Every route calls rejectNonLocal, directly or through readLocalJson, and no
+// GET changes anything but a cache of what it reads.
 //
 // The one other way in is the user's phone through Tailscale Serve (`proxenos phone`):
 // their Mac's private address on their own tailnet, PROXENOS_REMOTE_HOST, which Serve
 // forwards here saying which Tailscale login is asking. That address answers only the
 // user's own login, PROXENOS_REMOTE_USER.
 
+import { PAGE_HEADER } from "./headers";
 import { setting } from "./vault";
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+// What a browser says of a request another site, or another subdomain of one, started.
+const ELSEWHERE = new Set(["cross-site", "same-site"]);
+const READS = new Set(["GET", "HEAD"]);
 
 function fromTheUser(req: Request, hostname: string): boolean {
   if (LOOPBACK.has(hostname)) return true;
@@ -19,10 +29,21 @@ function fromTheUser(req: Request, hostname: string): boolean {
   return !!remote && !!user && hostname === remote && login === user;
 }
 
-export function rejectNonLocal(req: Request): Response | null {
+/**
+ * Null when the request is the user's own page asking, else the 403 to answer. `shared` is for
+ * the one request that isn't the page's own fetch: the phone's share sheet posting a form to
+ * /share, which can't carry the page's header, so it rests on the checks before it.
+ */
+export function rejectNonLocal(req: Request, { shared = false }: { shared?: boolean } = {}): Response | null {
   const host = req.headers.get("host") ?? "";
   const hostname = host.replace(/:\d+$/, "").toLowerCase();
   if (!fromTheUser(req, hostname)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+  if (ELSEWHERE.has((req.headers.get("sec-fetch-site") ?? "").toLowerCase())) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+  if (!READS.has(req.method.toUpperCase()) && !shared && req.headers.get(PAGE_HEADER) !== "1") {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
   const origin = req.headers.get("origin");
@@ -41,10 +62,10 @@ export function rejectNonLocal(req: Request): Response | null {
 export const NO_STORE = { "Cache-Control": "no-store" };
 
 /**
- * Guard for a POST that writes to the vault: loopback host, same origin, and a
- * JSON body. A cross-site form can't send application/json without a
- * preflight, which this server never answers. Returns the parsed body, or the
- * response to send instead.
+ * Guard for a POST that writes to the vault: loopback host, same origin, the
+ * page's header, and a JSON body. A cross-site form can send neither the header
+ * nor application/json without a preflight, which this server never answers.
+ * Returns the parsed body, or the response to send instead.
  */
 export async function readLocalJson(
   req: Request,

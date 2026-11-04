@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ActionButton } from "@/components/ActionButton";
+import { JSON_HEADERS } from "@/lib/headers";
 
 /**
  * "Right now": a line about how the reader is and what's on their mind. The next two days of
@@ -31,7 +32,7 @@ export function NowNote() {
     try {
       const res = await fetch("/api/now", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error(String(res.status));

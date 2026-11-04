@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getJson } from "./client";
 import type { SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
+import { JSON_HEADERS } from "./headers";
 
 /** Paths under these, relative to the home folder, are synced to a cloud on most Macs. */
 const SYNCED: readonly [string, "icloud" | "drive"][] = [
@@ -46,7 +47,7 @@ export function useSetup() {
   const apply = useCallback(async (change: SetupChange): Promise<string> => {
     const res = await fetch("/api/setup", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(change),
     });
     const answer = (await res.json().catch(() => ({}))) as Partial<SetupResult>;
