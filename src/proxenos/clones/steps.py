@@ -14,8 +14,9 @@ their `authors`); or a review of the manuscript the user started (proxenos.revie
 which takes its steps as it goes. The user's own are approved; the rest wait for Approve on the
 page, except comments whose every author is the user (PROXENOS_NAME, word for word). The night takes only
 approved ones, and picks one of its own only for a project with "autostep": true. "Do a step"
-on the page is the user asking: it takes the first approved one, else the first waiting, else
-one the runner picks.
+on the page is the user asking: it takes the first approved one, else one the runner picks. A
+waiting one runs only after its own Approve, so a step from someone else's comments never runs
+on a click meant for another.
 
 A step:
 
@@ -130,12 +131,10 @@ def take(
     now: datetime | None = None,
     tried: list | None = None,
     asked: dict | None = None,
-    approved_only: bool = False,
 ) -> dict:
     """One step on the project, from its worktree to its report: the one `asked` (an item as
-    queue makes it), else the first approved in the queue, else (unless `approved_only`, as the
-    night takes them) the first waiting, which the user asking for a step approves, else one the
-    runner picks. The step as saved."""
+    queue makes it), else the first approved in the queue, else one the runner picks. One still
+    waiting for approval stays in the queue. The step as saved."""
     now = now or datetime.now(UTC)
     repo = _repo(project)
     gate = lock.Lock(vault / "state" / f"steps-{project['id']}.lock")
@@ -143,7 +142,7 @@ def take(
         raise SystemExit(f"steps: {project['id']} is taking a step already")
     try:
         _settle(vault, project["id"])
-        return _take(vault, project, repo, now, tried, asked, approved_only)
+        return _take(vault, project, repo, now, tried, asked)
     finally:
         gate.release()
 
@@ -155,15 +154,13 @@ def _take(
     now: datetime,
     tried: list | None,
     asked: dict | None,
-    approved_only: bool = False,
 ) -> dict:
     queued_first = asked is None
     if queued_first:
-        asked = next_queued(vault, project["id"], approved_only)
+        asked = next_queued(vault, project["id"])
     start = begin(vault, project["id"], repo, str((asked or {}).get("base") or ""))
     if queued_first and asked:
         unqueue(vault, project["id"], asked["id"])
-        asked = asked | {"approved": True}  # taking it is approving it, should it come back
     when = f"{now:%Y%m%d-%H%M%S}"
     step = {
         "id": f"{project['id']}/{when}",
@@ -620,13 +617,12 @@ def queued(vault: Path, project_id: str) -> list[dict]:
     return [q for q in items or [] if isinstance(q, dict) and _text(q.get("text"))]
 
 
-def next_queued(vault: Path, project_id: str, approved_only: bool = False) -> dict | None:
-    """The step to take next from the queue: the first approved, else, unless `approved_only`,
-    the first waiting for approval, which the user asking for a step approves. A step queued
-    before Proxenos kept who asked says nothing, so it waits like the rest."""
-    items = queued(vault, project_id)
-    approved = [q for q in items if q.get("approved") is True]
-    return next(iter(approved if approved_only else [*approved, *items]), None)
+def next_queued(vault: Path, project_id: str) -> dict | None:
+    """The step to take next from the queue: the first approved. One waiting for approval is
+    never taken, not even when the user asks for a step, since that click is for a step, not
+    for that one: it runs once the user presses its own Approve. A step queued before Proxenos
+    kept who asked says nothing, so it waits like the rest."""
+    return next((q for q in queued(vault, project_id) if q.get("approved") is True), None)
 
 
 def queue(
@@ -945,11 +941,11 @@ def night(vault: Path, now: datetime | None = None, tried: list | None = None) -
         if any(s.get("status") == "ready" for s in projects.steps_taken(vault, project["id"], 20)):
             stats["steps_waiting"] += 1
             continue
-        if not project["autostep"] and not next_queued(vault, project["id"], approved_only=True):
+        if not project["autostep"] and not next_queued(vault, project["id"]):
             stats["steps_unasked"] += 1
             continue
         try:
-            take(vault, project, now, tried, approved_only=True)
+            take(vault, project, now, tried)
             stats["steps_taken"] += 1
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one project must not stop the rest
             stats["steps_failed"] += 1

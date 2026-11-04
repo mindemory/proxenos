@@ -328,7 +328,7 @@ function ProjectSection({
                 : stepping
                   ? "A step is being taken on another project: one at a time."
                   : toApprove
-                    ? "Steps you didn't ask for run only once you approve them. Doing a step now approves the one it takes."
+                    ? "Steps you didn't ask for run only once you approve each one. Doing a step now takes one you approved, else picks its own."
                     : project.queue.length
                       ? "The next step takes the first one queued."
                       : project.autostep
