@@ -571,6 +571,7 @@ def _write_supplement(
     named = {m.group(0).strip("./") for m in _NAMED.finditer(text)}
     own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
     if not named:
+        _prune_supplement(where, files, set(), stats)
         return
     tree: dict[str, list[tuple[str, int, str]]] = {}
     listed = manuscript._git(repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip)
@@ -606,6 +607,7 @@ def _write_supplement(
         data = manuscript._blob(repo, tip, kept)
         if data is not None:
             _replace(target, key, files, source, data, now, stats)
+    _prune_supplement(where, files, set(chosen), stats)
     items = _supplementary_items(text, chosen)
     if any(how != "data" for how, *_ in items):
         _write_supplementary(repo, tip, items, where, files, project_name, now, stats)
@@ -635,6 +637,21 @@ _UNSHOWN = (
     "_An SVG, which this PDF can't show without rsvg-convert (`brew install librsvg` on a Mac): "
     "it's in {file}, and the Word file shows it._"
 )
+
+
+def _prune_supplement(where: Path, files: dict, keep: set[str], stats: Counter) -> None:
+    """Proxenos's copies in Supplement/ of files the manuscript no longer names: removed while
+    they're still exactly as it wrote them, so a figure taken out of the paper leaves the folder
+    too; one the user changed stays theirs, no longer followed."""
+    for key in [k for k in files if k.startswith(f"{SUPPLEMENT}/")]:
+        base = key.split("/", 1)[1]
+        if base in keep:
+            continue
+        target = where / SUPPLEMENT / base
+        if _sha(target) == files[key].get("written"):
+            target.unlink()
+            stats["removed"] += 1
+        del files[key]
 
 
 def _supplementary_items(

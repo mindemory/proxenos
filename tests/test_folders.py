@@ -1056,3 +1056,32 @@ def test_tracked_changes_in_markdown_are_taken_for_the_copies():
         == "We show that beta synchrony rises here.\n\nLegend: `{~~old~>new~~}` is a replacement.\n"
     )
     assert folders.accept_marks("No marks at all.") == "No marks at all."
+
+
+def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
+    vault, repo, drive, _ = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(
+        repo,
+        {
+            "docs/paper/paper.md": "# Calls\n\nSee `results/S1.csv` and ![Screens](figures/screen.png).\n",
+            "results/S1.csv": "site,n\nA,3\n",
+            "figures/screen.png": b"\x89PNG screen",
+        },
+        "Named",
+        3,
+    )
+    git(repo, "checkout", "-q", "main")
+    run(vault, NOW)
+    supplement = drive / FOLDER / "Supplement"
+    assert {p.name for p in supplement.iterdir()} == {"S1.csv", "screen.png"}
+    (supplement / "S1.csv").write_text("site,n\nA,3\nB,4\n")  # the owner's own change
+
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"docs/paper/paper.md": "# Calls\n\nNo figures or tables now.\n"}, "Unnamed", 4)
+    git(repo, "checkout", "-q", "main")
+    stats = run(vault, NOW + timedelta(days=1))
+
+    assert stats["removed"] == 1
+    assert [p.name for p in supplement.iterdir()] == ["S1.csv"]  # theirs stays
+    assert not any(k.startswith("Supplement/") for k in state(vault)["projects"]["calls"]["files"])
