@@ -54,6 +54,7 @@ from statistics import mean, median
 from proxenos import chats, links, llm
 from proxenos.clones import care
 from proxenos.config import env
+from proxenos.ingest import email as mail
 from proxenos.ingest import linkedin
 
 # Gemma 4 E4B at 4 bits: 5 GB, for a Mac with 32 GB; with 16 GB, mlx-community/gemma-4-e2b-it-4bit
@@ -263,7 +264,7 @@ def _new_emails(vault: Path) -> Iterator[dict]:
     made = chats.drafted(vault)
     for record in chats._records(sorted((vault / "raw" / "email").glob("*/*.jsonl"))):
         subject = " ".join(str(record.get("subject") or "").split())
-        body = str(record.get("body_new") or record.get("body") or "").strip()
+        body = mail.own_text(record).strip()  # theirs only, never what it quotes or forwards
         if (
             not record.get("from_me")
             or not isinstance(record.get("ts"), str)

@@ -45,6 +45,7 @@ from pathlib import Path
 
 from proxenos import links
 from proxenos.config import env
+from proxenos.ingest import email as mail
 
 DAYS = 7
 CONTEXT_DAYS = 30  # how far back the conversation shown with a waiting chat goes
@@ -167,8 +168,8 @@ def conversations(
             heard[message["peers"][0]].add(message["chat"])
 
     def to_sender(m: dict) -> list[str]:
-        mail = sorted(sent.get(m["peers"][0], []) if m["peers"] else [], key=lambda x: x["ts"])
-        return [x["text"] for x in mail if not x["drafted"]][-OWN_EMAILS:]
+        mailed = sorted(sent.get(m["peers"][0], []) if m["peers"] else [], key=lambda x: x["ts"])
+        return [x["text"] for x in mailed if x["text"] and not x["drafted"]][-OWN_EMAILS:]
 
     names = {w for w in _WORD.findall(env("NAME").casefold()) if len(w) > 2}  # the user's
     for key, messages in threads.items():
@@ -397,8 +398,11 @@ def _email(r: dict, me: set[str]) -> dict | None:
         and not labels & _SET_ASIDE
         and not _BULK_TEXT.search(str(r.get("body") or r.get("body_new") or ""))
     )
+    # The user's own mail is only what they wrote: never someone else's words it quotes or
+    # forwards, even with nothing of theirs above them. Others' is what they said, as it came.
+    text = mail.own_text(r) if mine else r.get("body_new") or r.get("body")
     message = _message(
-        {**r, "text": r.get("body_new") or r.get("body")},
+        {**r, "text": text},
         thread,
         None if mine else sender,
         direct,

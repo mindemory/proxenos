@@ -19,7 +19,7 @@ Only what the user wrote themselves, read as proxenos.chats reads it:
 - chat messages marked as theirs, from each stream's newest MONTHS month files, in chats where
   someone else wrote too, so notes to self stay out;
 - email they sent to someone besides themselves, from the months of mail chats reads, and of
-  it only what they wrote (body_new), not what they quoted or forwarded;
+  it only what they wrote, not what they quoted or forwarded (proxenos.ingest.email.own_text);
 - posts marked as theirs, or, in a stream that is only theirs (Bluesky, their website), the
   posts and replies, not reposts or pages.
 Never a message or an email that was a draft of Proxenos's they sent nearly unchanged
@@ -65,6 +65,7 @@ from pathlib import Path
 
 from proxenos import chats, llm
 from proxenos.config import env
+from proxenos.ingest import email as mail
 
 MONTHS = 3  # of each chat stream, the newest month files read for examples
 MIN_WORDS = 2
@@ -240,7 +241,7 @@ class Writing:
                     for e in [*(r.get("to") or []), *(r.get("cc") or [])]
                     for a in chats._ADDRESS.findall(str(e))
                 }
-                text = _tidy(r.get("body_new"))
+                text = _tidy(mail.own_text(r))
                 if to - me and len(text) >= LONG_MIN:
                     found.append(_piece("email", "", r, r.get("subject"), text))
         return found

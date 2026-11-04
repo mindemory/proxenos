@@ -5,8 +5,8 @@ For each local month, on this computer:
 
 - mood, from the user's own writing a day at a time (proxenos.mood): the messages they sent on
   the channels with people (rhythms.CHANNELS), read from the memory index's rows marked as
-  theirs, and the mail they sent, of which only what they wrote (body_new), never what they
-  quoted or forwarded. Other people's messages are never read for it. Each day's valence comes
+  theirs, and the mail they sent, of which only what they wrote, never what they quoted or
+  forwarded (proxenos.ingest.email.own_text). Other people's messages are never read for it. Each day's valence comes
   with no model, its emotions from a model on this computer only.
 - music, from Spotify's month files: each day's hours, and the month's top artists, genres and
   moods from the artists' labels (clones/rhythms/artists.json, the model's, from names) and
@@ -44,6 +44,7 @@ from pathlib import Path
 
 from proxenos import llm, memory, mood, musicbrainz
 from proxenos.clones import rhythms
+from proxenos.ingest import email as mail
 
 VERSION = 1  # bump when what a card holds changes: every card is made again
 BACKFILL = 6  # older months a night makes, newest first
@@ -184,7 +185,7 @@ def own_writing(vault: Path, month: str) -> dict[str, list[tuple[str, str]]]:
                         )
     for path in _month_files(vault, "email", near):
         for r in rhythms._jsonl(path):
-            text = r.get("body_new")  # what they wrote, not what they quoted or forwarded
+            text = mail.own_text(r)  # what they wrote, not what they quoted or forwarded
             if r.get("from_me") is not True or not isinstance(text, str) or not text.strip():
                 continue
             if (when := _day_of(r.get("ts"))) and when.startswith(month):

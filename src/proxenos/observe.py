@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 from proxenos import chats, llm
 from proxenos.config import env
+from proxenos.ingest import email as mail
 
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 # Below this much rendered text a month says too little to be worth a model call.
@@ -70,7 +71,7 @@ def render_chatgpt(records: list[dict]) -> str:
 def render_email(records: list[dict]) -> str:
     parts = []
     for r in records:
-        body = (r["body_new"] or "").strip()
+        body = mail.own_text(r).strip()  # theirs only, never what it quotes or forwards
         if r["from_me"] and (body or r["subject"]):
             recipients = len(r["to"] or []) + len(r["cc"] or [])
             parts.append(

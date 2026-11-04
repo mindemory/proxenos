@@ -44,6 +44,7 @@ from pathlib import Path
 from proxenos import llm, lookup, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
+from proxenos.ingest import email as mail
 
 ERRAND_ID = re.compile(r"errand-\d{8}T\d{6}Z(?:-\d{1,3})?")  # -n: one of several begun at once
 PERSON_HITS = 40  # records naming the person, read for a way to reach them
@@ -654,7 +655,7 @@ def earlier_emails(vault: Path) -> list[dict]:
                 except ValueError:
                     continue
                 attached = [a for a in r.get("attachments") or [] if isinstance(a, str)]
-                body = str(r.get("body_new") or r.get("body") or "").strip()
+                body = mail.own_text(r).strip()  # theirs, never what it quotes or forwards
                 if (
                     r.get("in_reply_to")
                     or not _REACHING.search(body)

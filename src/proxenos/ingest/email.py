@@ -34,8 +34,11 @@ _PARSER = BytesParser(policy=policy.default)
 _FROM_ESCAPE = re.compile(rb"^>(>*From )", re.MULTILINE)
 
 # Where quoted text starts besides "On <date>, <name> wrote:". Outlook puts a
-# "From: ... Sent: ..." block under replies, and forwards bring a banner.
-_QUOTE_BANNER = re.compile(r"-{2,}\s*(original|forwarded) message\s*-{2,}", re.IGNORECASE)
+# "From: ... Sent: ..." block under replies, and forwards bring a banner: Gmail's and Outlook's
+# dashes, or Apple Mail's "Begin forwarded message:".
+_QUOTE_BANNER = re.compile(
+    r"-{2,}\s*(original|forwarded) message\s*-{2,}|begin forwarded message:", re.IGNORECASE
+)
 
 _HIDDEN_TAGS = {"script", "style", "title"}
 _BLOCK_TAGS = {"blockquote", "dd", "div", "dt", "hr", "li", "ol", "p", "pre", "table", "tr", "ul"}
@@ -290,6 +293,19 @@ def _html_text(html: str) -> str:
     parser.close()
     text = "\n".join(" ".join(line.split()) for line in "".join(parser.chunks).split("\n"))
     return re.sub(r"\n{3,}", "\n\n", text)
+
+
+def own_text(record: dict) -> str:
+    """What the sender of an email record wrote themselves: its body_new with these rules run
+    over it again as they are now, and "" when it has none, never the whole body in its place.
+    A record keeps its whole body, and body_new as these rules found it when it came in, which
+    is empty for a forward of someone else's mail with nothing of theirs above it. Whatever
+    reads the user's own mail as their writing reads this, so such a forward is no writing of
+    theirs, and mail already in the vault loses a quote the rules learned to find since (Apple
+    Mail's "Begin forwarded message:"). A record from a reader that keeps no body_new is read
+    from its body."""
+    text = record.get("body_new") if "body_new" in record else record.get("body")
+    return _new_text(str(text or "")) or ""
 
 
 def _new_text(body: str) -> str | None:

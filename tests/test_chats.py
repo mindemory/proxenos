@@ -171,6 +171,35 @@ def test_an_email_waits_when_addressed_to_the_user_by_someone_they_write_to(tmp_
     assert chat["own"] == ["Hi Ana, sure."]  # what they wrote Ana in another thread
 
 
+def test_my_own_email_is_only_what_i_wrote_never_what_i_forwarded(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+    theirs = "Begin forwarded message:\n\nFrom: Ravi <ravi@x.org>\n\nThe room moved to 4B, Ravi"
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            # As mail read before Apple Mail's banner was known left it: the forward kept.
+            mail(
+                "t1",
+                "2026-02-20T09:00:00Z",
+                "me@x.org",
+                ["ana@x.org"],
+                f"FYI Ana\n\n{theirs}",
+                True,
+            ),
+            # A forward with nothing of mine: its body is all Ravi's.
+            mail("t2", "2026-02-21T09:00:00Z", "me@x.org", ["ana@x.org"], None, True)
+            | {"body": theirs},
+            mail("t3", "2026-03-09T09:00:00Z", "ana@x.org", ["me@x.org"], "Can you come at 3?"),
+        ],
+    )
+
+    (chat,) = chats.waiting(tmp_path, NOW)
+
+    assert chat["own"] == ["FYI Ana"]
+    said = {m["chat"]: m["text"] for _, _, ms, *_ in chats.conversations(tmp_path) for m in ms}
+    assert (said["t1"], said["t2"]) == ("FYI Ana", "")
+
+
 def test_auto_replies_receipts_and_mass_mail_never_wait(tmp_path, monkeypatch):
     monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
 

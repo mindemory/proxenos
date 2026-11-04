@@ -149,6 +149,30 @@ def test_a_draft_i_sent_as_written_is_never_learned_as_my_writing(tmp_path):
     assert not any("sending now" in a or "lunch next week" in a for a in answers)
 
 
+def test_an_email_is_learned_without_what_i_forwarded_in_it(tmp_path):
+    vault = tmp_path / "vault"
+    forwarded = "Begin forwarded message:\n\nFrom: Ravi <ravi@example.com>\n\nRoom 4B at noon, Ravi"
+    write_jsonl(
+        vault / "raw" / "email" / "personal" / "2026-02.jsonl",
+        [
+            {
+                "id": "e1",
+                "ts": "2026-02-10T10:00:00Z",
+                "from_me": True,
+                "subject": "Thursday",
+                "to": ["Erin Example <erin@example.com>"],
+                # As mail read before Apple Mail's banner was known kept it.
+                "body_new": f"Hi Erin, see below for the room.\n\n{forwarded}",
+                "body": f"Hi Erin, see below for the room.\n\n{forwarded}",
+            }
+        ],
+    )
+
+    (email,) = voicemodel._new_emails(vault)
+
+    assert email["sent"] == "Hi Erin, see below for the room."
+
+
 def test_the_newest_conversations_are_held_out_for_evaluation(tmp_path):
     vault = make_vault(tmp_path)
     voicemodel.build(vault, now=NOW)

@@ -198,6 +198,43 @@ def test_body_new_drops_quotes_and_the_attribution_onward(tmp_path):
     assert outlook["in_reply_to"] == "html-1@example.com"
 
 
+MINE = "Sounds good, see you at the lab on Friday."
+THEIRS = "Could you send the slides before the review? The room changed to 4B."
+QUOTED = {
+    "reply attribution": f"{MINE}\n\nOn Mon, Mar 2, 2026 at 9:00 AM Ravi Rao <ravi@example.com>\n"
+    f"wrote:\n\n{THEIRS}",
+    "quoted lines": f"> {THEIRS}\n{MINE}\n> > older still",
+    "Outlook header block": f"{MINE}\n\n________________________________\nFrom: Ravi Rao "
+    f"<ravi@example.com>\nSent: Monday, March 2, 2026 9:00 AM\nTo: Me <me@example.com>\n"
+    f"Subject: Slides\n\n{THEIRS}",
+    "Apple Mail forward": f"{MINE}\n\nBegin forwarded message:\n\nFrom: Ravi Rao "
+    f"<ravi@example.com>\nSubject: Slides\nDate: March 2, 2026 at 9:00:00 AM EST\nTo: Me "
+    f"<me@example.com>\n\n{THEIRS}",
+    "Gmail forward": f"{MINE}\n\n---------- Forwarded message ---------\nFrom: Ravi Rao "
+    f"<ravi@example.com>\nDate: Mon, Mar 2, 2026 at 9:00 AM\nSubject: Slides\nTo: <me@example.com>"
+    f"\n\n{THEIRS}",
+    "Outlook original message": f"{MINE}\n\n-----Original Message-----\nFrom: Ravi Rao\n{THEIRS}",
+}
+
+
+@pytest.mark.parametrize("kind", list(QUOTED))
+def test_my_own_text_leaves_out_what_i_quoted_or_forwarded(kind):
+    body = QUOTED[kind]
+    record = {"from_me": True, "body": body, "body_new": email_ingest._new_text(body)}
+
+    assert email_ingest.own_text(record) == MINE
+    assert THEIRS in record["body"]  # the record keeps everything
+
+
+def test_a_forward_with_nothing_of_mine_is_no_writing_of_mine():
+    forward = f"Begin forwarded message:\n\nFrom: Ravi Rao <ravi@example.com>\n\n{THEIRS}"
+    # As a reader that kept no body_new would leave it, and as one before Apple Mail's banner
+    # was known would have: neither falls back to the body, and the rules run over it again.
+    assert email_ingest.own_text({"body": forward, "body_new": None}) == ""
+    assert email_ingest.own_text({"body": forward, "body_new": forward}) == ""
+    assert email_ingest.own_text({"body": f"{MINE}\n\n{forward}"}) == MINE
+
+
 def test_missing_message_id_or_date_falls_back_and_no_date_at_all_is_skipped(tmp_path):
     mbox = make_mbox(tmp_path / "m.mbox", [NO_ID, NO_DATE])
     records = list(email_ingest.read_messages(mbox, "gmail"))
