@@ -136,6 +136,19 @@ def test_the_set_is_each_answer_with_its_chat_then_emails_and_posts(tmp_path):
         assert not any(text in answer for answer in by_answer)
 
 
+def test_a_draft_i_sent_as_written_is_never_learned_as_my_writing(tmp_path):
+    vault = make_vault(tmp_path)
+    made = [["whatsapp", "ben/2026-03-05T08:10:00Z"], ["email", "e1"]]
+    (vault / chats.DRAFTED).parent.mkdir(parents=True)
+    (vault / chats.DRAFTED).write_text(json.dumps({"messages": made}))
+
+    stats = voicemodel.build(vault, now=NOW)
+
+    assert (stats["answers"], stats["emails"]) == (2, 0)
+    answers = {e["messages"][2]["content"] for e in examples(vault)}
+    assert not any("sending now" in a or "lunch next week" in a for a in answers)
+
+
 def test_the_newest_conversations_are_held_out_for_evaluation(tmp_path):
     vault = make_vault(tmp_path)
     voicemodel.build(vault, now=NOW)

@@ -12,8 +12,9 @@ can be changed.
 Each reply is held out. A draft is asked for with the chat as chats.waiting would have given it
 the moment before the user answered (chats._waiting on the messages before their reply), so a
 reply counts only where a draft would have been written then: someone else had the last word,
-within chats.DAYS, saying something to answer, and the user had written in that chat before. The
-examples of their writing are only what they wrote before it (voice.Writing.until), so no model
+within chats.DAYS, saying something to answer, and the user had written in that chat before; and
+never one that was a draft of Proxenos's they sent nearly unchanged (proxenos.fidelity), which is
+the model's writing, not theirs to compare with. The examples of their writing are only what they wrote before it (voice.Writing.until), so no model
 sees that reply, anything after it in that chat or anywhere else, nor a draft they changed and
 sent after it. The system prompt is the one reply drafts get, as of that moment: the self-model,
 the notes they had told Proxenos by then, their calendar from that day. Two things a real draft
@@ -242,6 +243,8 @@ def _reply(
         sent = _burst(said[i:])
         if len(" ".join(sent).split()) < voice.MIN_WORDS:
             continue  # a word or an emoji shows little of how they write
+        if any(m.get("drafted") for m in said[i : i + len(sent)]):
+            continue  # a draft of Proxenos's they sent nearly as it was: not their own words
         return {
             "key": pair_key,
             "replied": reply["ts"],

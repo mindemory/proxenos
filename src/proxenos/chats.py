@@ -27,6 +27,13 @@ workspace.
 Each one comes with what a reply needs: the messages waiting, the recent conversation around
 them, and the user's own last messages in that chat, which show how they write to that person
 (case, length, words, emoji) better than any summary of their voice.
+
+A message the user sent can be a draft of Proxenos's they copied and sent nearly unchanged:
+proxenos.fidelity finds those (DRAFTED), and every message here says whether it's one
+("drafted"). It still counts as theirs in a chat, so they have written there, but it's the
+model's writing, so it's never shown as how they write: not among their own last messages
+here, and not by what reads their writing from these messages (proxenos.voice, the voice
+model's training set, proxenos.compare).
 """
 
 import json
@@ -98,6 +105,7 @@ _REPLY_PREFIX = re.compile(r"^\s*((re|fwd?|aw|wg)\s*(\[\d+\])?\s*:\s*)+", re.IGN
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")  # Slack's <@U123> or <@U123|name>
 _WORD = re.compile(r"\w+")
 _ASSISTANTS = {"meta ai"}  # the AI in a chat app: what it sends waits on no one
+DRAFTED = Path("clones", "drafts", "drafted.json")  # written by proxenos.fidelity
 
 
 def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
@@ -120,14 +128,17 @@ def conversations(
     vault: Path, months: int | None = None, email: bool = True, email_months: int = EMAIL_MONTHS
 ) -> Iterator[tuple]:
     """Every conversation, as (source, chat key, messages, elsewhere, examples): the messages
-    as one shape (see below), and for _waiting where the user's own words come from when they
-    haven't written in it, and how many to keep. `months` reads only each chat stream's newest
-    month files, and email=False leaves email out. Email is its last `email_months`, or all of
-    it with 0."""
+    as one shape (see below), each marked "drafted" when it's a draft of Proxenos's the user
+    sent nearly unchanged (see drafted), and for _waiting where the user's own words come from
+    when they haven't written in it, and how many to keep. `months` reads only each chat
+    stream's newest month files, and email=False leaves email out. Email is its last
+    `email_months`, or all of it with 0."""
+    made = drafted(vault)
     for source, (stream, read) in _SOURCES.items():
         chats: dict[str, list[dict]] = defaultdict(list)
         paths = sorted((vault / "raw" / source / stream).glob("*.jsonl"))
         for message in _messages(paths[-months:] if months else paths, read):
+            message["drafted"] = (source, message["id"]) in made
             chats[message["chat"]].append(message)
         for key, messages in chats.items():
             yield source, key, messages, None, OWN_MESSAGES
@@ -135,7 +146,7 @@ def conversations(
     # Slack, one workspace at a time: who the user is differs between workspaces.
     for folder in sorted((vault / "raw" / "slack").glob("*/messages")):
         paths = sorted(folder.glob("*.jsonl"))
-        yield from _slack(folder.parent.name, paths[-months:] if months else paths)
+        yield from _slack(folder.parent.name, paths[-months:] if months else paths, made)
 
     if not email:
         return
@@ -148,6 +159,7 @@ def conversations(
     heard: dict[str, set[str]] = defaultdict(set)  # address → the threads it wrote to them in
     me = {a.strip().lower() for a in env("EMAILS").split(",") if a.strip()}
     for message in _messages(sorted(files), lambda r: _email(r, me)):
+        message["drafted"] = ("email", message["id"]) in made
         threads[message["chat"]].append(message)
         for address in message["peers"] if message["mine"] else ():
             sent[address].append(message)
@@ -156,13 +168,27 @@ def conversations(
 
     def to_sender(m: dict) -> list[str]:
         mail = sorted(sent.get(m["peers"][0], []) if m["peers"] else [], key=lambda x: x["ts"])
-        return [x["text"] for x in mail[-OWN_EMAILS:]]
+        return [x["text"] for x in mail if not x["drafted"]][-OWN_EMAILS:]
 
     names = {w for w in _WORD.findall(env("NAME").casefold()) if len(w) > 2}  # the user's
     for key, messages in threads.items():
         if _first(key, messages, sent, heard, names):
             messages = [{**m, "first": True} for m in messages]
         yield "email", key, messages, to_sender, OWN_EMAILS
+
+
+def drafted(vault: Path) -> set[tuple[str, str]]:
+    """The user's sent messages that were Proxenos's drafts sent nearly unchanged, as (source,
+    message id), as proxenos.fidelity last found them: the model's writing, not theirs."""
+    try:
+        found = json.loads((vault / DRAFTED).read_text(encoding="utf-8")).get("messages")
+    except (OSError, ValueError, AttributeError):
+        return set()
+    return {
+        (pair[0], pair[1])
+        for pair in (found if isinstance(found, list) else [])
+        if isinstance(pair, list) and len(pair) == 2 and all(isinstance(x, str) for x in pair)
+    }
 
 
 def _waiting(
@@ -186,6 +212,8 @@ def _waiting(
     first = bool(said[-1].get("first"))
     if (not words and not first) or (first and said[0]["ts"] < since):
         return None
+    if own:  # a draft they sent nearly as it was: they wrote here, but not in their own words
+        words = [said[i]["text"] for i in own if not said[i].get("drafted")]
     last = own[-1] if own else -1
     waiting, before = said[last + 1 :][-CONTEXT_MESSAGES:], said[: last + 1]
     text = " ".join(m["text"] for m in waiting)
@@ -250,11 +278,15 @@ def asks(text: str) -> bool:
     return "?" in text or bool(_REQUEST.search(text))
 
 
-def _slack(workspace: str, paths: list[Path]) -> Iterator[tuple]:
+def _slack(
+    workspace: str,
+    paths: list[Path],
+    made: set[tuple[str, str]] | frozenset[tuple[str, str]] = frozenset(),
+) -> Iterator[tuple]:
     """A workspace's conversations, as conversations() gives them: each direct message, and each
     channel thread, whose messages count as to the user where they mention the user or the user
     has written in the thread. A thread that only mentions them is answered in their way of
-    writing in that workspace."""
+    writing in that workspace. `made` is the drafts sent nearly unchanged (see drafted)."""
     records = [r for r in _records(paths) if r.get("channel_id")]
     me = {r["user_id"] for r in records if r.get("from_me") and r.get("user_id")}
     names = {
@@ -279,12 +311,14 @@ def _slack(workspace: str, paths: list[Path]) -> Iterator[tuple]:
         )
         if message:
             mentioned = bool(me & set(_MENTION.findall(str(r.get("text") or ""))))
-            chats[key].append({**message, "direct": dm or mentioned})
+            done = ("slack", message["id"]) in made
+            chats[key].append({**message, "direct": dm or mentioned, "drafted": done})
             if not dm:
                 threads.add(key)
 
     mine = sorted(
-        (m for ms in chats.values() for m in ms if m["mine"] and m["text"]), key=lambda m: m["ts"]
+        (m for ms in chats.values() for m in ms if m["mine"] and m["text"] and not m["drafted"]),
+        key=lambda m: m["ts"],
     )
     for key, messages in chats.items():
         if key in threads and any(m["mine"] for m in messages):

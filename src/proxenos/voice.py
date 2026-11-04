@@ -22,6 +22,9 @@ Only what the user wrote themselves, read as proxenos.chats reads it:
   it only what they wrote (body_new), not what they quoted or forwarded;
 - posts marked as theirs, or, in a stream that is only theirs (Bluesky, their website), the
   posts and replies, not reposts or pages.
+Never a message or an email that was a draft of Proxenos's they sent nearly unchanged
+(proxenos.fidelity, which proxenos.chats marks them by): those words are the model's, so they're
+no example of the user's writing, nor evidence that a writing rule holds.
 A message of fewer than MIN_WORDS words ("ok", an emoji) shows little of how they write and is
 skipped, a text under LONG_MIN characters isn't longer writing, and no text is shown twice. A
 reply drafted as of an earlier time, to compare it with what the user sent then (proxenos.compare,
@@ -172,7 +175,7 @@ class Writing:
             found += [
                 {"source": source, "chat": key, "name": name, "ts": m["ts"], "text": m["text"]}
                 for m in said
-                if m["mine"] and _enough(m["text"])
+                if m["mine"] and not m.get("drafted") and _enough(m["text"])
             ]
         return sorted(found, key=lambda m: m["ts"], reverse=True)
 
@@ -186,6 +189,9 @@ class Writing:
         except (OSError, ValueError, KeyError, TypeError):
             measured = []
         measured = [*_edits(folder / "feedback.jsonl"), *(m for m in measured or [] if m)]
+        # What the user sent after changing a draft stays their writing (only a draft sent
+        # nearly as written is the model's, see proxenos.fidelity), and the draft beside it here
+        # is how a change is learned from: no other mark is needed.
         return [
             m
             for m in sorted(
@@ -213,6 +219,7 @@ class Writing:
     def _emails(self) -> list[dict]:
         """Newest month first, until there's enough."""
         me = {a.strip().lower() for a in env("EMAILS").split(",") if a.strip()}
+        made = chats.drafted(self.vault)  # drafts sent nearly as written: the model's words
         files = sorted((self.vault / "raw" / "email").glob("*/*.jsonl"))
         months = sorted({p.name for p in files if _MONTH.fullmatch(p.name)})
         found: list[dict] = []
@@ -221,6 +228,8 @@ class Writing:
                 break
             for r in chats._records([p for p in files if p.name == month]):
                 if r.get("from_me") is not True or not isinstance(r.get("ts"), str):
+                    continue
+                if ("email", str(r.get("id") or r["ts"])) in made:
                     continue
                 to = {
                     a.lower()

@@ -60,6 +60,31 @@ def test_finds_direct_chats_where_someone_else_had_the_last_word(tmp_path):
     assert chat["own"] == ["old news", "see you / soon"]
 
 
+def test_a_draft_i_sent_as_written_counts_as_writing_there_but_not_as_my_words(tmp_path):
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            wa("asha", "2026-03-01T09:00:00Z", "heyy long time", mine=True),
+            wa("asha", "2026-03-08T09:00:00Z", "Dear Asha, thank you for the evening.", mine=True),
+            wa("asha", "2026-03-09T09:00:00Z", "when are you free next?"),
+            wa("ben", "2026-03-08T09:00:00Z", "Certainly, I will send it shortly.", mine=True),
+            wa("ben", "2026-03-09T09:00:00Z", "did you send it?"),
+        ],
+    )
+    made = [["whatsapp", "asha/2026-03-08T09:00:00Z"], ["whatsapp", "ben/2026-03-08T09:00:00Z"]]
+    (tmp_path / chats.DRAFTED).parent.mkdir(parents=True)
+    (tmp_path / chats.DRAFTED).write_text(json.dumps({"messages": made}))
+
+    found = {chat["chat"]: chat for chat in chats.waiting(tmp_path, NOW)}
+
+    assert found["asha"]["own"] == ["heyy long time"]
+    assert found["ben"]["own"] == []  # waiting all the same: they wrote there, a draft's words
+    marked = {
+        m["id"]: m["drafted"] for _, _, said, *_ in chats.conversations(tmp_path) for m in said
+    }
+    assert marked["asha/2026-03-08T09:00:00Z"] and not marked["asha/2026-03-01T09:00:00Z"]
+
+
 def test_linkedin_conversations_count_but_not_sponsored_ones(tmp_path):
     def li(conv, ts, text, mine=False, folder="INBOX"):
         author = "Me Myself" if mine else "Sara Example"

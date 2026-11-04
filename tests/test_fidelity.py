@@ -3,7 +3,7 @@
 import json
 from difflib import SequenceMatcher
 
-from proxenos import fidelity
+from proxenos import chats, fidelity
 
 
 def write_jsonl(path, records):
@@ -62,6 +62,40 @@ def test_a_draft_is_compared_with_what_was_sent_in_its_chat_after_it(tmp_path):
     assert m["closeness"] == 1.0  # sent as written, over two messages
     assert (m["draft_text"], m["sent_text"]) == ("yaa coming\nsee you friday",) * 2
     assert data["by_source"] == {"whatsapp": {"n": 1, "mean": 1.0}}
+
+
+def test_a_draft_sent_nearly_as_written_is_marked_as_the_models_words(tmp_path):
+    ben = {"chat_id": "ben", "chat_name": "Ben"}
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            wa("2026-03-10T11:30:00Z", "coming friday?", False),
+            wa("2026-03-10T12:05:00Z", "yaa coming", True),
+            wa("2026-03-10T12:06:00Z", "see you friday!", True),
+            wa("2026-03-10T11:40:00Z", "did you get the slides?", False) | ben,
+            wa("2026-03-10T12:10:00Z", "haan got them thx", True) | ben,
+        ],
+    )
+    folder = tmp_path / "clones" / "drafts"
+    draft(folder, "reply-1", "yaa coming\nsee you friday")
+    draft(folder, "reply-2", "Yes, I received the slides. Thank you very much.", chat="ben")
+    # From an earlier run: mail no longer read, which stays marked, and Ben's message, which
+    # this run measures again and finds was changed.
+    earlier = [["email", "an-old-email"], ["whatsapp", "2026-03-10T12:10:00Z"]]
+    (folder / "drafted.json").write_text(json.dumps({"messages": earlier}))
+
+    fidelity.measure(tmp_path)
+
+    assert fidelity.NEARLY == 0.9
+    assert chats.drafted(tmp_path) == {
+        ("email", "an-old-email"),
+        ("whatsapp", "2026-03-10T12:05:00Z"),
+        ("whatsapp", "2026-03-10T12:06:00Z"),
+    }
+    marked = {
+        m["id"]: m["drafted"] for _, _, said, *_ in chats.conversations(tmp_path) for m in said
+    }
+    assert marked["2026-03-10T12:06:00Z"] and not marked["2026-03-10T12:10:00Z"]
 
 
 def test_a_draft_still_waiting_is_marked_sent_once_its_chat_was_answered(tmp_path):

@@ -100,7 +100,10 @@ That distance can be measured, so it doesn't rest on impressions:
   sent second, without difflib's autojunk, which would score a text of 200 characters or more
   by another rule than a short chat. Each sync measures every draft again, and a comparison
   round's scores are worked out again from its texts whenever it's read, so every score
-  follows the measure as it is now.
+  follows the measure as it is now. A draft you send nearly unchanged (closeness 0.9 or more)
+  comes back as your own message, but its words are the model's, so nothing that learns how you
+  write (the examples a draft is shown, the checks on writing rules, the voice model, the
+  observers) reads it as yours; one you changed more stays yours, and teaches the change.
 - **Judgment:** how often a draft's "needs from you" questions were the ones you actually had to
   answer, and how often you discarded a draft as wrong rather than unneeded.
 

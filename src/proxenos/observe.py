@@ -1,9 +1,11 @@
 """Observer clones: one per source, each turning a month of raw data into notes about the user.
 
 An observer only sees the user's side: their own messages, sent mail, plays and activities.
-Other people's words never leave the vault. Notes land in observations/<source>/YYYY-MM.md
-and are redone whenever that month's raw data changes, so the current month keeps up as it
-fills in. Timestamps are shown in this machine's local time.
+Other people's words never leave the vault. Nor is a message of the user's that was a draft of
+Proxenos's they sent nearly unchanged (proxenos.fidelity) shown as theirs: its words are the
+model's, and a note on how the user writes must not learn them. Notes land in
+observations/<source>/YYYY-MM.md and are redone whenever that month's raw data changes, so the
+current month keeps up as it fills in. Timestamps are shown in this machine's local time.
 """
 
 import json
@@ -14,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from proxenos import llm
+from proxenos import chats, llm
 from proxenos.config import env
 
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
@@ -273,6 +275,12 @@ def render(vault: Path, name: str, month: str) -> str:
             with month_file.open(encoding="utf-8") as f:
                 stream = directory.name
                 records += [{**json.loads(line), "_stream": stream} for line in f]
+    source, made = name.split("/")[0], chats.drafted(vault)
+    records = [
+        r
+        for r in records
+        if not (r.get("from_me") and (source, str(r.get("id") or r.get("ts"))) in made)
+    ]
     records.sort(key=lambda r: r["ts"])
     render_with = _SOURCES.get(name.split("/")[0], (None, render_generic))[1]
     return render_with(records)

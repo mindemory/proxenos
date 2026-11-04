@@ -10,7 +10,9 @@ draft. Their consecutive messages within BURST are one answer, one per line. The
 longer writing: each sent email that starts a thread (from its subject) and each LinkedIn post
 in the export's Shares CSV under exports/. Only the last YEARS, at most PER_CHAT answers a
 conversation (the newest), so one long chat doesn't drown the rest. Links, addresses and long
-numbers are blanked as the care clone blanks them before its model call.
+numbers are blanked as the care clone blanks them before its model call. A message or an email
+that was a draft of Proxenos's sent nearly unchanged (proxenos.fidelity) is the model's writing,
+so it's never an answer to learn, nor one of the user's own messages shown before one.
 
 The newest tenth of the conversations, by their last message, is held out: those answers go to
 eval.jsonl for `eval` and data/test.jsonl, never into training. Of the rest, one conversation in
@@ -224,12 +226,16 @@ def _answers(source: str, messages: list[dict], since: str = "") -> list[dict]:
             continue  # nothing a draft would be written for
         first = datetime.fromisoformat(said[i]["ts"])
         earliest = _iso(first - timedelta(days=chats.CONTEXT_DAYS))
-        sent = []
+        burst = []
         for later in said[i:]:
             if not later["mine"] or datetime.fromisoformat(later["ts"]) > first + BURST:
                 break
-            sent.append(later["text"])
-        own = mine[: bisect.bisect_left(mine, i)][-chats.OWN_MESSAGES :]
+            burst.append(later)
+        if any(m.get("drafted") for m in burst):
+            continue  # a draft of Proxenos's sent nearly as it was: the model's words
+        sent = [m["text"] for m in burst]
+        before = mine[: bisect.bisect_left(mine, i)]
+        own = [j for j in before if not said[j].get("drafted")][-chats.OWN_MESSAGES :]
         found.append(
             {
                 "kind": "reply",
@@ -251,8 +257,10 @@ def _answers(source: str, messages: list[dict], since: str = "") -> list[dict]:
 
 
 def _new_emails(vault: Path) -> Iterator[dict]:
-    """Each email the user sent that starts a thread: its subject, and what they wrote."""
+    """Each email the user sent that starts a thread: its subject, and what they wrote. Not one
+    that was a draft of Proxenos's sent nearly as written."""
     seen = set()
+    made = chats.drafted(vault)
     for record in chats._records(sorted((vault / "raw" / "email").glob("*/*.jsonl"))):
         subject = " ".join(str(record.get("subject") or "").split())
         body = str(record.get("body_new") or record.get("body") or "").strip()
@@ -264,6 +272,7 @@ def _new_emails(vault: Path) -> Iterator[dict]:
             or record.get("in_reply_to")
             or len(body.split()) < 3
             or record.get("id") in seen
+            or ("email", str(record.get("id") or record["ts"])) in made
         ):
             continue
         seen.add(record.get("id"))

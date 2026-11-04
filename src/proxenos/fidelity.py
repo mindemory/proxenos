@@ -21,6 +21,16 @@ change, and what proxenos.voice.lessons learns writing rules from; the voice mod
 when it's trained again (proxenos.voicemodel.refresh). That's the measure that should decide
 when a kind of reply can go out without asking (docs/memory.md). No model; nothing leaves the
 vault.
+
+A draft sent nearly unchanged (closeness NEARLY or more) comes back through the sources as the
+user's own message, but its words are the model's. So the messages it was sent as, by (source,
+message id), go to proxenos.chats.DRAFTED, which proxenos.chats marks them by and nothing that
+learns how the user writes reads as theirs: the voice examples and the evidence for writing
+rules (proxenos.voice), the voice model's training set (proxenos.voicemodel) and the observers
+(proxenos.observe). Each run decides again for the messages it measures and keeps what earlier
+runs found for the rest, so mail that's fallen out of the months chats reads stays marked. A
+draft the user changed more before sending stays theirs: what they sent is their writing, and
+the draft beside it is already what proxenos.voice learns their changes from.
 """
 
 import json
@@ -36,6 +46,7 @@ from proxenos.clones import work
 WINDOW = timedelta(days=3)
 TEXT_CHARS = 1200  # of a draft and of what was sent, kept for the drafting model
 BURST = timedelta(minutes=15)
+NEARLY = 0.9  # closeness from which a draft counts as sent nearly unchanged: the model's words
 # A draft's channel as the chat source its messages are read from, where the names differ.
 _SOURCE_OF = {channel: source for source, channel in work._CHANNEL_OF.items()}
 _CHAT_SOURCES = {"whatsapp", "slack", "linkedin", "facebook", "instagram", "twitter"}
@@ -61,6 +72,8 @@ def measure(vault: Path) -> dict[str, int]:
     measured = []
     answered = 0
     seen: set[Path] = set()  # a draft matched by two chats counts once
+    looked: set[tuple[str, str]] = set()  # the user's messages measured against a draft
+    nearly: set[tuple[str, str]] = set()  # and those of them that were one, sent nearly as is
     for source, key, messages, *_ in chats.conversations(vault):
         drafts = [
             *wanted.get((source, key), []),
@@ -74,6 +87,10 @@ def measure(vault: Path) -> dict[str, int]:
                 if draft.get("status") in ("draft", "approved"):
                     _mark_sent(draft["path"])
                     answered += 1
+                closeness = round(_closeness(draft["body"], sent), 2)
+                looked |= {(source, m["id"]) for m in sent}
+                if closeness >= NEARLY:
+                    nearly |= {(source, m["id"]) for m in sent}
                 measured.append(
                     {
                         "id": draft.get("id"),
@@ -81,11 +98,16 @@ def measure(vault: Path) -> dict[str, int]:
                         "to": _json(draft.get("to")) or draft.get("to"),
                         "drafted": draft["created"],
                         "sent": sent[0]["ts"],
-                        "closeness": round(_closeness(draft["body"], sent), 2),
+                        "closeness": closeness,
                         "draft_text": _clip(draft["body"]),
                         "sent_text": _clip("\n".join(m["text"] for m in sent)),
                     }
                 )
+    drafted = (chats.drafted(vault) - looked) | nearly
+    work._write(
+        vault / chats.DRAFTED,
+        json.dumps({"generated": _now(), "messages": sorted(map(list, drafted))}, indent=1),
+    )
     measured.sort(key=lambda m: m["sent"], reverse=True)
     by_source: dict[str, list[float]] = defaultdict(list)
     for m in measured:

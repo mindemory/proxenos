@@ -4,7 +4,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from proxenos import llm, master, observe
+from proxenos import chats, llm, master, observe
 
 
 def write_month(path, records):
@@ -79,6 +79,25 @@ def test_observers_see_only_my_side_and_skip_thin_months(tmp_path, monkeypatch):
     # Nothing changed, so nothing is redone.
     assert observe.observe(vault)["est_input_tokens"] == 0
     assert len(calls) == 2
+
+
+def test_observers_never_read_a_draft_i_sent_as_written_as_my_words(tmp_path):
+    vault = make_vault(tmp_path)
+    write_month(
+        vault / "raw/whatsapp/messages/2025-01.jsonl",
+        [
+            chat("2025-01-03T10:00:00Z", True, "my own words, as I write them"),
+            chat("2025-01-04T10:00:00Z", True, "Dear Asha, I would be delighted to attend."),
+        ],
+    )
+    made = [["whatsapp", "c/2025-01-04T10:00:00Z"], ["slack", "c/2025-01-03T10:00:00Z"]]
+    (vault / chats.DRAFTED).parent.mkdir(parents=True)
+    (vault / chats.DRAFTED).write_text(json.dumps({"messages": made}))
+
+    text = observe.render(vault, "whatsapp", "2025-01")
+
+    assert "my own words" in text  # marked only on Slack, which isn't where it was sent
+    assert "delighted" not in text
 
 
 def test_dry_run_counts_without_calling_the_model(tmp_path, monkeypatch):

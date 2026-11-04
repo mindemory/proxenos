@@ -316,6 +316,39 @@ def test_longer_writing_is_cut_and_capped(tmp_path, monkeypatch):
     assert pieces[0].rstrip().endswith("…")
 
 
+def test_a_draft_i_sent_as_written_is_no_example_of_mine_nor_evidence_for_a_rule(tmp_path):
+    vault = tmp_path / "vault"
+    write_month(
+        vault,
+        "whatsapp/messages",
+        "2026-03",
+        [
+            wa("asha", "Asha", 1, "okiees see you thurs", mine=True),
+            wa("asha", "Asha", 3, "Dear Asha, I would be delighted to come.", mine=True),
+            wa("asha", "Asha", 9, "are you coming friday?"),
+        ],
+    )
+    write_month(
+        vault,
+        "email/work",
+        "2026-03",
+        [sent(1, long("Dear Ana, thank you kindly for your note")), sent(2, long("hey ana so"))],
+    )
+    made = [["whatsapp", "asha/3/Dear Ash"], ["email", "e1"]]
+    (vault / chats.DRAFTED).parent.mkdir(parents=True)
+    (vault / chats.DRAFTED).write_text(json.dumps({"messages": made}))
+
+    written = voice.Writing(vault)
+    shown = voice.examples(written, None, name="Asha")
+    checked_on = voice._sample(written, {"channel": "any", "to": ""}, set())
+
+    assert [m["text"] for m in written.messages] == ["okiees see you thurs"]
+    assert [t["text"][:7] for t in written.long] == ["hey ana"]
+    assert "okiees" in shown and "hey ana" in shown
+    assert "delighted" not in shown and "kindly" not in shown
+    assert [m["text"][:7] for m in checked_on] == ["hey ana", "okiees "]
+
+
 def test_not_knowing_the_channel_shows_both_and_none_is_nothing(tmp_path):
     vault = chat_vault(tmp_path)
     write_month(vault, "email/tess", "2026-03", [sent(1, long("Hi Ana, sure."))])

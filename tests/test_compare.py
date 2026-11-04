@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import cli, compare, fidelity, llm
+from proxenos import chats, cli, compare, fidelity, llm
 
 NOW = datetime(2026, 3, 20, 12, 0, tzinfo=UTC)
 LOCAL, OTHER = "ollama:drafter", "ollama:other"
@@ -164,6 +164,15 @@ def test_a_reply_is_drafted_without_seeing_itself_or_anything_after_it(tmp_path,
     ben = next(c for c in models.calls if "Chat: Ben" in c["prompt"])
     assert "LATE NOTE" in ben["system"] and "LATE POST" in ben["system"]
     assert "LATER sending" not in ben["prompt"]
+
+
+def test_a_draft_i_sent_as_written_is_never_held_out_as_my_reply(tmp_path, models):
+    vault = make_vault(tmp_path)
+    (vault / chats.DRAFTED).write_text(
+        json.dumps({"messages": [["whatsapp", "ben/2026-03-04T10:10:00Z"]]})
+    )
+
+    assert [pair["chat"]["name"] for pair in compare.held_out(vault, 10)] == ["Ana"]
 
 
 def test_what_was_sent_is_the_burst_of_the_users_messages(tmp_path, models):

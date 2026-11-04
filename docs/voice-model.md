@@ -22,7 +22,7 @@ pip install mlx-lm
 proxenos voice build
 ```
 
-This writes the training set into `vault/voice/`. Each example is a conversation as it stood when you answered someone, and what you sent. Your messages sent within 15 minutes of each other count as one answer, one message per line. Only conversations where the other person said something to answer count: a question, a link, or a few words. Your emails that start a thread (from their subject) and your LinkedIn posts are added too. The last five years count, and at most 40 answers from any one conversation, so one long chat doesn't drown the rest. The newest tenth of your conversations is held out for the evaluation and never trained on.
+This writes the training set into `vault/voice/`. Each example is a conversation as it stood when you answered someone, and what you sent. Your messages sent within 15 minutes of each other count as one answer, one message per line. Only conversations where the other person said something to answer count: a question, a link, or a few words. Your emails that start a thread (from their subject) and your LinkedIn posts are added too. The last five years count, and at most 40 answers from any one conversation, so one long chat doesn't drown the rest. A draft of Proxenos's you sent nearly unchanged is the model's writing, not yours, so it's never an answer to learn or to evaluate on. The newest tenth of your conversations is held out for the evaluation and never trained on.
 
 ```bash
 proxenos voice train
