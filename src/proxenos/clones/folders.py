@@ -437,6 +437,9 @@ def _write_paper(
         with tempfile.TemporaryDirectory() as tmp:
             made, out = Path(tmp) / "made.docx", Path(tmp) / "paper"
             _write_out(repo, tip, listed, out)
+            if kind == "markdown":
+                written = out.joinpath(*path.split("/"))
+                written.write_text(accept_marks(written.read_text(encoding="utf-8")), "utf-8")
             main = out.joinpath(*path.split("/"))
             if found != "same":
                 to_docx(main, made, kind)
@@ -1076,6 +1079,36 @@ def to_docx(source: Path, out: Path, kind: str) -> None:
     _pandoc(*args, source.name, cwd=source.parent)
 
 
+# CriticMarkup, the marks a Markdown revision tracks its changes in, which pandoc doesn't read.
+_MARKS = (
+    (re.compile(r"\{~~(.*?)~>(.*?)~~\}", re.DOTALL), r"\2"),  # {~~old~>new~~}
+    (re.compile(r"\{\+\+(.*?)\+\+\}", re.DOTALL), r"\1"),  # {++added++}
+    (re.compile(r"\{--(.*?)--\}", re.DOTALL), ""),  # {--cut--}
+    (re.compile(r"\{>>(.*?)<<\}", re.DOTALL), ""),  # {>>a note<<}
+    (re.compile(r"\{==(.*?)==\}", re.DOTALL), r"\1"),  # {==marked==}
+)
+_CODE = re.compile(r"(`+)(?:.|\n)*?\1")
+
+
+def accept_marks(text: str) -> str:
+    """A Markdown manuscript's tracked changes in CriticMarkup taken, so its copies show the
+    text as revised: pandoc reads `~~` as a subscript and the PDF fails. Marks shown inside
+    code (a legend of them, say) are left as they are written."""
+    if "{" not in text:
+        return text
+    pieces, last = [], 0
+    for code in _CODE.finditer(text):
+        pieces += [_accepted(text[last : code.start()]), code.group(0)]
+        last = code.end()
+    return "".join([*pieces, _accepted(text[last:])])
+
+
+def _accepted(text: str) -> str:
+    for mark, kept in _MARKS:
+        text = mark.sub(kept, text)
+    return text
+
+
 def to_pdf(source: Path, out: Path, kind: str) -> None:
     """`source`, Markdown or LaTeX (`kind`), as a PDF at `out`, made in its folder as the Word
     file is: LaTeX typeset by tectonic as it is, with its own bibliography, its shell escape
@@ -1127,7 +1160,7 @@ def pdf_engine(kind: str) -> str | None:
 # tables ruled in a thin grid (pandoc's draws only a line under the header).
 # Bump LOOK when it changes, and each file still as Proxenos wrote it is written again.
 FONT = "Arial"
-LOOK = "arial-black-grid-1"
+LOOK = "arial-black-grid-critic-1"
 _BORDERS = "".join(
     f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
     for side in ("top", "left", "bottom", "right", "insideH", "insideV")

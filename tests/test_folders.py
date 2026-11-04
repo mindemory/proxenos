@@ -1044,3 +1044,15 @@ def test_a_markdown_pdf_goes_again_with_sub_and_superscript_marks_read_as_writte
     monkeypatch.setattr(folders, "_pandoc", broken)
     with pytest.raises(folders.ConvertError, match="failed with markdown$"):  # the first error
         folders.to_pdf(tmp_path / "paper.md", tmp_path / "paper.pdf", "markdown")
+
+
+def test_tracked_changes_in_markdown_are_taken_for_the_copies():
+    revised = folders.accept_marks(
+        "We {~~think~>show~~} that {++beta ++}synchrony {--clearly --}rises{>>check<<} "
+        "{==here==}.\n\nLegend: `{~~old~>new~~}` is a replacement.\n"
+    )
+    assert (
+        revised
+        == "We show that beta synchrony rises here.\n\nLegend: `{~~old~>new~~}` is a replacement.\n"
+    )
+    assert folders.accept_marks("No marks at all.") == "No marks at all."
