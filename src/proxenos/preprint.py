@@ -216,6 +216,36 @@ def check(
     }
 
 
+def look_up(
+    works: list[dict],
+    fetch: Fetch | None = None,
+    cache: Path | None = None,
+    wait: Callable[[float], None] = time.sleep,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Works named outside any .bib, such as the reading a paper's reviewer suggests
+    (proxenos.review), each {title, authors, year, doi}, looked up as `refs` looks up an entry:
+    by its DOI, then by its title. Each one's result, in order, with its status and what was
+    found."""
+    now = now or datetime.now(UTC)
+    asker = _Asker(fetch or _fetch, _cache_read(cache, now), wait, now)
+    try:
+        return [_check(_entry(work, i), asker) for i, work in enumerate(works, start=1)]
+    finally:
+        if cache is not None and asker.added:
+            _cache_write(cache, asker.cache)
+
+
+def _entry(work: dict, i: int) -> dict:
+    """A work as parse_bib gives an entry, its authors joined as BibTeX joins them."""
+    authors = [str(a).strip() for a in work.get("authors") or [] if str(a).strip()]
+    fields = {"title": str(work.get("title") or ""), "author": " and ".join(authors)}
+    for key in ("year", "doi"):
+        if work.get(key):
+            fields[key] = str(work[key])
+    return {"key": f"work{i}", "type": "article", "fields": fields}
+
+
 def _references(path: Path) -> tuple[list[dict], list[str] | None, list[Path], list[Path]]:
     """The entries to check, the keys the paper cites (None for a .bib alone), the .bib files read
     and those it names that aren't there."""

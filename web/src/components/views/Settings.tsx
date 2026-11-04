@@ -116,6 +116,16 @@ const PROJECT_FOLDER: { key: SettingKey; label: string; hint: string; placeholde
   },
 ];
 
+/** The model a paper's peer review runs on, which only Review it on the Projects page starts. */
+const REVIEW_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "review_model",
+    label: "Who reviews a paper",
+    hint: "Empty: Claude with your key, else Claude Code. claude-code for Claude Code; ollama:<name> for a model on this computer.",
+    placeholder: "claude-opus-5-5",
+  },
+];
+
 function Group({ kicker, title, note, children }: { kicker: string; title: string; note?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
@@ -268,6 +278,14 @@ export function Settings() {
         note="Each night, each project's manuscript and Proxenos's notes on it go here as Word files, to read, edit, comment on and share in Word or Google Docs. Your drive uploads them; Proxenos shares nothing and reads nothing else there. What you change in a Markdown manuscript comes back as a step for you to accept; LaTeX goes one way. Needs pandoc (brew install pandoc)."
       >
         <FoldersForm status={status} apply={apply} fields={PROJECT_FOLDER} button="Save folder" />
+      </Group>
+
+      <Group
+        kicker="Projects"
+        title="Peer review"
+        note="Review it on a project sends its manuscript, its code and its brief to this model, and nothing else of yours. It's heavy reasoning, so a hosted model is the default; every call is in the Privacy view."
+      >
+        <FoldersForm status={status} apply={apply} fields={REVIEW_SETTINGS} button="Save" />
       </Group>
     </div>
   );

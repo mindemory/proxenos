@@ -10,8 +10,9 @@ A step runs code with the user's files, so it runs only when the user asked for 
 step says who asked (`by`): the user, on the page or the command line ("you"); Proxenos itself,
 from a project's status, which comes from others' messages ("proxenos"); or comments on the
 manuscript's copy in the cloud folder, which anyone with the file can leave ("comments", with
-their `authors`). The user's own are approved; the rest wait for Approve on the page, except
-comments whose every author is the user (PROXENOS_NAME, word for word). The night takes only
+their `authors`); or a review of the manuscript the user started (proxenos.review, "review"),
+which takes its steps as it goes. The user's own are approved; the rest wait for Approve on the
+page, except comments whose every author is the user (PROXENOS_NAME, word for word). The night takes only
 approved ones, and picks one of its own only for a project with "autostep": true. "Do a step"
 on the page is the user asking: it takes the first approved one, else the first waiting, else
 one the runner picks.
@@ -549,23 +550,27 @@ def accept(vault: Path, step_id: str, now: datetime | None = None) -> dict:
 
 
 def _accepted_with(vault: Path, repo: Path, step: dict, now: datetime) -> None:
-    """The step this one built on, merged with it, is accepted too."""
-    earlier = _load_quietly(vault, step["builds_on"])
-    head = str(earlier.get("head") or "")
-    if earlier.get("status") != "ready" or not head:
-        return
-    merged = _git_run(repo, "merge-base", "--is-ancestor", head, step["base"]).returncode == 0
-    if not merged:
-        return
-    _remove(repo, earlier)
-    earlier |= {"status": "accepted", "decided": _iso(now)}
-    _note(
-        vault,
-        earlier,
-        "You accepted it",
-        f"With the step that built on it, merged into {step['base']}. The branch and its "
-        "worktree are gone.",
-    )
+    """The steps this one built on, merged with it, are accepted too, all the way down: a
+    review's revisions build on each other, round after round."""
+    earlier_id = step.get("builds_on")
+    for _ in range(QUEUE_MAX):
+        earlier = _load_quietly(vault, earlier_id) if earlier_id else {}
+        head = str(earlier.get("head") or "")
+        if earlier.get("status") != "ready" or not head:
+            return
+        merged = _git_run(repo, "merge-base", "--is-ancestor", head, step["base"]).returncode == 0
+        if not merged:
+            return
+        _remove(repo, earlier)
+        earlier |= {"status": "accepted", "decided": _iso(now)}
+        _note(
+            vault,
+            earlier,
+            "You accepted it",
+            f"With the step that built on it, merged into {step['base']}. The branch and its "
+            "worktree are gone.",
+        )
+        earlier_id = earlier.get("builds_on")
 
 
 def discard(vault: Path, step_id: str, now: datetime | None = None) -> dict:
@@ -603,7 +608,7 @@ def _drop_branch(repo: Path, branch: str) -> None:
 
 # The queue: steps asked for, by the user or for them, and whether the user has approved each.
 
-ASKERS = ("you", "proxenos", "comments")  # who asked for a step (see the module's docstring)
+ASKERS = ("you", "proxenos", "comments", "review")  # who asked for a step (see the docstring)
 
 
 def queued(vault: Path, project_id: str) -> list[dict]:
@@ -666,16 +671,18 @@ def asked_for(
     by: str = "you",
     authors: list[str] | None = None,
     approved: bool | None = None,
+    chars: int = STEP_CHARS,
 ) -> dict:
     """A step asked for, checked: what to do, the branch it starts from, who asked and whether
-    it's approved: the user's own are, the rest wait unless `approved` says otherwise."""
+    it's approved: the user's own are, the rest wait unless `approved` says otherwise. A review's
+    revision is longer than one typed (`chars`)."""
     now = now or datetime.now(UTC)
     project = _project(vault, project_id)
     text = text.strip()
     if not text:
         raise SystemExit("steps: say what the step is")
-    if len(text) > STEP_CHARS:
-        raise SystemExit(f"steps: keep a step to {STEP_CHARS} characters")
+    if len(text) > chars:
+        raise SystemExit(f"steps: keep a step to {chars} characters")
     if by not in ASKERS:
         raise SystemExit(f"steps: a step is asked for by {', '.join(ASKERS)}")
     item = {

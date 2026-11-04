@@ -41,6 +41,7 @@ SETTINGS = {
     "vault": "VAULT",
     "model": "MODEL",
     "ask_model": "ASK_MODEL",
+    "review_model": "REVIEW_MODEL",
     "local_url": "LOCAL_URL",
     "voice_model": "VOICE_MODEL",
     "docs_dirs": "DOCS_DIRS",
@@ -228,7 +229,7 @@ def _save_settings(changes: dict) -> str:
             raise ValueError(f"The {key.replace('_', ' ')} has to be one line.")
     if len(values.get("name", "")) > _MAX_NAME:
         raise ValueError(f"Keep the name under {_MAX_NAME} characters.")
-    for key in ("model", "ask_model"):
+    for key in ("model", "ask_model", "review_model"):
         if values.get(key) and not _MODEL.fullmatch(values[key]):
             raise ValueError("That isn't a model's name.")
     if values.get("voice_model") and not _VOICE.fullmatch(values["voice_model"]):

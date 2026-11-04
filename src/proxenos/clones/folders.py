@@ -22,6 +22,9 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
 - "<name> - response to reviewers.docx" and its PDF: a response to reviewers or a rebuttal in the
   manuscript's folder, found by its name, from the same version, and any file the project lists
   under "documents" (each by its own name), so co-authors read the letter with the paper. One way.
+- "<name> - response to reviewers, round <n>.docx": the newest response letter of the paper's
+  peer review in Proxenos (proxenos.review), from the vault, to share with co-authors. A note, so
+  one the user changed stays as they left it.
 - Supplement/: the tables, figures and data files the manuscript names, copied from git: by
   file name or path, or by a label their names carry ("Table S4" or "Supplementary Table 4"
   finds S02_tableS4_note_types.csv, a table's label only a table, and "Fig. S2" FigS2_calls.png,
@@ -84,7 +87,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
-from proxenos import manuscript
+from proxenos import manuscript, review
 from proxenos.clones import projects, steps, work
 from proxenos.config import env
 
@@ -232,6 +235,8 @@ def refresh(
         PROJECT: _about_project(project),
         FOLDER: _about_folder(project, docx, files, record.get("letters")),
     }
+    if reviewed := review.letter(vault, project["id"]):  # its newest round's, beside the paper
+        notes[f"{where.name} - response to reviewers, round {reviewed[0]}.docx"] = reviewed[1]
     for name, text in notes.items():
         if text is not None:
             _write_note(where / name, files, text, now, stats)

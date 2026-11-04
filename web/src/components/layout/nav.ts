@@ -95,7 +95,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Projects & papers",
     id: "projects",
     group: "work",
-    words: "paper manuscript thesis work steps branches code repository analysis",
+    words: "paper manuscript thesis work steps branches code repository analysis review reviewers peer review response letter",
     blurb: "Each project's paper, its steps and their branches.",
   },
   {

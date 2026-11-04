@@ -7,7 +7,8 @@
 // their changes, and a step's changes, are read when asked for (useManuscript, useStepChanges); an
 // edit to the manuscript is saved like a decision, as a step waiting on the user. Its Google Doc
 // (useManuscriptDoc) is made, brought back and its comments read on a click, each answered when
-// it's done.
+// it's done. Its peer review (useReviews) is started on a click and read every few seconds while
+// it goes, round by round.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -20,6 +21,7 @@ import type {
   ManuscriptEdit,
   ManuscriptResponse,
   ProjectsResponse,
+  ReviewsResponse,
   StepAsk,
   StepChangesResponse,
 } from "./types";
@@ -309,5 +311,56 @@ export function useManuscriptDoc(project: string, open: boolean, again: string, 
     fresh: () => void make(true),
     pull: () => void pull(),
     readComments,
+  };
+}
+
+/**
+ * The project's peer reviews, newest first, and starting one. While one is going they're read
+ * every few seconds, so each round shows as it comes; when it ends, `onDone`, so the steps of its
+ * revision show with the rest.
+ */
+export function useReviews(project: string, onDone: () => void) {
+  const [tick, setTick] = useState(0);
+  const read = useRead<ReviewsResponse>(`/api/projects/review?${new URLSearchParams({ project })}`, String(tick));
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const notify = useToast();
+  const going = starting || read.data?.job?.state === "running" || read.data?.runs[0]?.status === "working";
+  const was = useRef(false);
+
+  useEffect(() => {
+    if (was.current && !going) onDone();
+    was.current = going;
+  }, [going, onDone]);
+
+  useEffect(() => {
+    if (!going) return;
+    const timer = window.setInterval(() => setTick((t) => t + 1), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [going]);
+
+  const start = useCallback(
+    async (rounds: number) => {
+      setStarting(true);
+      setError(null);
+      try {
+        await post({ project, rounds }, "/api/projects/review");
+        notify("The review has started. It takes a while: each round shows here as it's done.", "ok");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setStarting(false);
+        setTick((t) => t + 1);
+      }
+    },
+    [project, notify],
+  );
+
+  return {
+    ...read,
+    going,
+    start: (rounds: number) => void start(rounds),
+    actionError: error,
+    clearActionError: () => setError(null),
   };
 }

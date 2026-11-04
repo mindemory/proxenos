@@ -20,7 +20,8 @@ they're given, and reads "notes", what the user wants it to know about the work.
 "manuscript", {"path": "docs/paper.md", "branch": "paper"}, names the paper the page shows with
 its changes (proxenos.manuscript), which is otherwise found in the code's history. Its steps run
 only when the user asked for them or approved them on the page; "autostep": true lets the night
-also take one it picks from where the project stands.
+also take one it picks from where the project stands. Its manuscript is peer-reviewed when the
+user asks (proxenos.review); "autoreview": true lets the night start one once it has changed.
 
 For each project that isn't paused, a run:
 - gathers what the vault holds on it: what's new since the last run naming one of its terms or
@@ -211,6 +212,8 @@ def listed_projects(vault: Path) -> list[dict]:
                 "notes": str(p.get("notes") or "").strip(),
                 # True lets the night take a step nobody asked for, picked from its status.
                 "autostep": p.get("autostep") is True,
+                # True lets the night review its manuscript once it changed (proxenos.review).
+                "autoreview": p.get("autoreview") is True,
                 # The paper, when the user names it (proxenos.manuscript finds it otherwise).
                 "manuscript": _manuscript(p.get("manuscript")),
             }

@@ -1266,3 +1266,23 @@ def test_a_label_keeps_its_file_after_the_file_name_leaves_the_text(setup):
         state(vault)["projects"]["calls"]["labels"]["table:13"]
         == "results/S08_median_stability.csv"
     )
+
+
+def test_the_newest_response_to_reviewers_goes_beside_the_manuscript(setup):
+    vault, _, drive, _ = setup
+    kept = vault / "clones" / "projects" / "calls" / "reviews"
+    for when, rounds in (("20260301-010000", 1), ("20260305-010000", 2)):
+        review = {
+            "id": f"calls/{when}",
+            "rounds": [{"n": n, "response": True} for n in range(1, rounds + 1)],
+        }
+        work._write(kept / f"{when}.json", json.dumps(review))
+        for n in range(1, rounds + 1):
+            work._write(kept / when / f"round-{n}" / "response.md", f"Dear reviewers, {when} {n}.")
+
+    run(vault, NOW)
+
+    (where,) = (drive / "PhD").iterdir()
+    letters = sorted(where.glob("* - response to reviewers*.docx"))
+    assert [p.name for p in letters] == [f"{where.name} - response to reviewers, round 2.docx"]
+    assert letters[0].read_bytes() == b"DOCX from markdown\nDear reviewers, 20260305-010000 2."

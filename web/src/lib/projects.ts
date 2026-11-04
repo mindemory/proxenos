@@ -162,7 +162,7 @@ function count(v: unknown): number {
 }
 
 /** A file's text, if it's a plain file no bigger than `max`; a symlink isn't followed. */
-async function readPlain(file: string, max: number): Promise<string | null> {
+export async function readPlain(file: string, max: number): Promise<string | null> {
   try {
     const fh = await fs.open(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     try {
@@ -177,7 +177,7 @@ async function readPlain(file: string, max: number): Promise<string | null> {
   }
 }
 
-async function readJson(file: string): Promise<unknown> {
+export async function readJson(file: string): Promise<unknown> {
   const text = await readPlain(file, MAX_JSON_BYTES);
   try {
     return text === null ? null : JSON.parse(text);
@@ -186,7 +186,7 @@ async function readJson(file: string): Promise<unknown> {
   }
 }
 
-function toNote(raw: unknown): StepNote | null {
+export function toNote(raw: unknown): StepNote | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const title = str(r.title).trim();
@@ -225,6 +225,7 @@ function toStep(raw: unknown, project: string, when: string): ProjectStep | null
     status,
     summary: str(r.summary),
     asked: str(r.asked),
+    byReview: r.by === "review",
     runner: r.runner === "claude" || r.runner === "local" ? r.runner : "",
     step: str(r.step),
     why: str(r.why),
@@ -301,7 +302,7 @@ async function readSteps(dir: string, project: string, job: Job | null): Promise
   return found;
 }
 
-function toJob(job: Job | null): ProjectsJob | null {
+export function toJob(job: Job | null): ProjectsJob | null {
   return job && { state: job.state, message: job.message, started: job.started, finished: job.finished, project: job.account };
 }
 

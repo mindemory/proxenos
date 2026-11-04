@@ -168,7 +168,11 @@ export function StepCard({ step, now, busy, stepping, onAccept, onDiscard, onRev
           )}
         </div>
         <h3 className="text-base font-medium leading-snug text-ink">{step.step || step.asked || "A step of the project's work"}</h3>
-        {step.asked && step.step && step.asked !== step.step && <p className="text-xs text-muted">You asked: {step.asked}</p>}
+        {step.asked && step.step && step.asked !== step.step && (
+          <p className="line-clamp-4 text-xs text-muted">
+            {step.byReview ? "The review asked" : "You asked"}: {step.asked}
+          </p>
+        )}
         {step.buildsOn && <p className="text-xs text-muted">It revises a step that was waiting on you, and builds on its work.</p>}
         {step.why && <p className="text-sm leading-relaxed text-muted">{step.why}</p>}
       </div>

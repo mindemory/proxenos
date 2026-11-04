@@ -1025,7 +1025,18 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
  * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, a thought
  * being thought through, a round of drafts comparing two models, and a comparison of offers.
  */
-export type JobKind = ConnectJobKind | "ask" | "errand" | "send" | "step" | "decide" | "life" | "think" | "compare" | "offers";
+export type JobKind =
+  | ConnectJobKind
+  | "ask"
+  | "errand"
+  | "send"
+  | "step"
+  | "decide"
+  | "life"
+  | "think"
+  | "compare"
+  | "offers"
+  | "review";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -1065,6 +1076,7 @@ export const SETTING_KEYS = [
   "name",
   "vault",
   "model",
+  "review_model",
   "local_url",
   "docs_dirs",
   "website_repo",
@@ -1761,6 +1773,8 @@ export interface ProjectStep {
   summary: string;
   /** The step the user queued, or "" when the runner picked it. */
   asked: string;
+  /** A step a paper's peer review asked for, rather than the user. */
+  byReview: boolean;
   /** What took it: Claude Code, the local model, or "" before one did. */
   runner: "claude" | "local" | "";
   step: string;
@@ -1850,6 +1864,94 @@ export interface ProjectsResponse {
   job: ProjectsJob | null;
   /** The last Accept, Discard or change to a queue. */
   deciding: ProjectsJob | null;
+}
+
+// ── A paper's peer review ───────────────────────────────────────────────────
+//
+// From clones/projects/<id>/reviews/, as `proxenos review` writes it: each review's rounds, each
+// reviewer's report, the author's plan and the response letter, and every concern with what each
+// round made of it. The revision itself is the project's steps, shown with the rest.
+
+export const REVIEW_ROUNDS_MAX = 5;
+export const REVIEW_ROUNDS_DEFAULT = 3;
+export type ReviewStatus = "working" | "done" | "stopped" | "failed";
+export type ConcernStatus = "open" | "resolved" | "partly resolved" | "not resolved";
+
+export interface Reviewer {
+  n: number;
+  lens: string;
+  expertise: string;
+}
+
+/** One reviewer's report in one round. */
+export interface ReviewReport {
+  n: number;
+  recommendation: string;
+  score: number | null;
+  confidence: number | null;
+  major: number;
+  minor: number;
+  resolved: number;
+  partly: number;
+  unresolved: number;
+  /** Suggested works no index found, left out; citations taken out of its words. */
+  dropped: number;
+  takenOut: number;
+  /** The report, in markdown. */
+  text: string;
+}
+
+export interface ReviewRound {
+  n: number;
+  status: string;
+  /** Where the manuscript was read: its branch, or the last round's step's. */
+  branch: string;
+  commit: string;
+  reviews: ReviewReport[];
+  openMajor: number;
+  openMinor: number;
+  plan: { text: number; analysis: number; later: number; decline: number };
+  planText: string;
+  response: string;
+  steps: string[];
+  error: string;
+}
+
+export interface ReviewConcern {
+  id: string;
+  reviewer: number;
+  kind: "major" | "minor";
+  round: number;
+  title: string;
+  status: ConcernStatus;
+  history: { round: number; status: string }[];
+}
+
+export interface ReviewRun {
+  id: string;
+  created: string;
+  updated: string;
+  status: ReviewStatus;
+  summary: string;
+  error: string;
+  model: string;
+  roundsMax: number;
+  manuscript: { path: string; branch: string };
+  field: string;
+  venue: string;
+  reviewers: Reviewer[];
+  rounds: ReviewRound[];
+  concerns: ReviewConcern[];
+  /** What it's doing now, or did last. */
+  latest: StepNote | null;
+}
+
+export interface ReviewsResponse {
+  now: string;
+  project: string;
+  runs: ReviewRun[];
+  /** The review being run now, or how the last one ended. */
+  job: ProjectsJob | null;
 }
 
 // ── A project's manuscript ──────────────────────────────────────────────────

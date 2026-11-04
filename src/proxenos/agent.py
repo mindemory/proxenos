@@ -21,6 +21,9 @@ it's installed, then the local model.
 Each takes a Task and returns the report REPORT describes. Neither commits, merges or pushes;
 proxenos.clones.steps does what comes after. Each run, either runner's, leaves one line in the
 model-call log as every model call does (`logged`), since Claude Code's goes through no llm.ask.
+
+`read_only` lets Claude Code read a folder and answer, with nothing to run or write: a reviewer of
+a paper reading its code (proxenos.review).
 """
 
 import json
@@ -44,6 +47,7 @@ MINUTES = 30
 TURNS = 100
 BUDGET_USD = "5"
 TOOLS = "Read,Edit,Write,Glob,Grep,Bash"
+READ_TOOLS = "Read,Glob,Grep"  # all a reader has: nothing it does runs or writes
 # Commands a step may not run, by name or from /usr/bin: the Keychain's, AppleScript's (which
 # drives other apps, Mail and Messages among them, outside the sandbox), the clipboard's, and
 # opening an app or a page. A rule doesn't catch one run another way (`sh -c`); the sandbox is
@@ -264,6 +268,73 @@ class ClaudeCode:
         return _answer(code, stdout, stderr)
 
 
+def read_only(
+    prompt: str,
+    system: str,
+    schema: dict,
+    folder: Path,
+    hidden: list[Path],
+    run: Run | None = None,
+) -> dict:
+    """A question Claude Code answers by reading a folder, a worktree of a project's code at one
+    commit, with only READ_TOOLS: it runs nothing, writes nothing, fetches nothing, and reads
+    nothing outside the folder or in `hidden`. On the account it's signed in to, never
+    Proxenos's API key, within MINUTES, TURNS and PROXENOS_REVIEW_BUDGET dollars. The answer,
+    matching `schema`; AgentUnavailable when Claude Code can't start."""
+    binary = claude_bin()
+    if not binary:
+        raise AgentUnavailable("Claude Code isn't installed here")
+    settings = {
+        "permissions": {
+            "deny": [
+                *(f"Read({_rule(p)})" for p in hidden),
+                "Bash",
+                "Edit",
+                "Write",
+                "WebFetch",
+                "WebSearch",
+            ],
+            "blockReadsOutsideWorkingDirectories": True,
+        }
+    }
+    args = [
+        binary,
+        "-p",
+        "--output-format",
+        "json",
+        "--json-schema",
+        json.dumps(schema),
+        "--append-system-prompt",
+        system,
+        "--tools",
+        READ_TOOLS,
+        "--allowedTools",
+        READ_TOOLS,
+        "--permission-mode",
+        "dontAsk",
+        "--settings",
+        json.dumps(settings),
+        "--setting-sources",
+        "",
+        "--strict-mcp-config",
+        "--disable-slash-commands",
+        "--no-session-persistence",
+        "--max-turns",
+        str(TURNS),
+        "--max-budget-usd",
+        env("REVIEW_BUDGET", BUDGET_USD),
+    ]
+    if model := env("STEP_MODEL").strip():
+        args += ["--model", model]
+    environment = {k: os.environ[k] for k in _KEEP_ENV if k in os.environ}
+    environment["PATH"] = os.pathsep.join(_SYSTEM_PATH)
+    code, stdout, stderr = (run or _run)(args, folder, environment, prompt, MINUTES * 60)
+    answer, _ = _structured(code, stdout, stderr)
+    if not isinstance(answer, dict):
+        raise AgentError("Claude Code finished without an answer")
+    return answer
+
+
 def _settings(task: Task) -> dict:
     """The sandbox: commands write only in the worktree and reach no network; nothing reads the
     hidden folders, and nothing edits the data or hidden ones. If the sandbox can't start, Claude
@@ -410,6 +481,15 @@ def _run(
 
 def _answer(code: int, stdout: str, stderr: str) -> dict:
     """The report from Claude Code's answer, or why there's none."""
+    report, meta = _structured(code, stdout, stderr)
+    if not isinstance(report, dict) or not _text(report.get("step")):
+        raise AgentError("Claude Code finished without a report")
+    return report | {"meta": meta}
+
+
+def _structured(code: int, stdout: str, stderr: str) -> tuple[object, dict]:
+    """What Claude Code answered in the shape it was asked for, and its turns and cost; why it
+    gave none as AgentError, or AgentUnavailable when it couldn't start."""
     try:
         answer = json.loads(stdout.strip().splitlines()[-1]) if stdout.strip() else None
     except ValueError:
@@ -432,9 +512,7 @@ def _answer(code: int, stdout: str, stderr: str) -> dict:
     report = answer.get("structured_output")
     if not isinstance(report, dict):
         report = _json_in(str(answer.get("result") or ""))
-    if not isinstance(report, dict) or not _text(report.get("step")):
-        raise AgentError("Claude Code finished without a report")
-    return report | {"meta": meta}
+    return report, meta
 
 
 # The local model.

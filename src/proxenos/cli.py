@@ -34,6 +34,7 @@ from proxenos import (
     phone,
     preprint,
     privacy,
+    review,
     schedule,
     setup,
     speech,
@@ -52,8 +53,9 @@ NIGHT_WAIT = 3600  # seconds a night waits for a running sync before it gives up
 # the week's choices (once a week) that read the tasks and ideas, the job leads, which read the
 # people index and the openings kept from Ask, and what to watch (once a week), then what each of
 # those brings to mind from memory, the projects, the errands still waiting on a way to reach
-# someone, the drafts of them all, a step of each project's own work, which takes longest, then
-# each project's folder in the user's cloud drive, with what those wrote and the manuscript's
+# someone, the drafts of them all, a step of each project's own work, which takes longest, a
+# review of each paper whose project opts in (proxenos.review, after the steps), then each
+# project's folder in the user's cloud drive, with what those wrote and the manuscript's
 # changes there brought back, the journal of the day that just ended, which reads them all, the
 # stories of the months, which read the journal, and last the weeks over time, counted, with more
 # artists labelled and looked up for their genres and moods, and the month cards due.
@@ -182,6 +184,12 @@ def main(argv: list[str] | None = None) -> None:
             "gdocs", help="it as a Google Doc: make it, bring back its changes, read its comments"
         )
     )
+    reviewing = commands.add_parser(
+        "review",
+        help="a project's paper peer-reviewed in rounds: reviews, a plan, the revision as steps, "
+        "a response letter",
+    )
+    review.add_arguments(reviewing)
     posting = commands.add_parser(
         "preprint", help="a LaTeX paper ready for arXiv: its references checked, its source bundled"
     )
@@ -262,6 +270,10 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "preprint":  # sends only references' DOIs, titles and links; no model
         preprint.run(vault_path(), args)  # the vault, when there is one, keeps what was found
+        return
+    if args.command == "review":  # the paper and its code to the review model; a lock per project
+        for line in review.run(vault_path(), args):  # vault_path also loads settings
+            print(line)
         return
     if args.command == "project":  # reads the code's history; writes only what the user asks for
         module = paperdoc if args.what == "gdocs" else manuscript
@@ -389,6 +401,8 @@ def night(vault: Path, clones: dict[str, ModuleType]) -> bool:
     steps: list[tuple[str, Callable[[], dict[str, int]]]] = [("master", lambda: master.run(vault))]
     for name in NIGHT_CLONES:
         steps.append((name, lambda module=clones[name]: module.run(vault, _defaults(module))))
+        if name == "steps":  # only projects that opt in; before folders takes the letter
+            steps.append(("review", lambda: review.night(vault)))
     steps.append(("voice", lambda: voicemodel.refresh(vault)))
     steps.append(("lessons", lambda: voice.lessons(vault)))
     if notify.configured():

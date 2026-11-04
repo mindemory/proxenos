@@ -8,6 +8,7 @@ import { Fold } from "@/components/ask/parts";
 import { ErrorBanner, NoVault } from "@/components/EmptyState";
 import { Markdown } from "@/components/Markdown";
 import { ManuscriptPanel } from "@/components/projects/Manuscript";
+import { ReviewPanel } from "@/components/projects/Reviews";
 import { StepCard } from "@/components/projects/StepCard";
 import { Bone } from "@/components/Skeleton";
 import { timeAgo } from "@/lib/format";
@@ -269,6 +270,8 @@ function ProjectSection({
             <span className="text-xs text-muted">The paper&apos;s old and new versions, with the changes between them.</span>
           </div>
         ))}
+
+      {project.repo && <ReviewPanel project={project.id} onSteps={onRefresh} />}
 
       {project.repo && (
         <div className="card space-y-3 p-3 sm:p-4">

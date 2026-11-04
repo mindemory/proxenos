@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from proxenos import cli, llm, master, musicbrainz, voice, voicemodel
+from proxenos import cli, llm, master, musicbrainz, review, voice, voicemodel
 from proxenos.clones import (
     advisor,
     care,
@@ -72,6 +72,12 @@ def calls(tmp_path, monkeypatch):
 
     monkeypatch.setattr(voicemodel, "refresh", fake_refresh)
 
+    def fake_review(vault):
+        calls.append(("review", vault.name, {}))
+        return {"done": 1}
+
+    monkeypatch.setattr(review, "night", fake_review)
+
     def fake_lessons(vault):
         calls.append(("lessons", vault.name, {}))
         return {"new_changed_drafts": 2}
@@ -113,6 +119,7 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "review: 1 done",
         "folders: 1 done",
         "journal: 1 done",
         "life: 1 done",
@@ -120,7 +127,10 @@ def test_night_runs_the_master_then_every_clone_in_order(calls, capsys):
         "voice: 3 new answers",  # trained again only when it's due
         "lessons: 2 new changed drafts",  # rules learned only once enough are new
     ]
-    assert [name for name, *_ in calls] == ["master", *cli.NIGHT_CLONES, "voice", "lessons"]
+    # A review of each paper that opts in comes after the steps, before its folder takes the letter.
+    nightly = list(cli.NIGHT_CLONES)
+    nightly.insert(nightly.index("steps") + 1, "review")
+    assert [name for name, *_ in calls] == ["master", *nightly, "voice", "lessons"]
     assert cli.NIGHT_CLONES.index("recall") < cli.NIGHT_CLONES.index("work")
     # The week's choices read the tasks and ideas, and their drafts are the work clone's.
     assert cli.NIGHT_CLONES.index("network") < cli.NIGHT_CLONES.index("choices")
@@ -184,6 +194,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands: 1 done",
         "work: 1 done",
         "steps: 1 done",
+        "review: 1 done",
         "folders: 1 done",
         "journal: 1 done",
         "life: 1 done",
@@ -204,6 +215,7 @@ def test_a_failed_step_is_reported_and_the_rest_still_run(calls, monkeypatch, ca
         "errands",
         "work",
         "steps",
+        "review",
         "folders",
         "journal",
         "life",
