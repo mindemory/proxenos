@@ -439,7 +439,9 @@ def _write_paper(
             _write_out(repo, tip, listed, out)
             if kind == "markdown":
                 written = out.joinpath(*path.split("/"))
-                written.write_text(accept_marks(written.read_text(encoding="utf-8")), "utf-8")
+                # As bytes, so line ends stay as committed (text mode would make them CRLF on Windows).
+                raw = written.read_bytes().decode("utf-8", "surrogateescape")
+                written.write_bytes(accept_marks(raw).encode("utf-8", "surrogateescape"))
             main = out.joinpath(*path.split("/"))
             if found != "same":
                 to_docx(main, made, kind)
@@ -738,13 +740,13 @@ def _write_supplementary(
         return
     with tempfile.TemporaryDirectory() as tmp:
         md = Path(tmp) / "supplementary.md"
-        md.write_text(_supplementary(repo, tip, items, title, md.parent), encoding="utf-8")
+        md.write_text(_supplementary(repo, tip, items, title, md.parent), "utf-8", newline="\n")
         if make_docx:
             _build(docx, files, source, lambda o: to_docx(md, o, "markdown"), now, stats)
         if make_pdf:
             if not shown:
                 text = _supplementary(repo, tip, items, title, md.parent, svg=False)
-                md.write_text(text, encoding="utf-8")
+                md.write_text(text, "utf-8", newline="\n")
             _build(pdf, files, pdf_source, lambda o: to_pdf(md, o, "markdown"), now, stats)
 
 
@@ -911,7 +913,7 @@ def _write_note(target: Path, files: dict, text: str, now: datetime, stats: Coun
         return
     with tempfile.TemporaryDirectory() as tmp:
         note, made = Path(tmp) / "note.md", Path(tmp) / "note.docx"
-        note.write_text(text, encoding="utf-8")
+        note.write_text(text, "utf-8", newline="\n")
         to_docx(note, made, "markdown")
         files[target.name] = {
             "source": source,
