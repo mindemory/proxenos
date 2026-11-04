@@ -538,6 +538,7 @@ def test_latex_goes_one_way_with_its_citations_from_the_bib_beside_it(setup):
     assert not (where / SUPPLEMENTARY).exists()  # it names no table or figure
     folder = text_of(where / "About this folder.docx")
     assert "goes one way" in folder and "Change paper/main.tex itself" in folder
+    assert "Comments do come back" in folder and "stay here" not in folder
     assert "pull" not in state(vault)["projects"]["calls"]
     assert not (vault / "clones" / "folders" / "calls" / "baseline.md").exists()
 

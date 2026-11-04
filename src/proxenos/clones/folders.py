@@ -1147,14 +1147,16 @@ _COMES_BACK = (
     "Change it here, in Word or Google Docs, and comment as you like. Each night what you changed "
     "comes back to the project's git as a step on a branch of its own, from the version it was "
     "made from, for you to accept or discard on the page: only the paragraphs you changed change, "
-    "and the rest keeps its Markdown to the byte. Tracked changes count as accepted, and comments "
-    "stay here, in the file. In Google Docs, edit the .docx itself: a copy saved as a Google Doc "
-    "isn't read. While what came back last time waits on you, newer changes wait here."
+    "and the rest keeps its Markdown to the byte. Tracked changes count as accepted. A comment "
+    "comes back too, as a step that makes what it asks: yours run, anyone else's wait for you to "
+    "approve them on the page. In Google Docs, edit the .docx itself: a copy saved as a Google "
+    "Doc isn't read. While what came back last time waits on you, newer changes wait here."
 )
 _ONE_WAY = (
     "It's made from the LaTeX, with its citations and references written out as text, so it goes "
-    "one way: what you change here doesn't come back. Change {path} itself, and keep your "
-    "comments here to work from."
+    "one way: what you change here doesn't come back. Change {path} itself. Comments do come "
+    "back, each as a step that makes what it asks in {path}: yours run, anyone else's wait for "
+    "you to approve them on the page."
 )
 _MOVES_ON = (
     "When the paper moves on in git, a newer copy takes this one's place. If you'd changed this "
