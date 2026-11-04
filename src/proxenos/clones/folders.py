@@ -1085,10 +1085,18 @@ def to_pdf(source: Path, out: Path, kind: str) -> None:
     if engine is None:
         raise ConvertError(NO_ENGINE)
     if kind == "markdown":
-        args = ["-f", "markdown", "-o", str(out), f"--pdf-engine={engine}"]
-        args += ["-V", "geometry:margin=1in", source.name]
-        _pandoc(*args, cwd=source.parent, seconds=BUILD_SECONDS)
-        return
+        # Pandoc's ~sub~ and ^super^ marks, which a paper may use for something else (a tilde,
+        # a caret), can make LaTeX fail; then it goes again with them read as they're written.
+        failed: ConvertError | None = None
+        for reader in ("markdown", "markdown-subscript-superscript"):
+            args = ["-f", reader, "-o", str(out), f"--pdf-engine={engine}"]
+            args += ["-V", "geometry:margin=1in", source.name]
+            try:
+                _pandoc(*args, cwd=source.parent, seconds=BUILD_SECONDS)
+                return
+            except ConvertError as e:
+                failed = failed or e
+        raise failed
     with tempfile.TemporaryDirectory() as tmp:
         args = ["-X", "compile", "--untrusted", "--outdir", tmp, source.name]
         _run(engine, *args, cwd=source.parent, seconds=BUILD_SECONDS)

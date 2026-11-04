@@ -1020,3 +1020,27 @@ def test_a_workbook_is_a_table_where_openpyxl_is_installed(monkeypatch):
         3,
     )
     assert folders._table("notes.json", b"{}") is None
+
+
+def test_a_markdown_pdf_goes_again_with_sub_and_superscript_marks_read_as_written(
+    tmp_path, monkeypatch
+):
+    readers = []
+
+    def pandoc(*args, cwd, seconds):
+        readers.append(args[args.index("-f") + 1])
+        if args[args.index("-f") + 1] == "markdown":
+            raise folders.ConvertError("Argument of \\textsubscript has an extra }")
+
+    monkeypatch.setattr(folders, "pdf_engine", lambda kind: "tectonic")
+    monkeypatch.setattr(folders, "_pandoc", pandoc)
+    folders.to_pdf(tmp_path / "paper.md", tmp_path / "paper.pdf", "markdown")
+    assert readers == ["markdown", "markdown-subscript-superscript"]
+
+    def broken(*args, cwd, seconds):
+        readers.append("again")
+        raise folders.ConvertError(f"failed with {args[args.index('-f') + 1]}")
+
+    monkeypatch.setattr(folders, "_pandoc", broken)
+    with pytest.raises(folders.ConvertError, match="failed with markdown$"):  # the first error
+        folders.to_pdf(tmp_path / "paper.md", tmp_path / "paper.pdf", "markdown")
