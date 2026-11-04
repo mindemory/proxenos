@@ -20,11 +20,13 @@ _real_server_models = setup._server_models  # conftest stands it in for every te
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    """A home folder of its own, so ~ and the iCloud folders are under tmp_path."""
+    """A home folder of its own, so ~ and the iCloud folders are under tmp_path, and the vault
+    the default one in it, with conftest's left unset."""
     folder = tmp_path / "home"
     folder.mkdir()
     monkeypatch.setenv("HOME", str(folder))
     monkeypatch.setenv("USERPROFILE", str(folder))
+    monkeypatch.delenv("PROXENOS_VAULT")
     return folder
 
 

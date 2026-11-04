@@ -110,8 +110,6 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     monkeypatch.setattr("proxenos.config.ENV_FILE", app / "repo" / ".env")
     monkeypatch.setattr("proxenos.config._loaded", False)
     monkeypatch.setattr("proxenos.config._origin", {})
-    # Nor the user's own vault: a test that runs the command without setting one finds none.
-    monkeypatch.setenv("PROXENOS_VAULT", str(app / "no-vault"))
     # Nor Alexandria's vault, whose picks and reactions the feed reads when it's on this computer.
     monkeypatch.setenv("ALEXANDRIA_HOME", str(app / "no-alexandria"))
     # The repo's data/ folder holds real downloads; tests only ever see their own inbox.
@@ -145,6 +143,9 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     for name in list(os.environ):
         if name.startswith(_SECRET_PREFIXES):
             monkeypatch.delenv(name)
+    # Nor the user's own vault: a test that runs the command without setting one finds none. Set
+    # after the PROXENOS_ variables are cleared, or it would be cleared with them.
+    monkeypatch.setenv("PROXENOS_VAULT", str(app / "no-vault"))
     # Loading and saving set variables directly; none of them outlives the test.
     before = dict(os.environ)
     yield
