@@ -15,7 +15,7 @@ import urllib.request
 
 import pytest
 
-from proxenos import calls, callserver, cli, twilio
+from proxenos import calls, callserver, cli, llm, twilio
 
 NAME = "Tess Lee"
 PHONE = "+15555550101"
@@ -386,6 +386,36 @@ def test_a_call_runs_its_server_until_twilio_says_it_ended(tmp_path, settings, m
     number = tmp_path / "clones" / "calls" / "billing" / calls.NUMBER_FILE
     assert json.loads(number.read_text())["doubt"] is None  # checked before it dialed
     assert not (tmp_path / "state" / "asking").exists()  # other model work may go on again
+
+
+@pytest.mark.parametrize(
+    "call_model, expected",
+    [("ollama:gemma4:e4b", "ollama:gemma4:e4b"), ("", "claude-opus-5-5")],
+)
+def test_a_model_chosen_for_calls_wins_over_the_one_for_what_you_wait_on(
+    tmp_path, settings, monkeypatch, call_model, expected
+):
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    monkeypatch.setenv("PROXENOS_ASK_MODEL", "claude-opus-5-5")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setenv("PROXENOS_CALL_MODEL", call_model)
+    monkeypatch.setattr(callserver.calls.Call, "warm", lambda self: None)
+    servers, used = [], []
+    made = callserver._Server
+    monkeypatch.setattr(callserver, "_Server", lambda *a: servers.append(made(*a)) or servers[-1])
+    monkeypatch.setattr(callserver, "TOUCH", 0.05)
+    monkeypatch.setattr(callserver, "LAST_WORD", 5)
+    monkeypatch.setattr(twilio, "TIME_LIMIT", 0)
+
+    class Recording(FakeTwilio):
+        def call(self, *args):
+            used.append(llm.current())  # what the call's model calls would go to
+            return super().call(*args)
+
+    callserver.place(tmp_path, write_sheet(tmp_path), check=False, client=Recording(servers))
+
+    # Unset, a call is something you wait on, and goes where Ask and Think do.
+    assert used == [expected]
 
 
 def test_settings_say_whats_missing_and_a_made_up_vault_never_calls(

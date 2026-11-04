@@ -7,8 +7,10 @@ number), and rings the user at PROXENOS_PHONE from PROXENOS_TWILIO_NUMBER. Twili
 Mac at PROXENOS_CALLS_URL, the one public address Proxenos has, which Tailscale Funnel passes on
 to 127.0.0.1:PORT. Only while a call goes is anything listening there, and it answers only
 requests Twilio signed with the user's token, at paths that start with that call's own random
-token. The model on the call is PROXENOS_CALL_MODEL when it's set, else PROXENOS_MODEL; while a
-call goes, other model work waits, so a person on the line isn't kept waiting behind it.
+token. The model on the call is PROXENOS_CALL_MODEL when it's set; else, since a call is
+something the user waits on, PROXENOS_ASK_MODEL when it's set and can answer, else
+PROXENOS_MODEL (llm.foreground). While a call goes, other model work waits, so a person on the
+line isn't kept waiting behind it.
 
 Every request the server answers is checked: a POST, all of Twilio's, only with Twilio's
 X-Twilio-Signature over the public URL and its form (_Handler.do_POST, twilio.signed), at a
@@ -131,7 +133,10 @@ def place(
         raise SystemExit(f"{doubt} To call it anyway: proxenos call start {sheet.id} --anyway")
     values = settings()
     if model := env("CALL_MODEL"):
+        # Chosen for calls, it wins: over the main model, and over the one for what the user
+        # waits on, which a call is (llm.foreground) and which would take it otherwise.
         os.environ[env_key("MODEL")] = model
+        os.environ[env_key("ASK_MODEL")] = model
     token = secrets.token_hex(16)
     call = calls.Call(
         sheet,
