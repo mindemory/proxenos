@@ -13,15 +13,19 @@ Each reply is held out. A draft is asked for with the chat as chats.waiting woul
 the moment before the user answered (chats._waiting on the messages before their reply), so a
 reply counts only where a draft would have been written then: someone else had the last word,
 within chats.DAYS, saying something to answer, and the user had written in that chat before; and
-never one that was a draft of Proxenos's they sent nearly unchanged (proxenos.fidelity), which is
-the model's writing, not theirs to compare with. The examples of their writing are only what they wrote before it (voice.Writing.until), so no model
-sees that reply, anything after it in that chat or anywhere else, nor a draft they changed and
-sent after it. The system prompt is the one reply drafts get, as of that moment: the self-model,
-the notes they had told Proxenos by then, their calendar from that day. Two things a real draft
-has are left out: what research finds in memory, which holds the reply itself and everything
-since and can't be bounded by time, and the pages linked in the chat, which may have changed
-since and would be fetched again. Both models get the same prompt, so the only difference is
-the model.
+never one that was a draft of Proxenos's they sent nearly unchanged, which is the model's
+writing, not theirs to compare with: neither one proxenos.fidelity marked, nor one as close to
+any draft made in that conversation before it (fidelity.from_draft). The examples of their
+writing are only what they wrote before it (voice.Writing.until), with the writing rules they
+kept as they stood then, so no model sees that reply, anything after it in that chat or
+anywhere else, nor a draft they changed and sent after it. The system prompt is the one reply
+drafts get, as of that moment (work._system with past): the self-model as the vault's history
+had it then (proxenos.history), the notes they had told Proxenos by then, and of their calendar
+only the events that day that began before it, since the calendar doesn't say when an event was
+made. Two things a real draft has are left out: what research finds in memory, which holds the
+reply itself and everything since and can't be bounded by time, and the pages linked in the
+chat, which may have changed since and would be fetched again. Both models get the same prompt,
+so the only difference is the model.
 
 A drafting model writes through the work clone's own code for a reply (work._reply_job and
 work._answered, with its retries) under llm.using, which points those calls at it and logs them
@@ -205,17 +209,24 @@ def held_out(vault: Path, n: int, skip: set[str] | frozenset[str] = frozenset())
     none of `skip` (by key): each {key, replied, chat, sent}, where chat is the chat as
     chats.waiting would have given it just before they replied, and sent what they sent."""
     found = []
+    drafts = fidelity.written(vault)
     for source, key, messages, *_ in chats.conversations(vault):
-        if pair := _reply(source, key, messages, skip):
+        if pair := _reply(source, key, messages, skip, drafts):
             found.append(pair)
     return sorted(found, key=lambda p: p["replied"], reverse=True)[:n]
 
 
 def _reply(
-    source: str, key: str, messages: list[dict], skip: set[str] | frozenset[str]
+    source: str,
+    key: str,
+    messages: list[dict],
+    skip: set[str] | frozenset[str],
+    drafts: tuple[dict, dict] = ({}, {}),
 ) -> dict | None:
     """Of the user's TRIES newest replies to someone in a conversation, the newest a draft
-    would have been written for, or None."""
+    would have been written for, or None. Never one that was a draft of Proxenos's made in
+    that conversation before it, sent nearly unchanged (`drafts`, as fidelity.written gives
+    them)."""
     said = sorted((m for m in messages if m["text"]), key=lambda m: m["ts"])
     tried = 0
     for i in range(len(said) - 1, 0, -1):
@@ -243,7 +254,9 @@ def _reply(
         sent = _burst(said[i:])
         if len(" ".join(sent).split()) < voice.MIN_WORDS:
             continue  # a word or an emoji shows little of how they write
-        if any(m.get("drafted") for m in said[i : i + len(sent)]):
+        if any(m.get("drafted") for m in said[i : i + len(sent)]) or fidelity.from_draft(
+            drafts, source, key, messages, reply["ts"], " ".join(sent)
+        ):
             continue  # a draft of Proxenos's they sent nearly as it was: not their own words
         return {
             "key": pair_key,
@@ -277,8 +290,8 @@ def _asked(
     when = datetime.fromisoformat(pair["replied"])
     job = work._reply_job(pair["chat"], person, health, work._today(when))
     prompt = job["prompt"] + work._examples(written.until(pair["replied"]), job) + job["ask"]
-    system = work._system(vault / "self", when) + work._shared(vault / "clones" / "drafts", when)
-    return prompt, system
+    system = work._system(vault / "self", when, past=True)
+    return prompt, system + work._shared(vault / "clones" / "drafts", when)
 
 
 def _drafted(item: dict, draft: dict, chat: dict, prompt: str, system: str, person: str) -> None:

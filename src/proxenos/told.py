@@ -28,8 +28,8 @@ TOLD = Path("state", "told.jsonl")
 def notes(vault: Path, now: datetime | None = None, fade: bool = True) -> list[dict]:
     """The notes that count now, oldest first: every rule, and the facts of the last FACT_DAYS
     (every fact, without `fade`), as {at, text, always}, without those removed since. None
-    written after `now`, which only a reply drafted as of an earlier time (proxenos.compare)
-    would find."""
+    written after `now`, nor a removal after it, which only a reply drafted as of an earlier
+    time (proxenos.compare, `proxenos voice eval`) would find."""
     now = now or datetime.now(UTC)
     found: dict[str, dict] = {}
     try:
@@ -42,13 +42,13 @@ def notes(vault: Path, now: datetime | None = None, fade: bool = True) -> list[d
             at = datetime.fromisoformat(str(note["at"]))
         except (ValueError, KeyError, TypeError):
             continue  # the page writes this file, and one bad line shouldn't hide the rest
+        if at.tzinfo and at > now:
+            continue  # told, or taken back, after `now`
         if note.get("forget"):
             found.pop(str(note["forget"]), None)
             continue
         text = " ".join(str(note.get("text") or "").split())[:NOTE_CHARS]
         always = note.get("always") is True
-        if at.tzinfo and at > now:
-            continue
         if text and (always or not fade or now - at <= timedelta(days=FACT_DAYS)):
             found[str(note["at"])] = {"at": str(note["at"]), "text": text, "always": always}
     return sorted(found.values(), key=lambda n: n["at"])

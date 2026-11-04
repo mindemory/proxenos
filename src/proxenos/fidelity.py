@@ -115,6 +115,33 @@ def measure(vault: Path) -> dict[str, int]:
     return {"drafts_measured": len(measured), "drafts_answered": answered}
 
 
+def written(vault: Path) -> tuple[dict, dict]:
+    """Each draft Proxenos wrote, as (when, the model's text), by the chat it answers and by
+    whom it's to, for `from_draft`."""
+    return tuple(
+        {key: [(d["created"], d["text"]) for d in ds if d["text"]] for key, ds in found.items()}
+        for found in _drafts(vault / "clones" / "drafts")
+    )
+
+
+def from_draft(
+    drafts: tuple[dict, dict], source: str, key: str, messages: list[dict], ts: str, text: str
+) -> bool:
+    """Whether `text`, which the user sent at `ts` in a conversation (source, key and its
+    messages, as proxenos.chats gives them), was a draft of Proxenos's made for it before then,
+    sent nearly unchanged (NEARLY): the model's words, which a reply held out to judge a model
+    by must never be. `drafts` is what `written` gives."""
+    by_chat, by_name = drafts
+    made = [
+        *by_chat.get((source, key), []),
+        *(d for who in _with(source, key, messages) for d in by_name.get(who, [])),
+    ]
+    return any(
+        when < ts and round(_closeness(draft, [{"text": text}]), 2) >= NEARLY
+        for when, draft in made
+    )
+
+
 def _drafts(folder: Path) -> tuple[dict, dict]:
     """Each draft with front matter and when it was written, with "text", what the model last
     wrote of it (_model_text), by the chat it answers (source, chat key) and, for one with no

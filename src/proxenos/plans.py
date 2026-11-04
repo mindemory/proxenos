@@ -127,15 +127,21 @@ def write(
     return len(events)
 
 
-def week(vault: Path, now: datetime | None = None, days: int = WEEK_DAYS) -> str:
+def week(
+    vault: Path, now: datetime | None = None, days: int = WEEK_DAYS, before: datetime | None = None
+) -> str:
     """The user's own events from today for `days` days, one line each in local time, for a
-    draft that suggests a time; "" when there are none. An event on two calendars shows once."""
+    draft that suggests a time; "" when there are none. An event on two calendars shows once.
+    With `before`, only events that began before it: for a draft as of an earlier time, since
+    raw/calendar doesn't say when an event was made, and one made after could give it away."""
     now = now or datetime.now(UTC)
     today = now.astimezone().date()
     end = today + timedelta(days=days)
     lines = {}
     for event in _calendar(vault, today):
         if event["day"] >= end:
+            continue
+        if before is not None and not _began(event, before):
             continue
         when = (
             f"{event['time']:%a %b %d %H:%M}"
@@ -318,6 +324,15 @@ def _calendar(vault: Path, since: date, made: set[str] = frozenset()) -> Iterato
             if when is not None and when >= since:
                 title = " ".join(str(event.get("summary") or "busy").split())[:80]
                 yield {"day": when, "time": time, "words": _words(title), "title": title}
+
+
+def _began(event: dict, when: datetime) -> bool:
+    """Whether one of the user's own events began before `when`: by its time in local time, or
+    for an all-day one, by its day's start."""
+    local = when.astimezone()
+    if event["time"] is None:
+        return event["day"] <= local.date()
+    return event["time"] < local.replace(tzinfo=None)
 
 
 def _same(task: dict, when: datetime | date, event: dict) -> bool:

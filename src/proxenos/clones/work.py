@@ -68,7 +68,18 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, links, llm, plans, research, told, untrusted, voice, voicemodel
+from proxenos import (
+    chats,
+    history,
+    links,
+    llm,
+    plans,
+    research,
+    told,
+    untrusted,
+    voice,
+    voicemodel,
+)
 from proxenos.clones import care
 from proxenos.config import env
 
@@ -500,19 +511,28 @@ def _batch(item: dict) -> str:
 # What the model is told
 
 
-def _system(self_dir: Path, now: datetime | None = None) -> str:
+def _system(self_dir: Path, now: datetime | None = None, past: bool = False) -> str:
+    """The system prompt every draft gets, as of `now`. With `past`, for a reply drafted as of an
+    earlier time to hold it out (proxenos.compare, `proxenos voice eval`), nothing from after
+    `now`: the self-model as the vault's history had it then (proxenos.history), and of the
+    calendar only events that began before it, since raw/calendar doesn't say when an event was
+    made. The notes, the "right now" note and the sent posts are already as of `now`."""
     person = env("NAME", "the person")
     system = _SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
     parts = []
     for name in SELF_FILES:
         path = self_dir / f"{name}.md"
-        if path.exists() and (text := path.read_text(encoding="utf-8").strip()):
+        if past and now is not None:
+            text = history.at(self_dir.parent, Path(self_dir.name, f"{name}.md"), now).strip()
+        else:
+            text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
+        if text:
             parts.append(f"<{name}>\n{text}\n</{name}>")
     if parts:
         system += f"\n\nWho {person} is, from their self-model:\n" + "\n".join(parts)
     if notes := told.prompt(self_dir.parent, person, now):
         system += "\n\n" + notes
-    if week := plans.week(self_dir.parent, now):
+    if week := plans.week(self_dir.parent, now, before=now if past else None):
         system += (
             f"\n\n{person}'s calendar for the next {plans.WEEK_DAYS} days, local time:\n{week}"
         )

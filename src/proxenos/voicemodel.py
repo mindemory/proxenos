@@ -12,7 +12,9 @@ in the export's Shares CSV under exports/. Only the last YEARS, at most PER_CHAT
 conversation (the newest), so one long chat doesn't drown the rest. Links, addresses and long
 numbers are blanked as the care clone blanks them before its model call. A message or an email
 that was a draft of Proxenos's sent nearly unchanged (proxenos.fidelity) is the model's writing,
-so it's never an answer to learn, nor one of the user's own messages shown before one.
+so it's never an answer to learn or to hold out, nor one of the user's own messages shown before
+one: neither one fidelity marked, nor one as close to any draft made in that conversation
+before it (fidelity.from_draft).
 
 The newest tenth of the conversations, by their last message, is held out: those answers go to
 eval.jsonl for `eval` and data/test.jsonl, never into training. Of the rest, one conversation in
@@ -26,7 +28,9 @@ it their version. Scoring it against the drafting model stays `eval`, and using 
 `serve` runs mlx-lm's server with it on 127.0.0.1, which drafts reach as PROXENOS_VOICE_MODEL=mlx.
 `eval` drafts the newest held-out answer in each held-out chat with the base model, the fine-tuned
 one and the drafting model set up now, given the prompt reply drafts get, with the examples of
-the user's writing proxenos.voice picks from what they wrote before it, and scores each by
+the user's writing proxenos.voice picks from what they wrote before it, and the drafting model
+the system prompt as of then (work._system with past: the self-model from the vault's history,
+the notes, rules and calendar from before it), and scores each by
 how much of it survived into what the user sent (fidelity's closeness). `score` reads texts (a
 post, an essay, a web page) paragraph by paragraph and says how much more likely the fine-tuned
 model finds each than the base model does: how much it reads like the user, next to the same
@@ -48,6 +52,7 @@ import sys
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from statistics import mean, median
 
@@ -159,9 +164,13 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
     person = env("NAME", "the person")
     since = _iso(now - timedelta(days=365 * YEARS))
     # Each conversation: its key, when it last said anything, and its examples.
+    from proxenos import fidelity  # it reads the work clone, which reads this module
+
+    drafts = fidelity.written(vault)
     found: list[tuple[str, str, list[dict]]] = []
     for source, key, messages, *_ in chats.conversations(vault, email_months=0):
-        points = _answers(source, messages, since)
+        made = partial(fidelity.from_draft, drafts, source, key, messages)
+        points = _answers(source, messages, since, made)
         if points:
             last = max(m["ts"] for m in messages)
             found.append((f"{source}/{key}", last, points))
@@ -206,10 +215,16 @@ def build(vault: Path, now: datetime | None = None) -> dict[str, int]:
     }
 
 
-def _answers(source: str, messages: list[dict], since: str = "") -> list[dict]:
+def _answers(
+    source: str,
+    messages: list[dict],
+    since: str = "",
+    made: Callable[[str, str], bool] | None = None,
+) -> list[dict]:
     """The newest PER_CHAT times since `since` the user answered someone in a conversation,
     oldest first: the chat as it stood (as chats.waiting gives one), their own messages before
-    it, and what they sent."""
+    it, and what they sent. Never an answer `made` says was a draft of Proxenos's made there
+    before it, sent nearly unchanged (fidelity.from_draft, given when and what was sent)."""
     said = sorted((m for m in messages if m["text"]), key=lambda m: m["ts"])
     mine = [i for i, m in enumerate(said) if m["mine"]]
     found: list[dict] = []
@@ -232,9 +247,9 @@ def _answers(source: str, messages: list[dict], since: str = "") -> list[dict]:
             if not later["mine"] or datetime.fromisoformat(later["ts"]) > first + BURST:
                 break
             burst.append(later)
-        if any(m.get("drafted") for m in burst):
-            continue  # a draft of Proxenos's sent nearly as it was: the model's words
         sent = [m["text"] for m in burst]
+        if any(m.get("drafted") for m in burst) or (made and made(said[i]["ts"], " ".join(sent))):
+            continue  # a draft of Proxenos's sent nearly as it was: the model's words
         before = mine[: bisect.bisect_left(mine, i)]
         own = [j for j in before if not said[j].get("drafted")][-chats.OWN_MESSAGES :]
         found.append(
@@ -662,12 +677,15 @@ def _drafters(vault: Path, person: str) -> dict[str, Callable[[list[dict]], list
 
         if not llm.configured():
             raise SystemExit("No drafting model set up to compare with.")
-        drafting = work._system(vault / "self")
         written = voice.Writing(vault)
         texts = []
         for point in points:
-            # The prompt a reply draft gets, with the user's own writing from before the
-            # answer only, as drafting it then would have seen it: never the answer itself.
+            # The prompt a reply draft gets, as drafting it then would have seen it: the
+            # user's own writing from before the answer only, never the answer itself, and the
+            # system prompt as of then (the self-model, notes, rules, calendar and posts).
+            when = datetime.fromisoformat(point["ts"])
+            drafting = work._system(vault / "self", when, past=True)
+            drafting += work._shared(vault / "clones" / "drafts", when)
             before = written.until(point["ts"])
             source, key = point["source"], point["conversation"].split("/", 1)[1]
             job = {"for": "reply", "voice": {"channel": source, "chat": (source, key)}}

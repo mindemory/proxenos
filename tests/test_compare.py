@@ -4,7 +4,9 @@ network, no model, no real data."""
 import json
 import os
 import random
+import shutil
 import stat
+import subprocess
 from datetime import UTC, datetime
 
 import pytest
@@ -164,6 +166,82 @@ def test_a_reply_is_drafted_without_seeing_itself_or_anything_after_it(tmp_path,
     ben = next(c for c in models.calls if "Chat: Ben" in c["prompt"])
     assert "LATE NOTE" in ben["system"] and "LATE POST" in ben["system"]
     assert "LATER sending" not in ben["prompt"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+def test_a_reply_is_drafted_with_the_self_model_rules_and_calendar_as_they_stood(tmp_path, models):
+    vault = make_vault(tmp_path)
+    rules = "# How Tess writes\n\n- {} RULE, lower case\n"
+    commit(
+        vault,
+        "2026-02-01T09:00:00Z",
+        {"self/identity.md": "EARLY SELF", "self/voice_rules.md": rules.format("EARLY")},
+    )
+    commit(
+        vault,
+        "2026-03-02T09:00:00Z",
+        {"self/identity.md": "LATE SELF", "self/voice_rules.md": rules.format("LATE")},
+    )
+    write_jsonl(
+        vault / "raw" / "calendar" / "personal" / "2026-03.jsonl",
+        [  # just before Ana's reply, and just after it: the calendar can't say when it was made
+            {"id": "c1", "ts": "2026-03-01T10:00:00Z", "start": "2026-03-01T10:00:00Z",
+             "summary": "EARLY EVENT"},
+            {"id": "c2", "ts": "2026-03-01T10:30:00Z", "start": "2026-03-01T10:30:00Z",
+             "summary": "LATER EVENT"},
+        ],
+    )  # fmt: skip
+    with (vault / "state" / "told.jsonl").open("a") as f:  # the early note, taken back later
+        f.write(json.dumps({"at": "2026-03-03T09:00:00Z", "forget": "2026-03-01T08:00:00Z"}) + "\n")
+
+    compare.start(vault, OTHER, n=10, now=NOW, rng=random.Random(1))
+
+    ana = next(c for c in models.calls if "Chat: Ana" in c["prompt"])
+    assert "EARLY SELF" in ana["system"] and "LATE SELF" not in ana["system"]
+    assert "EARLY RULE" in ana["prompt"] and "LATE RULE" not in ana["prompt"]
+    assert "EARLY EVENT" in ana["system"] and "LATER EVENT" not in ana["system"]
+    assert "EARLY NOTE" in ana["system"]  # taken back only after Ana's reply
+    ben = next(c for c in models.calls if "Chat: Ben" in c["prompt"])
+    assert "LATE SELF" in ben["system"] and "LATE RULE" in ben["prompt"]
+    assert "EARLY NOTE" not in ben["system"]
+
+
+def commit(vault, when, files):
+    """Write `files` into the vault and commit them as the master would, at `when`."""
+    if not (vault / ".git").exists():
+        subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+        (vault / ".gitignore").write_text("/*\n!/.gitignore\n!/self/\n!/observations/\n")
+    for rel, text in files.items():
+        (vault / rel).parent.mkdir(parents=True, exist_ok=True)
+        (vault / rel).write_text(text)
+    dated = os.environ | {"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when}
+    subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(vault), "-c", "user.name=T", "-c", "user.email=t@example.org"]
+        + ["commit", "-q", "-m", f"consolidate {when[:10]}"],
+        check=True,
+        env=dated,
+    )
+
+
+def test_a_reply_that_matches_a_draft_made_before_it_is_never_held_out(tmp_path, models):
+    vault = make_vault(tmp_path)
+    thread = json.dumps({"source": "whatsapp", "chat": "ben"})
+
+    def draft(name, created):
+        (vault / "clones" / "drafts" / f"{name}.md").write_text(
+            f'---\nid: {name}\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: whatsapp\n'
+            f"created: {created}\nstatus: sent\nthread: {thread}\n---\n\n"
+            "Later: sending them in an hour!\n"
+        )
+
+    def held():
+        return [pair["chat"]["name"] for pair in compare.held_out(vault, 10)]
+
+    draft("reply-after", "2026-03-04T11:00:00Z")  # made after Ben's reply: it can't be its source
+    assert held() == ["Ben", "Ana"]
+    draft("reply-before", "2026-03-04T10:05:00Z")  # Ben's reply is this draft, sent as written
+    assert held() == ["Ana"]
 
 
 def test_a_draft_i_sent_as_written_is_never_held_out_as_my_reply(tmp_path, models):

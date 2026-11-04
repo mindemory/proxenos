@@ -63,7 +63,7 @@ from difflib import SequenceMatcher
 from functools import cached_property
 from pathlib import Path
 
-from proxenos import chats, llm
+from proxenos import chats, history, llm
 from proxenos.config import env
 from proxenos.ingest import email as mail
 
@@ -157,16 +157,19 @@ class Writing:
 
     def until(self, ts: str) -> "Writing":
         """The same writing as it stood at `ts` (an ISO time): only what the user wrote before
-        it, and only the drafts they changed and sent before it, so a draft written as of `ts`
-        sees nothing from after, such as the reply it's drafting. proxenos.compare and `voice
-        eval` hold replies out this way. The copy shares what this one has read; the rules the
-        user kept stay as they are, since they are theirs now."""
+        it, only the drafts they changed and sent before it, and the writing rules they kept as
+        the vault's history had them then (proxenos.history), so a draft written as of `ts`
+        sees nothing from after, such as the reply it's drafting, or a rule learned from it.
+        proxenos.compare and `voice eval` hold replies out this way. The copy shares what this
+        one has read."""
         then = Writing(self.vault)
         then.__dict__["messages"] = [m for m in self.messages if m["ts"] < ts]
         then.__dict__["long"] = [t for t in self.long if t["ts"] < ts]
         then.__dict__["corrections"] = [
             m for m in self.corrections if "" < str(m.get("sent") or m.get("ts") or "") < ts
         ]
+        kept_then = history.at(self.vault, RULES_FILE, datetime.fromisoformat(ts))
+        then.__dict__["rules"] = _rules_in(kept_then)
         return then
 
     @cached_property

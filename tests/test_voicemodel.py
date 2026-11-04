@@ -3,7 +3,9 @@ mlx-lm and every model faked out. No network, no real data."""
 
 import json
 import os
+import shutil
 import stat
+import subprocess
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
@@ -327,6 +329,56 @@ def test_the_drafting_model_gets_a_reply_prompt_with_only_earlier_writing(tmp_pa
     assert "went well!" not in prompt  # never the answer
     assert "You are Tess" not in system and "Tess" in system
     assert result["summary"]["current"]["mean"] > 0.5
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+def test_the_drafting_model_gets_the_system_prompt_as_it_stood_then(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    subprocess.run(["git", "-C", str(vault), "init", "-q"], check=True)
+    for when, said in (("2026-03-01T09:00:00Z", "EARLY SELF"), ("2026-03-09T11:00:00Z", "LATE")):
+        (vault / "self").mkdir(exist_ok=True)
+        (vault / "self" / "identity.md").write_text(said)
+        subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(vault), "-c", "user.name=T", "-c", "user.email=t@example.org"]
+            + ["commit", "-q", "-m", "consolidate"],
+            check=True,
+            env=os.environ | {"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when},
+        )
+    (vault / "state").mkdir()
+    (vault / "state" / "told.jsonl").write_text(  # told after Dana's answer
+        json.dumps({"at": "2026-03-09T12:00:00Z", "text": "LATE NOTE"}) + "\n"
+    )
+    voicemodel.build(vault, now=NOW)
+    asked = []
+
+    def ask(prompt, *, system=None, schema=None, effort="medium"):
+        asked.append(system)
+        return {"body": "it went well"}
+
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:some-model")
+    monkeypatch.setattr(voicemodel.llm, "ask", ask)
+
+    voicemodel.evaluate(vault, models=("current",))
+
+    (system,) = asked
+    assert "EARLY SELF" in system and "LATE" not in system
+
+
+def test_an_answer_that_matches_a_draft_made_before_it_is_never_learned(tmp_path):
+    vault = make_vault(tmp_path)
+    drafts = vault / "clones" / "drafts"
+    drafts.mkdir(parents=True)
+    thread = json.dumps({"source": "whatsapp", "chat": "ben"})
+    (drafts / "reply-ben.md").write_text(
+        '---\nid: reply-ben\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: whatsapp\n'
+        f"created: 2026-03-05T08:05:00Z\nstatus: sent\nthread: {thread}\n---\n\nSending now!\n"
+    )
+
+    stats = voicemodel.build(vault, now=NOW)
+
+    assert stats["answers"] == 2
+    assert not any("sending now" in e["messages"][2]["content"] for e in examples(vault))
 
 
 def test_a_web_page_is_scored_by_its_paragraphs_without_markup():
