@@ -61,7 +61,9 @@ class Client:
     def call(self, to: str, caller: str, url: str, status_url: str) -> str:
         """Dial `to` from `caller` (a Twilio number or one verified in the account). Twilio asks
         `url` what to do once someone answers and posts to `status_url` when the call ends.
-        Returns the call's id."""
+        Returns the call's id. The call isn't recorded: Record is false, as it is when unsaid,
+        and no TwiML here records (no <Record>, no record on <Dial>). Twilio's speech
+        recognition hears it, for the transcript, which is what the assistant says of it."""
         fields = {
             "To": to,
             "From": caller,
@@ -70,6 +72,7 @@ class Client:
             "StatusCallback": status_url,
             "StatusCallbackMethod": "POST",
             "TimeLimit": str(TIME_LIMIT),
+            "Record": "false",
         }
         return str(self._post("Calls.json", fields)["sid"])
 

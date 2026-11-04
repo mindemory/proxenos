@@ -4,6 +4,7 @@ nothing leaves this computer: the one server listens on 127.0.0.1 for the test's
 import base64
 import hashlib
 import hmac
+import json
 import os
 import stat
 import threading
@@ -107,6 +108,7 @@ def test_the_client_posts_to_the_users_own_account_and_says_twilios_errors():
     fields = dict(urllib.parse.parse_qsl(first.data.decode()))
     assert fields["To"] == PHONE and fields["Url"].endswith("/answer")
     assert fields["TimeLimit"] == str(twilio.TIME_LIMIT)
+    assert fields["Record"] == "false"  # transcribed, as the assistant says, never recorded
     assert first.get_header("Authorization") == "Basic " + base64.b64encode(b"AC1:tok").decode()
     assert second.full_url.endswith("/Calls/CA42.json") and second.data == b"Status=completed"
     assert twilio._said(b'{"code": 21210, "message": "not yet verified"}') == "not yet verified"
@@ -176,6 +178,9 @@ def test_on_hold_it_says_nothing_then_tells_who_it_is_and_rings_the_user(tmp_pat
     assert "<Hangup/>" in call.dialed("completed") and call.phase == "done"
     whos = [t["who"] for t in call.transcript]
     assert whos == ["note", "line", "line", "them", "assistant", "note"]
+    # Nothing it answers Twilio with records the call, so "transcribed" is all it is.
+    said = first + out + whisper
+    assert "<Record" not in said and "record=" not in said.lower()
 
 
 # ── Talking ─────────────────────────────────────────────────────────────────
@@ -376,8 +381,10 @@ def test_a_call_runs_its_server_until_twilio_says_it_ended(tmp_path, settings, m
     assert ok == 200 and '<Play digits="ww1w2"/>' in answered
     assert (forged, unknown, ended) == (403, 404, 200)
     assert said.startswith("The call ended (busy).")
-    (record,) = (tmp_path / "clones" / "calls" / "billing").glob("*.json")
+    (record,) = (tmp_path / "clones" / "calls" / "billing").glob("*T*Z.json")
     assert calls._json(record.read_text(), dict)["sid"] == "CA9"
+    number = tmp_path / "clones" / "calls" / "billing" / calls.NUMBER_FILE
+    assert json.loads(number.read_text())["doubt"] is None  # checked before it dialed
     assert not (tmp_path / "state" / "asking").exists()  # other model work may go on again
 
 
@@ -408,3 +415,42 @@ def test_the_command_lists_sheets_and_stop_clears_a_call_left_behind(tmp_path, m
     live.write_text('{"sid": "CA1", "pid": 0}')
     cli.main(["call", "stop", "billing"])
     assert "cleared what was left" in capsys.readouterr().out and not live.exists()
+
+
+# ── Whether the number is theirs ────────────────────────────────────────────
+
+
+def mail(vault, key, body, mine=False, month="2026-03", **extra):
+    path = vault / "raw" / "email" / "work" / f"{month}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {"id": key, "ts": f"{month}-02T09:00:00Z", "from_me": mine, "body": body} | extra
+    with path.open("a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def test_a_number_from_just_one_message_to_the_user_is_doubted_until_they_say(tmp_path, settings):
+    sheet = write_sheet(tmp_path)  # +15555550142
+    assert calls.doubt(tmp_path, sheet) is None  # found nowhere: from a bill or a website
+
+    mail(tmp_path, "m1", "URGENT: your account is overdue. Call (555) 555-0142 today.")
+    assert "just one message sent to you" in (calls.doubt(tmp_path, sheet) or "")
+    # Quoting it in a reply isn't having it from elsewhere: only the reply's new text counts.
+    mail(
+        tmp_path, "m2", "Is this real?\n> Call (555) 555-0142", mine=True, body_new="Is this real?"
+    )
+    assert calls.doubt(tmp_path, sheet)
+    with pytest.raises(SystemExit, match="--anyway"):
+        callserver.place(tmp_path, sheet, check=False)
+    kept = json.loads((tmp_path / "clones" / "calls" / "billing" / "number.json").read_text())
+    assert kept["number"] == "+15555550142" and "scam" in kept["doubt"]
+
+    # The user wrote it themselves, or it came in earlier mail from them too: not doubted.
+    for n, (body, extra) in enumerate(
+        [("Our number is +1 555 555 0142.", {"mine": True}), ("Billing: 555.555.0142", {})]
+    ):
+        vault = tmp_path / f"v{n}"
+        mail(vault, "m1", "URGENT: your account is overdue. Call (555) 555-0142 today.")
+        mail(vault, "m3", body, month="2025-11", **extra)
+        assert calls.doubt(vault, sheet) is None
+    # Another number in the same message, or one sharing only its last digits, isn't it.
+    assert not calls._has({"body": "call 555-555-9999 or ext. 0142"}, "15555550142")

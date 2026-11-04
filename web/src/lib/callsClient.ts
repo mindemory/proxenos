@@ -14,10 +14,10 @@ import { JSON_HEADERS } from "./headers";
 
 const POLL_MS = 3000;
 
-async function post(url: string, id: string): Promise<string> {
+async function post(url: string, body: { id: string; anyway?: boolean }): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(url, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ id }) });
+    res = await fetch(url, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
   } catch {
     throw new Error("Couldn't reach Proxenos. Is your Mac awake?");
   }
@@ -60,11 +60,11 @@ export function useCalls() {
   }, [going, load]);
 
   const act = useCallback(
-    async (url: string, id: string) => {
+    async (url: string, id: string, anyway?: boolean) => {
       setBusy(id);
       setError(null);
       try {
-        notify((await post(url, id)) || "Done", "ok");
+        notify((await post(url, anyway ? { id, anyway } : { id })) || "Done", "ok");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -79,7 +79,8 @@ export function useCalls() {
     data,
     error,
     busy,
-    start: (id: string) => act("/api/calls/start", id),
+    /** Call the sheet's number; `anyway` calls one the vault doubts, once the reader has seen why. */
+    start: (id: string, anyway?: boolean) => act("/api/calls/start", id, anyway),
     stop: (id: string) => act("/api/calls/stop", id),
     clearError: () => setError(null),
   };

@@ -105,6 +105,7 @@ async function readSheet(vault: string, id: string): Promise<CallSheet> {
     talk: false,
     notes: "",
     error: null,
+    doubt: null,
     live: await liveRecord(vault, id),
     past: await pastRecords(vault, id),
   };
@@ -132,6 +133,7 @@ async function readSheet(vault: string, id: string): Promise<CallSheet> {
     facts: facts && typeof facts === "object" && !Array.isArray(facts) ? Object.keys(facts).slice(0, 20) : [],
     talk: ["true", "yes"].includes((f.talk ?? "").trim().toLowerCase()),
     notes: front.body.slice(0, 4000),
+    doubt: await numberDoubt(vault, id, number),
   };
   if (!NUMBER.test(number)) return { ...read, error: "Its number needs the country code, like +16035550100." };
   if (!read.about) return { ...read, error: "It doesn't say what the call is about." };
@@ -139,6 +141,18 @@ async function readSheet(vault: string, id: string): Promise<CallSheet> {
     return { ...read, error: "Its asks or facts aren't written the way calls.py reads them." };
   }
   return read;
+}
+
+/**
+ * What the last check of the sheet's number found (<id>/number.json, written by calls.check when
+ * a call starts or `proxenos call list` runs): why it may not be theirs, while the sheet still has
+ * that number; else null.
+ */
+async function numberDoubt(vault: string, id: string, number: string): Promise<string | null> {
+  const kept = await readJsonFile(path.join(folder(vault), id, "number.json"), MAX_SHEET_BYTES).catch(() => null);
+  if (!kept || typeof kept !== "object" || Array.isArray(kept)) return null;
+  const r = kept as Record<string, unknown>;
+  return r.number === number && typeof r.doubt === "string" && r.doubt ? r.doubt.slice(0, 600) : null;
 }
 
 function alive(pid: unknown): boolean {
@@ -256,9 +270,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Start `proxenos call start <id>` on its own, and wait until it says the call is going (its
  * live.json names it) or it stops, when what it printed says why: a setting missing, Twilio
- * unreachable or refusing.
+ * unreachable or refusing, or a number the vault doubts. `anyway` calls that number all the same,
+ * as the reader's "Call anyway" asks once the page has shown why.
  */
-export async function startCall(id: string): Promise<Result> {
+export async function startCall(id: string, anyway = false): Promise<Result> {
   const vault = vaultPath();
   const dir = path.join(folder(vault), id);
   try {
@@ -276,7 +291,7 @@ export async function startCall(id: string): Promise<Result> {
   let child;
   try {
     // Its own process group, so restarting the page doesn't hang up on whoever's on the line.
-    child = cli.spawn(["call", "start", id], { detached: true, stdio: ["ignore", log.fd, log.fd] });
+    child = cli.spawn(["call", "start", id, ...(anyway ? ["--anyway"] : [])], { detached: true, stdio: ["ignore", log.fd, log.fd] });
   } finally {
     await log.close();
   }

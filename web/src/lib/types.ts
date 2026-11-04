@@ -2039,6 +2039,11 @@ export interface CallSheet {
   notes: string;
   /** What's wrong with the sheet, when it can't be called from. */
   error: string | null;
+  /**
+   * Why its number may not be theirs, as the last check found it (calls.doubt: in just one
+   * message to the reader, and in nothing of theirs), or null. Calling it then takes "Call anyway".
+   */
+  doubt: string | null;
   live: CallRecord | null;
   /** Newest first. */
   past: CallRecord[];

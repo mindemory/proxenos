@@ -10,7 +10,14 @@ requests Twilio signed with the user's token, at paths that start with that call
 token. The model on the call is PROXENOS_CALL_MODEL when it's set, else PROXENOS_MODEL; while a
 call goes, other model work waits, so a person on the line isn't kept waiting behind it.
 
+Every request the server answers is checked: a POST, all of Twilio's, only with Twilio's
+X-Twilio-Signature over the public URL and its form (_Handler.do_POST, twilio.signed), at a
+path with the call's token; a GET only at <token>/ping, which says "ok" to this Mac's own check
+that Twilio can reach it, and nothing else.
+
 The user starts every call, here or from the page, and Ctrl-C or `proxenos call stop` hangs up.
+A number the vault has from just one message to the user (calls.doubt) is called only with
+--anyway, which the page's "Call anyway" passes once it has shown why.
 """
 
 import argparse
@@ -56,6 +63,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="call without first checking that Twilio can reach this Mac",
     )
+    start.add_argument(
+        "--anyway",
+        action="store_true",
+        help="call a number the vault has from just one message to you, once you've checked it",
+    )
     stop = actions.add_parser("stop", help="hang up a call that's going")
     stop.add_argument("id")
 
@@ -65,11 +77,14 @@ def run(vault: Path, args: argparse.Namespace) -> None:
         for sheet_id, sheet in calls.sheets(vault):
             line = f"{sheet.title} ({sheet.to})" if isinstance(sheet, calls.Sheet) else sheet
             print(f"{sheet_id}: {line}")
+            if isinstance(sheet, calls.Sheet) and (doubt := calls.check(vault, sheet)):
+                print(f"  {doubt}")
         return
     if args.action == "stop":
         print(stop(vault, args.id))
         return
-    print(place(vault, calls.load(vault, args.id), check=not args.no_check))
+    sheet = calls.load(vault, args.id)
+    print(place(vault, sheet, check=not args.no_check, anyway=args.anyway))
 
 
 def settings() -> dict[str, str]:
@@ -104,12 +119,16 @@ def place(
     check: bool = True,
     client: twilio.Client | None = None,
     port: int = PORT,
+    anyway: bool = False,
 ) -> str:
-    """Place the call, answer Twilio's requests until it ends, then keep the record."""
+    """Place the call, answer Twilio's requests until it ends, then keep the record. A number the
+    vault doubts (calls.doubt) is called only `anyway`, once the user has seen why."""
     if outbox.is_demo(vault):
         raise SystemExit("Nothing is called from a made-up vault.")
     if live := _live_pid(vault, sheet.id):
         raise SystemExit(f"A call from {sheet.id} is already going (process {live}).")
+    if (doubt := calls.check(vault, sheet)) and not anyway:
+        raise SystemExit(f"{doubt} To call it anyway: proxenos call start {sheet.id} --anyway")
     values = settings()
     if model := env("CALL_MODEL"):
         os.environ[env_key("MODEL")] = model

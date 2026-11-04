@@ -105,7 +105,7 @@ interface SheetCardProps {
   now: string;
   busy: boolean;
   blocked: boolean;
-  onStart: (id: string) => void;
+  onStart: (id: string, anyway?: boolean) => void;
   onStop: (id: string) => void;
 }
 
@@ -131,6 +131,7 @@ function SheetCard({ sheet, now, busy, blocked, onStart, onStop }: SheetCardProp
       </p>
       {sheet.notes && <p className="whitespace-pre-wrap break-words text-sm text-muted">{sheet.notes}</p>}
       {sheet.error && <p className="text-sm text-bad-ink">{sheet.error}</p>}
+      {sheet.doubt && !live && <p className="break-words text-sm text-warn-ink">{sheet.doubt}</p>}
 
       {live ? (
         <div className="space-y-3 rounded-xl border border-line p-3 sm:p-4">
@@ -150,17 +151,17 @@ function SheetCard({ sheet, now, busy, blocked, onStart, onStop }: SheetCardProp
             {asking ? (
               <>
                 <span className="text-sm text-ink">
-                  Call <span className="num">{sheet.number}</span> now?
+                  {sheet.doubt ? "You've checked it's theirs? Call" : "Call"} <span className="num">{sheet.number}</span> now?
                 </span>
                 <ActionButton
                   icon={Phone}
-                  label={busy ? "Calling…" : "Yes, call"}
-                  tone="accent"
+                  label={busy ? "Calling…" : sheet.doubt ? "Call anyway" : "Yes, call"}
+                  tone={sheet.doubt ? "warn" : "accent"}
                   active
                   disabled={busy}
                   onClick={() => {
                     setAsking(false);
-                    onStart(sheet.id);
+                    onStart(sheet.id, !!sheet.doubt);
                   }}
                 />
                 <ActionButton icon={X} label="Not now" tone="neutral" onClick={() => setAsking(false)} />
@@ -237,7 +238,7 @@ export function Calls() {
               now={data.now}
               busy={busy === s.id}
               blocked={busy !== null || data.missing.length > 0}
-              onStart={(id) => void start(id)}
+              onStart={(id, anyway) => void start(id, anyway)}
               onStop={(id) => void stop(id)}
             />
           ))
@@ -245,7 +246,9 @@ export function Calls() {
         <p className="text-xs text-muted">
           On hold it says nothing. To a person it says it&apos;s an automated assistant calling for you and that the call is
           transcribed, never that it&apos;s you. It never agrees to pay, settle or a payment plan, and gives no number that isn&apos;t
-          on the sheet. The call goes through Twilio, which hears it to transcribe it. <Command>proxenos call start &lt;name&gt;</Command>{" "}
+          on the sheet. The call goes through Twilio, which hears it to transcribe it and doesn&apos;t record it. A number your
+          records have from just one message to you, and from nothing of yours, may be a scam&apos;s: it says so, and calls it
+          only once you press Call anyway. <Command>proxenos call start &lt;name&gt;</Command>{" "}
           places one from a terminal.
         </p>
       </div>

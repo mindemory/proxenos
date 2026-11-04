@@ -13,8 +13,13 @@ hears each stretch of speech: one that sounds like the hold's own messages ("you
 important to us") or repeats one heard before is the hold, and one that sounds like a person
 picking up ("thanks for holding, this is ...") is someone answering; when neither is clear, the
 model decides. To a person, the assistant first says what it is: "I'm an automated assistant
-calling for <name>, and this call is transcribed." It never says it's the user, and it has no
-voice of theirs.
+calling for <name>, and this call is transcribed." That's all it is: Twilio's speech recognition
+hears it for the transcript, and nothing records it (twilio.Client.call). It never says it's
+the user, and it has no voice of theirs.
+
+Before a call, its number is checked against the vault (`doubt`): one that's in just one
+message someone sent the user, and in nothing of theirs, may be a scam's, and the call waits
+until the user says to call it anyway.
 
 Then, by default, it rings the user's phone, and they press 1 to be put through (so voicemail
 never is). With talk: true, or when the user doesn't come to the phone and there are asks, it
@@ -232,6 +237,83 @@ def sheets(vault: Path) -> list[tuple[str, Sheet | str]]:
         except (OSError, ValueError) as e:
             found.append((path.stem, str(e)))
     return found
+
+
+# ── Whether the number is the organization's own ────────────────────────────
+
+NUMBER_FILE = "number.json"  # in <id>/: what the last check of the sheet's number found
+# The user's own records, beside what they sent: what they wrote down or put in a calendar.
+_OWN_SOURCES = frozenset({"notes", "keep", "calendar", "gcalendar", "maccalendar", "gtasks"})
+_PHONE = re.compile(r"\+?\(?\d[\d ().-]{5,}\d")  # a phone number, with what's inside one
+_SAME = 9  # the last digits two numbers share to be one: an area code and the rest
+
+
+def doubt(vault: Path, sheet: Sheet) -> str | None:
+    """Why the sheet's number may not be the one to call, or None. A number that turns up in just
+    one message someone sent the user, and in nothing of theirs (what they sent, their notes and
+    calendar) nor in any other mail or chat, came from that message alone: a phishing email
+    gives one so, with an urgent bill to pay. A number found nowhere was put on the sheet from
+    elsewhere, as from a bill or a website, and isn't doubted here."""
+    theirs, mine = _mentions(vault, sheet.number)
+    if len(theirs) != 1 or mine:
+        return None
+    return (
+        f"{sheet.number} is in just one message sent to you, and in nothing you've sent or kept: "
+        "it may not be theirs, as a scam's email gives a number. Check it on their own website "
+        "or a bill before you call."
+    )
+
+
+def check(vault: Path, sheet: Sheet) -> str | None:
+    """`doubt`, kept in <id>/number.json with the number it's about, for the page to show on the
+    sheet until the number changes."""
+    found = doubt(vault, sheet)
+    _write(
+        folder(vault) / sheet.id / NUMBER_FILE,
+        {"number": sheet.number, "doubt": found, "checked": _iso(_now())},
+    )
+    return found
+
+
+def _mentions(vault: Path, number: str) -> tuple[set[str], set[str]]:
+    """The records under raw/ that have `number` in them: (those from others, the user's own).
+    Only lines with its last four digits are read whole, so a big vault reads fast. An email's
+    new text stands for it, so a quote of what it answers doesn't count as the user's."""
+    digits = re.sub(r"\D", "", number)
+    theirs: set[str] = set()
+    mine: set[str] = set()
+    for path in sorted((vault / "raw").glob("*/**/*.jsonl")):
+        source = path.relative_to(vault / "raw").parts[0]
+        with path.open(encoding="utf-8", errors="replace") as f:
+            for n, line in enumerate(f):
+                if digits[-4:] not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(record, dict) or not _has(record, digits):
+                    continue
+                key = f"{source}/{record.get('id') or f'{path.name}:{n}'}"
+                own = record.get("from_me") is True or source in _OWN_SOURCES
+                (mine if own else theirs).add(key)
+    return theirs, mine
+
+
+def _has(record: dict, digits: str) -> bool:
+    """Whether a record's text, or a chat's id (WhatsApp keys one by its number), has the number:
+    the same last _SAME digits, however it's written."""
+    if record.get("body_new"):
+        record = {k: v for k, v in record.items() if k != "body"}
+    texts = [v for v in record.values() if isinstance(v, str)]
+    texts += [x for v in record.values() if isinstance(v, list) for x in v if isinstance(x, str)]
+    same = min(_SAME, len(digits))
+    for text in texts:
+        for found in _PHONE.findall(text):
+            seen = re.sub(r"\D", "", found)
+            if len(seen) >= same and seen[-same:] == digits[-same:]:
+                return True
+    return False
 
 
 def _json(value: str | None, kind: type) -> list | dict | None:
