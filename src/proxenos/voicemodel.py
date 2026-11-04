@@ -31,7 +31,10 @@ one and the drafting model set up now, given the prompt reply drafts get, with t
 the user's writing proxenos.voice picks from what they wrote before it, and the drafting model
 the system prompt as of then (work._system with past: the self-model from the vault's history,
 the notes, rules and calendar from before it), and scores each by
-how much of it survived into what the user sent (fidelity's closeness). `score` reads texts (a
+how much of it survived into what the user sent (fidelity's closeness). It leaves out an answer
+written while a draft for its chat was waiting, however much the user changed it, since they
+may have read it first (fidelity.drafted_before), and eval.json says how many it left out each
+way and how many it drafted had a self-model in the vault's history then. `score` reads texts (a
 post, an essay, a web page) paragraph by paragraph and says how much more likely the fine-tuned
 model finds each than the base model does: how much it reads like the user, next to the same
 measure on their own held-out emails and posts. Everything stays here:
@@ -540,8 +543,12 @@ def evaluate(
     held = _read_jsonl(vault / "voice" / "eval.jsonl")
     # A held-out answer that was a draft of Proxenos's, sent nearly unchanged, is the model's
     # words: the set was built before such answers were known, so they're left out here too.
+    # So is one written while a draft for that chat was there, however much the user changed
+    # it, since they may have read it first: the rest were written without one.
     made = fidelity.written(vault)
-    kept = [p for p in held if not _was_draft(made, p)]
+    drafted = [p for p in held if _was_draft(made, p)]
+    waiting = [p for p in held if p not in drafted and _draft_before(made, p)]
+    kept = [p for p in held if p not in drafted and p not in waiting]
     points = _sample(kept, n)
     if not points:
         raise SystemExit("Nothing held out to evaluate on: run `proxenos voice build` first.")
@@ -574,9 +581,11 @@ def evaluate(
         "n": len(points),
         "sent_words": round(mean(len(p["sent"].split()) for p in points), 1),
         "by_source": dict(sorted(_count(p["source"] for p in points).items())),
-        # What drew each column, and that the drafting model saw nothing after each answer.
+        # What drew each column, and that the drafting model saw nothing after each answer:
+        # the answers left out, and how many of those drafted had a self-model to read then.
         "as_of": True,
-        "excluded": len(held) - len(kept),
+        "excluded": {"drafted": len(drafted), "draft_waiting": len(waiting)},
+        "self_model": sum(map(partial(_had_self, vault), points)),
         "columns": _columns(vault, drafts),
         "summary": summary,
         "items": [
@@ -598,12 +607,45 @@ def evaluate(
 
 def _was_draft(made: tuple[dict, dict], point: dict) -> bool:
     """Whether a held-out answer was a Proxenos draft sent nearly unchanged."""
-    source, _, key = str(point.get("conversation") or "").partition("/")
     from proxenos import fidelity  # it reads the work clone, which reads this module
 
-    # By the chat it answers: a held-out point keeps too little of its messages to say whom
-    # a chat is with, which matching by name would need.
-    return fidelity.from_draft(made, source or point["source"], key, [], point["ts"], point["sent"])
+    source, key, messages = _where(point)
+    return fidelity.from_draft(made, source, key, messages, point["ts"], point["sent"])
+
+
+def _draft_before(made: tuple[dict, dict], point: dict) -> bool:
+    """Whether a draft of Proxenos's for a held-out answer's chat was waiting when it was
+    written, at any closeness: made since the user's own message there before (the last of
+    theirs the point's recent messages hold; with none there, any draft before counts), one they
+    may have read before writing theirs."""
+    from proxenos import fidelity  # it reads the work clone, which reads this module
+
+    since = max((m["ts"] for m in point.get("recent") or [] if m.get("mine")), default="")
+    return fidelity.drafted_before(made, *_where(point), point["ts"], since)
+
+
+def _where(point: dict) -> tuple[str, str, list[dict]]:
+    """A held-out answer's conversation as fidelity matches drafts to one: its source and key,
+    and its messages waiting, as from whom (the chat, a direct one, as an answer's must be), so
+    a draft to that person by name, a task's message say, counts as one for the chat."""
+    source, _, key = str(point.get("conversation") or "").partition("/")
+    messages = [
+        {"mine": False, "direct": True, "name": point.get("name") or "", "sender": w["sender"]}
+        for w in point.get("waiting") or []
+    ]
+    return source or point["source"], key, messages
+
+
+def _had_self(vault: Path, point: dict) -> bool:
+    """Whether the vault's history held a self-model when the answer was written, which the
+    drafting model's as-of prompt then read (work._system with past); with none, it had none."""
+    from proxenos import history
+    from proxenos.clones import work  # it reads this module
+
+    when = datetime.fromisoformat(point["ts"])
+    return any(
+        history.at(vault, Path("self", f"{name}.md"), when).strip() for name in work.SELF_FILES
+    )
 
 
 def _columns(vault: Path, drafts: dict) -> dict[str, dict]:

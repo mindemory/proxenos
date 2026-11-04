@@ -14,8 +14,9 @@ the moment before the user answered (chats._waiting on the messages before their
 reply counts only where a draft would have been written then: someone else had the last word,
 within chats.DAYS, saying something to answer, and the user had written in that chat before; and
 never one that was a draft of Proxenos's they sent nearly unchanged, which is the model's
-writing, not theirs to compare with: neither one proxenos.fidelity marked, nor one as close to
-any draft made in that conversation before it (fidelity.from_draft). The examples of their
+writing, not theirs to compare with (one proxenos.fidelity marked), nor one written while a
+draft for that conversation was waiting, made since their own message there before, however
+close it came (fidelity.drafted_before): they may have read it first. The examples of their
 writing are only what they wrote before it (voice.Writing.until), with the writing rules they
 kept as they stood then, so no model sees that reply, anything after it in that chat or
 anywhere else, nor a draft they changed and sent after it. The system prompt is the one reply
@@ -224,9 +225,9 @@ def _reply(
     drafts: tuple[dict, dict] = ({}, {}),
 ) -> dict | None:
     """Of the user's TRIES newest replies to someone in a conversation, the newest a draft
-    would have been written for, or None. Never one that was a draft of Proxenos's made in
-    that conversation before it, sent nearly unchanged (`drafts`, as fidelity.written gives
-    them)."""
+    would have been written for, or None. Never one written while a draft of Proxenos's for
+    that conversation was waiting (`drafts`, as fidelity.written gives them), however close
+    it came: they may have read it first, or sent it."""
     said = sorted((m for m in messages if m["text"]), key=lambda m: m["ts"])
     tried = 0
     for i in range(len(said) - 1, 0, -1):
@@ -254,10 +255,11 @@ def _reply(
         sent = _burst(said[i:])
         if len(" ".join(sent).split()) < voice.MIN_WORDS:
             continue  # a word or an emoji shows little of how they write
-        if any(m.get("drafted") for m in said[i : i + len(sent)]) or fidelity.from_draft(
-            drafts, source, key, messages, reply["ts"], " ".join(sent)
-        ):
+        if any(m.get("drafted") for m in said[i : i + len(sent)]):
             continue  # a draft of Proxenos's they sent nearly as it was: not their own words
+        before = max((m["ts"] for m in said[:i] if m["mine"]), default="")
+        if fidelity.drafted_before(drafts, source, key, messages, reply["ts"], before):
+            continue  # a draft was waiting, which they may have read first, or sent
         return {
             "key": pair_key,
             "replied": reply["ts"],

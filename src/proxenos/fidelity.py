@@ -117,9 +117,10 @@ def measure(vault: Path) -> dict[str, int]:
 
 def written(vault: Path) -> tuple[dict, dict]:
     """Each draft Proxenos wrote, as (when, the model's text), by the chat it answers and by
-    whom it's to, for `from_draft`."""
+    whom it's to, for `from_draft` and `drafted_before`. A draft whose model text is gone (see
+    _model_text) has "", which no answer comes close to, but it was still made."""
     return tuple(
-        {key: [(d["created"], d["text"]) for d in ds if d["text"]] for key, ds in found.items()}
+        {key: [(d["created"], d["text"] or "") for d in ds] for key, ds in found.items()}
         for found in _drafts(vault / "clones" / "drafts")
     )
 
@@ -131,15 +132,38 @@ def from_draft(
     messages, as proxenos.chats gives them), was a draft of Proxenos's made for it before then,
     sent nearly unchanged (NEARLY): the model's words, which a reply held out to judge a model
     by must never be. `drafts` is what `written` gives."""
+    return any(
+        when < ts and draft and round(_closeness(draft, [{"text": text}]), 2) >= NEARLY
+        for when, draft in _made(drafts, source, key, messages)
+    )
+
+
+def drafted_before(
+    drafts: tuple[dict, dict],
+    source: str,
+    key: str,
+    messages: list[dict],
+    ts: str,
+    since: str = "",
+) -> bool:
+    """Whether a draft of Proxenos's for a conversation (as `from_draft` takes it) was waiting
+    when the user wrote there at `ts`, however close it came: made before then, and after
+    `since`, their own message there before, which answered whatever an earlier draft was for
+    ("" when there's none, or it isn't known: any draft before counts). They may have read it
+    first, so what they wrote may lean on it, and a reply held out as written without a draft
+    mustn't have had one."""
+    return any(since < when < ts for when, _ in _made(drafts, source, key, messages))
+
+
+def _made(
+    drafts: tuple[dict, dict], source: str, key: str, messages: list[dict]
+) -> list[tuple[str, str]]:
+    """The drafts made for a conversation: for its chat, and to whom it's with."""
     by_chat, by_name = drafts
-    made = [
+    return [
         *by_chat.get((source, key), []),
         *(d for who in _with(source, key, messages) for d in by_name.get(who, [])),
     ]
-    return any(
-        when < ts and round(_closeness(draft, [{"text": text}]), 2) >= NEARLY
-        for when, draft in made
-    )
 
 
 def _drafts(folder: Path) -> tuple[dict, dict]:

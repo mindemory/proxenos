@@ -302,7 +302,9 @@ def test_a_held_out_answer_that_was_a_draft_is_left_out_and_each_column_is_named
     drafters = {"base": lambda points: ["fine" for _ in points]}
     voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
     saved = json.loads((vault / "voice" / "eval.json").read_text())
-    assert (saved["as_of"], saved["excluded"]) == (True, 0)
+    assert saved["as_of"] is True
+    assert saved["excluded"] == {"drafted": 0, "draft_waiting": 0}
+    assert saved["self_model"] == 0  # no history of the self-model: drafted with none
     assert saved["columns"]["last message again"]["model"].startswith("none")
     assert saved["columns"]["base"]["model"] == voicemodel.BASE
 
@@ -310,13 +312,35 @@ def test_a_held_out_answer_that_was_a_draft_is_left_out_and_each_column_is_named
     source, _, key = point["conversation"].partition("/")
     drafts = vault / "clones" / "drafts"
     drafts.mkdir(parents=True)
-    thread = json.dumps({"source": source, "chat": key})
-    (drafts / "reply-dana.md").write_text(
-        f'---\nid: reply-dana\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: {source}\n'
-        f"created: 2020-01-01T00:00:00Z\nstatus: sent\nthread: {thread}\n---\n\n"
-        f"{point['sent']}\n"
-    )
+
+    def draft(name, created, text, front=""):
+        thread = json.dumps({"source": source, "chat": key})
+        (drafts / f"{name}.md").write_text(
+            f'---\nid: {name}\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: {source}\n'
+            f"created: {created}\nstatus: sent\n{front or f'thread: {thread}'}\n---\n\n{text}\n"
+        )
+
+    draft("reply-dana", "2020-01-01T00:00:00Z", point["sent"])
     with pytest.raises(SystemExit):  # its only answer was the model's words
+        voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
+
+    # A draft waiting when the answer was written, however far from it, may have been read
+    # first: it's left out too. One made before their own message there before was for what
+    # that answered, and one made after, they couldn't have seen. Another held out with none
+    # is drafted, and the two kinds left out are counted apart.
+    other = point | {"conversation": f"{source}/erin", "name": "Erin", "sent": "on my way"}
+    (vault / "voice" / "eval.jsonl").write_text(json.dumps(point) + "\n" + json.dumps(other))
+    assert point["recent"][-1]["ts"] == "2026-03-09T09:00:00Z"  # "hey dana", theirs
+    draft("reply-dana", "2026-03-09T10:01:00Z", "nothing like what was sent, at all")
+    draft("reply-erin", "2026-03-09T08:00:00Z", "an earlier one", front='to: "Erin"')
+    draft("reply-later", "2026-03-10T00:00:00Z", "after it", front='to: "Erin"')
+    voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
+    saved = json.loads((vault / "voice" / "eval.json").read_text())
+    assert saved["excluded"] == {"drafted": 0, "draft_waiting": 1}
+    assert [item["sent"] for item in saved["items"]] == ["on my way"]
+    # A draft to that person by name, a task's message say, counts as one for the chat.
+    draft("task-erin", "2026-03-09T09:30:00Z", "a task's message", front='to: "Erin"')
+    with pytest.raises(SystemExit):
         voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
 
 
@@ -387,6 +411,8 @@ def test_the_drafting_model_gets_the_system_prompt_as_it_stood_then(tmp_path, mo
 
     (system,) = asked
     assert "EARLY SELF" in system and "LATE" not in system
+    # The one answer had a self-model to be drafted with, as the vault's history had it then.
+    assert json.loads((vault / "voice" / "eval.json").read_text())["self_model"] == 1
 
 
 def test_an_answer_that_matches_a_draft_made_before_it_is_never_learned(tmp_path):

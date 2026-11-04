@@ -224,23 +224,25 @@ def commit(vault, when, files):
     )
 
 
-def test_a_reply_that_matches_a_draft_made_before_it_is_never_held_out(tmp_path, models):
+def test_a_reply_written_while_a_draft_waited_is_never_held_out(tmp_path, models):
     vault = make_vault(tmp_path)
     thread = json.dumps({"source": "whatsapp", "chat": "ben"})
 
-    def draft(name, created):
+    def draft(name, created, text="Later: sending them in an hour!"):
         (vault / "clones" / "drafts" / f"{name}.md").write_text(
             f'---\nid: {name}\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: whatsapp\n'
-            f"created: {created}\nstatus: sent\nthread: {thread}\n---\n\n"
-            "Later: sending them in an hour!\n"
+            f"created: {created}\nstatus: sent\nthread: {thread}\n---\n\n{text}\n"
         )
 
     def held():
         return [pair["chat"]["name"] for pair in compare.held_out(vault, 10)]
 
     draft("reply-after", "2026-03-04T11:00:00Z")  # made after Ben's reply: it can't be its source
+    # Made before their own "hi ben" there, it was for what that answered.
+    draft("reply-earlier", "2026-03-03T10:00:00Z", "something else entirely")
     assert held() == ["Ben", "Ana"]
-    draft("reply-before", "2026-03-04T10:05:00Z")  # Ben's reply is this draft, sent as written
+    # Waiting when they replied: nothing like what they sent, but they may have read it first.
+    draft("reply-before", "2026-03-04T10:05:00Z", "No, not tonight, sorry")
     assert held() == ["Ana"]
 
 
