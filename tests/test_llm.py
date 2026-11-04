@@ -260,6 +260,9 @@ def test_local_calls_take_turns_and_a_question_goes_first(tmp_path, monkeypatch)
     time.sleep(0.2)
     assert not asked  # it waits for its turn
     wanted.append("Think")
+    # Let the waiting call look again first: one that checked for a question just before it
+    # came, then found the lock free as it's let go, would take a turn the test means to deny.
+    time.sleep(0.1)
     other.release()
     time.sleep(0.2)
     assert not asked  # the model is free, but the question goes first
