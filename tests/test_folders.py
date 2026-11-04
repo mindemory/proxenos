@@ -804,6 +804,34 @@ def test_comments_on_a_manuscript_become_a_step_once(setup, monkeypatch):
     assert folders.comments(drive / "not a word file.docx") == []
 
 
+def test_a_response_to_reviewers_beside_the_manuscript_goes_with_it(setup):
+    vault, repo, drive, fake = setup
+    git(repo, "checkout", "-q", "paper-storyline")
+    letter = "# Response to reviewers\n\n## Reviewer 1\n\nWe {++now ++}report the delays.\n"
+    commit(
+        repo,
+        {"docs/paper/RESPONSE.md": letter, "docs/paper/notes.md": "not a letter\n"},
+        "Reply",
+        3,
+    )
+    git(repo, "checkout", "-q", "main")
+
+    run(vault, NOW)
+
+    where = drive / FOLDER
+    sent = where / "Calls the paper - response to reviewers.docx"
+    assert "We now report the delays." in text_of(sent)  # its marks taken as accepted
+    assert (where / "Calls the paper - response to reviewers.pdf").exists()
+    assert not any("notes" in p.name for p in where.iterdir())
+    about = text_of(where / "About this folder.docx")
+    assert "Calls the paper - response to reviewers.docx" in about and "goes one way" in about
+    assert state(vault)["projects"]["calls"]["letters"] == [sent.name]
+
+    made = len(fake.pdfs)
+    run(vault, LATER)  # nothing changed in git: nothing made again
+    assert len(fake.pdfs) == made
+
+
 def test_the_files_a_manuscript_names_go_to_its_supplement(setup):
     vault, repo, drive, _ = setup
     git(repo, "checkout", "-q", "paper-storyline")

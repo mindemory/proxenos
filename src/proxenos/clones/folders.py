@@ -19,6 +19,9 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
   the manuscript copied instead, as "About this folder" says. Both are made again together, only
   when the manuscript or the files beside it changed: a LaTeX build takes tens of seconds, and
   one that failed isn't tried again until they change.
+- "<name> - response to reviewers.docx" and its PDF: a response to reviewers or a rebuttal in the
+  manuscript's folder, found by its name, from the same version, and any file the project lists
+  under "documents" (each by its own name), so co-authors read the letter with the paper. One way.
 - Supplement/: the tables, figures and data files the manuscript names, copied from git: by
   file name or path, or by a label their names carry ("Table S4" or "Supplementary Table 4"
   finds S02_tableS4_note_types.csv, a table's label only a table, and "Fig. S2" FigS2_calls.png,
@@ -227,7 +230,7 @@ def refresh(
         BRIEF: brief or None,
         DRAFTS: _drafts_note(project, drafts, DRAFTS in files),
         PROJECT: _about_project(project),
-        FOLDER: _about_folder(project, docx, files),
+        FOLDER: _about_folder(project, docx, files, record.get("letters")),
     }
     for name, text in notes.items():
         if text is not None:
@@ -490,6 +493,83 @@ def _write_paper(
 
     labels = record.setdefault("labels", {})
     _write_supplement(repo, tip, path, where, files, project["name"], now, stats, labels)
+    record["letters"] = _write_letters(project, repo, tip, path, where, files, now, stats)
+
+
+# Letters that go with the manuscript.
+
+# A response to reviewers (or a rebuttal) beside the manuscript, by its file's name.
+_LETTER = re.compile(r"(?i)(response|rebuttal|reply[\w-]*review|reply[\w-]*referee)")
+_LETTER_KINDS = {".md": "markdown", ".markdown": "markdown", ".tex": "latex"}
+
+
+def letters(repo: Path, tip: str, path: str, project: dict) -> list[str]:
+    """What goes beside the manuscript, by its path in git: a response to reviewers or a
+    rebuttal in the manuscript's own folder, found by its name, and any file the project lists
+    under "documents" (in projects.json), so co-authors can read the letter with the paper."""
+    folder = str(PurePosixPath(path).parent)
+    listed = manuscript._git(
+        repo, "ls-tree", "--name-only", tip, "" if folder == "." else folder + "/"
+    )
+    found = [
+        name
+        for name in listed.splitlines()
+        if name != path
+        and PurePosixPath(name).suffix.lower() in _LETTER_KINDS
+        and _LETTER.search(PurePosixPath(name).stem)
+    ]
+    named = [str(d) for d in project.get("documents") or [] if isinstance(d, str) and d]
+    return list(dict.fromkeys([*found, *named]))
+
+
+def _write_letters(
+    project: dict,
+    repo: Path,
+    tip: str,
+    path: str,
+    where: Path,
+    files: dict,
+    now: datetime,
+    stats: Counter,
+) -> list[str]:
+    """Each letter (`letters`) at the manuscript's tip as a Word file and a PDF beside it, made
+    again only when it changed in git and never over a copy the user changed (that moves to
+    Earlier/ first). They go one way: a letter is changed in git. The names written, in order."""
+    wanted = letters(repo, tip, path, project)
+    written = []
+    for rel in wanted:
+        data = manuscript._blob(repo, tip, rel)
+        kind = _LETTER_KINDS.get(PurePosixPath(rel).suffix.lower(), "markdown")
+        if data is None:
+            continue
+        stem = PurePosixPath(rel).stem
+        label = "response to reviewers" if len(wanted) == 1 and _LETTER.search(stem) else stem
+        docx = where / (safe_name(f"{where.name} - {label}", "letter") + ".docx")
+        pdf = docx.with_suffix(".pdf")
+        text = data.decode("utf-8", "surrogateescape")
+        if kind == "markdown":
+            text = accept_marks(text)
+        source = _digest(LOOK, "letter", rel, text)
+        pdf_source = _digest(source, "pdf") if pdf_engine(kind) else None
+        if _due(docx, files, source) or _due(pdf, files, pdf_source):
+            with tempfile.TemporaryDirectory() as tmp:
+                made = Path(tmp) / PurePosixPath(rel).name
+                made.write_bytes(text.encode("utf-8", "surrogateescape"))
+                if _due(docx, files, source):
+                    _build(
+                        docx, files, source, lambda o, m=made, k=kind: to_docx(m, o, k), now, stats
+                    )
+                if _due(pdf, files, pdf_source):
+                    _build(
+                        pdf,
+                        files,
+                        pdf_source,
+                        lambda o, m=made, k=kind: to_pdf(m, o, k),
+                        now,
+                        stats,
+                    )
+        written.append(docx.name)
+    return written
 
 
 def _pdf_plan(
@@ -1158,6 +1238,10 @@ _ONE_WAY = (
     "back, each as a step that makes what it asks in {path}: yours run, anyone else's wait for "
     "you to approve them on the page."
 )
+_LETTER_NOTE = (
+    "**{docx}**, and its PDF, are the letter that goes with the manuscript, from the same version "
+    "in git. It goes one way: change it in git, and keep your comments here to work from."
+)
 _MOVES_ON = (
     "When the paper moves on in git, a newer copy takes this one's place. If you'd changed this "
     f"one, it moves to {EARLIER}/ first, with the date, so your changes and comments stay."
@@ -1193,9 +1277,12 @@ _NOTHING_ELSE = (
 )
 
 
-def _about_folder(project: dict, docx: str, files: dict) -> str:
-    """What the folder is, when its manuscript was made and from where, what its PDF is, and
-    what comes back."""
+def _about_folder(
+    project: dict, docx: str, files: dict, letters_written: list[str] | None = None
+) -> str:
+    """What the folder is, when its manuscript was made and from where, what its PDF is, the
+    letters beside it, and what comes back."""
+    letters_written = [n for n in letters_written or [] if n in files]
     keeps = (
         f"Proxenos keeps this folder for {project['name']}, from your vault and the project's "
         "git, and brings it up to date each night. Git stays the source of truth."
@@ -1212,6 +1299,8 @@ def _about_folder(project: dict, docx: str, files: dict) -> str:
         ]
         if (files.get(SUPPLEMENTARY) or {}).get("written"):
             paper.append(_SUPPLEMENTARY)
+        for name in letters_written:
+            paper.append(_LETTER_NOTE.format(docx=name))
     parts = ["# About this folder", keeps, "## The manuscript", *paper]
     return "\n\n".join([*parts, "## The notes", _THE_NOTES, _NOTHING_ELSE]) + "\n"
 
