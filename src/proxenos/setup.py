@@ -51,6 +51,7 @@ SETTINGS = {
     "project_folder": "PROJECT_FOLDER",
     "ntfy_server": "NTFY_SERVER",
     "quiet_hours": "QUIET_HOURS",
+    "notice_kinds": "NOTICE_KINDS",
     "searxng_url": "SEARXNG_URL",
     "lookup": "LOOKUP",
 }
@@ -201,6 +202,11 @@ def _apply(request: object) -> str:
             raise ValueError("Paste the new value on one line.")
         if name == "NTFY_TOPIC" and not notify.TOPIC.fullmatch(value):
             raise ValueError("A topic has only letters, digits, - and _, up to 64 of them.")
+        if name == "NTFY_TOPIC" and len(value) < notify.MIN_TOPIC:
+            raise ValueError(
+                f"Make the topic at least {notify.MIN_TOPIC} random characters: anyone who "
+                "knows it can read your notices. Settings' Make one gives you one."
+            )
         return f"Saved {name} in {config.save_secret(name, value)}."
     if "forget" in request:
         name = str(request["forget"])
@@ -252,6 +258,8 @@ def _save_settings(changes: dict) -> str:
         values["searxng_url"] = values["searxng_url"].rstrip("/")
     if values.get("lookup") and values["lookup"].casefold() not in ("on", "off"):
         raise ValueError("Looking people up is on or off.")
+    if values.get("notice_kinds") and values["notice_kinds"].casefold() not in ("on", "off"):
+        raise ValueError("Saying what kinds wait in a notice is on or off.")
     if "vault" in values:
         values["vault"] = _make_vault(values["vault"])
 

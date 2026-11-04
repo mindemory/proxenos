@@ -6,11 +6,14 @@ secret, like a key, since on ntfy.sh anyone who knows a topic can read what's se
 should be long and random. NTFY_TOKEN, a secret too, is for a server with access control, and
 PROXENOS_NTFY_SERVER names the user's own server (default https://ntfy.sh).
 
-A notice says how many of each kind wait and nothing else ("2 drafts to send and 1 care item
-wait on you."): never a name, a message's words, a subject or a health detail, since the server
-is a third party and a notice shows on a lock screen. The kinds are what the page's Home asks
-the user about, counted as it counts them: drafts to send, care items that are the user's move,
-project steps waiting for review, and open tasks overdue or due within SOON_DAYS days.
+A notice says how many things wait and nothing else ("3 things wait for you."): never a name,
+a message's words, a subject or a health detail, since the server is a third party and a notice
+shows on a lock screen, where even "1 care item" says something about the user's health. With
+PROXENOS_NOTICE_KINDS on, it says how many of each kind ("2 drafts to send and 1 care item wait
+on you."). The kinds are what the page's Home asks the user about, counted as it counts them:
+drafts to send, care items that are the user's move, project steps waiting for review, and open
+tasks overdue or due within SOON_DAYS days. The page suggests a topic of TOPIC_CHARS random
+letters and digits after "proxenos-", and setup takes none shorter than MIN_TOPIC.
 
 `proxenos sync` and `proxenos night` call `run` as they finish. A run sends at most one notice,
 and only when a count went up since the last one: state/notified.json keeps the counts as of
@@ -54,11 +57,14 @@ KINDS = {
 }
 # What a notice carries, for docs/privacy.md and the page's Privacy view.
 SENDS = (
-    "How many drafts, care items, project steps and tasks due soon wait on you, and nothing "
-    "else: never a name, a message's words, a subject or a health detail. The server gets the "
-    "topic and, as with any request, this computer's internet address."
+    "How many things wait on you, and nothing else; with the kinds switched on, how many drafts, "
+    "care items, project steps and tasks due soon. Never a name, a message's words, a subject or "
+    "a health detail. The server gets the topic and, as with any request, this computer's "
+    "internet address."
 )
 TOPIC = re.compile(r"[A-Za-z0-9_-]{1,64}")  # the names ntfy takes
+MIN_TOPIC = 20  # on ntfy.sh anyone who knows a topic reads it: one this short is guessed
+TOPIC_CHARS = 24  # of a topic the page makes up (web/src/components/views/Settings.tsx)
 _QUIET = re.compile(r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})")
 _SETTLED = ("discarded", "sent", "overtaken")  # a draft's statuses once it's dealt with
 _NOTES = ("doc", "checklist", "plan", "note")  # kept for the user when addressed to no one
@@ -136,15 +142,24 @@ def counts(vault: Path, now: datetime | None = None) -> dict[str, int]:
     return found
 
 
-def message(counts: dict[str, int]) -> str | None:
-    """The notice's words, counts and kinds only: "2 drafts to send and 1 care item wait on
+def message(counts: dict[str, int], kinds: bool | None = None) -> str | None:
+    """The notice's words, a count only: "3 things wait for you." With `kinds` (by default, the
+    user's PROXENOS_NOTICE_KINDS), counts by kind: "2 drafts to send and 1 care item wait on
     you." None when nothing waits."""
     waiting = {kind: n for kind in KINDS if (n := counts.get(kind, 0)) > 0}
     if not waiting:
         return None
+    if not (kinds_on() if kinds is None else kinds):
+        total = sum(waiting.values())
+        return f"{total} {'thing waits' if total == 1 else 'things wait'} for you."
     parts = [f"{n} {KINDS[kind][n != 1]}" for kind, n in waiting.items()]
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
     return f"{listed} {'waits' if sum(waiting.values()) == 1 else 'wait'} on you."
+
+
+def kinds_on() -> bool:
+    """Whether the user turned on saying what kinds wait (PROXENOS_NOTICE_KINDS=on)."""
+    return config.env("NOTICE_KINDS").strip().casefold() == "on"
 
 
 def quiet(now: datetime) -> bool:

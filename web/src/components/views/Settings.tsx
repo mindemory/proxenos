@@ -61,7 +61,27 @@ const NOTICE_SETTINGS: { key: SettingKey; label: string; hint: string; placehold
     hint: "In this computer's time. A notice waits until they end; off for none.",
     placeholder: "22:00-08:00",
   },
+  {
+    key: "notice_kinds",
+    label: "Say what kinds",
+    hint: "on to say how many drafts, care items, steps and tasks; empty or off for a count alone, which says nothing on a lock screen.",
+    placeholder: "off",
+  },
 ];
+
+/** A topic no one could guess: "proxenos-" and 24 random letters and digits, made in this browser. */
+function newTopic(): string {
+  const letters = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  // 252 is the largest multiple of 36 under 256: a byte past it would favour the first letters.
+  let picked = "";
+  for (const b of bytes) if (b < 252) picked += letters[b % 36];
+  while (picked.length < 24) {
+    const [b] = crypto.getRandomValues(new Uint8Array(1));
+    if (b < 252) picked += letters[b % 36];
+  }
+  return `proxenos-${picked}`;
+}
 
 const FOLDERS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
   {
@@ -218,7 +238,7 @@ export function Settings() {
       <Group
         kicker="Phone"
         title="Notices on your phone"
-        note="When something new waits on you, one short notice through ntfy, an open-source push service: how many drafts, care items, steps and tasks, never a name, a message's words or a health detail."
+        note="When something new waits on you, one short notice through ntfy, an open-source push service: how many things wait, and how many of each kind only if you turn that on; never a name, a message's words or a health detail."
       >
         <NoticesCard status={status} apply={apply} />
       </Group>
@@ -337,7 +357,7 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
     : s.name === "ANTHROPIC_API_KEY"
       ? "Checked with Anthropic before it's saved."
       : s.name === "NTFY_TOPIC"
-        ? "Letters, digits, - and _, up to 64. The same name you subscribed to in the app."
+        ? "20 to 64 letters, digits, - and _, random. The same name you subscribed to in the app."
         : s.name === "NTFY_TOKEN"
           ? "Only for a server that asks for one. ntfy.sh doesn't."
           : s.name === "BRAVE_SEARCH_KEY"
@@ -444,19 +464,41 @@ function NoticesCard({ status, apply }: { status: SetupStatus; apply: Apply }) {
       <ol className="list-decimal space-y-1 py-3.5 pl-9 pr-4 text-sm leading-relaxed text-muted">
         <li>Install the ntfy app, on Android or iOS.</li>
         <li>
-          Make up a long, random topic name, like proxenos- and twenty letters and digits, and subscribe to it in the
-          app.
+          Make a long, random topic name below, and subscribe to it in the app. On ntfy.sh anyone who knows a topic can read
+          what&apos;s sent to it, so keep it like a password.
         </li>
-        <li>
-          Save it here as the topic. On ntfy.sh anyone who knows a topic can read what&apos;s sent to it, so keep it like a
-          password.
-        </li>
+        <li>Save it here as the topic.</li>
       </ol>
+      <MakeTopic />
       {rows.map((s) => (
         <SecretRow key={s.name} s={s} store={status.secretStore} apply={apply} />
       ))}
       <NoticeSettings status={status} apply={apply} />
       <TestNotice ready={topicSet} />
+    </div>
+  );
+}
+
+/**
+ * Make a topic in this browser, to copy into the ntfy app and then save below. It's made here, not
+ * by the server, so it never comes back from it, as no saved secret does.
+ */
+function MakeTopic() {
+  const [topic, setTopic] = useState<string | null>(null);
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-3.5">
+      <button
+        type="button"
+        onClick={() => setTopic(newTopic())}
+        className="rounded-full border border-line-strong px-3 py-1.5 text-[0.8125rem] text-muted transition-colors hover:text-ink"
+      >
+        Make one
+      </button>
+      {topic && (
+        <code className="num select-all break-all rounded bg-surface-2 px-2 py-1 text-sm text-ink" aria-label="A new topic">
+          {topic}
+        </code>
+      )}
     </div>
   );
 }

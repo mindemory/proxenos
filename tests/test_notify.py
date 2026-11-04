@@ -179,9 +179,8 @@ def test_a_notice_says_counts_and_kinds_and_nothing_else(vault, sent, on, monkey
     assert request.get_method() == "POST"
     assert request.get_header("Authorization") == f"Bearer {TOKEN}"
     body = request.data.decode()
-    assert body == (
-        "1 draft to send, 1 care item, 1 step to review and 1 task due soon wait on you."
-    )
+    # A count alone: on a lock screen even "1 care item" says something about the user's health.
+    assert body == "4 things wait for you."
     said = body + json.dumps(dict(request.header_items()))
     assert not [word for word in PRIVATE if word in said]
     assert state(vault) == {
@@ -192,16 +191,22 @@ def test_a_notice_says_counts_and_kinds_and_nothing_else(vault, sent, on, monkey
         assert (vault / notify.STATE).stat().st_mode & 0o777 == 0o600
 
 
-def test_the_words_agree_with_how_many(vault):
+def test_the_words_agree_with_how_many(vault, monkeypatch):
     assert notify.message({"drafts": 0, "care": 0}) is None
+    assert notify.message({"tasks": 1}) == "1 thing waits for you."
+    assert notify.message({"care": 2, "drafts": 3, "made_up": 5}) == "5 things wait for you."
+    # The kinds only when the user turns them on.
+    monkeypatch.setenv("PROXENOS_NOTICE_KINDS", "on")
     assert notify.message({"tasks": 1}) == "1 task due soon waits on you."
     assert (
         notify.message({"care": 2, "drafts": 3}) == "3 drafts to send and 2 care items wait on you."
     )
     assert notify.message({"steps": 1, "made_up": 5}) == "1 step to review waits on you."
+    assert notify.message({"care": 1}, kinds=False) == "1 thing waits for you."
 
 
-def test_a_notice_goes_only_when_a_count_went_up(vault, sent, on):
+def test_a_notice_goes_only_when_a_count_went_up(vault, sent, on, monkeypatch):
+    monkeypatch.setenv("PROXENOS_NOTICE_KINDS", "on")  # to see which count it was
     assert notify.run(vault, NOON)["notices_sent"] == 1
     assert notify.run(vault, NOON + timedelta(minutes=15)) == {"notices_sent": 0}
     assert len(sent.requests) == 1
@@ -359,6 +364,11 @@ def test_the_topic_and_token_are_secrets_and_the_server_and_hours_settings(tmp_p
     assert notify.configured()
     bad = setup.apply({"secret": "NTFY_TOPIC", "value": "my topic"})
     assert not bad["ok"] and "letters, digits" in bad["error"]
+    short = setup.apply({"secret": "NTFY_TOPIC", "value": "proxenos-alerts"})  # guessed
+    assert not short["ok"] and "at least 20" in short["error"]
+
+    assert setup.apply({"settings": {"notice_kinds": "on"}})["ok"] and notify.kinds_on()
+    assert not setup.apply({"settings": {"notice_kinds": "maybe"}})["ok"]
 
     assert setup.apply({"settings": {"ntfy_server": "https://ntfy.example.org/"}})["ok"]
     assert setup.status()["settings"]["ntfy_server"]["value"] == "https://ntfy.example.org"

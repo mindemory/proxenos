@@ -1074,6 +1074,7 @@ export const SETTING_KEYS = [
   "project_folder",
   "ntfy_server",
   "quiet_hours",
+  "notice_kinds",
   "searxng_url",
   "lookup",
 ] as const;
