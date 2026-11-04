@@ -1486,8 +1486,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(vault: Path, args: argparse.Namespace) -> list[str]:
-    """Review the project, or with --all each one with a manuscript. A line for each, the last
-    saying where the review stands, for the page's job."""
+    """Review the project, or with --all each one with a manuscript, but those kept out of the
+    cloud ("cloud": false, an immigration petition, say), whose papers go to a hosted model only
+    when named. A line for each, the last saying where the review stands, for the page's job."""
     listed = projects.listed_projects(vault)
     if bool(args.id) == bool(args.all):
         raise SystemExit("review: name a project, or give --all")
@@ -1499,6 +1500,12 @@ def run(vault: Path, args: argparse.Namespace) -> list[str]:
         chosen = [p for p in listed if p["repo"] and not p["paused"]]
     said, failed = [], 0
     for project in chosen:
+        if args.all and not project["cloud"]:
+            said.append(
+                f'review: {project["id"]}: kept out of the cloud ("cloud": false), so '
+                "only when you name it"
+            )
+            continue
         if args.all:
             try:
                 if manuscript.find(project) is None:

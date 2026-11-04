@@ -415,6 +415,7 @@ def test_all_reviews_every_project_with_a_manuscript_and_says_why_not_the_rest(
         {"id": "bare", "name": "Bare", "repo": str(bare)},
         {"id": "notes", "name": "Notes only"},
         {"id": "resting", "name": "Resting", "repo": str(repo), "paused": True},
+        {"id": "petition", "name": "Petition", "repo": str(repo), "cloud": False},
     )
 
     cli.main(["review", "--all", "--rounds", "1"])
@@ -422,7 +423,8 @@ def test_all_reviews_every_project_with_a_manuscript_and_says_why_not_the_rest(
     said = capsys.readouterr().out.strip().splitlines()
     assert said[0].startswith("review: birds: 1 round: 3 major concerns open")
     assert said[1] == "review: bare: no manuscript, so no review"
-    assert len(said) == 2
+    assert said[2].startswith("review: petition: kept out of the cloud")  # only when named
+    assert len(said) == 3
     with pytest.raises(SystemExit, match="name a project, or give --all"):
         review.run(vault, argparse.Namespace(id=None, all=False, rounds=1, reviewers=3))
 
