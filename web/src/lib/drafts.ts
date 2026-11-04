@@ -71,6 +71,7 @@ export function kindLabel(kind: string): string {
 export function channelLabel(channel: string): string {
   if (channel === "in_person") return "In person";
   if (channel === "whatsapp") return "WhatsApp";
+  if (channel === "wechat") return "WeChat";
   const text = channel.replace(/[_-]+/g, " ").trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1, 24) : "";
 }

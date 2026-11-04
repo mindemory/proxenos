@@ -288,6 +288,23 @@ def test_with_no_way_to_reach_them_it_waits_and_asks_someone_there_to_introduce(
     assert "Ready instead: a note to Ben Ode" in errand["summary"]
 
 
+def test_a_wechat_message_is_written_to_copy_there_never_sent_another_way(vault):
+    class WeChat(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            return answer | {"channel": "wechat", "cv": False} if "person" in answer else answer
+
+    model = WeChat("Ana Lee", "Acme Labs")
+
+    errand = errands.start(vault, "Message Ana Lee on WeChat about my paper", NOW, model)
+
+    (message,) = errand["messages"]  # her email address is known, and isn't used
+    assert (message["channel"], message["address"], message["state"]) == ("wechat", "", "waiting")
+    assert "in their WeChat chat, where" in model.calls[1]["prompt"]
+    assert errand["summary"] == "Written for Ana Lee: copy it into your WeChat chat with them."
+    assert errands.recheck(vault, errand, NOW) is False
+
+
 def test_an_errand_that_fails_says_so_and_fails(vault):
     def broken(prompt, **kw):
         raise llm.ModelError("the model fell over")

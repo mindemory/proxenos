@@ -54,7 +54,9 @@ EXAMPLE_CHARS = 1500
 CV_CHARS = 4000
 CV_DEPTH = 5  # folders deep a CV is looked for
 OPEN_DAYS = 30  # how long a waiting errand keeps looking each night
-CHANNELS = ("email", "linkedin", "whatsapp", "instagram", "messenger", "x", "any")
+CHANNELS = ("email", "linkedin", "whatsapp", "wechat", "instagram", "messenger", "x", "any")
+# Channels that aren't a source: a message for one is copied there, never sent another way.
+COPIED = {"wechat": "WeChat"}
 _CHAT_SOURCES = {"linkedin": "linkedin", "instagram": "instagram", "facebook": "messenger"}
 _CHAT_SOURCES |= {"twitter": "x", "whatsapp": "whatsapp"}
 # A CV's file name: "resume", "Ana_Lee_CV", "AnaLeeCV", "cv.pdf"; not "CVPR".
@@ -221,15 +223,23 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     _step(vault, errand, "Looked them up", " ".join(found))
 
     routes = reach(vault, name)
-    route = _pick(routes, channel)
+    route = None if channel in COPIED else _pick(routes, channel)
     # No address in the records, and an email would do: their organization's pages may have one.
     web = (
-        bool(org)
+        channel not in COPIED
+        and bool(org)
         and lookup.on()
         and not any(r["channel"] == "email" for r in routes)
         and (route is None or channel == "email")
     )
-    _step(vault, errand, "Looked for a way to reach them", _routes_found(name, routes, route, web))
+    _step(
+        vault,
+        errand,
+        "Looked for a way to reach them",
+        f"It goes by {COPIED[channel]}, which you copy it into: Proxenos doesn't read or send there."
+        if channel in COPIED
+        else _routes_found(name, routes, route, web),
+    )
     if web and (found := on_the_web(vault, errand, name, org)):
         routes.append(found)
         route = found
@@ -294,7 +304,12 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     ]
     intro = answer.get("intro") if isinstance(answer.get("intro"), dict) else {}
     to = _text(intro.get("to"))
-    if not route and to in intro_routes and str(intro.get("body") or "").strip():
+    if (
+        not route
+        and channel not in COPIED
+        and to in intro_routes
+        and str(intro.get("body") or "").strip()
+    ):
         errand["messages"].append(
             _message(
                 "intro",
@@ -318,7 +333,7 @@ def recheck(vault: Path, errand: dict, now: datetime) -> bool:
     model. Whether one of them can go now."""
     found = False
     for message in errand.get("messages", []):
-        if message.get("state") != "waiting":
+        if message.get("state") != "waiting" or message.get("channel") in COPIED:
             continue
         route = _pick(reach(vault, message["to"]), message.get("channel") or "any")
         if route:
@@ -680,13 +695,17 @@ def _write_prompt(
             "The newest records that name them:\n"
             + "\n".join(research._line(h, person) for h in hits[:LINES])
         )
+    copied = COPIED.get(errand.get("channel", ""))
     parts.append(
         f"How {person} can reach them: " + _route_line(errand["person"], route)
         if route
+        else f"How {person} can reach them: in their {copied} chat, where {person} pastes it, "
+        "so it's a chat message, not an email."
+        if copied
         else f"How {person} can reach them: no way found in the records (the message is kept "
         "until an address turns up)."
     )
-    if colleagues and not route:
+    if colleagues and not route and not copied:
         parts.append(
             f"People {person} knows at {errand['org']}:\n"
             + "\n".join(
@@ -805,6 +824,10 @@ def summary(errand: dict) -> str:
     if main["state"] == "ready":
         where = main["address"] or f"their {main['channel']} chat"
         return f"Ready to send to {main['to']} at {where}{with_cv}: press Send, or edit it first."
+    if main.get("channel") in COPIED:
+        return (
+            f"Written for {main['to']}: copy it into your {COPIED[main['channel']]} chat with them."
+        )
     lines = [f"No way to reach {main['to']} in your records, so their message waits{with_cv}."]
     if intro and intro["state"] == "ready":
         lines.append(f"Ready instead: a note to {intro['to']} asking for an introduction.")
