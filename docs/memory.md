@@ -134,6 +134,14 @@ lower, where a handful of drafts would do. The replies the outbox sent itself ne
 itself. A rules file from before keeps its switches, and its bar on the mean is read as the bar
 on the share.
 
+What the record can't see: "untouched" means nothing recorded. Copying a draft by selecting its
+text by hand rather than with Copy, or using it from the page on your phone without its buttons
+(reading it there and writing it out, say), leaves no record, so that draft counts as untouched,
+and one you sent nearly as written would count for the app as if the outbox could have sent it
+unseen. Copy, Open and Sent keep the record honest. Until drafts are also held back unseen and
+measured, the record is drafts you didn't act on in a way the page recorded, which isn't quite
+drafts you never saw.
+
 - **Which replies:** a draft nobody touched, to one person you've written to before (never
   someone new's first email), with no blank left and nothing it asks you, while its chat still
   waits on exactly the messages it answers.
