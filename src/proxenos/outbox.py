@@ -22,9 +22,13 @@ Then, as it goes, it's held for the user when it might reach more than one perso
 something from outside its own conversation:
 - its chat isn't known to be with one person: a group, a chat whose records don't say, or an
   email whose mail went to anyone but the user;
-- its draft rests on what memory held beyond the chat (the draft's "found"), or mentions health,
-  or a name or place (a capitalised word that isn't a sentence's first) the chat and the user's
-  own messages there never had, other than a day, a month and the two people's own names;
+- its prompt held anything beyond the chat: memory's research, the person's records elsewhere,
+  Care, the user's notes or their calendar (the draft's "drew_on", which the drafting code sets
+  from what it put in, never the model; a draft from before it was kept is held too), or the
+  draft says it rested on something (its "found", the model's word);
+- it mentions health, or a name or place (a capitalised word that isn't a sentence's first) the
+  chat and the user's own messages there never had, other than a day, a month and the two
+  people's own names: for what every draft gets, the self-model and the user's own writing;
 - it has a link, an email address, a phone number or a run of DIGITS or more digits that's in
   neither the chat's messages nor the user's own earlier ones there, checked the way a call's
   words are checked against its sheet;
@@ -328,11 +332,19 @@ def _kind(source: str, record: dict) -> str | None:
 
 
 def _outside(chat: dict, body: str, fields: dict, said: list[str]) -> str | None:
-    """Why a reply may carry something from outside its own conversation, or None: its draft
-    says it rested on what memory held beyond the chat ("found": research into other records).
-    And, for what a draft doesn't say it used (Care, notes, the calendar, the self-model), a
-    word of health, or a capitalised word that isn't a sentence's first, a day, a month, the two
-    people's own names or anywhere in the chat or the user's own messages there."""
+    """Why a reply may carry something from outside its own conversation, or None: its prompt
+    held anything beyond the chat (drew_on, which the drafting code sets from what it put in,
+    not the model: memory's research, the person's records elsewhere, Care, the user's notes,
+    the calendar), or a draft from before that was kept, which can't say; or the draft says it
+    rested on something (found, the model's own word). And, for what's in every draft (the
+    self-model, the user's own writing), a word of health, or a capitalised word that isn't a
+    sentence's first, a day, a month, the two people's own names or anywhere in the chat or the
+    user's own messages there."""
+    drew = _drew_on(fields)
+    if drew is None:
+        return "it was drafted before Proxenos kept what its prompt held beyond the chat"
+    if drew:
+        return f"its prompt held more than this chat ({', '.join(_DREW[d] for d in drew)})"
     if work._one_line(fields.get("found")):
         return "it rests on what your memory holds beyond this chat"
     if health := voice._HEALTH.search(body):
@@ -350,6 +362,27 @@ def _outside(chat: dict, body: str, fields: dict, said: list[str]) -> str | None
         if name.casefold() not in known:
             return f"it names something the chat doesn't ({name})"
     return None
+
+
+_DREW = {  # work.DREW_ON, as a held reply's reason says each
+    "memory": "what memory found",
+    "person": "their records elsewhere",
+    "care": "your health care",
+    "notes": "your notes",
+    "calendar": "your calendar",
+}
+
+
+def _drew_on(fields: dict) -> list[str] | None:
+    """What a reply's prompt held beyond its chat, as the drafting code wrote it (work.DREW_ON),
+    or None when the draft doesn't say, or says it in a way the code never writes."""
+    try:
+        drew = json.loads(fields.get("drew_on") or "")
+    except ValueError:
+        return None
+    if not isinstance(drew, list) or not all(d in _DREW for d in drew):
+        return None
+    return drew
 
 
 def _answered(vault: Path, chat: dict) -> dict | None:

@@ -769,6 +769,39 @@ def test_a_reply_looks_up_the_person_and_the_matter_and_keeps_what_it_found(tmp_
     assert "- relation: close friend" in prompt and "happy valentines!" in prompt
     assert "Hall B" in prompt and len(model.gated) == 1
     assert "okiees see you thurs" not in prompt.split("elsewhere")[1]  # this chat isn't repeated
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    assert json.loads(front(path)["drew_on"]) == ["memory", "person", "care"]
+
+
+def test_what_a_reply_prompt_held_beyond_its_chat_is_written_by_the_code(
+    tmp_path, model, monkeypatch
+):
+    vault = chat_vault(tmp_path)
+    write_json(vault / "clones" / "care" / "care.json", {})
+    rule = {"at": "2026-03-01T09:00:00Z", "text": "Keep it short.", "always": True}
+    write_jsonl(vault / "state" / "told.jsonl", [rule])
+    answer = model.__call__
+
+    def says_it_found(prompt, **kwargs):  # the model's word is its own, never drew_on
+        return answer(prompt, **kwargs) | {"found": "Everything you know."}
+
+    monkeypatch.setattr(llm, "ask", says_it_found)
+    work.work(vault, limit=1, now=NOW, read=FakePages())
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    assert json.loads(front(path)["drew_on"]) == []  # the chat, the self-model and a rule
+
+    # A fact told and the week's calendar are in every prompt, Care's summary in a reply's.
+    write_json(vault / "clones" / "care" / "care.json", {"summary": "Waiting on a referral."})
+    fact = {"at": "2026-03-09T09:00:00Z", "text": "Not going to the clinic.", "always": False}
+    write_jsonl(vault / "state" / "told.jsonl", [rule, fact])
+    monkeypatch.setattr(work.plans, "week", lambda *a, **kw: "Fri Mar 13 12:00 Retreat")
+    path.unlink()
+    work.work(vault, limit=3, now=NOW, read=FakePages())
+    (path,) = [p for key, p in drafts(vault).items() if key.startswith("reply-")]
+    assert json.loads(front(path)["drew_on"]) == ["care", "notes", "calendar"]
+    assert len(drafts(vault)) == 3
+    # Nothing that isn't a reply says, since only a reply can go out on its own.
+    assert all("drew_on" not in front(p) for k, p in drafts(vault).items() if k[:6] != "reply-")
 
 
 def test_what_research_opened_reaches_the_draft_inside_the_tag_for_others_words(tmp_path, model):

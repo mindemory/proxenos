@@ -117,6 +117,11 @@ CHANNELS = (
 )
 _CHANNEL_OF = {"facebook": "messenger", "twitter": "x"}  # chat sources by their channel names
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
+# What a reply's prompt can hold beyond its own chat, as the code put it there, in this order:
+# what memory research found for it, the person's records elsewhere and their network note, the
+# summary of the user's health care, the facts and "right now" note they told Proxenos, and their
+# calendar's week. A reply's drew_on lists those its prompt held (see `_drew_on`).
+DREW_ON = ("memory", "person", "care", "notes", "calendar")
 # Statuses that settle a draft: the page sets the first three, and the tasks clone sets
 # overtaken when the messages made it moot. A draft with one is never written again.
 _MINE = ("approved", "discarded", "sent", "overtaken")
@@ -261,6 +266,7 @@ def work(
     # drafts written before, written again with what's changed since.
     queue = sorted(jobs.values(), key=lambda job: job["id"] in existing)
     system = _system(vault / "self", now) + _shared(out, now)
+    beyond = _system_beyond(vault, now)  # what that holds beyond any one chat
     person = env("NAME", "the person")
     own = voice.Writing(vault)  # read once, when the first draft needs it
     written = failed = unneeded = 0
@@ -270,7 +276,9 @@ def work(
         try:
             prompt = job["prompt"] + _examples(own, job) + pages
             if chat := job.get("chat"):  # a reply: what the vault knows beyond this chat
-                prompt += _research(vault, chat, job["prompt"] + pages, person, fence)
+                more, drew = _research(vault, chat, job["prompt"] + pages, person, fence)
+                prompt += more
+                job = job | {"drew_on": _drew_on([*beyond, *job.get("drew_on", []), *drew])}
             elif name := _one_line(job["voice"].get("name")):  # someone they've dealt with before
                 who = research.person(vault, name, person)
                 prompt += f"\n\n{untrusted.wrap(who, fence)}" if who else ""
@@ -347,6 +355,10 @@ def render(draft: dict) -> str:
     for key in ("found", "asks", "thread", "overtaken"):
         if draft.get(key):
             lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
+    # And what its prompt held beyond the chat, even nothing, so a draft from before it was kept
+    # can be told apart (proxenos.outbox holds that one).
+    if draft.get("drew_on") is not None:
+        lines.append(f"drew_on: {json.dumps(draft['drew_on'])}")
     return "\n".join([*lines, "---", "", draft["body"].strip(), ""])
 
 
@@ -438,6 +450,7 @@ def _reply_job(chat: dict, person: str, health: str, today: str) -> dict:
     text, ask = _reply_text(chat, person, health, fence)
     job = _job(reply_key(chat), "reply", f"Reply to {chat['name']}", today, text)
     return job | {
+        "drew_on": ["care"] if health else [],  # the health summary is in its prompt
         "fence": fence,
         "channel": _channel(chat["source"]),
         "to": _one_line(chat["name"]),
@@ -702,9 +715,12 @@ def _voiced(chat: dict, person: str) -> str | None:
         return None
 
 
-def _research(vault: Path, chat: dict, brief: str, person: str, fence: str) -> str:
+def _research(
+    vault: Path, chat: dict, brief: str, person: str, fence: str
+) -> tuple[str, list[str]]:
     """The person and the matter behind a chat, from the rest of the vault, for its prompt: the
-    records found inside the tag `fence`, since they hold other people's words."""
+    records found inside the tag `fence`, since they hold other people's words. And which of
+    them it holds, as DREW_ON names them: decided here, from what went in, never by the model."""
     who = research.person(vault, chat["name"], person, chat=(chat["source"], chat["name"]))
     found, _ = research.matter(vault, brief, person, llm.ask, who=chat["name"])
     parts = [
@@ -717,7 +733,22 @@ def _research(vault: Path, chat: dict, brief: str, person: str, fence: str) -> s
         )
         if p
     ]
-    return "\n\n" + "\n\n".join(parts) if parts else ""
+    drew = ["memory"] * bool(found) + ["person"] * bool(who)
+    return ("\n\n" + "\n\n".join(parts) if parts else ""), drew
+
+
+def _system_beyond(vault: Path, now: datetime) -> list[str]:
+    """What `_system` gives every draft as of `now` beyond any one chat, as DREW_ON names it: the
+    facts or "right now" note the user told (their rules say how to write, not what), and the
+    calendar's week. The self-model, their own writing and posts are in every draft, and are
+    what proxenos.outbox's checks for health and new names are for."""
+    told_facts = any(not n["always"] for n in told.notes(vault, now)) or right_now(vault, now)
+    return ["notes"] * bool(told_facts) + ["calendar"] * bool(plans.week(vault, now))
+
+
+def _drew_on(names: list[str]) -> list[str]:
+    """`names` once each, in DREW_ON's order."""
+    return [name for name in DREW_ON if name in names]
 
 
 def _examples(own: voice.Writing, job: dict) -> str:
@@ -902,6 +933,8 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         ],
         # A reply's chat, so what was sent there after can be compared with the draft.
         "thread": {"source": c["source"], "chat": c["chat"]} if (c := job.get("chat")) else None,
+        # And what its prompt held beyond that chat, as the code put it there.
+        "drew_on": job.get("drew_on", []) if job.get("chat") else None,
         "body": body,
     }
 

@@ -137,11 +137,16 @@ on the share.
   (WhatsApp's, Messenger's, Instagram's and X's chat type, Beeper's for LinkedIn too, or one name
   on a LinkedIn export's messages), and an email only when the mail it answers came from one
   address to you alone. Where the records don't say, it's held.
-- **Nothing from outside the chat:** a draft that says it rested on what your memory held beyond
-  the chat (its "found") is held. So, as a backstop for what a draft doesn't say it used (Care,
-  your notes, your calendar), is one that mentions health, or a name or a place (a capitalised
-  word that isn't a sentence's first) that the chat and your own messages there never had, other
-  than a day, a month and your two names.
+- **Nothing from outside the chat:** a reply whose prompt held anything beyond its chat is held:
+  what memory's research found, the person's records elsewhere, Care's summary of your health
+  care, the facts and "right now" note you told Proxenos, or your calendar's week. The drafting
+  code writes which into the draft as it builds the prompt (`drew_on`), so it doesn't rest on
+  the model saying what it used; a draft made before Proxenos kept that is held too, and so is
+  one whose own "found" says it rested on something. Since the self-model and your own writing
+  are in every draft, a backstop holds one that mentions health, or a name or a place (a
+  capitalised word that isn't a sentence's first) that the chat and your own messages there
+  never had, other than a day, a month and your two names. Most replies to someone with records
+  elsewhere are held, then: what can't be shown to come from the chat alone stays a draft.
 - **What else holds one back:** a link, an email address, a phone number or a run of six or more
   digits that's in neither the chat nor your own earlier messages there, or, for email, mail
   whose Reply-To isn't its sender (or was read before Proxenos kept Reply-To). A held reply

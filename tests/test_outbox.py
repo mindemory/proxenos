@@ -67,11 +67,13 @@ def measured(vault, source, closeness):
     )
 
 
-def reply(vault, draft_id, body, status="draft", asks="[]"):
+def reply(vault, draft_id, body, status="draft", asks="[]", drew_on="[]"):
+    drew = f"drew_on: {drew_on}\n" if drew_on is not None else ""
     write(
         vault / "clones" / "drafts" / f"{draft_id}.md",
         f'---\nid: {draft_id}\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: whatsapp\n'
-        f'to: "Asha"\ncreated: 2026-03-10T10:00:00Z\nstatus: {status}\nasks: {asks}\n---\n\n{body}\n',
+        f'to: "Asha"\ncreated: 2026-03-10T10:00:00Z\nstatus: {status}\nasks: {asks}\n{drew}---\n\n'
+        f"{body}\n",
     )
 
 
@@ -379,8 +381,9 @@ def test_a_signed_reply_says_it_was_sent_by_the_assistant(vault):
 def held_for(vault, body, **front):
     """Why the outbox held a reply with `body` and these front matter fields, or None."""
     (path,) = (vault / "clones" / "drafts").glob("reply-*.md")
-    reply(vault, path.stem, body)
-    extra = "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items())
+    reply(vault, path.stem, body, drew_on=None)
+    front = {"drew_on": [], **front}
+    extra = "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items() if v is not None)
     path.write_text(path.read_text().replace("asks: []\n", "asks: []\n" + extra))
     send = Sender()
     outbox.run(vault, NOW, {"beeper": send})
@@ -393,6 +396,11 @@ def held_for(vault, body, **front):
     "body, front, why",
     [
         ("yaa coming", {"found": "The trip is booked for Friday."}, "beyond this chat"),
+        # What the code put in the prompt holds it, whatever the model said it used.
+        ("yaa coming", {"drew_on": ["memory"]}, "more than this chat (what memory found)"),
+        ("yaa coming", {"drew_on": ["care", "calendar"]}, "(your health care, your calendar)"),
+        ("yaa coming", {"drew_on": None}, "before Proxenos kept what its prompt held"),
+        ("yaa coming", {"drew_on": ["whatever"]}, "before Proxenos kept what its prompt held"),
         ("yaa coming, after the doctor", {}, "health (doctor)"),
         ("yaa coming, my back pain is better", {}, "health (pain)"),
         ("yaa coming with Priya", {}, "names something the chat doesn't (Priya)"),
