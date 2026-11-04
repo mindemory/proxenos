@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from proxenos import cli, compare, llm
+from proxenos import cli, compare, fidelity, llm
 
 NOW = datetime(2026, 3, 20, 12, 0, tzinfo=UTC)
 LOCAL, OTHER = "ollama:drafter", "ollama:other"
@@ -255,6 +255,28 @@ def test_the_results_count_wins_with_wilson_intervals(tmp_path, models):
     assert other["where"] == "this computer" and other["drafted"] == 4 and other["failed"] == 0
     assert 0 <= other["closeness"] <= 1
     assert "Under about 20" in results["note"]
+
+
+def test_a_rounds_closeness_is_worked_out_again_from_its_texts(tmp_path, models):
+    vault = many_chats(tmp_path, 2)
+    shown = compare.start(vault, OTHER, n=2, now=NOW, rng=random.Random(5))
+    path = vault / compare.FOLDER / f"{shown['round']['id']}.json"
+    doc = json.loads(path.read_text())
+    for item in doc["items"]:
+        for draft in item["drafts"].values():
+            draft["closeness"] = 0.01  # as an older measure might have left it
+    path.write_text(json.dumps(doc))
+
+    again = {m["name"]: m["closeness"] for m in compare.results(vault)["results"]["models"]}
+
+    measured: dict[str, list[float]] = {}
+    for item in doc["items"]:
+        sent = [{"text": text} for text in item["sent"]]
+        for draft in item["drafts"].values():
+            close = round(fidelity._closeness(draft["text"], sent), 3)
+            measured.setdefault(draft["model"], []).append(close)
+    assert again == {name: round(sum(c) / len(c), 3) for name, c in measured.items()}
+    assert all(close > 0.01 for close in again.values())
 
 
 def test_wilson_intervals():

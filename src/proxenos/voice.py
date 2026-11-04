@@ -356,12 +356,15 @@ def _edits(path: Path) -> list[dict]:
         before, after = _tidy(event.get("before")), _tidy(event.get("after"))
         if before and after and before != after:
             channel = str(event.get("channel") or "")
+            # The draft first and the user's version second, without autojunk, as fidelity
+            # measures closeness: with it, a long draft would be scored by another rule.
+            close = SequenceMatcher(None, before, after, autojunk=False).ratio()
             found.append(
                 {
                     "source": _SOURCE_OF.get(channel, channel),
                     "to": event.get("to") or "",
                     "ts": str(event.get("ts") or ""),
-                    "closeness": round(SequenceMatcher(None, before, after).ratio(), 2),
+                    "closeness": round(close, 2),
                     "draft_text": before,
                     "sent_text": after,
                 }

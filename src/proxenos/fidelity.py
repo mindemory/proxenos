@@ -144,7 +144,12 @@ def _sent(messages: list[dict], drafted: str) -> list[dict]:
 
 
 def _closeness(draft: str, sent: list[dict]) -> float:
-    return SequenceMatcher(None, _plain(draft), _plain(" ".join(m["text"] for m in sent))).ratio()
+    """How much of the draft survived into what was sent: difflib's ratio (Ratcliff/Obershelp),
+    the draft first and what was sent second. Without autojunk, which in a text of 200 or more
+    characters takes every character making up more than about 1% of it for junk, so long
+    replies and emails would be scored by another rule than short chats."""
+    sent_text = _plain(" ".join(m["text"] for m in sent))
+    return SequenceMatcher(None, _plain(draft), sent_text, autojunk=False).ratio()
 
 
 def _clip(text: str) -> str:

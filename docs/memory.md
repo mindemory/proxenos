@@ -95,7 +95,12 @@ is yours to decide, and says what it would need to.
 That distance can be measured, so it doesn't rest on impressions:
 - **Voice:** how much of each draft you change before sending. Proxenos sees the draft and, at the
   next sync, what you actually sent in that chat, so it can score how close it came, per person
-  and per kind of message.
+  and per kind of message. Closeness is the share of the draft still in what you sent: Python's
+  difflib ratio (Ratcliff/Obershelp) on the words in lower case, the draft first and what you
+  sent second, without difflib's autojunk, which would score a text of 200 characters or more
+  by another rule than a short chat. Each sync measures every draft again, and a comparison
+  round's scores are worked out again from its texts whenever it's read, so every score
+  follows the measure as it is now.
 - **Judgment:** how often a draft's "needs from you" questions were the ones you actually had to
   answer, and how often you discarded a draft as wrong rather than unneeded.
 

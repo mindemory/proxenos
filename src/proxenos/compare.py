@@ -506,6 +506,13 @@ def _load(path: Path) -> dict | None:
         return None
     if not shaped:
         return None
+    # Each draft's closeness worked out again from its text and what was sent, so a round drafted
+    # before the measure changed (proxenos.fidelity._closeness) counts by the one a new round has.
+    for item in doc["items"]:
+        sent = [{"text": text} for text in item.get("sent") or [] if isinstance(text, str)]
+        for draft in item["drafts"].values():
+            if isinstance(draft, dict) and isinstance(draft.get("text"), str) and sent:
+                draft["closeness"] = round(fidelity._closeness(draft["text"], sent), 3)
     picks: dict[int, dict] = {}
     try:
         lines = _picks_path(path.parent, path.stem).read_text(encoding="utf-8").splitlines()

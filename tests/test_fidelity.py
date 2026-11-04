@@ -1,6 +1,7 @@
 """How close reply drafts came to what was sent, on a synthetic vault. No model, no real data."""
 
 import json
+from difflib import SequenceMatcher
 
 from proxenos import fidelity
 
@@ -85,6 +86,20 @@ def test_closeness_falls_as_the_draft_is_rewritten():
     assert fidelity._closeness("sorry can't make it friday", sent) == 1.0
     assert fidelity._closeness("Sorry, can't make it on Friday!", sent) > 0.8
     assert fidelity._closeness("Let's do lunch next week instead", sent) < 0.5
+
+
+def test_a_long_reply_sent_nearly_as_written_scores_near_one():
+    # A passage said twice, as a schedule or a list does, with one word changed: difflib's
+    # autojunk takes most characters of a text this long for junk and scores it about half.
+    said = (
+        "thanks for sending the draft over, I read it twice and the second section on methods "
+        "reads much better now but the figures still need labels on both axes and a legend"
+    )
+    draft = f"{said} {said}"
+    sent = draft.replace("twice", "again", 1)
+    assert len(draft) > 200
+    assert SequenceMatcher(None, fidelity._plain(draft), fidelity._plain(sent)).ratio() < 0.6
+    assert fidelity._closeness(draft, [{"text": sent}]) > 0.98
 
 
 def note(folder, name, channel, to, created="2026-03-10T12:00:00Z", status="draft"):
