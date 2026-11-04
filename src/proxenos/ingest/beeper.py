@@ -144,6 +144,8 @@ def _record(source: str, chat: dict, m: dict) -> dict | None:
         return common | {
             "conversation_id": chat_id,
             "conversation_title": chat.get("title") or None,
+            # Whether it's with one person, which LinkedIn's own export says only by whom it's to.
+            "conversation_type": "direct" if chat.get("type") == "single" else "group",
             "author": sender,
             "folder": "INBOX",
         }

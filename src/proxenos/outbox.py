@@ -1,19 +1,36 @@
 """The outbox: replies that go out on their own, within rules the user sets on the Drafts page.
 
 Off until the user switches it on, and then only per app ("channel"), and only for an app whose
-replies have earned it: at least min_measured of them measured (fidelity.py) and, on average,
-min_closeness of each draft still in what the user then sent. A reply qualifies only when it is
-a draft nobody has touched, for one person (never a group) who has heard from the user before
-(never someone new's first email), with no [placeholder] left and nothing it asks the user, and
-only while its chat is still waiting on exactly the messages it answers. A qualifying reply is
-queued at one sync and goes out at the next, so the user has until then (about 15 minutes) to
-cancel it on the page; at most daily_limit go out a day.
+replies have earned it on the evidence that matches what it sends. The outbox sends drafts nobody
+touched, so its track record is the app's reply drafts the user didn't act on (didn't copy, open
+in their app, edit, approve, mark sent, keep or think through in Think: proxenos.fidelity measures
+them all, the page's feedback.jsonl and Think's threads say which were used) and that it didn't
+send itself, since its own sends would vouch for themselves. Of those, the share that came out
+nearly unchanged (closeness at least NEARLY) must be at least min_share (0.9) with 95%
+confidence: the Wilson lower bound of that share. With every one unchanged, 0.9 takes 35 drafts.
+At least min_measured of them, too. A rules.json from before keeps its switches, and its
+min_closeness, the old bar on the mean, is read as min_share.
 
-Then, as it goes, it's checked the way a call's words are checked against its sheet: a reply
-with a link, an email address, a phone number or a run of DIGITS or more digits that's in
-neither the chat's messages nor the user's own earlier ones there is held, and so is an email
-reply to mail whose Reply-To isn't its From (a reply would go somewhere else) or that was read
-before Reply-To was kept. A held reply stays a draft for the user, and the log says why.
+A reply qualifies only when it is a draft nobody has touched, for one person who has heard from
+the user before (never someone new's first email), with no [placeholder] left and nothing it
+asks the user, and only while its chat is still waiting on exactly the messages it answers. A
+qualifying reply is queued at one sync and goes out at the next, so the user has until then
+(about 15 minutes) to cancel it on the page; at most daily_limit go out a day. With the app's
+"sign" on (off unless the user turns it on), it goes out with SIGN under it.
+
+Then, as it goes, it's held for the user when it might reach more than one person, or carry
+something from outside its own conversation:
+- its chat isn't known to be with one person: a group, a chat whose records don't say, or an
+  email whose mail went to anyone but the user;
+- its draft rests on what memory held beyond the chat (the draft's "found"), or mentions health,
+  or a name or place (a capitalised word that isn't a sentence's first) the chat and the user's
+  own messages there never had, other than a day, a month and the two people's own names;
+- it has a link, an email address, a phone number or a run of DIGITS or more digits that's in
+  neither the chat's messages nor the user's own earlier ones there, checked the way a call's
+  words are checked against its sheet;
+- it's an email reply to mail whose Reply-To isn't its From (a reply would go somewhere else) or
+  that was read before Reply-To was kept.
+A held reply stays a draft for the user, and the log says why.
 
 How each app sends ("routes"): email through the Mail app (it replies in the thread, from the
 account the mail came to, as if the user pressed Reply); Instagram, Messenger, X and LinkedIn,
@@ -28,6 +45,7 @@ Nothing goes out from a made-up vault (`proxenos demo`, marked by its DEMO file)
 """
 
 import json
+import math
 import os
 import re
 import shutil
@@ -38,8 +56,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, links
+from proxenos import chats, links, voice
 from proxenos.clones import work
+from proxenos.config import env
 from proxenos.ingest import beeper
 
 CHANNELS = ("email", "whatsapp", "slack", "instagram", "messenger", "x", "linkedin")
@@ -51,7 +70,23 @@ _WWW = re.compile(r"\bwww\.[^\s<>\"'(){}\[\]]+", re.IGNORECASE)  # a link withou
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 # A phone number or another number, with the spaces, dots, dashes and brackets inside it.
 _NUMBER = re.compile(r"\+?\(?\d[\d ().-]*\d")
-DEFAULT_RULE = {"on": False, "min_closeness": 0.9, "min_measured": 5}
+DEFAULT_RULE = {"on": False, "min_share": 0.9, "min_measured": 5, "sign": False}
+MAX_SHARE = 0.99  # a share of 1 could never be shown: the bound is always under it
+NEARLY = 0.9  # a measured draft this close to what was sent went out nearly unchanged
+Z = 1.96  # 95% confidence, for the Wilson bound
+# What the user does with a draft on the page that makes it theirs: all but discard, which
+# counts against an app like a reply they rewrote.
+USED = ("approve", "copy", "opened", "edit", "sent", "keep")
+SIGN = "\n\n(sent by my assistant)"
+# A capitalised word, to tell a name or a place; an apostrophe or a hyphen splits it.
+_WORD = re.compile(r"[^\W\d_]+")
+_DAYS = frozenset(
+    """
+    monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu thur thurs fri
+    sat sun january february march april may june july august september october november
+    december jan feb mar apr jun jul aug sep sept oct nov dec
+    """.split()  # noqa: SIM905 (a word list reads better as words)
+)
 DEMO = "DEMO"  # the file that marks a vault `proxenos demo` made up
 
 Send = Callable[[dict, str], None]  # (the draft's chat, the text) → sent, or raises
@@ -69,24 +104,26 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
     folder = vault / "clones" / "outbox"
     rules = read_rules(folder / "rules.json")
     routes = {} if is_demo(vault) else _routes()
-    closeness = _closeness(vault)
-    earned = {
-        ch: closeness.get(ch, {}).get("n", 0) >= rule["min_measured"]
-        and closeness.get(ch, {}).get("mean", 0) >= rule["min_closeness"]
-        for ch, rule in rules["channels"].items()
-    }
+    log = _jsonl(folder / "log.jsonl")
+    evidence = _evidence(vault, log)
+    earned = {}
+    for ch, rule in rules["channels"].items():
+        e = evidence.get(ch, {"n": 0, "unchanged": 0})
+        earned[ch] = (
+            e["n"] >= rule["min_measured"] and wilson(e["unchanged"], e["n"]) >= rule["min_share"]
+        )
     allowed = {
         ch
         for ch, rule in rules["channels"].items()
         if rules["enabled"] and rule["on"] and earned[ch] and routes.get(ch)
     }
     cancelled = {e.get("draft_id") for e in _jsonl(folder / "cancelled.jsonl")}
-    log = _jsonl(folder / "log.jsonl")
     today = now.date().isoformat()
     sent_today = sum(1 for e in log if e.get("ok") and str(e.get("at", "")).startswith(today))
     held = {e.get("draft_id") for e in log if e.get("held")}  # left for the user, logged once
     previous = _json(folder / "state.json") or {}
-    replies = {r["id"]: r for r in _replies(vault, now)}  # the drafts that could go out now
+    # The drafts that could go out now, for the apps allowed to send.
+    replies = {r["id"]: r for r in _replies(vault, now, allowed)}
     stats = {"outbox_sent": 0, "outbox_failed": 0, "outbox_held": 0}
 
     def hold(draft: dict) -> None:
@@ -110,8 +147,9 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
             queue.append(item)  # waits for tomorrow's allowance
             continue
         route = routes[draft["channel"]]
+        text = draft["text"] + (SIGN if rules["channels"][draft["channel"]]["sign"] else "")
         try:
-            ((senders or {}).get(route) or SENDERS[route])(draft["thread"], draft["text"])
+            ((senders or {}).get(route) or SENDERS[route])(draft["thread"], text)
         except Exception as e:  # noqa: BLE001 - one failure is logged; it must not stop the sync
             _log(folder, draft, route, now, error=" ".join(str(e).split())[:300])
             stats["outbox_failed"] += 1
@@ -140,7 +178,11 @@ def run(vault: Path, now: datetime | None = None, senders: dict[str, Send] | Non
     state = {
         "generated": _iso(now),
         "routes": routes,
-        "closeness": closeness,
+        "closeness": _closeness(vault),
+        "evidence": {
+            ch: e | {"lower": round(wilson(e["unchanged"], e["n"]), 3)}
+            for ch, e in evidence.items()
+        },
         "earned": earned,
         "queue": queue,
         "sent_today": sent_today,
@@ -160,19 +202,21 @@ def read_rules(path: Path) -> dict:
     given = raw.get("channels") if isinstance(raw.get("channels"), dict) else {}
     for ch in CHANNELS:
         c = given.get(ch) if isinstance(given.get(ch), dict) else {}
-        rule = dict(DEFAULT_RULE, on=c.get("on") is True)
-        if isinstance(c.get("min_closeness"), int | float) and 0.5 <= c["min_closeness"] <= 1:
-            rule["min_closeness"] = float(c["min_closeness"])
+        rule = dict(DEFAULT_RULE, on=c.get("on") is True, sign=c.get("sign") is True)
+        # An older file's bar on the mean closeness is read as the bar on the share.
+        share = c.get("min_share", c.get("min_closeness"))
+        if isinstance(share, int | float) and not isinstance(share, bool) and 0.5 <= share <= 1:
+            rule["min_share"] = min(float(share), MAX_SHARE)
         if _int(c.get("min_measured"), 1, 100):
             rule["min_measured"] = c["min_measured"]
         rules["channels"][ch] = rule
     return rules
 
 
-def _replies(vault: Path, now: datetime) -> list[dict]:
-    """The reply drafts that could go out: nobody has touched them, they're for one person
-    who isn't new, nothing is left to fill in or ask, and their chat still waits on what they
-    answer. Each says why it must be held instead (see _held), or None."""
+def _replies(vault: Path, now: datetime, allowed: set[str]) -> list[dict]:
+    """The reply drafts that could go out, on the `allowed` apps: nobody has touched them, they're
+    for someone who isn't new, nothing is left to fill in or ask, and their chat still waits on
+    what they answer. Each says why it must be held instead (see _held), or None."""
     folder = vault / "clones" / "drafts"
     edited = work._latest(folder / "feedback.jsonl", "draft_id", ("edit",))
     current = {work.reply_key(c): c for c in chats.waiting(vault, now)}
@@ -182,6 +226,9 @@ def _replies(vault: Path, now: datetime) -> list[dict]:
         fields, front = work._front(text) or {}, work._FRONT.match(text)
         chat = current.get(path.stem)
         if not front or not chat or fields.get("status") != "draft" or path.stem in edited:
+            continue
+        channel = _SOURCE_CHANNEL.get(chat["source"], chat["source"])
+        if channel not in allowed:
             continue
         body = text[front.end() :].strip()
         if not body or _PLACEHOLDER.search(body) or json.loads(fields.get("asks") or "[]"):
@@ -194,23 +241,26 @@ def _replies(vault: Path, now: datetime) -> list[dict]:
             {
                 "id": path.stem,
                 "path": path,
-                "channel": _SOURCE_CHANNEL.get(chat["source"], chat["source"]),
+                "channel": channel,
                 "to": fields.get("to", ""),
                 "thread": {"source": chat["source"], "chat": chat["chat"], "last": chat["id"]},
                 "text": body,
-                "held": _held(vault, chat, body),
+                "held": _held(vault, chat, body, fields),
             }
         )
     return found
 
 
-def _held(vault: Path, chat: dict, body: str) -> str | None:
-    """Why a reply mustn't go out on its own, or None. A link, an email address or a number in
-    it that the chat never had is one the model may have made up, and a model that makes up
-    where to go, whom to write or what to pay isn't the one to send it. And an email reply goes
-    where the mail it answers says replies go, so only where that's its sender."""
+def _held(vault: Path, chat: dict, body: str, fields: dict) -> str | None:
+    """Why a reply mustn't go out on its own, or None. It must reach one person (_group) and
+    carry nothing from outside its own conversation (_outside). A link, an email address or a
+    number in it that the chat never had is one the model may have made up, and a model that
+    makes up where to go, whom to write or what to pay isn't the one to send it. And an email
+    reply goes where the mail it answers says replies go, so only where that's its sender."""
     said = [m["text"] for m in [*chat["recent"], *chat["waiting"]]] + list(chat["own"])
     folded = "\n".join(said).casefold()
+    if why := _group(vault, chat) or _outside(chat, body, fields, said):
+        return why
     for link in [*links.find(body), *(w.rstrip(".,;:!?*") for w in _WWW.findall(body))]:
         if link.casefold() not in folded:
             return f"it has a link the chat doesn't ({link})"
@@ -229,6 +279,76 @@ def _held(vault: Path, chat: dict, body: str) -> str | None:
         sender = str(answered.get("from_address") or "").lower()
         if any(str(a).lower() != sender for a in answered.get("reply_to") or []):
             return "the mail it answers asks for replies to another address (Reply-To)"
+    return None
+
+
+def _group(vault: Path, chat: dict) -> str | None:
+    """Why a reply might reach more than one person, or None when its chat is known to be with
+    one: for email, the mail it answers came from one address to the user alone; for a chat,
+    every record of it in the months the conversation spans says it's direct. A record that
+    doesn't say counts against it: what can't be known is held."""
+    if chat["source"] == "email":
+        answered = _answered(vault, chat)
+        me = {a.strip().lower() for a in env("EMAILS").split(",") if a.strip()}
+        if answered is None or not me:
+            return "who else the mail it answers went to can't be told"
+        others = {
+            a.lower()
+            for entry in [*(answered.get("to") or []), *(answered.get("cc") or [])]
+            for a in chats._ADDRESS.findall(str(entry))
+        }
+        if others - me or len(chats._ADDRESS.findall(str(answered.get("from_address")))) != 1:
+            return "the mail it answers went to others too"
+        return None
+    if chat["source"] not in chats._SOURCES:
+        return "it's a chat Proxenos can't tell is with one person"
+    stream, _ = chats._SOURCES[chat["source"]]
+    key = "conversation_id" if chat["source"] in ("linkedin", "twitter") else "chat_id"
+    months = {m["ts"][:7] for m in [*chat["recent"], *chat["waiting"]]}
+    paths = sorted((vault / "raw" / chat["source"] / stream).glob("*.jsonl"))
+    records = [
+        r
+        for r in chats._records([p for p in paths if p.stem in months])
+        if str(r.get(key)) == chat["chat"]
+    ]
+    if not records or any(_kind(chat["source"], r) != "direct" for r in records):
+        return "it's a group, or its records don't say it's with one person"
+    return None
+
+
+def _kind(source: str, record: dict) -> str | None:
+    """Whether a chat's record says it's "direct" or a "group", or None when it doesn't. A
+    LinkedIn export says it by whom each message is to: one person, or several."""
+    if source in ("whatsapp", "facebook", "instagram"):
+        return record.get("chat_type")
+    if kind := record.get("conversation_type"):
+        return kind
+    to = str(record.get("to") or "").strip() if source == "linkedin" else ""
+    return ("group" if "," in to else "direct") if to else None
+
+
+def _outside(chat: dict, body: str, fields: dict, said: list[str]) -> str | None:
+    """Why a reply may carry something from outside its own conversation, or None: its draft
+    says it rested on what memory held beyond the chat ("found": research into other records).
+    And, for what a draft doesn't say it used (Care, notes, the calendar, the self-model), a
+    word of health, or a capitalised word that isn't a sentence's first, a day, a month, the two
+    people's own names or anywhere in the chat or the user's own messages there."""
+    if work._one_line(fields.get("found")):
+        return "it rests on what your memory holds beyond this chat"
+    if health := voice._HEALTH.search(body):
+        return f"it mentions health ({health[0]})"
+    names = [chat.get("name") or "", env("NAME")]
+    names += [m.get("sender") or "" for m in [*chat["recent"], *chat["waiting"]]]
+    known = {w.casefold() for text in [*said, *names] for w in _WORD.findall(text)} | _DAYS
+    for word in _WORD.finditer(body):
+        name = word[0]
+        if len(name) < 2 or not name[0].isupper() or name.isupper():
+            continue  # "I", "OK": not a name
+        before = body[: word.start()].rstrip(" \t\"'“‘(*_")
+        if not before or before[-1] in ".!?:\n/…":
+            continue  # a sentence's first word
+        if name.casefold() not in known:
+            return f"it names something the chat doesn't ({name})"
     return None
 
 
@@ -264,8 +384,57 @@ _BEEPER_NETWORKS = {
 }
 
 
+def _evidence(vault: Path, log: list[dict]) -> dict[str, dict]:
+    """The track record per app that matches what the outbox sends, untouched drafts: of the
+    reply drafts measured (fidelity.json) that the user didn't act on (USED in the page's
+    feedback.jsonl, or a Think thread started from it) and that the outbox didn't send itself
+    (an ok line in `log`), how many (n) and how many came out nearly unchanged (unchanged)."""
+    folder = vault / "clones" / "drafts"
+    measured = (_json(folder / "fidelity.json") or {}).get("drafts")
+    used = set(work._latest(folder / "feedback.jsonl", "draft_id", USED)) | _thought(vault)
+    used |= {e.get("draft_id") for e in log if e.get("ok")}
+    found: dict[str, dict] = {}
+    for m in measured if isinstance(measured, list) else []:
+        draft = m.get("id") if isinstance(m, dict) else None
+        closeness = m.get("closeness") if isinstance(m, dict) else None
+        if not isinstance(draft, str) or not draft.startswith("reply-") or draft in used:
+            continue
+        if not isinstance(closeness, int | float) or isinstance(closeness, bool):
+            continue
+        e = found.setdefault(_SOURCE_CHANNEL.get(m.get("source"), m.get("source")), {"n": 0})
+        e["n"] += 1
+        e["unchanged"] = e.get("unchanged", 0) + (closeness >= NEARLY)
+    return found
+
+
+def _thought(vault: Path) -> set[str]:
+    """The drafts the user thought through in Think: each thread's draft it started from."""
+    found = set()
+    for path in (vault / "clones" / "think").glob("*.json"):
+        context = (_json(path) or {}).get("context")
+        if isinstance(context, dict) and context.get("kind") == "draft":
+            found.add(context.get("id"))
+    return found
+
+
+def wilson(k: int, n: int) -> float:
+    """The share that k successes in n show with 95% confidence: the lower bound of the Wilson
+    score interval. With all n successes it is n / (n + Z²), so a share of 0.9 needs 35."""
+    if n <= 0:
+        return 0.0
+    p = k / n
+    spread = Z * math.sqrt(p * (1 - p) / n + Z * Z / (4 * n * n))
+    return (p + Z * Z / (2 * n) - spread) / (1 + Z * Z / n)
+
+
+def needed(share: float) -> int:
+    """The fewest untouched drafts that could show `share`: every one of them unchanged."""
+    return math.ceil(share * Z * Z / (1 - share))
+
+
 def _closeness(vault: Path) -> dict:
-    """The track record per app, from fidelity.json's per-source means."""
+    """Every measured draft's record per app, from fidelity.json's per-source means, as the
+    page showed it before the evidence: what all drafts, used or not, came to."""
     data = _json(vault / "clones" / "drafts" / "fidelity.json") or {}
     return {
         _SOURCE_CHANNEL.get(source, source): s

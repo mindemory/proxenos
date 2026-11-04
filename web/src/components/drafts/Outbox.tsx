@@ -7,7 +7,14 @@ import { ActionButton } from "@/components/ActionButton";
 import { Bone } from "@/components/Skeleton";
 import { useOutbox } from "@/lib/client";
 import { formatDateTime, formatTime, timeAgo } from "@/lib/format";
-import { OUTBOX_LIMITS, OUTBOX_LOG_SHOWN, outboxChannelLabel, outboxRouteHint, outboxRouteLabel } from "@/lib/outbox";
+import {
+  OUTBOX_LIMITS,
+  OUTBOX_LOG_SHOWN,
+  outboxChannelLabel,
+  outboxNeeded,
+  outboxRouteHint,
+  outboxRouteLabel,
+} from "@/lib/outbox";
 import { OUTBOX_CHANNELS, type OutboxChannel, type OutboxState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -158,13 +165,17 @@ export function Outbox() {
       ALWAYS.includes(c) ||
       rules.channels[c].on ||
       state?.routes[c] !== undefined ||
-      state?.closeness[c] !== undefined,
+      state?.closeness[c] !== undefined ||
+      state?.evidence[c] !== undefined,
   );
   const sent = data.log.filter((e) => e.ok).length;
   const failed = data.log.length - sent;
 
-  const setChannel = (c: OutboxChannel, edit: { on?: boolean; min_closeness?: number; min_measured?: number }, done: string) =>
-    change({ channel: c, ...edit }, done);
+  const setChannel = (
+    c: OutboxChannel,
+    edit: { on?: boolean; min_share?: number; min_measured?: number; sign?: boolean },
+    done: string,
+  ) => change({ channel: c, ...edit }, done);
 
   return (
     <section aria-label="Outbox" className={cn(SECTION, "space-y-3")}>
@@ -190,9 +201,9 @@ export function Outbox() {
           </span>
         </label>
         <p id="outbox-about" className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
-          Only replies to one person, with nothing left for you to fill in or decide, and only where that
-          app&apos;s replies have gone out nearly as drafted. Each waits until the next sync, about 15 minutes, so you can
-          cancel it.
+          Only replies to one person, with nothing left for you to fill in or decide and nothing from outside their
+          chat, and only where that app&apos;s drafts you didn&apos;t touch have gone out nearly as drafted, 95% sure.
+          Each waits until the next sync, about 15 minutes, so you can cancel it.
         </p>
       </div>
 
@@ -238,7 +249,7 @@ export function Outbox() {
           const rule = rules.channels[c];
           const label = outboxChannelLabel(c);
           const route = state?.routes[c] ?? null;
-          const record = state?.closeness[c];
+          const record = state?.evidence[c];
           const status = channelStatus(c, state);
           const hint = state && !route ? outboxRouteHint(c) : "";
           return (
@@ -249,15 +260,21 @@ export function Outbox() {
                   <span className={cn("text-xs", status.className)}>{status.text}</span>
                 </p>
                 <p className="text-sm text-muted">
-                  {record ? (
+                  {record && record.n > 0 ? (
                     <>
-                      <span className="num text-ink">{record.n}</span> measured,{" "}
-                      <span className="num text-ink">{Math.round(record.mean * 100)}%</span> close
+                      <span className="num text-ink">{record.unchanged}</span> of{" "}
+                      <span className="num text-ink">{record.n}</span> drafts you didn&apos;t touch went out nearly
+                      unchanged: at least <span className="num text-ink">{Math.floor(record.lower * 100)}%</span>, 95%
+                      sure
                     </>
                   ) : (
-                    "Nothing measured yet"
+                    "No draft you didn't touch measured yet"
                   )}
                   {route && <span className="text-faint"> · via {outboxRouteLabel(route)}</span>}
+                </p>
+                <p className="text-xs text-faint">
+                  Drafts you copied, opened, edited or thought through don&apos;t count, nor what went out on its own.
+                  With every one unchanged, {Math.round(rule.min_share * 100)}% takes {outboxNeeded(rule.min_share)}.
                 </p>
                 {hint && <p className="text-xs text-faint">{hint}</p>}
               </div>
@@ -278,31 +295,48 @@ export function Outbox() {
                 />
               </div>
 
-              <p className="col-span-2 col-start-1 row-start-2 flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-sm text-muted sm:col-span-1 sm:col-start-2 sm:row-start-1">
-                At least
-                <NumberField
-                  value={rule.min_measured}
-                  min={OUTBOX_LIMITS.measured.min}
-                  max={OUTBOX_LIMITS.measured.max}
-                  label={`${label}: replies measured`}
-                  disabled={saving}
-                  onCommit={(n) => setChannel(c, { min_measured: n }, `${label}: ${n} measured needed`)}
-                  onReject={report}
-                />
-                measured and
-                <span className="inline-flex items-center">
+              <div className="col-span-2 col-start-1 row-start-2 space-y-1.5 text-sm text-muted sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+                  At least
                   <NumberField
-                    value={Math.round(rule.min_closeness * 100)}
-                    min={Math.round(OUTBOX_LIMITS.closeness.min * 100)}
-                    max={Math.round(OUTBOX_LIMITS.closeness.max * 100)}
-                    label={`${label}: percent close`}
+                    value={rule.min_measured}
+                    min={OUTBOX_LIMITS.measured.min}
+                    max={OUTBOX_LIMITS.measured.max}
+                    label={`${label}: untouched drafts measured`}
                     disabled={saving}
-                    onCommit={(n) => setChannel(c, { min_closeness: n / 100 }, `${label}: ${n}% close needed`)}
+                    onCommit={(n) => setChannel(c, { min_measured: n }, `${label}: ${n} measured needed`)}
                     onReject={report}
                   />
-                  % close
-                </span>
-              </p>
+                  measured and
+                  <span className="inline-flex items-center">
+                    <NumberField
+                      value={Math.round(rule.min_share * 100)}
+                      min={Math.round(OUTBOX_LIMITS.share.min * 100)}
+                      max={Math.round(OUTBOX_LIMITS.share.max * 100)}
+                      label={`${label}: percent unchanged`}
+                      disabled={saving}
+                      onCommit={(n) => setChannel(c, { min_share: n / 100 }, `${label}: ${n}% unchanged needed`)}
+                      onReject={report}
+                    />
+                    % unchanged
+                  </span>
+                </p>
+                <label htmlFor={`outbox-sign-${c}`} className="flex min-h-11 cursor-pointer items-center gap-2">
+                  <Switch
+                    id={`outbox-sign-${c}`}
+                    on={rule.sign}
+                    disabled={saving}
+                    onToggle={() =>
+                      void setChannel(
+                        c,
+                        { sign: !rule.sign },
+                        rule.sign ? `${label}: replies go out unsigned` : `${label}: replies say your assistant sent them`,
+                      )
+                    }
+                  />
+                  Say your assistant sent it
+                </label>
+              </div>
             </li>
           );
         })}

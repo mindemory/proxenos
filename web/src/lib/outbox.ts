@@ -16,7 +16,8 @@ import {
 
 export const OUTBOX_LIMITS = {
   dailyLimit: { min: 1, max: 50 },
-  closeness: { min: 0.5, max: 1 },
+  // A share of 1 could never be shown: its lower bound is always under it.
+  share: { min: 0.5, max: 0.99 },
   measured: { min: 1, max: 100 },
 } as const;
 
@@ -25,9 +26,20 @@ export const OUTBOX_LOG_SHOWN = 50;
 
 const MAX_QUEUE = 200;
 
-const DEFAULT_CHANNEL: OutboxChannelRule = { on: false, min_closeness: 0.9, min_measured: 5 };
+const DEFAULT_CHANNEL: OutboxChannelRule = { on: false, min_share: 0.9, min_measured: 5, sign: false };
 
-/** Everything off, and a channel must have been sent as drafted nearly always, five times over. */
+/** 95% confidence, as proxenos.outbox bounds the share. */
+const Z = 1.96;
+
+/**
+ * The fewest untouched drafts that could show `share` at 95% confidence: every one of them sent
+ * nearly unchanged. 35 for 90%. As proxenos.outbox.needed works it out.
+ */
+export function outboxNeeded(share: number): number {
+  return Math.ceil((share * Z * Z) / (1 - share));
+}
+
+/** Everything off, and a channel's untouched drafts must show 90% go out nearly as drafted. */
 export function defaultOutboxRules(): OutboxRules {
   const channels = Object.fromEntries(OUTBOX_CHANNELS.map((c) => [c, { ...DEFAULT_CHANNEL }]));
   return { enabled: false, daily_limit: 10, channels: channels as Record<OutboxChannel, OutboxChannelRule> };
@@ -58,7 +70,10 @@ export function outboxRules(raw: unknown): OutboxRules {
     if (!c) continue;
     const rule = rules.channels[ch];
     rule.on = c.on === true;
-    if (isNum(c.min_closeness, OUTBOX_LIMITS.closeness.min, OUTBOX_LIMITS.closeness.max)) rule.min_closeness = c.min_closeness;
+    rule.sign = c.sign === true;
+    // A file from before has a bar on the mean closeness, read as the bar on the share.
+    const share = "min_share" in c ? c.min_share : c.min_closeness;
+    if (isNum(share, OUTBOX_LIMITS.share.min, 1)) rule.min_share = Math.min(share, OUTBOX_LIMITS.share.max);
     if (isInt(c.min_measured, OUTBOX_LIMITS.measured.min, OUTBOX_LIMITS.measured.max)) rule.min_measured = c.min_measured;
   }
   return rules;
@@ -72,7 +87,7 @@ export function parseOutboxEdit(body: Record<string, unknown>): { edit: OutboxRu
   const keys = Object.keys(body);
   const main = ["enabled", "daily_limit", "channel"].filter((k) => keys.includes(k));
   if (main.length !== 1) return { error: 'send one change: "enabled", "daily_limit" or "channel"' };
-  const extra = keys.filter((k) => !["enabled", "daily_limit", "channel", "on", "min_closeness", "min_measured"].includes(k));
+  const extra = keys.filter((k) => !["enabled", "daily_limit", "channel", "on", "min_share", "min_measured", "sign"].includes(k));
   if (extra.length > 0) return { error: "unknown field" };
 
   if (main[0] === "enabled") {
@@ -91,24 +106,28 @@ export function parseOutboxEdit(body: Record<string, unknown>): { edit: OutboxRu
   if (typeof channel !== "string" || !OUTBOX_CHANNELS.includes(channel as OutboxChannel)) {
     return { error: `channel must be one of ${OUTBOX_CHANNELS.join(", ")}` };
   }
-  const edit: { channel: OutboxChannel; on?: boolean; min_closeness?: number; min_measured?: number } = {
+  const edit: { channel: OutboxChannel; on?: boolean; min_share?: number; min_measured?: number; sign?: boolean } = {
     channel: channel as OutboxChannel,
   };
   if ("on" in body) {
     if (typeof body.on !== "boolean") return { error: "on must be true or false" };
     edit.on = body.on;
   }
-  if ("min_closeness" in body) {
-    const { min, max } = OUTBOX_LIMITS.closeness;
-    if (!isNum(body.min_closeness, min, max)) return { error: `min_closeness must be a number from ${min} to ${max}` };
-    edit.min_closeness = body.min_closeness;
+  if ("sign" in body) {
+    if (typeof body.sign !== "boolean") return { error: "sign must be true or false" };
+    edit.sign = body.sign;
+  }
+  if ("min_share" in body) {
+    const { min, max } = OUTBOX_LIMITS.share;
+    if (!isNum(body.min_share, min, max)) return { error: `min_share must be a number from ${min} to ${max}` };
+    edit.min_share = body.min_share;
   }
   if ("min_measured" in body) {
     const { min, max } = OUTBOX_LIMITS.measured;
     if (!isInt(body.min_measured, min, max)) return { error: `min_measured must be a whole number from ${min} to ${max}` };
     edit.min_measured = body.min_measured;
   }
-  if (Object.keys(edit).length === 1) return { error: "say what to change: on, min_closeness or min_measured" };
+  if (Object.keys(edit).length === 1) return { error: "say what to change: on, min_share, min_measured or sign" };
   return { edit };
 }
 
@@ -129,9 +148,11 @@ export function outboxState(raw: unknown): OutboxState | null {
   // way to send is the safe reading.
   const routes: OutboxState["routes"] = {};
   const closeness: OutboxState["closeness"] = {};
+  const evidence: OutboxState["evidence"] = {};
   const earned: OutboxState["earned"] = {};
   const rawRoutes = record(r.routes);
   const rawCloseness = record(r.closeness);
+  const rawEvidence = record(r.evidence);
   const rawEarned = record(r.earned);
   for (const ch of OUTBOX_CHANNELS) {
     if (rawRoutes && ch in rawRoutes) {
@@ -140,6 +161,10 @@ export function outboxState(raw: unknown): OutboxState | null {
     }
     const s = record(rawCloseness?.[ch]);
     if (s && isInt(s.n, 0, Number.MAX_SAFE_INTEGER) && isNum(s.mean, 0, 1)) closeness[ch] = { n: s.n, mean: s.mean };
+    const e = record(rawEvidence?.[ch]);
+    if (e && isInt(e.n, 0, Number.MAX_SAFE_INTEGER) && isInt(e.unchanged, 0, e.n) && isNum(e.lower, 0, 1)) {
+      evidence[ch] = { n: e.n, unchanged: e.unchanged, lower: e.lower };
+    }
     if (rawEarned && ch in rawEarned) earned[ch] = rawEarned[ch] === true;
   }
 
@@ -164,6 +189,7 @@ export function outboxState(raw: unknown): OutboxState | null {
     generated: text(r.generated),
     routes,
     closeness,
+    evidence,
     earned,
     queue,
     sent_today: isInt(r.sent_today, 0, Number.MAX_SAFE_INTEGER) ? r.sent_today : 0,

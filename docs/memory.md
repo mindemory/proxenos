@@ -120,16 +120,34 @@ and a window to undo. Where they haven't, it stays a draft.
 
 The first step from drafting to acting is the outbox ([outbox.py](../src/proxenos/outbox.py)),
 set on the Drafts page. It is off until you switch it on, and then only per app, and only for
-an app whose replies have earned it: by default at least five measured, and on average nine
-tenths of each draft still in what you sent ([fidelity.py](../src/proxenos/fidelity.py)).
+an app whose replies have earned it on the evidence that matches what it sends. It sends drafts
+nobody touched, so what counts is that app's measured reply drafts ([fidelity.py](../src/proxenos/fidelity.py))
+you didn't act on: not copied, opened in their app, edited, approved, marked sent, kept or
+thought through in Think. Of those, the share whose reply went out nearly unchanged (nine tenths
+or more of the draft still in what you sent) must be at least 90% with 95% confidence, the lower
+bound of its Wilson interval. With every one unchanged, that takes 35 drafts; the page says how
+many your setting needs. The replies the outbox sent itself never count, so it can't vouch for
+itself. A rules file from before keeps its switches, and its bar on the mean is read as the bar
+on the share.
 
-- **Which replies:** a draft nobody touched, to one person (never a group) you've written to
-  before (never someone new's first email), with no blank left and nothing it asks you, while
-  its chat still waits on exactly the messages it answers.
-- **What holds one back:** a link, an email address, a phone number or a run of six or more
+- **Which replies:** a draft nobody touched, to one person you've written to before (never
+  someone new's first email), with no blank left and nothing it asks you, while its chat still
+  waits on exactly the messages it answers.
+- **Never to a group:** a chat goes only when every record of it says it's with one person
+  (WhatsApp's, Messenger's, Instagram's and X's chat type, Beeper's for LinkedIn too, or one name
+  on a LinkedIn export's messages), and an email only when the mail it answers came from one
+  address to you alone. Where the records don't say, it's held.
+- **Nothing from outside the chat:** a draft that says it rested on what your memory held beyond
+  the chat (its "found") is held. So, as a backstop for what a draft doesn't say it used (Care,
+  your notes, your calendar), is one that mentions health, or a name or a place (a capitalised
+  word that isn't a sentence's first) that the chat and your own messages there never had, other
+  than a day, a month and your two names.
+- **What else holds one back:** a link, an email address, a phone number or a run of six or more
   digits that's in neither the chat nor your own earlier messages there, or, for email, mail
   whose Reply-To isn't its sender (or was read before Proxenos kept Reply-To). A held reply
   stays a draft for you, and the log says why.
+- **Signed, if you like:** each app has a "say your assistant sent it" switch, off unless you turn
+  it on, which puts "(sent by my assistant)" under what goes out.
 - **When:** a reply is queued at one sync and goes out at the next, so you have about fifteen
   minutes to cancel it on the page. At most ten go out a day, or the limit you set.
 - **How:** email through the Mail app, as a reply in its thread from the account the mail came

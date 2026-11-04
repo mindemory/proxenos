@@ -2037,7 +2037,7 @@ def _drafts(vault: Path, c: _Clock) -> None:
             },
             "drafts": [
                 {
-                    "id": f"demo-m{n}",
+                    "id": f"reply-demo-m{n}",  # replies, as the outbox's record counts them
                     "source": source,
                     "to": to,
                     "drafted": c.ago(30 + 20 * n),

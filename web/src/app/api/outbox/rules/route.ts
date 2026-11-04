@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  *   {"enabled": boolean}
  *   {"daily_limit": integer 1..50}
  *   {"channel": email|whatsapp|slack|instagram|messenger|x|linkedin, "on"?: boolean,
- *    "min_closeness"?: number 0.5..1, "min_measured"?: integer 1..100}
+ *    "min_share"?: number 0.5..0.99, "min_measured"?: integer 1..100, "sign"?: boolean}
  * Anything else is refused. The change is merged into clones/outbox/rules.json (its defaults where
  * the file lacks them) and the answer is the rules as saved. The sync reads that file; this only
  * says what may go out.

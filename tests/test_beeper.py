@@ -129,6 +129,7 @@ def test_linkedin_comes_in_as_a_linkedin_conversation(tmp_path):
         "Dee",
         "INBOX",
     )
+    assert row["conversation_type"] == "direct"  # so a reply can tell it's to one person
 
 
 def test_x_chats_go_with_the_x_exports_direct_messages_and_wait_like_any_chat(tmp_path):

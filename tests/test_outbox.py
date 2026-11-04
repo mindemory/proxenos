@@ -44,10 +44,7 @@ def vault(tmp_path, monkeypatch):
     )
     (chat,) = chats.waiting(tmp_path, NOW)
     reply(tmp_path, work.reply_key(chat), "yaa coming")
-    write(
-        tmp_path / "clones" / "drafts" / "fidelity.json",
-        json.dumps({"by_source": {"whatsapp": {"n": 6, "mean": 0.95}}}),
-    )
+    measured(tmp_path, "whatsapp", [1.0] * 35)
     write(
         tmp_path / "clones" / "outbox" / "rules.json",
         json.dumps({"enabled": True, "channels": {"whatsapp": {"on": True}}}),
@@ -56,6 +53,18 @@ def vault(tmp_path, monkeypatch):
         outbox, "_routes", lambda: dict.fromkeys(outbox.CHANNELS) | {"whatsapp": "beeper"}
     )
     return tmp_path
+
+
+def measured(vault, source, closeness):
+    """fidelity.json with one measured reply draft per closeness, none of them used."""
+    drafts = [
+        {"id": f"reply-past{i:08d}", "source": source, "closeness": c}
+        for i, c in enumerate(closeness)
+    ]
+    write(
+        vault / "clones" / "drafts" / "fidelity.json",
+        json.dumps({"by_source": {source: {"n": len(drafts), "mean": 0.9}}, "drafts": drafts}),
+    )
 
 
 def reply(vault, draft_id, body, status="draft", asks="[]"):
@@ -107,9 +116,9 @@ def test_nothing_goes_while_off_unearned_cancelled_or_unsafe(vault):
 
     write(
         rules,
-        json.dumps({"enabled": True, "channels": {"whatsapp": {"on": True, "min_measured": 10}}}),
+        json.dumps({"enabled": True, "channels": {"whatsapp": {"on": True, "min_measured": 40}}}),
     )
-    assert outbox.run(vault, NOW, {"beeper": send})["outbox_queued"] == 0  # 6 measured isn't 10
+    assert outbox.run(vault, NOW, {"beeper": send})["outbox_queued"] == 0  # 35 measured isn't 40
 
     write(rules, json.dumps({"enabled": True, "channels": {"whatsapp": {"on": True}}}))
     outbox.run(vault, NOW, {"beeper": send})
@@ -155,13 +164,22 @@ def test_rules_are_read_as_strictly_as_the_page_reads_them(tmp_path):
             {
                 "enabled": "yes",
                 "daily_limit": 500,
-                "channels": {"email": {"on": True, "min_closeness": 0.2, "min_measured": 3}},
+                "channels": {
+                    "email": {"on": True, "min_closeness": 0.2, "min_measured": 3},
+                    "whatsapp": {"on": True, "min_closeness": 0.95, "sign": "yes"},
+                    "x": {"on": True, "min_share": 1, "min_closeness": 0.6, "sign": True},
+                },
             }
         ),
     )
     rules = outbox.read_rules(tmp_path / "rules.json")
     assert rules["enabled"] is False and rules["daily_limit"] == 10
-    assert rules["channels"]["email"] == {"on": True, "min_closeness": 0.9, "min_measured": 3}
+    email = {"on": True, "min_share": 0.9, "min_measured": 3, "sign": False}
+    assert rules["channels"]["email"] == email
+    # An older file's bar on the mean is read as the bar on the share; 1 can never be shown.
+    assert rules["channels"]["whatsapp"]["min_share"] == 0.95
+    assert rules["channels"]["whatsapp"]["sign"] is False
+    assert rules["channels"]["x"]["min_share"] == 0.99 and rules["channels"]["x"]["sign"] is True
     assert outbox.read_rules(tmp_path / "missing.json")["channels"]["whatsapp"]["on"] is False
 
 
@@ -288,10 +306,7 @@ def test_an_email_reply_goes_on_its_own_only_where_the_sender_asks(
     )
     (chat,) = chats.waiting(tmp_path, NOW)
     reply(tmp_path, work.reply_key(chat), "Sure, attaching it now.")
-    write(
-        tmp_path / "clones" / "drafts" / "fidelity.json",
-        json.dumps({"by_source": {"email": {"n": 6, "mean": 0.95}}}),
-    )
+    measured(tmp_path, "email", [1.0] * 35)
     write(
         tmp_path / "clones" / "outbox" / "rules.json",
         json.dumps({"enabled": True, "channels": {"email": {"on": True}}}),
@@ -309,3 +324,137 @@ def test_an_email_reply_goes_on_its_own_only_where_the_sender_asks(
     else:
         ((thread, _),) = send.sent
         assert thread["last"] == "m2"
+
+
+def test_wilson_bound_takes_35_unchanged_drafts_for_ninety_percent():
+    assert outbox.needed(0.9) == 35
+    assert outbox.wilson(35, 35) >= 0.9 > outbox.wilson(34, 34)
+    assert outbox.wilson(0, 0) == 0 and outbox.wilson(38, 40) < 0.9
+
+
+@pytest.mark.parametrize(
+    "closeness, earned",
+    [([1.0] * 35, True), ([1.0] * 34, False), ([1.0] * 34 + [0.5], False), ([0.95] * 60, True)],
+)
+def test_an_app_earns_sending_by_untouched_drafts_sent_nearly_unchanged(vault, closeness, earned):
+    measured(vault, "whatsapp", closeness)
+    outbox.run(vault, NOW, {"beeper": Sender()})
+    assert state(vault)["earned"]["whatsapp"] is earned
+    evidence = state(vault)["evidence"]["whatsapp"]
+    assert evidence["n"] == len(closeness)
+    assert evidence["unchanged"] == sum(c >= 0.9 for c in closeness)
+
+
+def test_drafts_the_user_used_or_the_outbox_sent_dont_count(vault):
+    measured(vault, "whatsapp", [1.0] * 40)
+    used = [("copy", 0), ("opened", 1), ("edit", 2), ("approve", 3), ("sent", 4), ("discard", 5)]
+    write(
+        vault / "clones" / "drafts" / "feedback.jsonl",
+        "".join(
+            json.dumps({"draft_id": f"reply-past{i:08d}", "action": a}) + "\n" for a, i in used
+        ),
+    )
+    thread = {"id": "t1", "context": {"kind": "draft", "id": "reply-past00000006"}}
+    write(vault / "clones" / "think" / "t1.json", json.dumps(thread))
+    sent = {"draft_id": "reply-past00000007", "ok": True, "at": "2026-03-01T00:00:00Z"}
+    write(vault / "clones" / "outbox" / "log.jsonl", json.dumps(sent) + "\n")
+
+    assert outbox.run(vault, NOW, {"beeper": Sender()})["outbox_queued"] == 0
+    # 40 measured, less five used on the page, one thought through and one the outbox sent; a
+    # discarded draft still counts, as a reply the user wouldn't have sent.
+    assert state(vault)["evidence"]["whatsapp"]["n"] == 33
+    assert not state(vault)["earned"]["whatsapp"]
+
+
+def test_a_signed_reply_says_it_was_sent_by_the_assistant(vault):
+    rules = {"enabled": True, "channels": {"whatsapp": {"on": True, "sign": True}}}
+    write(vault / "clones" / "outbox" / "rules.json", json.dumps(rules))
+    send = Sender()
+    outbox.run(vault, NOW, {"beeper": send})
+    outbox.run(vault, NOW + timedelta(minutes=15), {"beeper": send})
+    ((_, text),) = send.sent
+    assert text == "yaa coming" + outbox.SIGN
+
+
+def held_for(vault, body, **front):
+    """Why the outbox held a reply with `body` and these front matter fields, or None."""
+    (path,) = (vault / "clones" / "drafts").glob("reply-*.md")
+    reply(vault, path.stem, body)
+    extra = "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items())
+    path.write_text(path.read_text().replace("asks: []\n", "asks: []\n" + extra))
+    send = Sender()
+    outbox.run(vault, NOW, {"beeper": send})
+    outbox.run(vault, NOW + timedelta(minutes=15), {"beeper": send})
+    entries = log(vault)
+    return entries[0].get("held") if entries else None
+
+
+@pytest.mark.parametrize(
+    "body, front, why",
+    [
+        ("yaa coming", {"found": "The trip is booked for Friday."}, "beyond this chat"),
+        ("yaa coming, after the doctor", {}, "health (doctor)"),
+        ("yaa coming, my back pain is better", {}, "health (pain)"),
+        ("yaa coming with Priya", {}, "names something the chat doesn't (Priya)"),
+        ("yaa coming, see you at Stanford", {}, "(Stanford)"),
+    ],
+)
+def test_a_reply_drawing_on_more_than_its_chat_is_held(vault, body, front, why):
+    assert why in (held_for(vault, body, **front) or "")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Yaa coming. See you Friday, Asha!",
+        "yaa coming in March. Haha ok, Joe here",
+        "yaa, I'm coming / Bringing snacks",
+    ],
+)
+def test_names_days_and_sentence_starts_can_go(vault, monkeypatch, body):
+    monkeypatch.setenv("PROXENOS_NAME", "Joe Bloggs")
+    assert held_for(vault, body) is None
+
+
+@pytest.mark.parametrize("kind", ["group", None])
+def test_a_group_chat_or_one_whose_records_dont_say_is_held(vault, kind):
+    # Asked back in a group within hours of the user's own message, so it waits on them.
+    rows = [
+        wa("2026-03-10T08:00:00Z", "see you soon", mine=True) | {"chat_type": kind},
+        wa("2026-03-10T09:00:00Z", "coming friday?") | {"chat_type": kind},
+    ]
+    messages = vault / "raw" / "whatsapp" / "messages" / "2026-03.jsonl"
+    messages.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    assert "a group" in (held_for(vault, "yaa coming") or "")
+
+
+@pytest.mark.parametrize(
+    "source, record, held",
+    [
+        ("linkedin", {"to": "Asha Rao"}, False),
+        ("linkedin", {"to": "Asha Rao, Ben Ode"}, True),
+        ("linkedin", {"conversation_type": "direct"}, False),
+        ("linkedin", {}, True),
+        ("twitter", {"conversation_type": "direct"}, False),
+        ("twitter", {}, True),
+        ("instagram", {"chat_type": "direct"}, False),
+        ("facebook", {"chat_type": "group"}, True),
+    ],
+)
+def test_each_chat_app_must_say_it_is_one_to_one(source, record, held):
+    assert (outbox._kind(source, record) != "direct") is held
+
+
+def test_an_email_to_others_too_is_held(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@lab.example")
+    chat = {"source": "email", "id": "m2", "waiting": [{"ts": "2026-03-10T09:00:00Z"}]}
+    one = {"from_address": "ravi@lab.example", "to": ["me@lab.example"], "cc": None}
+    for record, held in (
+        (one, False),
+        (one | {"cc": ["Ann <ann@lab.example>"]}, True),
+        (one | {"to": ["me@lab.example", "team@lab.example"]}, True),
+    ):
+        monkeypatch.setattr(outbox, "_answered", lambda v, c, r=record: r)
+        assert (outbox._group(tmp_path, chat) is not None) is held
+    monkeypatch.delenv("PROXENOS_EMAILS")
+    assert outbox._group(tmp_path, chat) is not None  # who the user is can't be told

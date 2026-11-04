@@ -657,11 +657,16 @@ export interface DraftCloseness {
 export const OUTBOX_CHANNELS = ["email", "whatsapp", "slack", "instagram", "messenger", "x", "linkedin"] as const;
 export type OutboxChannel = (typeof OUTBOX_CHANNELS)[number];
 
-/** The rule for one channel: whether it's allowed, and what its record must show first. */
+/**
+ * The rule for one channel: whether it's allowed, what its record must show first, and whether
+ * what it sends says it came from the reader's assistant. The record is its drafts the reader
+ * didn't touch: the share of them that went out nearly unchanged, at 95% confidence.
+ */
 export interface OutboxChannelRule {
   on: boolean;
-  min_closeness: number; // 0.5 to 1: the mean of how close its drafts came to what was sent
-  min_measured: number; // 1 to 100: how many drafts that mean needs behind it
+  min_share: number; // 0.5 to 0.99: that share's lower bound must reach this
+  min_measured: number; // 1 to 100: how many untouched drafts it needs behind it at least
+  sign: boolean; // add a line saying the reader's assistant sent it
 }
 
 /** clones/outbox/rules.json, with anything missing filled in. */
@@ -675,7 +680,7 @@ export interface OutboxRules {
 export type OutboxRuleEdit =
   | { enabled: boolean }
   | { daily_limit: number }
-  | { channel: OutboxChannel; on?: boolean; min_closeness?: number; min_measured?: number };
+  | { channel: OutboxChannel; on?: boolean; min_share?: number; min_measured?: number; sign?: boolean };
 
 /** A reply waiting out its window: it goes at the first sync after `sends_at` unless cancelled. */
 export interface OutboxQueued {
@@ -691,8 +696,14 @@ export interface OutboxState {
   generated: string | null;
   /** How each channel can send ("apple_mail", "beeper"), or null for no way yet. */
   routes: Record<string, string | null>;
-  /** Each channel's track record: replies measured, and how close they came on average (0 to 1). */
+  /** Each channel's replies measured, used or not, and how close they came on average (0 to 1). */
   closeness: Record<string, { n: number; mean: number }>;
+  /**
+   * Each channel's record that counts: its measured drafts the reader didn't touch and the
+   * outbox didn't send (n), how many went out nearly unchanged, and the share that shows at 95%
+   * confidence (lower, 0 to 1).
+   */
+  evidence: Record<string, { n: number; unchanged: number; lower: number }>;
   /** Whether a channel's record meets its rule's thresholds. */
   earned: Record<string, boolean>;
   queue: OutboxQueued[];
