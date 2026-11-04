@@ -537,7 +537,12 @@ def evaluate(
     from proxenos import fidelity  # it reads the work clone, which reads this module
 
     person = env("NAME", "the person")
-    points = _sample(_read_jsonl(vault / "voice" / "eval.jsonl"), n)
+    held = _read_jsonl(vault / "voice" / "eval.jsonl")
+    # A held-out answer that was a draft of Proxenos's, sent nearly unchanged, is the model's
+    # words: the set was built before such answers were known, so they're left out here too.
+    made = fidelity.written(vault)
+    kept = [p for p in held if not _was_draft(made, p)]
+    points = _sample(kept, n)
     if not points:
         raise SystemExit("Nothing held out to evaluate on: run `proxenos voice build` first.")
     drafters = drafters or _drafters(vault, person)
@@ -569,6 +574,10 @@ def evaluate(
         "n": len(points),
         "sent_words": round(mean(len(p["sent"].split()) for p in points), 1),
         "by_source": dict(sorted(_count(p["source"] for p in points).items())),
+        # What drew each column, and that the drafting model saw nothing after each answer.
+        "as_of": True,
+        "excluded": len(held) - len(kept),
+        "columns": _columns(vault, drafts),
         "summary": summary,
         "items": [
             {
@@ -585,6 +594,30 @@ def evaluate(
     (vault / "voice" / "eval.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
     (vault / "voice" / "eval.json").chmod(0o600)
     return {key: out[key] for key in ("generated", "n", "sent_words", "by_source", "summary")}
+
+
+def _was_draft(made: tuple[dict, dict], point: dict) -> bool:
+    """Whether a held-out answer was a Proxenos draft sent nearly unchanged."""
+    source, _, key = str(point.get("conversation") or "").partition("/")
+    from proxenos import fidelity  # it reads the work clone, which reads this module
+
+    # By the chat it answers: a held-out point keeps too little of its messages to say whom
+    # a chat is with, which matching by name would need.
+    return fidelity.from_draft(made, source or point["source"], key, [], point["ts"], point["sent"])
+
+
+def _columns(vault: Path, drafts: dict) -> dict[str, dict]:
+    """Each column's model, by name: the baseline, the voice model's base with and without its
+    adapter, and the drafting model."""
+    about = trained(vault) or {}
+    base = about.get("base") or BASE
+    known = {
+        "last message again": {"model": "none: the user's previous message, sent again"},
+        "base": {"model": base},
+        "tuned": {"model": f"{base}, with the voice adapter"},
+        "current": {"model": llm.current()},
+    }
+    return {name: known[name] for name in drafts if name in known}
 
 
 def table(result: dict) -> str:

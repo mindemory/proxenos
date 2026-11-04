@@ -296,6 +296,30 @@ def test_the_evaluation_scores_each_model_against_what_was_sent(tmp_path):
     assert again["summary"]["tuned"]["mean"] < 1.0
 
 
+def test_a_held_out_answer_that_was_a_draft_is_left_out_and_each_column_is_named(tmp_path):
+    vault = make_vault(tmp_path)
+    voicemodel.build(vault, now=NOW)
+    drafters = {"base": lambda points: ["fine" for _ in points]}
+    voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
+    saved = json.loads((vault / "voice" / "eval.json").read_text())
+    assert (saved["as_of"], saved["excluded"]) == (True, 0)
+    assert saved["columns"]["last message again"]["model"].startswith("none")
+    assert saved["columns"]["base"]["model"] == voicemodel.BASE
+
+    (point,) = [json.loads(line) for line in (vault / "voice" / "eval.jsonl").open()]
+    source, _, key = point["conversation"].partition("/")
+    drafts = vault / "clones" / "drafts"
+    drafts.mkdir(parents=True)
+    thread = json.dumps({"source": source, "chat": key})
+    (drafts / "reply-dana.md").write_text(
+        f'---\nid: reply-dana\ntitle: "Reply"\nkind: reply\nfor: reply\nchannel: {source}\n'
+        f"created: 2020-01-01T00:00:00Z\nstatus: sent\nthread: {thread}\n---\n\n"
+        f"{point['sent']}\n"
+    )
+    with pytest.raises(SystemExit):  # its only answer was the model's words
+        voicemodel.evaluate(vault, n=5, models=("base",), drafters=drafters)
+
+
 def test_the_command_builds_the_set(tmp_path, monkeypatch, capsys):
     vault = make_vault(tmp_path)
     monkeypatch.setenv("PROXENOS_VAULT", str(vault))
