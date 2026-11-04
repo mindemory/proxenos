@@ -129,7 +129,8 @@ changed; the outbox keeps them in `clones/outbox/unanswered.jsonl`, since the dr
 in time. Of them all, the share whose reply went out nearly unchanged (nine tenths or more of the
 draft still in what you sent) must be at least 90% with 95% confidence, the lower bound of its
 Wilson interval. With every one unchanged, that takes 35 drafts; the page says how
-many your setting needs. The replies the outbox sent itself never count, so it can't vouch for
+many your setting needs. You can set the bar between 80% (16 drafts at the least) and 99%, never
+lower, where a handful of drafts would do. The replies the outbox sent itself never count, so it can't vouch for
 itself. A rules file from before keeps its switches, and its bar on the mean is read as the bar
 on the share.
 

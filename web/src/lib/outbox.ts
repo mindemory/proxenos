@@ -16,8 +16,9 @@ import {
 
 export const OUTBOX_LIMITS = {
   dailyLimit: { min: 1, max: 50 },
-  // A share of 1 could never be shown: its lower bound is always under it.
-  share: { min: 0.5, max: 0.99 },
+  // A share of 1 could never be shown: its lower bound is always under it. Under 0.8 a handful
+  // of drafts would do (five unchanged show 0.57), as proxenos.outbox.MIN_SHARE says.
+  share: { min: 0.8, max: 0.99 },
   measured: { min: 1, max: 100 },
 } as const;
 

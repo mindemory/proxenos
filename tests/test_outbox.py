@@ -170,6 +170,8 @@ def test_rules_are_read_as_strictly_as_the_page_reads_them(tmp_path):
                     "email": {"on": True, "min_closeness": 0.2, "min_measured": 3},
                     "whatsapp": {"on": True, "min_closeness": 0.95, "sign": "yes"},
                     "x": {"on": True, "min_share": 1, "min_closeness": 0.6, "sign": True},
+                    "slack": {"on": True, "min_share": 0.79},
+                    "linkedin": {"on": True, "min_share": 0.8},
                 },
             }
         ),
@@ -182,6 +184,10 @@ def test_rules_are_read_as_strictly_as_the_page_reads_them(tmp_path):
     assert rules["channels"]["whatsapp"]["min_share"] == 0.95
     assert rules["channels"]["whatsapp"]["sign"] is False
     assert rules["channels"]["x"]["min_share"] == 0.99 and rules["channels"]["x"]["sign"] is True
+    # The bar goes no lower than 0.8, which takes 16 drafts: under it a handful would do.
+    assert rules["channels"]["slack"]["min_share"] == 0.9
+    assert rules["channels"]["linkedin"]["min_share"] == outbox.MIN_SHARE == 0.8
+    assert outbox.needed(outbox.MIN_SHARE) == 16
     assert outbox.read_rules(tmp_path / "missing.json")["channels"]["whatsapp"]["on"] is False
 
 

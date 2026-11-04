@@ -78,6 +78,9 @@ _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _NUMBER = re.compile(r"\+?\(?\d[\d ().-]*\d")
 DEFAULT_RULE = {"on": False, "min_share": 0.9, "min_measured": 5, "sign": False}
 MAX_SHARE = 0.99  # a share of 1 could never be shown: the bound is always under it
+# The lowest bar a rule may set: below it a handful of drafts would open an app (five unchanged
+# show 0.57). 0.8 takes 16, every one unchanged. As the page's OUTBOX_LIMITS.share.min.
+MIN_SHARE = 0.8
 NEARLY = 0.9  # a measured draft this close to what was sent went out nearly unchanged
 Z = 1.96  # 95% confidence, for the Wilson bound
 # What the user does with a draft on the page that makes it theirs: all but discard, which
@@ -211,7 +214,11 @@ def read_rules(path: Path) -> dict:
         rule = dict(DEFAULT_RULE, on=c.get("on") is True, sign=c.get("sign") is True)
         # An older file's bar on the mean closeness is read as the bar on the share.
         share = c.get("min_share", c.get("min_closeness"))
-        if isinstance(share, int | float) and not isinstance(share, bool) and 0.5 <= share <= 1:
+        if (
+            isinstance(share, int | float)
+            and not isinstance(share, bool)
+            and MIN_SHARE <= share <= 1
+        ):
             rule["min_share"] = min(float(share), MAX_SHARE)
         if _int(c.get("min_measured"), 1, 100):
             rule["min_measured"] = c["min_measured"]
