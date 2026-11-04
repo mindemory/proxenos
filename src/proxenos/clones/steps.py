@@ -3,12 +3,24 @@
 The projects clone says where each project stands and what's next, from the user's messages,
 mail and notes. This one does the next thing. A project on clones/projects/projects.json with a
 "repo", the folder of its code (a git repository on this computer), takes one step each night
-when its last one has been accepted or discarded, and one more whenever the user presses "Do a
-step" on the page. A step:
+when its last one has been accepted or discarded and one is approved, and one more whenever the
+user presses "Do a step" on the page.
 
-1. is the one the user queued on the page, oldest first, else one the runner picks from where
-   the project stands (its status and next steps) and the steps before: run an analysis, fix a
-   script, make a figure, draft a section as markdown;
+A step runs code with the user's files, so it runs only when the user asked for it. Each queued
+step says who asked (`by`): the user, on the page or the command line ("you"); Proxenos itself,
+from a project's status, which comes from others' messages ("proxenos"); or comments on the
+manuscript's copy in the cloud folder, which anyone with the file can leave ("comments", with
+their `authors`). The user's own are approved; the rest wait for Approve on the page, except
+comments whose every author is the user (PROXENOS_NAME, word for word). The night takes only
+approved ones, and picks one of its own only for a project with "autostep": true. "Do a step"
+on the page is the user asking: it takes the first approved one, else the first waiting, else
+one the runner picks.
+
+A step:
+
+1. is the one asked for, oldest first, else one the runner picks from where the project stands
+   (its status and next steps) and the steps before: run an analysis, fix a script, make a
+   figure, draft a section as markdown;
 2. gets a worktree of its own: a new branch, proxenos/<project>-<when>, from the branch the
    user's checkout is on, in a folder beside Proxenos's settings. The user's own checkout is
    never touched. A step queued with a branch starts there instead: a manuscript's branch
@@ -81,9 +93,12 @@ def take(
     now: datetime | None = None,
     tried: list | None = None,
     asked: dict | None = None,
+    approved_only: bool = False,
 ) -> dict:
     """One step on the project, from its worktree to its report: the one `asked` (an item as
-    queue makes it), else the first queued, else one the runner picks. The step as saved."""
+    queue makes it), else the first approved in the queue, else (unless `approved_only`, as the
+    night takes them) the first waiting, which the user asking for a step approves, else one the
+    runner picks. The step as saved."""
     now = now or datetime.now(UTC)
     repo = _repo(project)
     gate = lock.Lock(vault / "state" / f"steps-{project['id']}.lock")
@@ -91,7 +106,7 @@ def take(
         raise SystemExit(f"steps: {project['id']} is taking a step already")
     try:
         _settle(vault, project["id"])
-        return _take(vault, project, repo, now, tried, asked)
+        return _take(vault, project, repo, now, tried, asked, approved_only)
     finally:
         gate.release()
 
@@ -103,13 +118,15 @@ def _take(
     now: datetime,
     tried: list | None,
     asked: dict | None,
+    approved_only: bool = False,
 ) -> dict:
     queued_first = asked is None
     if queued_first:
-        asked = next(iter(queued(vault, project["id"])), None)
+        asked = next_queued(vault, project["id"], approved_only)
     start = begin(vault, project["id"], repo, str((asked or {}).get("base") or ""))
     if queued_first and asked:
-        _pop_queue(vault, project["id"])
+        unqueue(vault, project["id"], asked["id"])
+        asked = asked | {"approved": True}  # taking it is approving it, should it come back
     when = f"{now:%Y%m%d-%H%M%S}"
     step = {
         "id": f"{project['id']}/{when}",
@@ -117,6 +134,7 @@ def _take(
         "created": _iso(now),
         "status": "working",
         "asked": asked["text"] if asked else "",
+        "by": (asked.get("by") or "you") if asked else "runner",
         "repo": str(repo),
         "base": start["base"],
         "base_commit": start["base_commit"],
@@ -541,7 +559,9 @@ def _drop_branch(repo: Path, branch: str) -> None:
         _git(repo, "branch", "-D", "-q", branch)
 
 
-# The queue: steps the user asked for on the page.
+# The queue: steps asked for, by the user or for them, and whether the user has approved each.
+
+ASKERS = ("you", "proxenos", "comments")  # who asked for a step (see the module's docstring)
 
 
 def queued(vault: Path, project_id: str) -> list[dict]:
@@ -553,6 +573,15 @@ def queued(vault: Path, project_id: str) -> list[dict]:
     return [q for q in items or [] if isinstance(q, dict) and _text(q.get("text"))]
 
 
+def next_queued(vault: Path, project_id: str, approved_only: bool = False) -> dict | None:
+    """The step to take next from the queue: the first approved, else, unless `approved_only`,
+    the first waiting for approval, which the user asking for a step approves. A step queued
+    before Proxenos kept who asked says nothing, so it waits like the rest."""
+    items = queued(vault, project_id)
+    approved = [q for q in items if q.get("approved") is True]
+    return next(iter(approved if approved_only else [*approved, *items]), None)
+
+
 def queue(
     vault: Path,
     project_id: str,
@@ -560,15 +589,29 @@ def queue(
     now: datetime | None = None,
     base: str = "",
     manuscript: dict | None = None,
+    by: str = "you",
+    authors: list[str] | None = None,
+    approved: bool | None = None,
 ) -> dict:
     """A step asked for, last in the project's queue. `base` names the branch it starts from (see
-    begin); `manuscript`, {path, branch}, says it's a change to the project's manuscript."""
+    begin); `manuscript`, {path, branch}, says it's a change to the project's manuscript; `by`
+    says who asked (ASKERS), and `authors` whose comments it makes. Approved when the user asked,
+    or when `approved` says so."""
     items = queued(vault, project_id)
     if len(items) >= QUEUE_MAX:
         raise SystemExit(f"steps: {project_id} has {QUEUE_MAX} steps queued already")
-    item = asked_for(vault, project_id, text, now, base, manuscript)
+    item = asked_for(vault, project_id, text, now, base, manuscript, by, authors, approved)
     _write_queue(vault, project_id, [*items, item])
     return item
+
+
+def approve(vault: Path, project_id: str, item_id: str) -> bool:
+    """The user's Approve on a step waiting in the queue, so the night may take it."""
+    items = queued(vault, project_id)
+    found = any(q.get("id") == item_id for q in items)
+    marked = [q | {"approved": True} if q.get("id") == item_id else q for q in items]
+    _write_queue(vault, project_id, marked)
+    return found
 
 
 def asked_for(
@@ -578,8 +621,12 @@ def asked_for(
     now: datetime | None = None,
     base: str = "",
     manuscript: dict | None = None,
+    by: str = "you",
+    authors: list[str] | None = None,
+    approved: bool | None = None,
 ) -> dict:
-    """A step the user asked for, checked: what to do, and the branch it starts from."""
+    """A step asked for, checked: what to do, the branch it starts from, who asked and whether
+    it's approved: the user's own are, the rest wait unless `approved` says otherwise."""
     now = now or datetime.now(UTC)
     project = _project(vault, project_id)
     text = text.strip()
@@ -587,7 +634,17 @@ def asked_for(
         raise SystemExit("steps: say what the step is")
     if len(text) > STEP_CHARS:
         raise SystemExit(f"steps: keep a step to {STEP_CHARS} characters")
-    item = {"id": f"q-{secrets.token_hex(6)}", "text": text, "added": _iso(now)}
+    if by not in ASKERS:
+        raise SystemExit(f"steps: a step is asked for by {', '.join(ASKERS)}")
+    item = {
+        "id": f"q-{secrets.token_hex(6)}",
+        "text": text,
+        "added": _iso(now),
+        "by": by,
+        "approved": by == "you" if approved is None else approved,
+    }
+    if authors:
+        item["authors"] = [_text(a)[:200] for a in authors if _text(a)][:20]
     if base:
         repo = _repo(project)
         if not BRANCH.fullmatch(base) or not _git(
@@ -608,14 +665,6 @@ def unqueue(vault: Path, project_id: str, item_id: str) -> bool:
     left = [q for q in items if q.get("id") != item_id]
     _write_queue(vault, project_id, left)
     return len(left) < len(items)
-
-
-def _pop_queue(vault: Path, project_id: str) -> dict | None:
-    items = queued(vault, project_id)
-    if not items:
-        return None
-    _write_queue(vault, project_id, items[1:])
-    return items[0]
 
 
 def _requeue(vault: Path, project_id: str, item: dict) -> None:
@@ -816,10 +865,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "request",
         nargs="?",
-        help='"-" reads {take}, {queue, step}, {unqueue, id}, {accept} or {discard} as JSON from '
-        "stdin; a step asked for may name its base (a branch) and manuscript ({path, branch}), "
-        "and {take, step} takes it now. With none, each project with a repo whose last step is "
-        "decided takes one",
+        help='"-" reads {take}, {queue, step}, {approve, id}, {unqueue, id}, {accept} or {discard} '
+        "as JSON from stdin; a step asked for may name its base (a branch) and manuscript "
+        "({path, branch}), and {take, step} takes it now. With none, each project with a repo "
+        "whose last step is decided takes one it's approved, or with autostep picks one",
     )
     parser.add_argument("--project", help="take a step on this project now, by its id")
 
@@ -838,16 +887,20 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
 
 def night(vault: Path, now: datetime | None = None, tried: list | None = None) -> dict[str, int]:
     """One step on each project with a repo that isn't paused and has no step waiting on the
-    user."""
-    stats: Counter = Counter(steps_taken=0, steps_failed=0, steps_waiting=0)
+    user: the first the user approved, or with "autostep" one the runner picks. Nothing nobody
+    asked for runs at night."""
+    stats: Counter = Counter(steps_taken=0, steps_failed=0, steps_waiting=0, steps_unasked=0)
     for project in projects.listed_projects(vault):
         if project["paused"] or not project["repo"]:
             continue
         if any(s.get("status") == "ready" for s in projects.steps_taken(vault, project["id"], 20)):
             stats["steps_waiting"] += 1
             continue
+        if not project["autostep"] and not next_queued(vault, project["id"], approved_only=True):
+            stats["steps_unasked"] += 1
+            continue
         try:
-            take(vault, project, now, tried)
+            take(vault, project, now, tried, approved_only=True)
             stats["steps_taken"] += 1
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one project must not stop the rest
             stats["steps_failed"] += 1
@@ -871,6 +924,8 @@ def _answer(vault: Path, request: dict) -> dict[str, int]:
         return {"steps_queued": 1}
     if "unqueue" in request:
         return {"steps_unqueued": int(unqueue(vault, request["unqueue"], request["id"]))}
+    if "approve" in request:
+        return {"steps_approved": int(approve(vault, request["approve"], request["id"]))}
     if "accept" in request:
         accept(vault, request["accept"])
         return {"steps_accepted": 1}
@@ -879,10 +934,10 @@ def _answer(vault: Path, request: dict) -> dict[str, int]:
 
 
 def _request(line: str) -> dict:
-    """The page's request, checked: {take: project}, {queue: project, step}, {unqueue: project,
-    id}, {accept: step} or {discard: step}. A step asked for, queued or taken now ({take,
-    step}), may name the branch it starts from (base) and the manuscript it changes
-    ({manuscript: {path, branch}})."""
+    """The page's request, checked: {take: project}, {queue: project, step}, {approve: project,
+    id}, {unqueue: project, id}, {accept: step} or {discard: step}. A step asked for, queued or
+    taken now ({take, step}), may name the branch it starts from (base) and the manuscript it
+    changes ({manuscript: {path, branch}}). Whoever sends one is the user, at the page or here."""
     try:
         request = json.loads(line)
     except ValueError:
@@ -893,7 +948,7 @@ def _request(line: str) -> dict:
         raise SystemExit("steps: base must be a branch's name")
     if not isinstance(request.get("manuscript") or {}, dict):
         raise SystemExit("steps: manuscript must be {path, branch}")
-    for key in ("take", "queue", "unqueue", "accept", "discard"):
+    for key in ("take", "queue", "approve", "unqueue", "accept", "discard"):
         if key in request:
             if not isinstance(request[key], str):
                 raise SystemExit(f"steps: {key} must be text")
@@ -901,7 +956,7 @@ def _request(line: str) -> dict:
                 raise SystemExit("steps: say what the step is")
             if key == "take" and not isinstance(request.get("step", ""), str):
                 raise SystemExit("steps: say what the step is")
-            if key == "unqueue" and not isinstance(request.get("id"), str):
-                raise SystemExit("steps: unqueue needs the queued step's id")
+            if key in ("approve", "unqueue") and not isinstance(request.get("id"), str):
+                raise SystemExit(f"steps: {key} needs the queued step's id")
             return request
     raise SystemExit("steps: the request asks for nothing")

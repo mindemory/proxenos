@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, FileText, FolderGit2, ListPlus, MessagesSquare, NotebookText, Play, ScrollText, X } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, FileText, FolderGit2, ListPlus, MessagesSquare, NotebookText, Play, ScrollText, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold } from "@/components/ask/parts";
@@ -17,6 +17,7 @@ import {
   STEP_MAX_TEXT,
   type ManuscriptEdit,
   type ProjectsResponse,
+  type QueuedStep,
   type StepAsk,
   type StepStatus,
   type ThinkStart,
@@ -36,6 +37,7 @@ interface SectionProps {
   deciding: boolean;
   onTake: () => void;
   onQueue: (text: string) => Promise<boolean>;
+  onApprove: (id: string) => void;
   onUnqueue: (id: string) => void;
   onAccept: (step: string) => void;
   onDiscard: (step: string) => void;
@@ -135,6 +137,16 @@ function ProjectCard({ project, now, open, onOpen }: { project: WorkProject; now
   );
 }
 
+/** Why a queued step waits for the reader: who asked for it, since it wasn't them. */
+function waitingWhy(q: QueuedStep): string {
+  if (q.by === "proxenos") return "Proxenos queued this from where the project stands. It runs once you approve it.";
+  if (q.by === "comments") {
+    const who = q.authors.length ? q.authors.join(", ") : "someone";
+    return `From comments by ${who} on the manuscript's copy. It runs once you approve it.`;
+  }
+  return "Queued before Proxenos kept who asked. It runs once you approve it.";
+}
+
 /** One project: where it stands, its manuscript, the steps asked for, and the steps taken, newest first. */
 function ProjectSection({
   project,
@@ -143,6 +155,7 @@ function ProjectSection({
   deciding,
   onTake,
   onQueue,
+  onApprove,
   onUnqueue,
   onAccept,
   onDiscard,
@@ -164,6 +177,7 @@ function ProjectSection({
   const mine = data.job?.state === "running" && data.job.project === project.id;
   const starting = mine && !project.steps.some((s) => s.status === "working");
   const waitingOnYou = project.steps.filter((s) => s.status === "ready").length;
+  const toApprove = project.queue.filter((q) => !q.approved).length;
   const canQueue = text.trim() !== "" && text.length <= STEP_MAX_TEXT && !queueing && !deciding;
   // A question gets an answer in Think in a minute; a step works on the code for up to half an hour.
   const question = onThink !== undefined && QUESTION.test(text.trim());
@@ -190,6 +204,7 @@ function ProjectSection({
               {waitingOnYou} {waitingOnYou === 1 ? "step" : "steps"} waiting on you
             </span>
           )}
+          {toApprove > 0 && <span className="text-xs text-warn-ink">{toApprove} to approve</span>}
         </div>
         {project.about && <p className="text-sm leading-relaxed text-muted">{project.about}</p>}
         {(project.drive.folder || project.drive.manuscript || project.drive.pdf) && (
@@ -280,15 +295,23 @@ function ProjectSection({
                         · from <span className="font-mono">{q.base}</span>
                       </span>
                     )}
+                    {!q.approved && <span className="block text-xs text-warn-ink">{waitingWhy(q)}</span>}
                   </span>
-                  <button
-                    onClick={() => onUnqueue(q.id)}
-                    disabled={deciding}
-                    aria-label="Take it off the queue"
-                    className="flex-shrink-0 rounded p-0.5 text-faint transition-colors hover:text-bad-ink disabled:opacity-50"
-                  >
-                    <X size={14} />
-                  </button>
+                  {q.approved ? (
+                    <button
+                      onClick={() => onUnqueue(q.id)}
+                      disabled={deciding}
+                      aria-label="Take it off the queue"
+                      className="flex-shrink-0 rounded p-0.5 text-faint transition-colors hover:text-bad-ink disabled:opacity-50"
+                    >
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <span className="flex flex-shrink-0 gap-1.5">
+                      <ActionButton icon={Check} label="Approve" tone="accent" disabled={deciding} onClick={() => onApprove(q.id)} />
+                      <ActionButton icon={X} label="Remove" tone="bad" disabled={deciding} onClick={() => onUnqueue(q.id)} />
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>
@@ -301,9 +324,13 @@ function ProjectSection({
                 ? "Taking a step now. It can take half an hour."
                 : stepping
                   ? "A step is being taken on another project: one at a time."
-                  : project.queue.length
-                    ? "The next step takes the first one queued."
-                    : "Each night it takes one step, once the last is accepted or discarded."}
+                  : toApprove
+                    ? "Steps you didn't ask for run only once you approve them. Doing a step now approves the one it takes."
+                    : project.queue.length
+                      ? "The next step takes the first one queued."
+                      : project.autostep
+                        ? "Each night it takes one step, once the last is accepted or discarded."
+                        : "It takes a step when you ask: queue one, or do one now."}
             </p>
             <div className="flex flex-wrap gap-2">
               {question && (
@@ -374,7 +401,8 @@ interface ProjectsProps {
 }
 
 export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
-  const { data, error, clearError, refresh, waiting, take, takeAsked, accept, discard, queue, unqueue, saveEdit } = useProjects();
+  const { data, error, clearError, refresh, waiting, take, takeAsked, accept, discard, queue, approve, unqueue, saveEdit } =
+    useProjects();
   // The project open below the cards: the one asked for (Home's tiles), else the one open last.
   const [open, setOpen] = useState<string | null>(focus ?? opened.get("id") ?? null);
   const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
@@ -456,6 +484,7 @@ export function Projects({ onThink, focus, onFocused }: ProjectsProps = {}) {
             deciding={deciding}
             onTake={() => void take(p.id)}
             onQueue={(text) => queue(p.id, text)}
+            onApprove={(id) => void approve(p.id, id)}
             onUnqueue={(id) => void unqueue(p.id, id)}
             onAccept={(id) => void accept(id)}
             onDiscard={(id) => void discard(id)}

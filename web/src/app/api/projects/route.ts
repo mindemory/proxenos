@@ -18,7 +18,8 @@ export async function GET(req: Request) {
  * POST /api/projects {take: <project>} takes a step on that project now. {accept: <step>} merges
  * the step's branch into the user's checkout, the one request that changes their code; {discard:
  * <step>} deletes its branch and worktree. {queue: <project>, step} asks for a step, up to 2,000
- * characters, and {unqueue: <project>, id} takes one back. A step asked for, queued or taken now
+ * characters, {approve: <project>, id} approves one Proxenos or someone's comments queued, so the
+ * night may take it, and {unqueue: <project>, id} takes one back. A step asked for, queued or taken now
  * ({take, step}), may name the branch it starts from (base: the manuscript's, or the branch of a
  * step it revises) and the manuscript it changes ({manuscript: {path, branch}}). Each goes to
  * `proxenos clone steps` on its stdin and nowhere else, and is answered at once; the page follows

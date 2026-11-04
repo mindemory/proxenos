@@ -36,10 +36,12 @@ A paused project gets one only when it has something to show, and one marked "cl
 the list (an immigration petition, say) never gets one: what it had there is left as it was.
 
 Comments left on a manuscript's copy, Markdown or LaTeX, come back too: each night the ones not
-seen before (not those marked resolved) are queued as one step, each with the passage it is on
+seen before (not those marked resolved) are queued as a step, each with the passage it is on
 and who left it, which makes the changes in the manuscript itself on a branch of its own, for
-the user to accept (proxenos.clones.steps). So a LaTeX paper, whose edits go one way, can still
-be worked on from Word or Google Docs by commenting.
+the user to accept (proxenos.clones.steps). Anyone the file is shared with can comment, so only
+the user's own comments (their name as the author) run as they come; anyone else's are a step
+of their own that waits for the user to approve it on the page. So a LaTeX paper, whose edits
+go one way, can still be worked on from Word or Google Docs by commenting.
 
 Nothing the user does there is lost. For each file written, clones/folders/state.json keeps the
 SHA-256 of what it was made from and of the bytes written. A note whose source changed is
@@ -329,39 +331,54 @@ def _queue_comments(
     now: datetime,
     stats: Counter,
 ) -> None:
-    """The comments on the manuscript's copy not queued before, as one step that makes them in
-    the manuscript, from its branch; as many as fit a step, the rest next run."""
+    """The comments on the manuscript's copy not queued before, as steps that make them in the
+    manuscript, from its branch; as many as fit a step, the rest next run. Anyone the file is
+    shared with can comment, and a step runs code, so the user's own comments (by an author
+    named as they are, see _by_user) are one step, approved, and everyone else's another, which
+    waits for the user to approve it on the page."""
     if not target.exists():
         return
     seen = set(record.get("comments") or [])
-    lines, keys = [], []
+    found: dict[bool, tuple[list[str], list[str], list[str]]] = {}  # mine → lines, keys, authors
     for c in comments(target):
         key = _digest(c["author"], c["at"], c["on"], c["text"])
         if key in seen:
             continue
+        lines, keys, authors = found.setdefault(_by_user(c["author"]), ([], [], []))
         who = f" ({c['author']})" if c["author"] else ""
         where = f"On “{_cut(c['on'], QUOTED)}”{who}: " if c["on"] else f"In general{who}: "
         line = f"{len(lines) + 1}. {where}{_cut(c['text'], SAID)}"
         if len(_COMMENTS_STEP) + sum(len(x) + 1 for x in [*lines, line]) > steps.STEP_CHARS:
-            break
+            continue
         lines.append(line)
         keys.append(key)
-    if not lines:
-        return
-    text = _COMMENTS_STEP + "\n".join(lines)
-    try:
-        steps.queue(
-            vault,
-            project["id"],
-            text,
-            now,
-            manuscript={"path": paper["path"], "branch": paper["branch"]},
-        )
-    except SystemExit as e:  # the queue is full, or the step isn't one: they wait for the next run
-        print(f"folders: {project['id']}'s comments weren't queued ({e})", file=sys.stderr)
-        return
-    record["comments"] = [*seen, *keys]
-    stats["comments_queued"] += len(lines)
+        if c["author"] not in authors:
+            authors.append(c["author"])
+    for mine, (lines, keys, authors) in sorted(found.items(), reverse=True):
+        try:
+            steps.queue(
+                vault,
+                project["id"],
+                _COMMENTS_STEP + "\n".join(lines),
+                now,
+                manuscript={"path": paper["path"], "branch": paper["branch"]},
+                by="comments",
+                authors=authors,
+                approved=mine,
+            )
+        except SystemExit as e:  # the queue is full, or the step isn't one: the next run tries
+            print(f"folders: {project['id']}'s comments weren't queued ({e})", file=sys.stderr)
+            continue
+        seen |= set(keys)
+        record["comments"] = sorted(seen)
+        stats["comments_queued"] += len(lines)
+
+
+def _by_user(author: str) -> bool:
+    """Whether a comment's author is the user: their name (PROXENOS_NAME), word for word in any
+    order and case, so "Dake, Mrugank" is and "Mrugank" alone isn't. A comment by no one isn't."""
+    words = sorted(w.casefold() for w in re.findall(r"\w+", author))
+    return bool(words) and words == sorted(w.casefold() for w in re.findall(r"\w+", env("NAME")))
 
 
 _COMMENTS_STEP = (

@@ -758,7 +758,17 @@ def word_with_comments(path):
         z.writestr("word/commentsExtended.xml", extended)
 
 
-def test_comments_on_a_manuscript_become_a_step_once(setup):
+@pytest.mark.parametrize(
+    "author, mine",
+    [("Joe Bloggs", True), ("bloggs, JOE", True), ("Joe", False), ("Joe Bloggs Jr", False)],
+)
+def test_a_comment_is_the_users_only_by_their_whole_name(monkeypatch, author, mine):
+    monkeypatch.setenv("PROXENOS_NAME", "Joe Bloggs")
+    assert folders._by_user(author) is mine
+    assert not folders._by_user("")
+
+
+def test_comments_on_a_manuscript_become_a_step_once(setup, monkeypatch):
     from proxenos.clones import steps
 
     vault, repo, drive, _ = setup
@@ -776,15 +786,20 @@ def test_comments_on_a_manuscript_become_a_step_once(setup):
         "Shorten the abstract.",
     ]
     assert folders.comments(copy)[0]["on"] == "dawn and dusk"
+    monkeypatch.setenv("PROXENOS_NAME", "Joe")
     stats = run(vault, NOW + timedelta(days=1))
     assert stats["comments_queued"] == 2
-    (queued,) = steps.queued(vault, "calls")
-    assert queued["manuscript"] == {"path": "paper/main.tex", "branch": "paper-storyline"}
-    assert "1. On “dawn and dusk” (Ana Lee): Say which species." in queued["text"]
-    assert "2. In general (Joe): Shorten the abstract." in queued["text"]
-    assert "Typo" not in queued["text"]  # resolved
+    # The user's own comments run as they come; anyone else's wait for the user's approval.
+    mine, theirs = steps.queued(vault, "calls")
+    for queued in (mine, theirs):
+        assert queued["manuscript"] == {"path": "paper/main.tex", "branch": "paper-storyline"}
+        assert queued["by"] == "comments" and "Typo" not in queued["text"]  # resolved
+    assert (mine["approved"], mine["authors"]) == (True, ["Joe"])
+    assert "1. In general (Joe): Shorten the abstract." in mine["text"]
+    assert (theirs["approved"], theirs["authors"]) == (False, ["Ana Lee"])
+    assert "1. On “dawn and dusk” (Ana Lee): Say which species." in theirs["text"]
     assert "comments_queued" not in run(vault, NOW + timedelta(days=2))  # each once
-    assert len(steps.queued(vault, "calls")) == 1
+    assert len(steps.queued(vault, "calls")) == 2
     assert folders.comments(drive / "not a word file.docx") == []
 
 

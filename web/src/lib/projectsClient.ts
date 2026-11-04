@@ -149,6 +149,11 @@ export function useProjects() {
     (project: string, id: string) => act({ unqueue: project, id }, { kind: "decide", label: "Taken off the queue" }),
     [act],
   );
+  /** Approve a step the reader didn't ask for themselves, so the night may take it. */
+  const approve = useCallback(
+    (project: string, id: string) => act({ approve: project, id }, { kind: "decide", label: "Approved: it can run" }),
+    [act],
+  );
   /** Save the user's own text for the manuscript, as a step waiting on them. */
   const saveEdit = useCallback(
     (project: string, edit: ManuscriptEdit) =>
@@ -168,6 +173,7 @@ export function useProjects() {
     accept,
     discard,
     queue,
+    approve,
     unqueue,
     saveEdit,
   };

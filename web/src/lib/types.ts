@@ -1787,6 +1787,15 @@ export interface QueuedStep {
   added: string;
   /** The branch it starts from, when not the checkout's: a manuscript's, or a waiting step's. */
   base: string;
+  /**
+   * Who asked for it: the reader ("you"), Proxenos from the project's status ("proxenos"), or
+   * comments on the manuscript's copy ("comments", by `authors`). "" for one queued before
+   * Proxenos kept who asked.
+   */
+  by: "you" | "proxenos" | "comments" | "";
+  authors: string[];
+  /** Whether the reader approved it: their own are; the rest wait, and the night skips them. */
+  approved: boolean;
 }
 
 /** What a step asked for from the page may say beyond its words. */
@@ -1807,6 +1816,8 @@ export interface WorkProject {
   /** Its folder, manuscript and PDF on drive.google.com, as the folders clone found them synced; "" for each it hasn't. */
   drive: { folder: string; manuscript: string; pdf: string };
   paused: boolean;
+  /** Whether the night may take a step nobody asked for ("autostep" in projects.json). */
+  autostep: boolean;
   /** The folder of its code, with ~ for home; "" when steps aren't taken on it. */
   repo: string;
   /** The paper it names in projects.json ("manuscript"), as a path in its code; "" when it names none. */

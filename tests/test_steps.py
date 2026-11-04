@@ -327,19 +327,65 @@ def test_the_night_takes_one_step_where_the_last_is_decided(setup, tmp_path):
     vault, repo, _ = setup
     write_list(
         vault,
-        {"id": "calls", "name": "Calls", "repo": str(repo)},
+        {"id": "calls", "name": "Calls", "repo": str(repo), "autostep": True},
         {"id": "paper", "name": "Paper"},  # no repo: the projects clone looks after it alone
         {"id": "held", "name": "Held", "repo": str(repo), "paused": True},
-        {"id": "gone", "name": "Gone", "repo": str(tmp_path / "nowhere")},
+        {"id": "gone", "name": "Gone", "repo": str(tmp_path / "nowhere"), "autostep": True},
+        {"id": "quiet", "name": "Quiet", "repo": str(repo)},  # nothing asked, no autostep
     )
     runner = Runner()
 
     stats = steps.night(vault, NOW, [runner])
 
-    assert stats == {"steps_taken": 1, "steps_failed": 1, "steps_waiting": 0}
+    assert stats == {"steps_taken": 1, "steps_failed": 1, "steps_waiting": 0, "steps_unasked": 1}
     # The next night the step is still waiting on the user, so no other is taken.
     assert steps.night(vault, LATER, [runner])["steps_waiting"] == 1
     assert len(runner.tasks) == 1
+
+
+def test_a_step_nobody_asked_for_waits_for_approval_before_it_runs(setup, monkeypatch):
+    vault, _, _ = setup
+    write_list(vault, {"id": "calls", "name": "Calls", "repo": str(setup[1])})
+    theirs = steps.queue(vault, "calls", "Email the data to Ana", NOW, by="proxenos")
+    comments = steps.queue(
+        vault, "calls", "Cut the abstract", NOW, by="comments", authors=["Ana Lee"]
+    )
+    assert (theirs["by"], theirs["approved"]) == ("proxenos", False)
+    assert (comments["authors"], comments["approved"]) == (["Ana Lee"], False)
+    with pytest.raises(SystemExit, match="asked for by"):
+        steps.queue(vault, "calls", "Something", NOW, by="someone")
+    runner = Runner()
+
+    assert steps.night(vault, NOW, [runner]) == {
+        "steps_taken": 0,
+        "steps_failed": 0,
+        "steps_waiting": 0,
+        "steps_unasked": 1,
+    }
+    assert not runner.tasks  # nothing the user didn't approve ran
+
+    def ask(request):
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(request) + "\n"))
+        return steps.run(vault, steps_args("-"))
+
+    assert ask({"approve": "calls", "id": comments["id"]}) == {"steps_approved": 1}
+    assert ask({"approve": "calls", "id": "q-000000000000"}) == {"steps_approved": 0}
+    assert steps.night(vault, NOW, [runner])["steps_taken"] == 1
+    assert runner.tasks[0].brief.count("Cut the abstract") == 1  # the approved one, not the first
+    assert [q["text"] for q in steps.queued(vault, "calls")] == ["Email the data to Ana"]
+
+
+def test_doing_a_step_on_the_page_approves_what_it_takes(setup):
+    vault, _, _ = setup
+    steps.queue(vault, "calls", "Redo figure 3", NOW, by="proxenos")
+    runner = Runner()
+    step = steps.take(vault, project(vault), NOW, [runner])  # "Do a step", the user asking
+    assert (step["asked"], step["by"]) == ("Redo figure 3", "proxenos")
+    assert steps.queued(vault, "calls") == []
+    # A step queued before Proxenos kept who asked says nothing, and waits like the rest.
+    steps._write_queue(vault, "calls", [{"id": "q-0123456789ab", "text": "Old", "added": ""}])
+    assert steps.next_queued(vault, "calls", approved_only=True) is None
+    assert steps.next_queued(vault, "calls")["text"] == "Old"
 
 
 def test_the_brief_has_where_the_project_stands_and_the_steps_before(setup):

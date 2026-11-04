@@ -269,6 +269,10 @@ def test_work_proxenos_can_do_is_queued_for_it_not_given_to_the_user(tmp_path):
     assert [q["text"] for q in taken.queued(tmp_path, "cookbook")] == [
         "Plot rise against temperature"
     ]
+    # From a status the messages shaped, so it waits for the user to approve it.
+    assert [(q["by"], q["approved"]) for q in taken.queued(tmp_path, "cookbook")] == [
+        ("proxenos", False)
+    ]
     assert taken.queued(tmp_path, "notes") == []
     status = (tmp_path / "clones" / "projects" / "cookbook" / "status.md").read_text()
     assert "Plot rise against temperature (Proxenos, queued)" in status

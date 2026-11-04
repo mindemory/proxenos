@@ -18,7 +18,9 @@ its work done, a step at a time, by the steps clone (proxenos.clones.steps), whi
 folders ("data") but never writes them, runs Python with "python" and MATLAB with "matlab" when
 they're given, and reads "notes", what the user wants it to know about the work. Its
 "manuscript", {"path": "docs/paper.md", "branch": "paper"}, names the paper the page shows with
-its changes (proxenos.manuscript), which is otherwise found in the code's history.
+its changes (proxenos.manuscript), which is otherwise found in the code's history. Its steps run
+only when the user asked for them or approved them on the page; "autostep": true lets the night
+also take one it picks from where the project stands.
 
 For each project that isn't paused, a run:
 - gathers what the vault holds on it: what's new since the last run naming one of its terms or
@@ -207,6 +209,8 @@ def listed_projects(vault: Path) -> list[dict]:
                 "python": str(p.get("python") or "").strip(),
                 "matlab": str(p.get("matlab") or "").strip(),
                 "notes": str(p.get("notes") or "").strip(),
+                # True lets the night take a step nobody asked for, picked from its status.
+                "autostep": p.get("autostep") is True,
                 # The paper, when the user names it (proxenos.manuscript finds it otherwise).
                 "manuscript": _manuscript(p.get("manuscript")),
             }
@@ -287,7 +291,8 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
 
 def _queue_own(vault: Path, project: dict, steps: list[dict], now: datetime) -> None:
     """The next steps that are Proxenos's to take, queued for the steps clone (up to QUEUED a
-    run, none twice), each marked so the status says it's queued."""
+    run, none twice), each marked so the status says it's queued. They come from the status,
+    which comes from others' messages, so each waits for the user to approve it on the page."""
     from proxenos.clones import steps as taken  # steps imports this module
 
     waiting = {_text(q.get("text")).casefold() for q in taken.queued(vault, project["id"])}
@@ -302,7 +307,7 @@ def _queue_own(vault: Path, project: dict, steps: list[dict], now: datetime) -> 
         if added >= QUEUED:
             continue
         try:
-            taken.queue(vault, project["id"], text, now)
+            taken.queue(vault, project["id"], text, now, by="proxenos")
         except SystemExit:  # the queue is full: it waits for the next run
             return
         waiting.add(text.casefold())

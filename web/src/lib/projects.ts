@@ -72,6 +72,7 @@ export type Decision =
   | { accept: string }
   | { discard: string }
   | ({ queue: string; step: string } & StepAsk)
+  | { approve: string; id: string }
   | { unqueue: string; id: string };
 
 /** A branch's name, as git takes one and as the steps clone checks it. */
@@ -119,6 +120,12 @@ export function parseDecision(body: Record<string, unknown>): Decision | { error
       ? { unqueue: body.unqueue, id: body.id }
       : { error: "id must be a queued step's id." };
   }
+  if ("approve" in body) {
+    if (!isProjectId(body.approve)) return { error: "approve must be a project's id." };
+    return typeof body.id === "string" && /^q-[0-9a-f]{12}$/.test(body.id)
+      ? { approve: body.approve, id: body.id }
+      : { error: "id must be a queued step's id." };
+  }
   if ("queue" in body) {
     if (!isProjectId(body.queue)) return { error: "queue must be a project's id." };
     const step = parseStepText(body.step);
@@ -127,7 +134,7 @@ export function parseDecision(body: Record<string, unknown>): Decision | { error
     if ("error" in ask) return { error: ask.error };
     return { queue: body.queue, step, ...ask };
   }
-  return { error: "Ask for take, queue, unqueue, accept or discard." };
+  return { error: "Ask for take, queue, approve, unqueue, accept or discard." };
 }
 
 /** Take a step on the project now: the one asked for, else the first queued. Null when a step is already being taken. */
@@ -251,12 +258,16 @@ function splitStatus(text: string): { status: string; date: string } {
   return { status: lines.join("\n").trim(), date };
 }
 
+const ASKERS: readonly QueuedStep["by"][] = ["you", "proxenos", "comments"];
+
 function toQueued(raw: unknown): QueuedStep | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const text = str(r.text).trim();
   if (!text || !/^q-[0-9a-f]{12}$/.test(str(r.id))) return null;
-  return { id: str(r.id), text, added: str(r.added), base: isBranch(r.base) ? r.base : "" };
+  const by = ASKERS.includes(r.by as QueuedStep["by"]) ? (r.by as QueuedStep["by"]) : "";
+  const authors = Array.isArray(r.authors) ? r.authors.map((a) => str(a).trim().slice(0, 200)).filter(Boolean).slice(0, 20) : [];
+  return { id: str(r.id), text, added: str(r.added), base: isBranch(r.base) ? r.base : "", by, authors, approved: r.approved === true };
 }
 
 async function readSteps(dir: string, project: string, job: Job | null): Promise<ProjectStep[]> {
@@ -340,6 +351,7 @@ export async function getProjects(): Promise<ProjectsResponse> {
       brief: ((await readPlain(path.join(folder, "brief.md"), MAX_STATUS_BYTES)) ?? "").trim(),
       drive: driveLinks(rec(rec(folders[id]).links)),
       paused: r.paused === true,
+      autostep: r.autostep === true,
       repo: str(r.repo).trim() ? displayPath(path.resolve(expandHome(str(r.repo).trim()))) : "",
       paper: paperPath(r.manuscript),
       data: strings(r.data, 10).map((d) => displayPath(path.resolve(expandHome(d.trim())))),
