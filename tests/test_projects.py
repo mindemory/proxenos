@@ -273,6 +273,12 @@ def test_work_proxenos_can_do_is_queued_for_it_not_given_to_the_user(tmp_path):
     assert [(q["by"], q["approved"]) for q in taken.queued(tmp_path, "cookbook")] == [
         ("proxenos", False)
     ]
+    # And no more than QUEUED of its own wait at once, so the user's own always fit.
+    ideas = [{"step": f"Idea {n}", "who": "Proxenos"} for n in range(projects.QUEUED + 2)]
+    project = next(p for p in projects.listed_projects(tmp_path) if p["id"] == "cookbook")
+    projects._queue_own(tmp_path, project, ideas, NOW)
+    projects._queue_own(tmp_path, project, ideas, NOW + timedelta(days=1))
+    assert len(taken.queued(tmp_path, "cookbook")) == projects.QUEUED
     assert taken.queued(tmp_path, "notes") == []
     status = (tmp_path / "clones" / "projects" / "cookbook" / "status.md").read_text()
     assert "Plot rise against temperature (Proxenos, queued)" in status

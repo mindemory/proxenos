@@ -292,11 +292,13 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
 def _queue_own(vault: Path, project: dict, steps: list[dict], now: datetime) -> None:
     """The next steps that are Proxenos's to take, queued for the steps clone (up to QUEUED a
     run, none twice), each marked so the status says it's queued. They come from the status,
-    which comes from others' messages, so each waits for the user to approve it on the page."""
+    which comes from others' messages, so each waits for the user to approve it on the page,
+    and no more than QUEUED wait at once, so the user's own always fit in the queue."""
     from proxenos.clones import steps as taken  # steps imports this module
 
-    waiting = {_text(q.get("text")).casefold() for q in taken.queued(vault, project["id"])}
-    added = 0
+    queued = taken.queued(vault, project["id"])
+    waiting = {_text(q.get("text")).casefold() for q in queued}
+    added = sum(1 for q in queued if q.get("by") == "proxenos" and q.get("approved") is not True)
     for step in steps:
         if _text(step.get("who")).casefold() != PROXENOS:
             continue
