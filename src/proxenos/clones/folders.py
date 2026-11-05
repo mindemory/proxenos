@@ -10,7 +10,9 @@ the projects and steps clones, each project on clones/projects/projects.json get
 <folder>/<its group, or Other>/<its name>/, the names made safe for every OS, holding Word files
 pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
 - "<name> - manuscript.docx": the manuscript (proxenos.manuscript.find) at its branch's tip,
-  read from git, never the user's checkout, with the files beside it that it includes and shows.
+  read from git, never the user's checkout, with the files beside it that it includes and shows,
+  and the figures it shows from elsewhere in the repository ("../../figures/fig1.png" from its
+  folder, or "figures/fig1.png" from the repository's top), each put where it looks for them.
   Markdown converts as it is. LaTeX converts with its citations and references written out from
   the .bib files beside it, so it goes one way: its changes never come back.
 - "<name> - manuscript.pdf": the same version, made in the same checkout, so the two always
@@ -74,6 +76,7 @@ import hashlib
 import io
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -454,7 +457,8 @@ def _write_paper(
     target = where / f"{where.name} - manuscript.docx"
     pdf = target.with_suffix(".pdf")
     listed = _paper_files(repo, tip, path)
-    source = _digest(LOOK, kind, path, *(" ".join(f) for f in listed))
+    elsewhere = _shown_elsewhere(repo, tip, path)
+    source = _digest(LOOK, kind, path, *(" ".join(f) for f in [*listed, *elsewhere]))
     found = _found(target, files.get(target.name), source)
     held = found == "theirs" and how in ("waiting", "held")
     pdf_source, committed = _pdf_plan(repo, tip, path, kind, source)
@@ -467,6 +471,7 @@ def _write_paper(
         with tempfile.TemporaryDirectory() as tmp:
             made, out = Path(tmp) / "made.docx", Path(tmp) / "paper"
             _write_out(repo, tip, listed, out)
+            _place(repo, tip, elsewhere, out)
             if kind == "markdown":
                 written = out.joinpath(*path.split("/"))
                 # As bytes, so line ends stay as committed (text mode would make them CRLF on Windows).
@@ -832,11 +837,20 @@ def _carried(name: str) -> set[tuple[str, int]]:
 def _shown(text: str) -> set[str]:
     """The figures the manuscript shows itself, Markdown's images and LaTeX's \\includegraphics,
     as the paths it gives them, lowercase, without a leading ./ or ../."""
+    return {re.sub(r"^(?:\.\.?/)+", "", p.lower()) for p in _shown_paths(text)}
+
+
+def _shown_paths(text: str) -> list[str]:
+    """The paths of the figures the manuscript shows itself, as it writes them, in order: not
+    one on the web."""
     paths = [m.group(1) for m in _GRAPHICS.finditer(text)]
     for m in _IMAGE.finditer(text):
         link = m.group(2).strip()
         paths.append(link[1:].partition(">")[0] if link.startswith("<") else link.partition(" ")[0])
-    return {re.sub(r"^(?:\.\.?/)+", "", p.strip().lower()) for p in paths if p.strip()}
+    return list(dict.fromkeys(p.strip() for p in paths if p.strip() and not _WEB.match(p.strip())))
+
+
+_WEB = re.compile(r"[a-z][\w+.-]*:", re.IGNORECASE)  # https:, data:: a link, not a path
 
 
 def _is_shown(kept: str, shown: set[str]) -> bool:
@@ -1112,6 +1126,61 @@ def _paper_files(repo: Path, tip: str, path: str) -> list[tuple[str, str]]:
     if first is None:
         raise ConvertError(f"{path} isn't on its branch")
     return [first, *rest]
+
+
+_EXTENSIONS = ("", ".pdf", ".png", ".jpg", ".jpeg", ".eps")  # as LaTeX finds a figure's file
+
+
+def _shown_elsewhere(repo: Path, tip: str, path: str) -> list[tuple[str, str, str]]:
+    """The figures the manuscript shows that sit outside its own folder, which _paper_files
+    leaves out, as (where the manuscript looks for it, from the repository's top; the file in
+    the repository; its blob): a path read from the manuscript's folder, as pandoc and LaTeX
+    read it ("../../figures/fig1.png"), else from the repository's top ("figures/fig1.png"),
+    which a paper written there means; a LaTeX one without its extension found as LaTeX finds
+    it. At most PAPER_FILES, none over FILE_BYTES, and never a path out of the repository."""
+    text = (manuscript._blob(repo, tip, path) or b"").decode("utf-8", "replace")
+    wanted = _shown_paths(text)
+    if not wanted:
+        return []
+    tree = {}
+    listed = manuscript._git(repo, "--literal-pathspecs", "ls-tree", "-r", "-l", "-z", tip)
+    for line in listed.split("\0"):
+        meta, _, name = line.partition("\t")
+        fields = meta.split()
+        if len(fields) == 4 and fields[1] == "blob" and fields[3].isdigit():
+            tree[name] = (fields[2], int(fields[3]))
+    folder = str(PurePosixPath(path).parent)
+    found: dict[str, tuple[str, str, str]] = {}
+    for shown in wanted:
+        at = posixpath.normpath(posixpath.join(folder, shown))
+        if at == ".." or at.startswith(("../", "/")):
+            continue  # out of the repository: nothing of its own to show
+        for base in (at, posixpath.normpath(shown)):  # from its folder, else from the top
+            if base == ".." or base.startswith(("../", "/")):
+                continue
+            kept = next((base + e for e in _EXTENSIONS if base + e in tree), None)
+            if kept is None:
+                continue
+            where = at + kept[len(base) :]
+            if kept == where and (folder == "." or where.startswith(f"{folder}/")):
+                break  # beside it, so _paper_files writes it out already
+            if tree[kept][1] <= FILE_BYTES and len(found) < PAPER_FILES:
+                found.setdefault(where, (where, kept, tree[kept][0]))
+            break
+    return list(found.values())
+
+
+def _place(repo: Path, tip: str, elsewhere: list[tuple[str, str, str]], into: Path) -> None:
+    """The figures from _shown_elsewhere, each written under `into` where the manuscript looks
+    for it, unless something is there already."""
+    for where, kept, _ in elsewhere:
+        target = into.joinpath(*where.split("/"))
+        if target.exists():
+            continue
+        data = manuscript._blob(repo, tip, kept)
+        if data is not None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
 
 
 def _write_out(repo: Path, tip: str, listed: list[tuple[str, str]], into: Path) -> None:

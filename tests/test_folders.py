@@ -1009,6 +1009,48 @@ def test_a_paper_naming_only_data_gets_no_supplement_document(setup):
     assert "Supplementary information" not in text_of(where / "About this folder.docx")
 
 
+def test_figures_kept_outside_the_papers_folder_go_into_its_copies(setup, monkeypatch):
+    vault, repo, drive, fake = setup
+    paper = (
+        "# Calls\n\n![Dawn](../../figures/fig1.png)\n\n![Dusk](figures/fig2.png)\n\n"
+        "![Here](fig.png)\n\n![Web](https://example.org/x.png)\n\n![Gone](../../../up.png)\n"
+    )
+    git(repo, "checkout", "-q", "paper-storyline")
+    files = {
+        "docs/paper/paper.md": paper,
+        "figures/fig1.png": b"\x89PNG one",  # from the paper's folder, up to the top
+        "figures/fig2.png": b"\x89PNG two",  # named from the top of the repository
+    }
+    commit(repo, files, "Figures at the top", 3)
+    git(repo, "checkout", "-q", "main")
+    seen = {}
+    made = fake.to_docx
+
+    def to_docx(source, out, kind):  # what pandoc, run in the paper's folder, would find
+        for shown in ("../../figures/fig1.png", "figures/fig2.png", "fig.png"):
+            target = source.parent / shown
+            if source.name == "paper.md":
+                seen[shown] = target.read_bytes() if target.exists() else None
+        made(source, out, kind)
+
+    monkeypatch.setattr(folders, "to_docx", to_docx)
+    run(vault, NOW)
+
+    assert seen == {
+        "../../figures/fig1.png": b"\x89PNG one",
+        "figures/fig2.png": b"\x89PNG two",
+        "fig.png": b"\x89PNG dawn",
+    }
+    # Each shown, so none is a supplement's.
+    assert not (drive / FOLDER / "Supplement").exists()
+    # A figure that changes makes the copies again.
+    git(repo, "checkout", "-q", "paper-storyline")
+    commit(repo, {"figures/fig2.png": b"\x89PNG two, redone"}, "Redo", 4)
+    git(repo, "checkout", "-q", "main")
+    run(vault, LATER)
+    assert seen["figures/fig2.png"] == b"\x89PNG two, redone"
+
+
 LABELLED = (
     "# Calls\n\n"
     "Calls differ by hour (Supplementary Table 2) and by species (Table S1), most at dusk\n"
