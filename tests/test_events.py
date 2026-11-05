@@ -56,8 +56,25 @@ def records():
         mail("hop", "Thank you for your order from the Hop", HOP),
         mail("ld", "Your reservation", LD + "\nSee you there", name="Choir"),
         mail("ics", "Your info for pottery", ICS, name="Clay"),
-        mail("old", "Booking confirmation", "Show\nThursday, October 8, 2026 7:00 PM"),
+        mail("old", "Your booking confirmation", "Show\nThursday, October 8, 2026 7:00 PM"),
         mail("news", "This week", "Concert\nFriday, November 6, 2026 8:00 PM", name="Letter"),
+        # Newsletters, promotions and binned mail use the same words, and are never bookings.
+        mail(
+            "issue",
+            "In This Issue: Pumpkin Painting & More!",
+            "Your order of events\nFriday, November 6, 2026 2:30 PM",
+            name="Examiner",
+        ),
+        mail(
+            "promo",
+            "Series Starts Soon: register for your seat",
+            "Workshop\nWednesday, December 9, 2026 12:30 PM",
+            name="Academy",
+        ),
+        {
+            **mail("binned", "Your tickets", "Gala\nSaturday, November 7, 2026 6:00 PM"),
+            "gmail_labels": ["Trash"],
+        },
     ]
 
 

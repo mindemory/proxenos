@@ -18,12 +18,23 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 DAYS = 30  # of mail looked at
+# A subject that confirms a booking of the user's own: their order, tickets, reservation or
+# registration, not a word that newsletters and invitations also use.
 _CONFIRMING = re.compile(
-    r"\b(orders?|tickets?|reservations?|bookings?|booked|registrations?|registered"
-    r"|your info for|confirmation|itinerary|see you on|rsvp)\b",
+    r"\byour (orders?|tickets?|e-?tickets?|reservations?|bookings?|registrations?|itinerary"
+    r"|rsvp|info for)\b|\bthank you for (your|the) (order|purchase|booking|reservation"
+    r"|registration)\b|\b(order|booking|reservation|registration|ticket) (confirm\w*|#|number)"
+    r"|\byou'?re (booked|registered|confirmed|going)\b|\bconfirmed:|\brsvp confirmed\b",
     re.IGNORECASE,
 )
-_HEAD_LINES = 5  # of the body, besides the subject, where the confirming words may be
+# What promotions, newsletters and notices say in their subjects, which a booking never does.
+_PROMOTING = re.compile(
+    r"in this issue|contents:|newsletter|digest|starts? (soon|in)|\d+ (days?|weeks?) away"
+    r"|join (us|our)|sign up|register (now|today|for)|registration (is )?open|save the date"
+    r"|last chance|don'?t miss|webinar|incident",
+    re.IGNORECASE,
+)
+_SET_ASIDE = {"trash", "spam", "[gmail]/trash", "[gmail]/spam", "junk email", "deleted items"}
 # A line about when the order or email was made, not about the event.
 _MADE = re.compile(
     r"^\W*(order(ed)?\s*(date|placed|time)?|purchased?(\s+(on|date))?|purchase date|sent|date"
@@ -72,14 +83,15 @@ _KINDS = {
 _START = ("startDate", "checkinTime", "checkinDate", "departureTime")
 # A line that isn't an event's name: a label, a price, a link, order boilerplate.
 _NOT_A_NAME = re.compile(
-    r"https?://|@|\$|€|£|^[\W_]*(thank|your|order|total|subtotal|qty|quantity|price|seat|view"
+    r"https?://|@|\$|€|£|^[\W_]*(thank|your|order|total|subtotal|qty|quantity|price|seat|view|location"
     r"|download|print|manage|confirmation|receipt|tickets?|booking|date|time|when|where|venue)\b"
     r"|\b(order|confirmation|receipt|total|subtotal)\b.*[#:]|^[^:]{1,25}:\s",
     re.IGNORECASE,
 )
 _BOILER = re.compile(
     r"^\W*(thank you for (your|the) (order|purchase|booking|reservation|registration)"
-    r"( (from|at|with)\b[^:–—-]*)?|your .{0,40}(confirmation|order|booking|reservation|tickets?))"
+    r"( (from|at|with)\b[^:–—-]*)?|your info for|your .{0,40}(confirmation|order|booking"
+    r"|reservation|tickets?))"
     r"\W*",
     re.IGNORECASE,
 )
@@ -111,9 +123,13 @@ def find(vault: Path, now: datetime | None = None) -> list[dict]:
 
 
 def _confirming(record: dict) -> bool:
-    """Whether the subject or the first lines of the body have a confirming word."""
-    head = [str(record.get("subject") or ""), *_lines(_body(record))[:_HEAD_LINES]]
-    return any(_CONFIRMING.search(h) for h in head)
+    """Whether the mail confirms a booking of the user's own, by its subject, and isn't one
+    they set aside (trash or spam)."""
+    subject = str(record.get("subject") or "")
+    labels = {str(label).casefold() for label in record.get("gmail_labels") or []}
+    if labels & _SET_ASIDE or _PROMOTING.search(subject):
+        return False
+    return bool(_CONFIRMING.search(subject))
 
 
 def _body(record: dict) -> str:
