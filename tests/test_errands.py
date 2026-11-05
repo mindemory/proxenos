@@ -1,6 +1,8 @@
 """Errands, with the model and every sender faked out, on a synthetic vault. No model, no real
 data, and nothing is ever sent."""
 
+import argparse
+import io
 import json
 from datetime import UTC, datetime
 
@@ -583,3 +585,136 @@ def test_the_pages_requests_are_checked(vault):
             errands._request(bad)
     with pytest.raises(SystemExit, match="isn't an errand's id"):
         errands.load(vault, "../../etc/passwd")
+
+
+def waiting_errand(vault, to, channel, *, chat=None, address="", created=NOW):
+    """An errand saved as it would stand with one message waiting, made at `created`."""
+    route = {"channel": channel, "address": address, "chat": chat, "how": "a test"}
+    route = route if address or chat else None
+    message = errands._message("main", to, channel, route, "S", "Hi", False)
+    errand = {
+        "id": f"errand-{created:%Y%m%dT%H%M%SZ}",
+        "goal": f"Reach {to}",
+        "created": errands._iso(created),
+        "status": "ready",
+        "steps": [],
+        "messages": [message],
+    }
+    errands._save(vault, errand, created)
+    return errand
+
+
+def sent_mail(n, to, **fields):
+    record = mail(n, from_me=True, to=[to], subject="Hello again", **fields)
+    return record | {"ts": f"2026-10-{n:02d}T12:00:00Z"}
+
+
+def test_a_message_the_user_sent_from_their_own_mail_is_marked_sent_with_the_evidence(vault):
+    errand = waiting_errand(vault, "Ana Lee", "email", address="ana.lee@acme.org")
+    before = sent_mail(4, "ana.lee@acme.org") | {"ts": "2026-09-30T08:00:00Z"}
+    write_month(vault, "email/joe", "2026-09", [before])
+    mails = [sent_mail(2, "ben@beta.com"), sent_mail(3, "Ana Lee <Ana.Lee@acme.org>")]
+    write_month(vault, "email/joe", "2026-10", mails)
+
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 1}
+
+    saved = errands.load(vault, errand["id"])
+    (message,) = saved["messages"]
+    assert (message["state"], message["sent_by"], message["sent_at"]) == (
+        "sent",
+        "elsewhere",
+        "2026-10-03T12:00:00Z",
+    )
+    assert message["sent_evidence"] == "you wrote to ana.lee@acme.org on 2026-10-03 (“Hello again”)"
+    assert saved["status"] == "sent"
+    assert saved["steps"][-1]["title"] == "Sent elsewhere"
+    assert saved["summary"] == "Sent to Ana Lee, from outside Proxenos."
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 0}  # nothing left to settle
+
+
+def test_a_message_to_someone_else_or_from_before_the_errand_leaves_it_waiting(vault):
+    errand = waiting_errand(vault, "Ana Lee", "email", address="ana.lee@acme.org")
+    before = sent_mail(4, "ana.lee@acme.org") | {"ts": "2026-09-30T08:00:00Z"}
+    write_month(vault, "email/joe", "2026-09", [before])
+    write_month(vault, "email/joe", "2026-10", [sent_mail(2, "ben@beta.com")])
+
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 0}
+    assert errands.load(vault, errand["id"])["status"] == "ready"
+
+
+def test_a_message_in_their_chat_on_its_channel_settles_a_chat_errand(vault):
+    jid = "919800000001@s.whatsapp.net"
+    chat = {"source": "whatsapp", "chat": jid, "last": "w0"}
+    errand = waiting_errand(vault, "Cy Doe", "whatsapp", chat=chat)
+    ben = {"chat_id": "ben@s.whatsapp.net", "chat_name": "Ben", "chat_type": "direct"}
+    cy = {"chat_id": jid, "chat_name": "Cy Doe", "chat_type": "direct"}
+    texts = [
+        ben | {"id": "w1", "ts": "2026-10-02T09:00:00Z", "text": "hello Ben", "from_me": True},
+        cy | {"id": "w2", "ts": "2026-10-02T10:00:00Z", "text": "hello Cy", "from_me": True},
+    ]
+    write_month(vault, "whatsapp/messages", "2026-10", texts)
+
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 1}
+
+    saved = errands.load(vault, errand["id"])
+    assert saved["messages"][0]["sent_evidence"] == (
+        "you wrote in your whatsapp chat with them on 2026-10-02"
+    )
+    assert saved["status"] == "sent"
+
+
+def test_a_slack_message_is_settled_by_the_dm_with_that_person(vault):
+    errand = waiting_errand(vault, "Cy Doe", "slack")  # copied, so no chat of its own
+    dm = {
+        "channel_id": "D1",
+        "channel_type": "dm",
+        "channel_name": "Cy Doe",
+        "user_id": "U1",
+        "user_name": "Joe Bloggs",
+        "from_me": True,
+        "id": "s1",
+        "ts": "2026-10-02T09:00:00Z",
+        "text": "hi Cy",
+    }
+    group = dm | {"channel_id": "C9", "channel_type": "channel", "channel_name": "ops", "id": "s2"}
+    write_month(vault, "slack/acme/messages", "2026-10", [group, dm])
+
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 1}
+    assert errands.load(vault, errand["id"])["messages"][0]["sent_by"] == "elsewhere"
+
+
+def test_the_user_marks_an_errands_message_sent_or_done_by_hand(vault):
+    errand = waiting_errand(vault, "Ana Lee", "email", address="ana.lee@acme.org")
+    intro = errands._message("intro", "Ben", "email", None, "S", "Could you introduce me?", False)
+    errand["messages"].append(intro)
+    errands._save(vault, errand, NOW)
+
+    one = errands.mark(vault, errand["id"], "sent", 0, NOW)
+
+    assert [m["state"] for m in one["messages"]] == ["sent", "done"]  # the note is moot now
+    assert one["messages"][0]["sent_by"] == "you"
+    assert one["status"] == "sent" and one["steps"][-1]["title"] == "Marked sent"
+    with pytest.raises(SystemExit, match="settled already"):
+        errands.mark(vault, errand["id"], "done", 0, NOW)
+
+    second = waiting_errand(vault, "Cy Doe", "email", created=datetime(2026, 10, 2, tzinfo=UTC))
+    done = errands.mark(vault, second["id"], "done")
+    assert done["status"] == "done" and done["messages"][0]["state"] == "done"
+    assert done["summary"] == "No longer needed: the message to Cy Doe."
+    assert errands.night(vault, NOW)["errands_checked"] == 0  # neither waits on anything
+
+
+def test_the_page_can_mark_sent_or_done_through_the_command(vault, monkeypatch):
+    first = waiting_errand(vault, "Ana Lee", "email", address="ana.lee@acme.org")
+    second = waiting_errand(vault, "Cy Doe", "email", created=datetime(2026, 10, 2, tzinfo=UTC))
+    for request, stat in (
+        ({"sent": first["id"], "index": 0}, "messages_marked_sent"),
+        ({"done": second["id"]}, "messages_marked_done"),
+    ):
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(request) + "\n"))
+        assert errands.run(vault, argparse.Namespace(goal="-")) == {stat: 1}
+    assert errands.load(vault, first["id"])["status"] == "sent"
+    assert errands.load(vault, second["id"])["status"] == "done"
+    for bad in ({"sent": 3}, {"done": "errand-20261001T090000Z", "index": "0"}):
+        with pytest.raises(SystemExit):
+            errands._request(json.dumps(bad))

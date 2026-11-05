@@ -29,7 +29,7 @@ const MAX_ERRANDS = 30;
 const MAX_ERRAND_BYTES = 1024 * 1024;
 // "-n": one of several begun in the same second, as Offers begins its replies.
 const ERRAND_ID = /^errand-\d{8}T\d{6}Z(-\d{1,3})?$/;
-const STATUSES: readonly ErrandStatus[] = ["working", "ready", "waiting", "sent", "failed", "dropped"];
+const STATUSES: readonly ErrandStatus[] = ["working", "ready", "waiting", "sent", "done", "failed", "dropped"];
 const ADDRESS = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 
 /** The most an errand's request may weigh: a message at its longest with every character escaped. */
@@ -77,13 +77,26 @@ export function parseSend(body: Record<string, unknown>): ({ send: string; index
   };
 }
 
+/** The user's word on an errand's message ({sent: <id>, index?} sent it themselves, {done: <id>, index?} no longer needed), checked. */
+export function parseMark(body: Record<string, unknown>): { sent: string; index?: number } | { done: string; index?: number } | { error: string } {
+  const how = "sent" in body ? "sent" : "done";
+  const id = body[how];
+  if (!isErrandId(id)) return { error: `${how} must be an errand's id.` };
+  const index = body.index;
+  if (index === undefined) return how === "sent" ? { sent: id } : { done: id };
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > 9) return { error: "index must be a message's number." };
+  return how === "sent" ? { sent: id, index } : { done: id, index };
+}
+
 /** Carry out an errand. Null when one is already being carried out. */
 export function startErrand(goal: string): Promise<Job | null> {
   return startJob("errand", ["clone", "errands", "-"], null, JSON.stringify({ goal }) + "\n");
 }
 
-/** Send one of an errand's messages, or drop the errand. Null when a Send is still going. */
-export function startSend(request: ({ send: string; index: number } & ErrandEdits) | { drop: string }): Promise<Job | null> {
+/** Send one of an errand's messages, mark one sent or done, or drop the errand. Null when a Send is still going. */
+export function startSend(
+  request: ({ send: string; index: number } & ErrandEdits) | { drop: string } | { sent: string; index?: number } | { done: string; index?: number },
+): Promise<Job | null> {
   return startJob("send", ["clone", "errands", "-"], null, JSON.stringify(request) + "\n");
 }
 
@@ -123,7 +136,9 @@ function toMessage(raw: unknown): ErrandMessage | null {
     body,
     attach: r.attach === true,
     copied: r.copied === true,
-    state: r.state === "ready" || r.state === "sent" ? r.state : "waiting",
+    state: r.state === "ready" || r.state === "sent" || r.state === "done" ? r.state : "waiting",
+    sentBy: r.sent_by === "proxenos" || r.sent_by === "you" || r.sent_by === "elsewhere" ? r.sent_by : "",
+    sentEvidence: str(r.sent_evidence),
     sentAt: str(r.sent_at),
   };
 }

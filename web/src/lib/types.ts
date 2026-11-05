@@ -1564,7 +1564,7 @@ export interface ThinkStart {
 export const ERRAND_MAX_GOAL = 2000;
 export const ERRAND_MAX_MESSAGE = 20_000;
 
-export type ErrandStatus = "working" | "ready" | "waiting" | "sent" | "failed" | "dropped";
+export type ErrandStatus = "working" | "ready" | "waiting" | "sent" | "done" | "failed" | "dropped";
 
 export interface ErrandStep {
   at: string;
@@ -1593,8 +1593,12 @@ export interface ErrandMessage {
   attach: boolean;
   /** Written to paste into a chat Proxenos can't send in (Slack, WeChat): Copy, or Send to an address typed in. */
   copied: boolean;
-  state: "ready" | "waiting" | "sent";
+  state: "ready" | "waiting" | "sent" | "done";
   sentAt: string;
+  /** Who sent it once it was: Proxenos on Send, the user by hand, or "elsewhere" when their own records show it went. */
+  sentBy: "proxenos" | "you" | "elsewhere" | "";
+  /** For one sent elsewhere: what in their records showed it. */
+  sentEvidence: string;
 }
 
 export interface ErrandCv {
@@ -1677,7 +1681,7 @@ export interface OfferReply {
   address: string;
   subject: string;
   body: string;
-  state: "ready" | "waiting" | "sent";
+  state: "ready" | "waiting" | "sent" | "done";
 }
 
 export interface OfferRow {

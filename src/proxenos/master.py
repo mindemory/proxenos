@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxenos import fidelity, importer, llm, memory, observe, outbox, plans, vectors
-from proxenos.clones import recall, tasks, work
+from proxenos.clones import errands, recall, tasks, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
     applemail,
@@ -175,6 +175,11 @@ def sync(vault: Path) -> dict[str, int]:
         stats |= fidelity.measure(vault)
     except (Exception, SystemExit):  # noqa: BLE001
         stats["fidelity_failed"] = 1
+    # And an errand's message the user sent some other way is marked sent: no model either.
+    try:
+        stats |= errands.settle(vault)
+    except (Exception, SystemExit):  # noqa: BLE001
+        stats["errands_failed"] = 1
     # Then the outbox, after the measure it goes by: off unless the user switched it on.
     try:
         stats |= outbox.run(vault)

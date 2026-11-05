@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, FileText, Paperclip, Send, TriangleAlert, X } from "lucide-react";
+import { Check, CheckCheck, Copy, FileText, Paperclip, Send, TriangleAlert, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold, QuestionText } from "@/components/ask/parts";
@@ -30,6 +30,7 @@ const STATUS: Record<ErrandStatus, { label: string; tone: string }> = {
     tone: "border-warn-line bg-warn-bg text-warn-ink",
   },
   sent: { label: "Sent", tone: "border-ok-line bg-ok-bg text-ok-ink" },
+  done: { label: "No longer needed", tone: "border-line-strong bg-surface-2 text-muted" },
   failed: {
     label: "Didn't finish",
     tone: "border-bad-line bg-bad-bg text-bad-ink",
@@ -66,11 +67,17 @@ function MessageBox({
   cv,
   busy,
   onSend,
+  onMarkSent,
+  onMarkDone,
 }: {
   message: ErrandMessage;
   cv: ErrandCv | null;
   busy: boolean;
   onSend: (edits: ErrandEdits) => void;
+  /** The user says they sent it themselves. */
+  onMarkSent: () => void;
+  /** The user says it's no longer needed. */
+  onMarkDone: () => void;
 }) {
   const notify = useToast();
   const [address, setAddress] = useState(message.address);
@@ -85,6 +92,7 @@ function MessageBox({
   }, [copied]);
 
   const sent = message.state === "sent";
+  const settled = sent || message.state === "done";
   const email = message.channel === "email" || (address.trim() !== "" && address !== message.address);
   const why = sent ? null : blocker(message, address, subject, body);
   const what = message.role === "intro" ? "asking for an introduction" : null;
@@ -115,6 +123,7 @@ function MessageBox({
           {what && <span className="text-faint"> · {what}</span>}
         </span>
         {sent && <SentBadge />}
+        {message.state === "done" && <span className="text-xs text-muted">No longer needed</span>}
       </div>
 
       {message.evidence && message.address && (
@@ -166,7 +175,7 @@ function MessageBox({
         <input
           aria-label="Subject"
           value={subject}
-          disabled={sent}
+          disabled={settled}
           onChange={(e) => setSubject(e.target.value)}
           placeholder="Subject"
           className={cn(INPUT, "font-medium")}
@@ -175,7 +184,7 @@ function MessageBox({
       <textarea
         aria-label="Message"
         value={body}
-        disabled={sent}
+        disabled={settled}
         onChange={(e) => setBody(e.target.value)}
         rows={Math.min(16, Math.max(5, body.split("\n").length + 2))}
         className={cn(INPUT, "resize-y leading-relaxed")}
@@ -189,10 +198,13 @@ function MessageBox({
 
       {sent ? (
         <p className="text-xs text-muted" title={formatDateTime(message.sentAt)}>
-          Sent {message.sentAt ? formatDateTime(message.sentAt) : ""}
-          {message.address ? ` to ${message.address}` : ""}.
+          {message.sentBy === "elsewhere"
+            ? `Sent elsewhere: ${message.sentEvidence}.`
+            : message.sentBy === "you"
+              ? `You sent it yourself ${message.sentAt ? formatDateTime(message.sentAt) : ""}.`
+              : `Sent ${message.sentAt ? formatDateTime(message.sentAt) : ""}${message.address ? ` to ${message.address}` : ""}.`}
         </p>
-      ) : (
+      ) : message.state === "done" ? null : (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
             {confirm ? (
@@ -217,6 +229,8 @@ function MessageBox({
               active={copied}
               onClick={() => void copy()}
             />
+            <ActionButton icon={CheckCheck} label="Mark sent" tone="ok" disabled={busy} onClick={onMarkSent} />
+            <ActionButton icon={X} label="Done" tone="neutral" disabled={busy} onClick={onMarkDone} />
           </div>
           {why && <p className="text-xs text-muted">{why}</p>}
           {busy && <p className="text-xs text-muted">A Send is going; this one waits until it&apos;s done.</p>}
@@ -232,13 +246,15 @@ interface ErrandCardProps {
   /** A Send or Drop is going. */
   busy: boolean;
   onSend: (index: number, edits: ErrandEdits) => void;
+  onMarkSent: (index: number) => void;
+  onMarkDone: (index: number) => void;
   onDrop: () => void;
 }
 
 /** One errand: what it was, where it stands, what it wrote, and every step it took to get there. */
-export function ErrandCard({ errand, now, busy, onSend, onDrop }: ErrandCardProps) {
+export function ErrandCard({ errand, now, busy, onSend, onMarkSent, onMarkDone, onDrop }: ErrandCardProps) {
   const status = STATUS[errand.status];
-  const done = errand.status === "sent" || errand.status === "dropped";
+  const done = errand.status === "sent" || errand.status === "done" || errand.status === "dropped";
   return (
     <article id={`errand-${errand.id}`} className="card flex min-w-0 scroll-mt-20 flex-col gap-4 p-4 sm:p-5">
       <div className="min-w-0 space-y-2">
@@ -273,6 +289,8 @@ export function ErrandCard({ errand, now, busy, onSend, onDrop }: ErrandCardProp
           cv={errand.cv}
           busy={busy}
           onSend={(edits) => onSend(i, edits)}
+          onMarkSent={() => onMarkSent(i)}
+          onMarkDone={() => onMarkDone(i)}
         />
       ))}
 

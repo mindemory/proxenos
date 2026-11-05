@@ -105,6 +105,8 @@ function Reply({ row, onErrand }: { row: OfferRow; onErrand?: (id: string) => vo
         </span>
         {reply.state === "sent" ? (
           <SentBadge />
+        ) : reply.state === "done" ? (
+          <span className="text-xs text-muted">No longer needed</span>
         ) : (
           <span
             className={cn(
@@ -122,8 +124,8 @@ function Reply({ row, onErrand }: { row: OfferRow; onErrand?: (id: string) => vo
       {onErrand && (
         <ActionButton
           icon={ArrowRight}
-          label={reply.state === "sent" ? "See it in Errands" : "Edit and send in Errands"}
-          name={`${reply.state === "sent" ? "See it in Errands" : "Edit and send in Errands"}: the reply to ${reply.to}`}
+          label={reply.state === "sent" || reply.state === "done" ? "See it in Errands" : "Edit and send in Errands"}
+          name={`${reply.state === "sent" || reply.state === "done" ? "See it in Errands" : "Edit and send in Errands"}: the reply to ${reply.to}`}
           tone="accent"
           onClick={() => onErrand(reply.errand)}
         />

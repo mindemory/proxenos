@@ -293,3 +293,17 @@ def test_sync_brings_the_tasks_up_to_date_when_they_are_due(tmp_path, monkeypatc
 
     monkeypatch.setattr(master.tasks, "plan", broken)
     assert master.sync(vault)["tasks_failed"] == 1
+
+
+def test_sync_marks_an_errands_message_sent_elsewhere_with_no_model(tmp_path, monkeypatch):
+    vault = make_vault(tmp_path)
+    monkeypatch.setattr(master, "_UNATTENDED", [])
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(master.errands, "settle", lambda v: {"messages_sent_elsewhere": 2})
+    assert master.sync(vault)["messages_sent_elsewhere"] == 2
+
+    def broken(vault):
+        raise SystemExit("no errands")
+
+    monkeypatch.setattr(master.errands, "settle", broken)
+    assert master.sync(vault)["errands_failed"] == 1

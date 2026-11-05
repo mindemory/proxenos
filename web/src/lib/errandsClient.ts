@@ -139,6 +139,12 @@ export function useErrands() {
 
   const drop = useCallback((id: string) => act({ drop: id }, { kind: "send", label: "Dropped" }), [act]);
 
+  /** The user says they sent a message of an errand themselves: nothing is sent. */
+  const markSent = useCallback((id: string, index: number) => act({ sent: id, index }, { kind: "send", label: "Marked sent" }), [act]);
+
+  /** The user says a message of an errand is no longer needed. */
+  const markDone = useCallback((id: string, index: number) => act({ done: id, index }, { kind: "send", label: "Marked done" }), [act]);
+
   return {
     data,
     error,
@@ -147,5 +153,7 @@ export function useErrands() {
     start,
     send,
     drop,
+    markSent,
+    markDone,
   };
 }

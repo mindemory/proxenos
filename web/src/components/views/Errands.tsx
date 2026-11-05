@@ -26,7 +26,7 @@ interface ErrandsProps {
  * tap short, with an account of every step. Nothing goes out until you press Send on it.
  */
 export function Errands({ focus, onFocused }: ErrandsProps = {}) {
-  const { data, error, clearError, waiting, start, send, drop } = useErrands();
+  const { data, error, clearError, waiting, start, send, drop, markSent, markDone } = useErrands();
   const [goal, setGoal] = useState(kept);
   const [starting, setStarting] = useState(false);
   const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
@@ -147,6 +147,8 @@ export function Errands({ focus, onFocused }: ErrandsProps = {}) {
                 now={data.now}
                 busy={busySend}
                 onSend={(index, edits) => void send(e.id, index, edits)}
+                onMarkSent={(index) => void markSent(e.id, index)}
+                onMarkDone={(index) => void markDone(e.id, index)}
                 onDrop={() => void drop(e.id)}
               />
             ))}

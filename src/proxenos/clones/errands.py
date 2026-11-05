@@ -31,6 +31,13 @@ Each step goes into the errand's thread as it's taken: what it did, what it foun
 the user can read the whole of it at the end. An errand is clones/errands/<id>.json. Nothing
 goes out unless the user presses Send on one message (`send`), and then only that message.
 Each night the errands still waiting look again for a way to reach their person, with no model.
+
+An errand knows when it's done, too. On every sync and each night (`settle`, no model) a message
+still ready or waiting is marked sent, `sent_by: "elsewhere"` with the evidence, when the user's
+own outgoing records show a message to that person after the errand was made: mail to the
+address, or a message in their chat with that person on the message's channel. The user can say
+so by hand (`mark`): "sent it myself", or "done" when it's no longer needed. The errand's status
+follows its messages, and one whose message is settled no longer waits on the user.
 """
 
 import argparse
@@ -44,7 +51,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import dates, llm, lookup, mailbox, memory, outbox, research, voice
+from proxenos import chats, dates, fidelity, llm, lookup, mailbox, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 from proxenos.ingest import email as mail
@@ -58,6 +65,8 @@ EXAMPLE_CHARS = 1500
 CV_CHARS = 4000
 CV_DEPTH = 5  # folders deep a CV is looked for
 OPEN_DAYS = 30  # how long a waiting errand keeps looking each night
+SETTLE_DAYS = 90  # how long an errand's open messages are checked against what the user sent
+OPEN = ("ready", "waiting")  # the states of a message that still waits on the user
 CHANNELS = (
     "email",
     "linkedin",
@@ -75,6 +84,8 @@ CHANNELS = (
 COPIED = {"wechat": "WeChat", "slack": "Slack"}
 _CHAT_SOURCES = {"linkedin": "linkedin", "instagram": "instagram", "facebook": "messenger"}
 _CHAT_SOURCES |= {"twitter": "x", "whatsapp": "whatsapp"}
+# And back: the source the user's messages on a channel are read from (Slack is read, not sent in).
+_SOURCE_OF = {channel: source for source, channel in _CHAT_SOURCES.items()} | {"slack": "slack"}
 # A CV's file name: "resume", "Ana_Lee_CV", "AnaLeeCV", "cv.pdf"; not "CVPR".
 _CV_NAME = re.compile(r"(?i:resume|résumé|curriculum)|CV(?![A-Za-z])|(?i:(?:^|[^a-z])cv(?![a-z]))")
 # An email reaching out, as against one that only carries the CV (a form, say).
@@ -470,7 +481,8 @@ def send(
     if cv and not Path(cv["path"]).is_file():
         raise SystemExit(f"errands: the CV isn't at {cv['path']} any more")
     (sender or _send)(message, cv)
-    message.update(state="sent", sent_at=_iso(now))
+    message.update(state="sent", sent_at=_iso(now), sent_by="proxenos")
+    _close_intros(errand, now)
     outbox._log(
         vault / "clones" / "outbox",
         {"id": f"{errand_id}/{index}", "channel": message["channel"], "to": message["to"]},
@@ -507,6 +519,171 @@ def drop(vault: Path, errand_id: str) -> dict:
     errand["status"] = "dropped"
     _step(vault, errand, "Dropped", "You dropped it; nothing more goes out for it.")
     return errand
+
+
+# Knowing it's done, without a Send from here.
+
+
+def mark(
+    vault: Path, errand_id: str, how: str, index: int | None = None, now: datetime | None = None
+) -> dict:
+    """The user's word on an errand's messages: how is "sent" (they sent it themselves) or "done"
+    (no longer needed). Of message `index`, or of every message still waiting when there's none.
+    Recorded as a step, and the errand's status follows. The errand as saved."""
+    now = now or datetime.now(UTC)
+    errand = load(vault, errand_id)
+    if errand.get("status") in ("working", "dropped", "failed"):
+        raise SystemExit(f"errands: {errand_id} is {errand.get('status')}; nothing is waiting")
+    messages = errand.get("messages") or []
+    if index is not None and not 0 <= index < len(messages):
+        raise SystemExit(f"errands: {errand_id} has no message {index}")
+    todo = [index] if index is not None else [i for i, m in enumerate(messages) if _open(m)]
+    if not todo or any(not _open(messages[i]) for i in todo):
+        raise SystemExit("errands: that message was settled already")
+    for i in todo:
+        if how == "sent":
+            messages[i] |= {"state": "sent", "sent_at": _iso(now), "sent_by": "you"}
+        else:
+            messages[i] |= {"state": "done", "done_at": _iso(now)}
+    _close_intros(errand, now)
+    errand["status"] = _status(errand)
+    who = ", ".join(messages[i]["to"] for i in todo)
+    if how == "sent":
+        _step(vault, errand, "Marked sent", f"You said you sent it yourself, to {who}.")
+    else:
+        _step(vault, errand, "Marked done", f"You said it's no longer needed: {who}.")
+    return errand
+
+
+def settle(vault: Path, now: datetime | None = None) -> dict[str, int]:
+    """Mark each errand message still ready or waiting as sent, `sent_by: "elsewhere"`, when the
+    user's own records show a message to that person after the errand was made: mail to the
+    address, or a message in their chat with that person on its channel, the way
+    proxenos.fidelity marks a reply draft sent. The evidence goes on the message and its step.
+    No model. Errands older than SETTLE_DAYS are left as they are."""
+    now = now or datetime.now(UTC)
+    oldest = _iso(now - timedelta(days=SETTLE_DAYS))
+    found = [
+        e
+        for e in listed(vault)
+        if e.get("status") in OPEN and str(e.get("created", "")) >= oldest and e.get("messages")
+    ]
+    out = _Outgoing(vault, min((str(e["created"]) for e in found), default=""))
+    settled = 0
+    for errand in found:
+        since = _when(errand["created"])
+        changed = False
+        for message in errand["messages"]:
+            if not (_open(message) and since):
+                continue
+            if hit := out.wrote(message, since):
+                when, evidence = hit
+                message |= {
+                    "state": "sent",
+                    "sent_at": when,
+                    "sent_by": "elsewhere",
+                    "sent_evidence": evidence,
+                }
+                settled += 1
+                changed = True
+                _step(
+                    vault, errand, "Sent elsewhere", f"{message['to']}: {evidence}, so it's sent."
+                )
+        if changed:
+            _close_intros(errand, now)
+            errand["status"] = _status(errand)
+            _save(vault, errand, now)
+    return {"messages_sent_elsewhere": settled}
+
+
+class _Outgoing:
+    """The user's own outgoing messages since a time, read once and only when asked: their mail
+    (all accounts, by the address it went to) and their chats (one-to-one, by their name or
+    the chat a message was found in)."""
+
+    def __init__(self, vault: Path, since: str) -> None:
+        self.vault, self.since = vault, since
+        self._mail: list[tuple[datetime, str, str, set[str]]] | None = None
+        self._chats: list[tuple[str, str, set[str], list[dict]]] | None = None
+
+    def wrote(self, message: dict, since: datetime) -> tuple[str, str] | None:
+        """(when, evidence) for the user's first message to the one this is for after `since`."""
+        address = _text(message.get("address")).lower()
+        chat = message.get("chat") if isinstance(message.get("chat"), dict) else None
+        channel = message.get("channel")
+        if channel == "email":
+            for when, ts, subject, to in sorted(self._emails(), key=lambda m: m[0]):
+                if address and when > since and address in to:
+                    return ts, f"you wrote to {address} on {ts[:10]} (“{subject[:60]}”)"
+            return None
+        source = _SOURCE_OF.get(channel or "")
+        if not source:
+            return None
+        for src, key, names, sent in self._conversations():
+            if src != source:
+                continue
+            if chat and chat.get("source") == source:
+                same = key == chat.get("chat")
+            else:
+                same = any(_same(message["to"], n) for n in names)
+            for m in sent if same else ():
+                if (when := _when(m["ts"])) and when > since:
+                    return m["ts"], f"you wrote in your {channel} chat with them on {m['ts'][:10]}"
+        return None
+
+    def _emails(self) -> list[tuple[datetime, str, str, set[str]]]:
+        if self._mail is None:
+            self._mail = []
+            for path in sorted((self.vault / "raw" / "email").glob("*/*.jsonl")):
+                if path.stem < self.since[:7]:
+                    continue  # a month before the errand's
+                with path.open(encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        if '"from_me": true' not in line:
+                            continue  # most mail: skipped unread
+                        try:
+                            r = json.loads(line)
+                        except ValueError:
+                            continue
+                        if not isinstance(r, dict) or not (when := _when(r.get("ts"))):
+                            continue
+                        to = set(_addresses(r.get("to")) + _addresses(r.get("cc")))
+                        self._mail.append((when, str(r["ts"]), _text(r.get("subject")), to))
+        return self._mail
+
+    def _conversations(self) -> list[tuple[str, str, set[str], list[dict]]]:
+        """(source, chat key, whom it's one-to-one with by name, the user's messages in it) for
+        each chat read, from its newest months."""
+        if self._chats is None:
+            self._chats = []
+            for source, key, messages, *_ in chats.conversations(self.vault, 4, email=False):
+                names = {n for s, n in fidelity._with(source, key, messages) if s == source}
+                sent = [m for m in messages if m["mine"] and m["text"]]
+                if sent:
+                    self._chats.append((source, key, names, sent))
+        return self._chats
+
+
+def _open(message: dict) -> bool:
+    return message.get("state") in OPEN
+
+
+def _close_intros(errand: dict, now: datetime) -> None:
+    """Once the errand's own message is sent or set aside, a note asking someone for an
+    introduction to them has nothing left to ask: it's done too."""
+    messages = errand.get("messages") or []
+    if messages and messages[0].get("state") in ("sent", "done"):
+        for message in messages[1:]:
+            if _open(message):
+                message |= {"state": "done", "done_at": _iso(now)}
+
+
+def _when(ts: object) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(str(ts))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
 
 
 # Finding things.
@@ -943,8 +1120,8 @@ def _status(errand: dict) -> str:
     states = [m.get("state") for m in errand.get("messages") or []]
     if errand.get("status") == "dropped":
         return "dropped"
-    if states and states[0] == "sent":
-        return "sent"
+    if states and states[0] in ("sent", "done"):
+        return states[0]
     return "ready" if "ready" in states else "waiting"
 
 
@@ -956,6 +1133,10 @@ def summary(errand: dict) -> str:
     main, intro = messages[0], (messages[1] if len(messages) > 1 else None)
     cv = errand.get("cv")
     with_cv = f", with {cv['name']}" if cv and main.get("attach") else ""
+    if main["state"] == "done":
+        return f"No longer needed: the message to {main['to']}."
+    if main["state"] == "sent" and main.get("sent_by") == "elsewhere":
+        return f"Sent to {main['to']}, from outside Proxenos."
     if main["state"] == "sent":
         return f"Sent to {main['to']}{with_cv}."
     if main["state"] == "ready":
@@ -1105,8 +1286,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "goal",
         nargs="?",
-        help='the errand, in your words; "-" reads {goal}, {send, index, ...} or {drop} as JSON '
-        "from stdin. With none, the waiting errands look again for a way to reach their person",
+        help='the errand, in your words; "-" reads {goal}, {send, index, ...}, {sent, index?}, '
+        "{done, index?} or {drop} as JSON from stdin. With none, the waiting errands look again "
+        "for a way to reach their person, and a message sent elsewhere is marked sent",
     )
 
 
@@ -1120,13 +1302,17 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
         if "drop" in request:
             drop(vault, request["drop"])
             return {"errands_dropped": 1}
+        for how in ("sent", "done"):
+            if how in request:
+                mark(vault, request[how], how, request.get("index"))
+                return {f"messages_marked_{how}": 1}
         errand = start(vault, request["goal"])
         return {"errands_run": 1, "messages_ready": _ready(errand)}
     if args.goal:
         errand = start(vault, args.goal)
         print(errand["summary"], file=sys.stderr)
         return {"errands_run": 1, "messages_ready": _ready(errand)}
-    return night(vault)
+    return night(vault) | settle(vault)
 
 
 def night(vault: Path, now: datetime | None = None) -> dict[str, int]:
@@ -1144,8 +1330,8 @@ def night(vault: Path, now: datetime | None = None) -> dict[str, int]:
 
 
 def _request(line: str) -> dict:
-    """The page's request, checked: {goal}, {send: id, index, address?, subject?, body?} or
-    {drop: id}."""
+    """The page's request, checked: {goal}, {send: id, index, address?, subject?, body?},
+    {sent: id, index?} (sent it myself), {done: id, index?} (no longer needed) or {drop: id}."""
     try:
         request = json.loads(line)
     except ValueError:
@@ -1166,6 +1352,14 @@ def _request(line: str) -> dict:
         if not isinstance(request["drop"], str):
             raise SystemExit("errands: drop must be an errand's id")
         return request
+    for how in ("sent", "done"):
+        if how in request:
+            if not isinstance(request[how], str):
+                raise SystemExit(f"errands: {how} must be an errand's id")
+            index = request.get("index")
+            if index is not None and (not isinstance(index, int) or isinstance(index, bool)):
+                raise SystemExit("errands: index must be a number")
+            return request
     if not isinstance(request.get("goal"), str):
         raise SystemExit("errands: say what the errand is")
     return request
