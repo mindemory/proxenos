@@ -40,10 +40,12 @@ from proxenos.config import env
 
 MINUTES = 60
 NEAR = timedelta(hours=2)
+SAME_PERSON_DAYS = 2  # their own event with the plan's person this close is the plan
 PAST_DAYS = 2  # plans this long gone stay, so today's don't vanish the moment they start
 NAME = "Proxenos"
 _AT = re.compile(r"(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?")
 _WORD = re.compile(r"[^\W\d_]{3,}")
+_TOKEN = re.compile(r"[^\W\d_]+")
 # Words a plan and an event share without being about the same thing.
 _COMMON = {
     *("about", "and", "appointment", "attend", "call", "check", "coffee", "dinner", "for"),
@@ -363,7 +365,14 @@ def _calendar(vault: Path, since: date, made: set[str] = frozenset()) -> Iterato
                 when = time.date()
             if when is not None and when >= since:
                 title = " ".join(str(event.get("summary") or "busy").split())[:80]
-                yield {"day": when, "time": time, "words": _words(title), "title": title}
+                yield {
+                    "day": when,
+                    "time": time,
+                    "words": _words(title),
+                    "title": title,
+                    "tokens": {t.casefold() for t in _TOKEN.findall(title)},
+                    "people": _people(event),
+                }
 
 
 def _began(event: dict, when: datetime) -> bool:
@@ -376,13 +385,47 @@ def _began(event: dict, when: datetime) -> bool:
 
 
 def _same(task: dict, when: datetime | date, event: dict) -> bool:
-    """Whether one of the user's own events is this plan."""
+    """Whether one of the user's own events is this plan: with its person within
+    SAME_PERSON_DAYS, or on its day, near its time, sharing a word with it."""
     day = when.date() if isinstance(when, datetime) else when
+    if abs((event["day"] - day).days) <= SAME_PERSON_DAYS and _theirs_with(task, event):
+        return True  # their calendar knows the real time better than a model reading messages
     if event["day"] != day:
         return False
     if isinstance(when, datetime) and event["time"] and abs(event["time"] - when) > NEAR:
         return False
     return bool(event["words"] & (_words(task.get("title")) | _words(task.get("with"))))
+
+
+def _people(event: dict) -> set[str]:
+    """The words of the names and addresses an event carries for its guests and organizer: a
+    name's parts, an address's name before the @ split at dots, dashes and underscores."""
+    found = set()
+    guests = event.get("guests")
+    for guest in [g for g in guests if isinstance(g, dict)] if isinstance(guests, list) else []:
+        found |= _words(guest.get("name")) | _words(str(guest.get("email") or "").split("@")[0])
+    return found | _words(str(event.get("organizer") or "").split("@")[0])
+
+
+def _initials(name: object) -> str:
+    """A name's initials ("Hsing-Hao Lee" is "hhl"); "" for fewer than three, which would
+    be anyone's, the user's own among them."""
+    letters = "".join(p[0] for p in _TOKEN.findall(str(name or "").casefold()))
+    return letters if len(letters) >= 3 else ""
+
+
+def _theirs_with(task: dict, event: dict) -> bool:
+    """Whether one of the user's own events is with the plan's person: their name in its title,
+    guests or organizer, or their initials as its title writes them ("MD HHL", with the user's
+    own alongside)."""
+    who = task.get("with")
+    if _words(who) & (event["words"] | event["people"]):
+        return True
+    mark = _initials(who)
+    return bool(mark) and any(
+        t == mark or (len(t) <= len(mark) + 3 and (t.startswith(mark) or t.endswith(mark)))
+        for t in event["tokens"]
+    )
 
 
 def _words(text: object) -> set[str]:

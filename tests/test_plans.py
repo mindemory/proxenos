@@ -239,3 +239,71 @@ def test_one_meeting_written_as_two_tasks_is_one_event(tmp_path):
     text = (tmp_path / "v" / "clones" / "tasks" / "plans.ics").read_text()
     assert "UID:t2@proxenos" in text and "UID:t1@proxenos" not in text  # t2 was made first
     assert "UID:t3@proxenos" in text and "UID:t4@proxenos" in text
+
+
+def test_my_own_event_for_the_person_is_the_plan_even_by_initials_or_guest(tmp_path):
+    vault = tmp_path / "vault"
+    write_events(
+        vault,
+        "me-example-org",
+        "2026-03",
+        [
+            {"id": "e1", "start": local("2026-03-13T13:00:00"), "summary": "MD HHL"},
+            {
+                "id": "e2",
+                "start": local("2026-03-12T09:00:00"),
+                "summary": "Clinic sync",
+                "organizer": "amy.forman@example.org",
+                "guests": [{"name": None, "email": "me@example.org", "status": "accepted"}],
+            },
+            {
+                "id": "e3",
+                "start": local("2026-03-12T09:00:00"),
+                "summary": "Sync",
+                "guests": [{"name": "Noor Haddad", "email": "noor@example.org"}],
+            },
+        ],
+    )
+    tasks = [
+        task("hhl", "Meet Hsing-Hao Lee", "2026-03-14T14:00", with_="Hsing-Hao Lee"),
+        task("amy", "Consultation with Amy Forman", "2026-03-13T16:00", with_="Amy Forman"),
+        task("noor", "Catch up", "2026-03-14T10:00", with_="Noor Haddad"),
+        task("far", "Meet Hsing-Hao Lee", "2026-03-20T14:00", with_="Hsing-Hao Lee"),
+        task("ann", "Meet Ann Lee Park", "2026-03-14T14:00", with_="Ann Lee Park"),
+    ]
+
+    assert plans.write(vault, tasks, NOW) == 2
+    text = (vault / "clones" / "tasks" / "plans.ics").read_text()
+    assert "UID:far@proxenos" in text and "UID:ann@proxenos" in text
+
+
+def test_events_made_earlier_that_no_longer_qualify_are_deleted(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    monkeypatch.setenv("PROXENOS_PLANS_CALENDAR", "me@gmail.com")
+    monkeypatch.setattr(plans.sys, "platform", "darwin")
+    write_events(
+        vault,
+        "me-example-org",
+        "2026-03",
+        [{"id": "real", "start": local("2026-03-13T13:00:00"), "summary": "MD HHL"}],
+    )
+    hhl = {"with_": "Hsing-Hao Lee"}
+    tasks = [
+        task("meet1", "Meet Hsing-Hao Lee for a quick sync", "2026-03-14T14:00", **hhl),
+        task("meet2", "Meet Hsing-Hao Lee for a quick sync", "2026-03-14T14:00", **hhl),
+        task("act1", "Reschedule meeting with Hsing-Hao Lee", "2026-03-14T14:00", **hhl),
+        task("act2", "Follow up with Amy Forman about the consultation", "2026-03-14T14:00"),
+        task("real2", "Coffee with Noor", "2026-03-12T10:00", with_="Noor"),
+    ]
+    cal = Calendar()
+    with monkeypatch.context() as before:  # the code as it was: all of them go on
+        before.setattr(plans, "is_event", lambda t: True)
+        before.setattr(plans, "_once", lambda events: events)
+        before.setattr(plans, "_same", lambda *a: False)
+        assert plans.write(vault, tasks, NOW, run=cal) == 5
+    assert len(cal.events) == 5
+
+    assert plans.write(vault, tasks, NOW, run=cal) == 1
+    assert [e[0] for e in cal.events.values()] == ["Coffee with Noor"]
+    pushed = json.loads((vault / "clones" / "tasks" / "pushed.json").read_text())
+    assert list(pushed) == ["real2"]
