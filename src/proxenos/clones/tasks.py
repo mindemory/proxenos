@@ -271,7 +271,7 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
     _write_json(out / "tasks.json", {"generated": _iso(now), "tasks": _sorted(tasks.values())})
     _write_json(out / "closed.json", closed)
     for key, why in overtaken.items():
-        _overtake(drafts[key]["path"], why)
+        work.overtake(drafts[key]["path"], why)
     events = plans.write(vault, tasks.values(), now)
     counts = {status: sum(t["status"] == status for t in tasks.values()) for status in STATUSES}
     return {
@@ -681,18 +681,6 @@ def _finished(drafts: dict[str, dict], tasks: dict[str, dict], closed: dict[str,
         elif (closed.get(key) or {}).get("action") in ("not_mine", "dismiss"):
             found[key] = f"You closed its task: {closed[key]['title']}."
     return found
-
-
-def _overtake(path: Path, why: str) -> None:
-    """Mark a draft overtaken, and why, in its front matter."""
-    text = path.read_text(encoding="utf-8")
-    front = work._FRONT.match(text)
-    if front is None:
-        return
-    head = re.sub(r"(?m)^overtaken:.*\r?\n", "", text[: front.end()])
-    mark = f"status: overtaken\novertaken: {json.dumps(why, ensure_ascii=False)}"
-    head = re.sub(r"(?m)^status:.*$", lambda _: mark, head, count=1)
-    path.write_text(head + text[front.end() :], encoding="utf-8")
 
 
 def _kept_drafts(path: Path) -> set[str]:

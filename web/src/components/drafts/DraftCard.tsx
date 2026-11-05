@@ -33,13 +33,15 @@ interface DraftCardProps {
   onEdit: (d: Draft, body: string) => Promise<boolean>;
   /** The reader says an overtaken draft is still needed. */
   onKeep: (d: Draft) => void;
+  /** Asks "Is this still needed?" of a draft no thread backs that has waited a week: Keep (asked again in a week) or Done. */
+  check?: { onKeep: (d: Draft) => void; onDone: (d: Draft) => void };
   /** The draft someone opened from another view (the home page): shown whole and highlighted. */
   focused?: boolean;
   /** Think it through with Proxenos before sending it. */
   onThink?: (d: Draft) => void;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, focused, onThink }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, check, focused, onThink }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -124,6 +126,16 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
           <span className="font-medium text-ink">No longer needed: </span>
           {d.overtaken || "the messages since show it isn't."}
         </p>
+      )}
+
+      {check && !sent && !overtaken && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warn-line bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+          <span className="font-medium">Is this still needed?</span>
+          <span className="ml-auto flex gap-2">
+            <ActionButton icon={RotateCcw} label="Keep" tone="accent" onClick={() => check.onKeep(d)} />
+            <ActionButton icon={Check} label="Done" tone="neutral" onClick={() => check.onDone(d)} />
+          </span>
+        </div>
       )}
 
       {editing ? (

@@ -51,6 +51,19 @@ export function isStale(d: Draft, now: number): boolean {
   return now - changed > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
+/** Days an unbacked draft can wait before it's asked about. */
+export const CHECK_DAYS = 7;
+
+/**
+ * A message no thread backs (a project's or Ask's draft: none of its chat is known) that has waited
+ * CHECK_DAYS unchanged: nothing will ever show it was handled, so the reader is asked.
+ */
+export function needsCheck(d: Draft, now: number): boolean {
+  if (!isAwaiting(d.status) || isNote(d) || d.thread) return false;
+  const changed = Math.max(d.created ? Date.parse(d.created) || 0 : 0, d.updated ? Date.parse(d.updated) || 0 : 0);
+  return now - changed > CHECK_DAYS * 24 * 60 * 60 * 1000;
+}
+
 /** A message or post still to go out, and recent: what asks for the reader on the home page and the top bar. */
 export function isToSend(d: Draft, now: number): boolean {
   return isAwaiting(d.status) && !isNote(d) && !isStale(d, now);

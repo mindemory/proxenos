@@ -21,6 +21,14 @@ matched by whom it's to, on its channel: the one-to-one chat with someone of tha
 email, the user's mail to that address. Once they've written to that person there, it's handled
 the same way, whether or not they used the draft.
 
+A draft the conversation has moved past is folded away, with no model: a reply or email draft
+(status draft, never edited by the user, nor kept after being folded) is marked overtaken, with a
+short reason, when its thread has a newer message than the draft, from either side and from any
+of the user's accounts; or when, after it was made, the user wrote to the same address in any
+thread or to the same organization's domain (never a personal-mail domain such as gmail.com), or
+in a chat on the same channel with the same person. The page shows it folded away with the
+reason and a way to bring it back (Keep), which holds for good.
+
 Written to clones/drafts/fidelity.json: each measured draft {id, source, to, drafted, sent,
 closeness, draft_text, sent_text} and, per source, how many have a closeness and their mean.
 The two texts, each cut to TEXT_CHARS, are what proxenos.voice shows the drafting model of a
@@ -58,6 +66,11 @@ NEARLY = 0.9  # closeness from which a draft counts as sent nearly unchanged: th
 # A draft's channel as the chat source its messages are read from, where the names differ.
 _SOURCE_OF = {channel: source for source, channel in work._CHANNEL_OF.items()}
 _CHAT_SOURCES = {"whatsapp", "slack", "linkedin", "facebook", "instagram", "twitter"}
+# The first label of a mail domain anyone can have an address at: no organization, so mail to one
+# says nothing of mail to another.
+_PERSONAL = {"gmail", "googlemail", "outlook", "hotmail", "live", "msn", "yahoo", "ymail"}
+_PERSONAL |= {"icloud", "me", "mac", "aol", "proton", "protonmail", "pm", "gmx", "fastmail"}
+_PERSONAL |= {"hey", "zoho", "yandex", "mail", "qq", "163", "126", "rediffmail"}
 
 
 def measure(vault: Path) -> dict[str, int]:
@@ -68,14 +81,30 @@ def measure(vault: Path) -> dict[str, int]:
     seen: set[Path] = set()  # a draft matched by two chats counts once
     looked: set[tuple[str, str]] = set()  # the user's messages measured against a draft
     nearly: set[tuple[str, str]] = set()  # and those of them that were one, sent nearly as is
+    cands = _candidates(wanted, named)  # drafts that may be overtaken, by file
+    mailed: list[tuple[datetime, str, str]] = []  # the user's mail since the oldest: (when, ts, to)
+    chatted: list[tuple[datetime, str, str, str]] = []  # and chat: (when, ts, source, with whom)
+    oldest = min((c["created"] for c in cands.values()), default="9")[:10]
     for source, key, messages, *_ in chats.conversations(vault):
+        who = _with(source, key, messages)
         drafts = [
             *wanted.get((source, key), []),
-            *(d for who in _with(source, key, messages) for d in named.get(who, [])),
+            *(d for w in who for d in named.get(w, [])),
         ]
+        for m in messages:
+            if m["mine"] and m["text"] and m["ts"][:10] >= oldest and (when := _moment(m["ts"])):
+                if source == "email":
+                    mailed += [(when, m["ts"], a) for a in m.get("peers", [])]
+                else:
+                    chatted += [(when, m["ts"], s, n) for s, n in who]
         for draft in drafts:
             if draft["path"] in seen:
                 continue
+            if (c := cands.get(draft["path"])) is not None:
+                c["addrs"] |= {a for m in messages for a in m.get("peers", [])}
+                c["names"] |= who
+                if later := _newest_after(messages, draft["created"]):
+                    c["newer"] = max(c["newer"] or later, later, key=lambda m: m["ts"])
             if sent := _sent(messages, draft["created"]):
                 seen.add(draft["path"])
                 if draft.get("status") in ("draft", "approved"):
@@ -98,6 +127,11 @@ def measure(vault: Path) -> dict[str, int]:
                         "sent_text": _clip("\n".join(m["text"] for m in sent)),
                     }
                 )
+    moved = 0
+    for path, c in cands.items():
+        if path not in seen and (why := _moved_past(c, mailed, chatted)):
+            work.overtake(path, why)
+            moved += 1
     drafted = (chats.drafted(vault) - looked) | nearly
     work._write(
         vault / chats.DRAFTED,
@@ -112,7 +146,70 @@ def measure(vault: Path) -> dict[str, int]:
     out = {"generated": _now(), "by_source": summary, "drafts": measured}
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fidelity.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
-    return {"drafts_measured": len(measured), "drafts_answered": answered}
+    return {
+        "drafts_measured": len(measured),
+        "drafts_answered": answered,
+        **({"drafts_moved_past": moved} if moved else {}),
+    }
+
+
+def _candidates(wanted: dict, named: dict) -> dict[Path, dict]:
+    """The drafts that can be overtaken, by file: still the clone's own (status draft, not edited
+    by the user, not kept after being folded away) and a reply or email, or on a chat. Each with
+    where it's to (`addrs`, `names`), to which what's read of its conversations is added, and
+    the newest message in them after it (`newer`)."""
+    found = {}
+    for draft in [d for ds in (*wanted.values(), *named.values()) for d in ds]:
+        mine = draft.get("status") == "draft" and not draft["edited"] and not draft["kept"]
+        if mine and (draft["backed"] or draft.get("kind") in ("reply", "email")):
+            who = _recipient(draft)
+            found[draft["path"]] = {
+                "id": draft.get("id"),
+                "created": draft["created"],
+                "addrs": {who[1]} if who and who[0] == "email" else set(),
+                "names": {who} if who and who[0] != "email" else set(),
+                "newer": None,
+            }
+    return found
+
+
+def _moved_past(c: dict, mailed: list, chatted: list) -> str | None:
+    """Why the conversation has moved past a draft, or None: a newer message in its thread, or
+    the user's own message since to the same address, organization or person (see the docstring)."""
+    if c["newer"]:
+        m = c["newer"]
+        who = "You" if m["mine"] else m["sender"] or m["name"] or "They"
+        return f"{who} wrote in the thread on {m['ts'][:10]}, after this draft."
+    made = _moment(c["created"])
+    domains = {a.split("@")[1] for a in c["addrs"] if "@" in a}
+    domains = {d for d in domains if d.split(".")[0] not in _PERSONAL}
+    for when, ts, to in sorted(mailed):
+        if made and when > made and to.count("@") == 1:
+            if to in c["addrs"]:
+                return f"You wrote to {to} on {ts[:10]}, in another thread, after this draft."
+            if to.split("@")[1] in domains:
+                return (
+                    f"You wrote to {to} on {ts[:10]}, at the same organization, after this draft."
+                )
+    for when, ts, source, name in sorted(chatted):
+        if made and when > made and (source, name) in c["names"]:
+            return f"You wrote to them in your {source} chat on {ts[:10]}, after this draft."
+    return None
+
+
+def _newest_after(messages: list[dict], created: str) -> dict | None:
+    """The newest message with text in a conversation after a moment, from either side."""
+    made = _moment(created)
+    later = [m for m in messages if m["text"] and made and (_moment(m["ts"]) or made) > made]
+    return max(later, key=lambda m: _moment(m["ts"]), default=None)
+
+
+def _moment(ts: object) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(str(ts))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
 
 
 def written(vault: Path) -> tuple[dict, dict]:
@@ -171,6 +268,7 @@ def _drafts(folder: Path) -> tuple[dict, dict]:
     wrote of it (_model_text), by the chat it answers (source, chat key) and, for one with no
     chat, by whom it's to (_recipient)."""
     edits = _edits(folder / "feedback.jsonl")
+    kept = set(work._latest(folder / "feedback.jsonl", "draft_id", ("keep",)))
     wanted: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by chat
     named: dict[tuple[str, str], list[dict]] = defaultdict(list)  # by whom it's to
     for path in sorted(folder.glob("*.md")):
@@ -182,7 +280,14 @@ def _drafts(folder: Path) -> tuple[dict, dict]:
             continue
         body = text[front.end() :]
         mine = edits.get(str(fields.get("id") or path.stem), [])
-        draft = fields | {"body": body, "path": path, "text": _model_text(body, mine)}
+        draft = fields | {
+            "body": body,
+            "path": path,
+            "text": _model_text(body, mine),
+            "edited": bool(mine),
+            "kept": str(fields.get("id") or path.stem) in kept,
+            "backed": isinstance(thread, dict),
+        }
         if isinstance(thread, dict):
             wanted[thread.get("source"), thread.get("chat")].append(draft)
         elif who := _recipient(fields):

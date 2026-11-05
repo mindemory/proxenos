@@ -9,7 +9,7 @@ import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
-import { groupDrafts, isNote, isStale, STALE_DAYS } from "@/lib/drafts";
+import { groupDrafts, isNote, isStale, needsCheck, STALE_DAYS } from "@/lib/drafts";
 import { scrollBehavior } from "@/lib/reading";
 import type { Draft, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ export function Drafts({
   /** Think a draft through with Proxenos, in a new thread that starts from it. */
   onThink?: (start: ThinkStart) => void;
 }) {
-  const { data, error, flashId, discard, sent: markSent, keep, edit, copy, open, clearError } = useDrafts(onChange);
+  const { data, error, flashId, discard, sent: markSent, keep, done, renew, edit, copy, open, clearError } = useDrafts(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
   const [showNotes, setShowNotes] = useState<boolean | null>(null);
   const [showOlder, setShowOlder] = useState<boolean | null>(null);
@@ -67,8 +67,10 @@ export function Drafts({
   // Overtaken: the messages since showed it isn't needed (someone else did it, or the plan changed).
   const overtaken = kept.filter((d) => d.status === "overtaken");
   const unsent = kept.filter((d) => d.status !== "sent" && d.status !== "overtaken");
+  // A message no thread backs, left a week: asked about, not folded away to be forgotten.
+  const checking = unsent.filter((d) => needsCheck(d, nowMs));
   const toSend = unsent.filter((d) => !isNote(d) && !isStale(d, nowMs));
-  const older = unsent.filter((d) => !isNote(d) && isStale(d, nowMs));
+  const older = unsent.filter((d) => !isNote(d) && isStale(d, nowMs) && !needsCheck(d, nowMs));
   const notes = unsent.filter((d) => isNote(d));
   const sent = kept.filter((d) => d.status === "sent");
 
@@ -85,6 +87,7 @@ export function Drafts({
       onSent={markSent}
       onEdit={edit}
       onKeep={keep}
+      check={needsCheck(d, nowMs) ? { onKeep: renew, onDone: done } : undefined}
       focused={d.id === focusId}
       onThink={
         onThink &&
@@ -165,6 +168,19 @@ export function Drafts({
             </section>
           ))}
         </div>
+      )}
+
+      {checking.length > 0 && (
+        <section aria-labelledby="drafts-check" className="px-4 sm:px-6 pb-6">
+          <h2 id="drafts-check" className="font-display text-2xl text-ink flex items-baseline gap-2">
+            Is this still needed?
+            <span className="num text-sm text-muted">{checking.length}</span>
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            No conversation shows whether these went out, and they&apos;re a week old. Keep what you still mean to send; mark the rest done.
+          </p>
+          <div className="mt-3 grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">{checking.map(card)}</div>
+        </section>
       )}
 
       {older.length > 0 && (

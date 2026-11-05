@@ -151,6 +151,7 @@ export const DRAFT_TOAST: Record<DraftAction, string> = {
   opened: "Opened",
   sent: "Marked sent",
   keep: "Kept: it's back in To send, and stays",
+  done: "Marked done: it no longer waits",
 };
 
 export const NETWORK_TOAST: Record<NetworkAction, string> = {
@@ -946,7 +947,7 @@ export async function copyText(text: string, html?: string): Promise<boolean> {
 }
 
 /** The status each action that changes a draft's file leaves it in. */
-const STATUS_AFTER = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft" } as const;
+const STATUS_AFTER = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft", done: "discarded" } as const;
 
 /** Go to a link the way a person clicking it would: a web page in a new tab, an app's address in place. */
 function launch(url: string) {
@@ -1024,6 +1025,25 @@ export function useDrafts(onChange?: () => void) {
     [patch, take, flash, notify, onChange, setError, resync],
   );
 
+  /** The reader says an old draft no thread backs is still needed: its file is touched, so it's asked about again in a week. */
+  const renew = useCallback(
+    (draft: Draft) => {
+      flash(draft.id);
+      patch(draft.id, { updated: new Date().toISOString() });
+      sendDraftAction(draft.id, "keep").then(
+        (record) => {
+          take(record);
+          notify("Kept: it's asked about again in a week", "ok");
+        },
+        () => {
+          setError(SAVE_FAILED);
+          resync();
+        },
+      );
+    },
+    [patch, take, flash, notify, setError, resync],
+  );
+
   /** Resolves true once the new body is saved in the file. */
   const edit = useCallback(
     async (draft: Draft, body: string): Promise<boolean> => {
@@ -1089,6 +1109,8 @@ export function useDrafts(onChange?: () => void) {
     discard: (d: Draft) => setStatus(d, "discard"),
     sent: (d: Draft) => setStatus(d, "sent"),
     keep: (d: Draft) => setStatus(d, "keep"),
+    done: (d: Draft) => setStatus(d, "done"),
+    renew,
     edit,
     copy,
     open,

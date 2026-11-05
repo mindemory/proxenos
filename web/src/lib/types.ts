@@ -576,9 +576,9 @@ export interface GraphThumb {
 // ── Drafts: clones/drafts/*.md ──────────────────────────────────────────────
 
 /** opened: the draft was opened in its app; sent: the reader says they sent it. Both are logged. */
-export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "sent" | "keep";
+export type DraftAction = "approve" | "discard" | "edit" | "copy" | "opened" | "sent" | "keep" | "done";
 
-export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent", "keep"];
+export const DRAFT_ACTIONS: readonly DraftAction[] = ["approve", "discard", "edit", "copy", "opened", "sent", "keep", "done"];
 
 /** One thing the reader told Proxenos (state/told.jsonl): a fact for now, or a rule ("always"). */
 export interface ToldNote {

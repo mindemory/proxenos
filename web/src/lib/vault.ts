@@ -1733,7 +1733,7 @@ function withBody(file: DraftFile, body: string): string {
 
 /** What each action that changes a draft's file sets its status to. The others only log. */
 // keep puts back in To send a draft the messages were said to have made moot.
-const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft" };
+const STATUS_OF: Partial<Record<DraftAction, string>> = { approve: "approved", discard: "discarded", sent: "sent", keep: "draft", done: "discarded" };
 
 /** How the reader has reviewed drafts so far, from clones/drafts/feedback.jsonl. */
 export async function getDraftReviews(vault: string = vaultPath()): Promise<DraftReviews> {

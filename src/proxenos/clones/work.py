@@ -1039,6 +1039,19 @@ def _existing(directory: Path) -> dict[str, tuple[Path, str | None]]:
     return found
 
 
+def overtake(path: Path, why: str) -> None:
+    """Mark a draft overtaken, and why, in its front matter: the page folds it away with the
+    reason (see proxenos.clones.tasks and proxenos.fidelity)."""
+    text = path.read_text(encoding="utf-8")
+    front = _FRONT.match(text)
+    if front is None:
+        return
+    head = re.sub(r"(?m)^overtaken:.*\r?\n", "", text[: front.end()])
+    mark = f"status: overtaken\novertaken: {json.dumps(why, ensure_ascii=False)}"
+    head = re.sub(r"(?m)^status:.*$", lambda _: mark, head, count=1)
+    path.write_text(head + text[front.end() :], encoding="utf-8")
+
+
 def _front(text: str) -> dict[str, str] | None:
     """Front matter fields by lower-case name, the first of each, or None when there is none."""
     match = _FRONT.match(text)

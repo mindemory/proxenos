@@ -273,3 +273,106 @@ def test_slack_direct_messages_and_emails_are_matched_by_name_and_address(tmp_pa
     assert "status: sent" in (folder / "task-1.md").read_text()
     assert "status: sent" in (folder / "care-1.md").read_text()
     assert "status: draft" in (folder / "care-2.md").read_text()
+
+
+def mail_draft(folder, name, thread, to, created="2026-03-10T12:00:00Z", status="draft"):
+    """An email reply draft, backed by the email thread `thread`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    key = json.dumps({"source": "email", "chat": thread})
+    (folder / f"{name}.md").write_text(
+        f'---\nid: {name}\ntitle: "Reply"\nkind: email\nfor: reply\nchannel: email\n'
+        f"to: {json.dumps(to)}\ncreated: {created}\nstatus: {status}\nthread: {key}\n---\n\nHi\n"
+    )
+
+
+def em(thread, ts, sender, to, mine=False, text="Hello there, can we talk?"):
+    return {
+        "id": f"{thread}-{ts}",
+        "ts": ts,
+        "from_address": sender,
+        "from_name": None if mine else sender.split("@")[0].title(),
+        "from_me": mine,
+        "to": to,
+        "cc": None,
+        "subject": "Hi",
+        "gmail_thread": thread,
+        "gmail_labels": ["Inbox"],
+        "body_new": text,
+    }
+
+
+def status_of(folder, name):
+    lines = (folder / f"{name}.md").read_text().splitlines()
+    return next(line for line in lines if line.startswith("status:"))
+
+
+def test_a_reply_is_overtaken_when_its_thread_has_a_newer_message_from_either_side(tmp_path):
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [
+            wa("2026-03-10T11:00:00Z", "coming friday?", False),
+            wa("2026-03-11T09:00:00Z", "also, bring chairs", False),
+        ],
+    )
+    folder = tmp_path / "clones" / "drafts"
+    draft(folder, "reply-new", "yaa coming", status="draft")
+    draft(folder, "reply-edited", "yaa coming", status="draft")
+    draft(folder, "reply-kept", "yaa coming", status="draft")
+    draft(folder, "reply-old", "no newer message", created="2026-03-12T00:00:00Z", status="draft")
+    edit = {"draft_id": "reply-edited", "action": "edit", "before": "x", "ts": "t"}
+    keep = {"draft_id": "reply-kept", "action": "keep", "ts": "t"}
+    (folder / "feedback.jsonl").write_text(json.dumps(edit) + "\n" + json.dumps(keep) + "\n")
+
+    assert fidelity.measure(tmp_path)["drafts_moved_past"] == 1
+
+    assert status_of(folder, "reply-new") == "status: overtaken"
+    text = (folder / "reply-new.md").read_text()
+    assert 'overtaken: "Asha wrote in the thread on 2026-03-11, after this draft."' in text
+    others = [status_of(folder, n) for n in ("reply-edited", "reply-kept", "reply-old")]
+    assert others == ["status: draft"] * 3
+
+
+def test_an_email_draft_is_overtaken_by_mail_to_the_same_address_or_organization(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@example.org")
+    me = "me@example.org"
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me" / "2026-03.jsonl",
+        [
+            em("t1", "2026-03-10T10:00:00Z", "team@casium.com", [me]),
+            em("t2", "2026-03-10T10:00:00Z", "bob@gmail.com", [me]),
+            em("t3", "2026-03-10T10:00:00Z", "cy@lab.org", [me]),
+            em("t4", "2026-03-10T10:30:00Z", me, ["priya@casium.com"], True, "Re: Evaluation"),
+            em("t5", "2026-03-10T18:31:00Z", me, ["priya@casium.com"], True, "Re: Evaluation"),
+            em("t6", "2026-03-10T18:40:00Z", me, ["alice@gmail.com"], True, "Hi Alice"),
+            em("t7", "2026-03-10T18:45:00Z", me, ["cy@lab.org"], True, "Hi Cy"),
+        ],
+    )
+    folder = tmp_path / "clones" / "drafts"
+    mail_draft(folder, "reply-org", "t1", "Casium Team")  # priya, same company, another thread
+    mail_draft(folder, "reply-personal", "t2", "bob@gmail.com")  # gmail is no organization
+    mail_draft(folder, "reply-address", "t3", "Cy <cy@lab.org>")
+
+    assert fidelity.measure(tmp_path)["drafts_moved_past"] == 2
+
+    assert status_of(folder, "reply-org") == "status: overtaken"
+    assert status_of(folder, "reply-personal") == "status: draft"
+    assert status_of(folder, "reply-address") == "status: overtaken"
+    org = (folder / "reply-org.md").read_text()
+    assert "You wrote to priya@casium.com on 2026-03-10, at the same organization" in org
+    other = (folder / "reply-address.md").read_text()
+    assert "You wrote to cy@lab.org on 2026-03-10, in another thread" in other
+
+
+def test_a_reply_is_overtaken_by_a_message_to_the_same_person_in_another_chat(tmp_path):
+    asha2 = wa("2026-03-11T10:00:00Z", "hi, new number", True) | {"chat_id": "asha-2"}
+    write_jsonl(
+        tmp_path / "raw" / "whatsapp" / "messages" / "2026-03.jsonl",
+        [wa("2026-03-10T11:00:00Z", "coming friday?", False), asha2],
+    )
+    folder = tmp_path / "clones" / "drafts"
+    draft(folder, "reply-1", "yaa coming", status="draft")
+
+    assert fidelity.measure(tmp_path)["drafts_moved_past"] == 1
+    assert "your whatsapp chat on 2026-03-11" in (folder / "reply-1.md").read_text()
