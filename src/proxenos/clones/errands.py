@@ -41,7 +41,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, lookup, mailbox, memory, outbox, research, voice
+from proxenos import dates, llm, lookup, mailbox, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 from proxenos.ingest import email as mail
@@ -282,8 +282,10 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         name=name,
         chat=(thread["source"], thread["chat"]) if thread else None,
     )
-    prompt = _write_prompt(
-        errand, note, hits, colleagues, intro_routes, route, cv, examples, person
+    prompt = (
+        dates.today(now)
+        + "\n\n"
+        + _write_prompt(errand, note, hits, colleagues, intro_routes, route, cv, examples, person)
     )
     system = _WRITE_SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
     answer = model(
@@ -301,6 +303,8 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     errand["who"] = _text(answer.get("who"))
     errand["why"] = _text(answer.get("why"))
     errand["needs"] = [_text(n) for n in answer.get("needs") or [] if _text(n)][:3]
+    body, checked = work.vet(body, now, errand["id"])
+    errand["needs"] = [*checked, *errand["needs"]]
     if cv:
         errand["cv"]["notes"] = _stale(answer.get("cv_notes"))
     errand["messages"] = [
@@ -314,6 +318,8 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         and to in intro_routes
         and str(intro.get("body") or "").strip()
     ):
+        note, more = work.vet(str(intro["body"]), now, errand["id"])
+        errand["needs"] += more
         errand["messages"].append(
             _message(
                 "intro",
@@ -321,7 +327,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
                 next(p["channel"] for p in colleagues if p["name"] == to),
                 intro_routes[to],
                 intro.get("subject"),
-                intro["body"],
+                note,
                 False,
             )
         )

@@ -75,7 +75,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
-from proxenos import ask, chats, llm, research, untrusted, voice
+from proxenos import ask, chats, dates, llm, research, untrusted, voice
 from proxenos.clones import choices, errands, tasks, work
 from proxenos.config import env
 
@@ -1476,7 +1476,7 @@ def _write_step(
     )
     if about:
         task += " " + _FOLLOW_ON.format(person=person, to=to)
-    parts.append(f"Today is {now.astimezone():%A %Y-%m-%d}. {task}")
+    parts.append(f"{dates.today(now)}\n\n{task}")
     system = _DRAFT.format(person=person) + "\n\n" + voice.rules(person)
     answer = model(
         "\n\n".join(parts),
@@ -1492,6 +1492,8 @@ def _write_step(
     subject = choices._one_line(answer.get("subject"))
     if channel == "email" and subject:
         body = f"Subject: {subject}\n\n{body}"
+    body, checked = work.vet(body, now, job["draft_id"])
+    asks += checked
     asks += [choices._one_line(a) for a in answer.get("asks") or [] if choices._one_line(a)]
     if about:
         asks.insert(0, f"It follows on from your earlier messages with {to}.")

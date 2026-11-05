@@ -54,7 +54,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import chats, llm, lookup, memory, research, think, told, untrusted, voice
+from proxenos import chats, dates, llm, lookup, memory, research, think, told, untrusted, voice
 from proxenos.clones import errands, projects, work
 from proxenos.config import env
 
@@ -784,7 +784,7 @@ def reply(
     if rules := told.prompt(vault, person, now):
         system += "\n\n" + rules
     answer = model(
-        prompt + (f"\n\n{own}" if own else ""),
+        f"{dates.today(now)}\n\n{prompt}" + (f"\n\n{own}" if own else ""),
         system=system + "\n\n" + work.short_self(vault, now),
         schema=_DRAFT_SCHEMA,
         effort="medium",
@@ -794,6 +794,8 @@ def reply(
     body = str(answer.get("body") or "").strip()
     if not body:
         raise ValueError("the model wrote no message")
+    body, checked = work.vet(body, now, errand["id"])
+    errand["needs"] += checked
     allowed = _figures(" ".join([prompt, report["goal"]]))
     if not _figures(body) <= allowed:
         errand["needs"].append("Check its figures: some aren't in their messages or yours.")

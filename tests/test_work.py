@@ -457,7 +457,8 @@ def test_a_chat_waiting_on_a_reply_is_drafted_first_in_its_own_voice(tmp_path, m
 
     assert stats["drafts_written"] == 1
     prompt = model.calls[0]["prompt"]
-    assert prompt.splitlines()[2] == "A chat waiting for their reply:"
+    assert prompt.startswith("Today is Tuesday 2026-03-10.\n")
+    assert "A chat waiting for their reply:" in prompt
     for text in ("- Chat: Asha", "Waiting on a referral.", "- okiees see you thurs", "- lol yaa"):
         assert text in prompt
     assert "Asha: also are you coming friday?" in prompt

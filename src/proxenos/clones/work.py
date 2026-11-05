@@ -71,6 +71,7 @@ from pathlib import Path
 
 from proxenos import (
     chats,
+    dates,
     history,
     links,
     llm,
@@ -276,7 +277,8 @@ def work(
         fence = job.get("fence") or untrusted.tag()  # the tag for others' words in this prompt
         pages = _pages([read(url) for url in job.get("links", [])[:PAGES]], fence)
         try:
-            prompt = job["prompt"] + _examples(own, job) + pages
+            shown = _examples(own, job)
+            prompt = job["prompt"] + shown + pages
             if chat := job.get("chat"):  # a reply: what the vault knows beyond this chat
                 more, drew = _research(vault, chat, job["prompt"] + pages, person, fence)
                 prompt += more
@@ -477,7 +479,7 @@ def _health(care: dict) -> str:
 
 
 def _today(now: datetime) -> str:
-    return f"Today is {now.astimezone():%A %Y-%m-%d}."
+    return dates.today(now)
 
 
 def _job(key: object, kind: str, title: object, today: str, text: str) -> dict:
@@ -919,10 +921,23 @@ def _brief(head: str, fields: list[tuple[str, object]], ask: str) -> str:
 # The answer, and the files
 
 
+def vet(body: str, now: datetime, label: str = "draft") -> tuple[str, list[str]]:
+    """A draft's text after the code's own checks, and the questions they raise for the user (the
+    draft's asks): a weekday that doesn't fit its date (proxenos.dates); where it can only have
+    been the weekday that was wrong it is corrected and logged. Every draft that is written
+    runs through it."""
+    body, asks, fixed = dates.check(body, now)
+    for line in fixed:
+        print(f"work: {label}: {line}", file=sys.stderr)
+    return body, asks
+
+
 def _draft(job: dict, answer: dict, now: datetime) -> dict:
     body = str(answer["body"]).strip()
     if not body:
         raise ValueError("the model wrote an empty draft")
+    body, checked = vet(body, now, job["id"])
+    asks = [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)]
     return {
         "id": job["id"],
         "title": _clip(_one_line(answer["title"]) or job["title"] or "Draft", TITLE_CHARS),
@@ -934,9 +949,7 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         "created": _iso(now),
         "status": "draft",
         "found": _clip(_one_line(answer.get("found")), FOUND_CHARS),
-        "asks": [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)][
-            :ASKS
-        ],
+        "asks": [_clip(a, ASK_CHARS) for a in checked] + asks[:ASKS],
         # A reply's chat, so what was sent there after can be compared with the draft.
         "thread": {"source": c["source"], "chat": c["chat"]} if (c := job.get("chat")) else None,
         # And what its prompt held beyond that chat, as the code put it there.

@@ -145,7 +145,9 @@ their voice; keep it.
 - No headings or bold in a message.
 - No stock openers or closers ("I hope this finds you well", "Happy to help", "Let me know \
 if...") unless their examples use them.
-- Never more polished or more organized than they are."""
+- Never more polished or more organized than they are.
+- A weekday goes with a date only as the calendar you were given has them: never work one out. \
+Where the date isn't in it, leave the weekday out."""
 
 
 def rules(person: str) -> str:

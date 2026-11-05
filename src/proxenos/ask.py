@@ -62,7 +62,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from proxenos import llm, lookup, research, untrusted, voice
+from proxenos import dates, llm, lookup, research, untrusted, voice
 from proxenos.clones import choices, work
 from proxenos.config import env
 
@@ -286,7 +286,7 @@ def _quick(
     if hits:
         lines = untrusted.wrap("\n".join(research._line(h, person) for h in hits), untrusted.tag())
         prompt = f"From {person}'s memory, the records nearest this:\n{lines}\n\n{prompt}"
-    prompt = f"Today is {now.astimezone():%A %Y-%m-%d}.\n\n{prompt}"
+    prompt = f"{dates.today(now)}\n\n{prompt}"
     if own := voice.examples(voice.Writing(vault), None):
         prompt += f"\n\n{own}"
     return model(
@@ -405,8 +405,7 @@ def _deep(
             f"What {person}'s memory holds that this depends on:\n{untrusted.wrap(found, fence)}"
         )
     own = voice.examples(voice.Writing(vault), None, name=who)  # how they write, for a draft
-    today = f"Today is {now.astimezone():%A %Y-%m-%d}."
-    task = f"{today} {_ANSWER.format(person=person)}\n\n{_OPENINGS}"
+    task = f"{dates.today(now)}\n\n{_ANSWER.format(person=person)}\n\n{_OPENINGS}"
     if lookup.on():
         task += "\n\n" + lookup.ASKED.format(person=person)
     answer = model(
@@ -425,6 +424,7 @@ def _deep(
 def _save_draft(vault: Path, ask_id: str, result: dict, now: datetime) -> None:
     draft = result["draft"]
     channel = draft["channel"] if draft["channel"] in work.CHANNELS else "other"
+    body, checked = work.vet(draft["body"], now, ask_id)
     work._write(
         vault / "clones" / "drafts" / f"{ask_id}.md",
         work.render(
@@ -438,8 +438,8 @@ def _save_draft(vault: Path, ask_id: str, result: dict, now: datetime) -> None:
                 "created": _iso(now),
                 "status": "draft",
                 "found": result["found"],
-                "asks": result["asks"],
-                "body": draft["body"],
+                "asks": [*(work._clip(a, work.ASK_CHARS) for a in checked), *result["asks"]],
+                "body": body,
             }
         ),
     )
@@ -536,8 +536,7 @@ def _follow_on(
                 f"The first step drafted without that conversation:\n{draft['body']}",
                 untrusted.wrap(about, fence),
                 voice.examples(voice.Writing(vault), None, name=to),
-                f"Today is {now.astimezone():%A %Y-%m-%d}. "
-                + _FOLLOW_ON.format(person=person, to=to),
+                f"{dates.today(now)}\n\n" + _FOLLOW_ON.format(person=person, to=to),
             )
             if part
         )
@@ -566,6 +565,7 @@ def _save_openings(vault: Path, result: dict, now: datetime) -> None:
             continue
         what = f"{opening['title']}, {opening['org']}" if opening["org"] else opening["title"]
         to = draft["to"] or opening["org"] or "them"
+        body, checked = work.vet(draft["body"], now, draft["id"])
         title, kind = {
             "message": (f"Note to {to} about {opening['title']}", "reply"),
             "cover_letter": (f"Cover letter: {what}", "doc"),
@@ -584,8 +584,11 @@ def _save_openings(vault: Path, result: dict, now: datetime) -> None:
                     "created": _iso(now),
                     "status": "draft",
                     "found": opening["why"],
-                    "asks": draft.get("asks") or [],
-                    "body": draft["body"],
+                    "asks": [
+                        *(work._clip(a, work.ASK_CHARS) for a in checked),
+                        *(draft.get("asks") or []),
+                    ],
+                    "body": body,
                 }
             ),
         )
