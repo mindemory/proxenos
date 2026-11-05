@@ -17,7 +17,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import fidelity, importer, llm, memory, observe, outbox, vectors
+from proxenos import fidelity, importer, llm, memory, observe, outbox, plans, vectors
 from proxenos.clones import recall, tasks, work
 from proxenos.config import env, env_key
 from proxenos.ingest import (
@@ -199,6 +199,13 @@ def sync(vault: Path) -> dict[str, int]:
         except (Exception, SystemExit) as e:  # noqa: BLE001 - tasks are extra, not the sync
             stats["tasks_failed"] = 1
             print(f"sync: tasks failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
+    # Without a task run, the plans again with no model, so a booking in the mail reaches the
+    # calendar on every sync.
+    try:
+        if "plans" not in stats:
+            stats["plans"] = plans.refresh(vault)
+    except (Exception, SystemExit):  # noqa: BLE001 - the calendar is extra, not the sync
+        stats["plans_failed"] = 1
     return stats
 
 

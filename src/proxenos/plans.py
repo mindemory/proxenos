@@ -106,14 +106,16 @@ def write(
     now: datetime | None = None,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> int:
-    """Write clones/tasks/plans.ics from the tasks, put the same events on the calendar
+    """Write clones/tasks/plans.ics from the tasks and the events the mail confirms
+    (`proxenos.events`, found in code), put the same events on the calendar
     PROXENOS_PLANS_CALENDAR names, and say how many events there are."""
     now = now or datetime.now(UTC)
+    booked = events_found(vault, now)
     today = now.astimezone().date()
     made = {p["uid"] for p in _pushed(vault).values()}  # Proxenos's own, not the user's
     theirs = list(_calendar(vault, today - timedelta(days=PAST_DAYS), made))
     events = []
-    for task in tasks:
+    for task in [*tasks, *booked]:
         when = at(task.get("at"))
         if task.get("status") in ("done", "cancelled") or when is None or not is_event(task):
             continue
@@ -137,6 +139,27 @@ def write(
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             print(f"plans: couldn't update {calendar} ({' '.join(str(e).split())[:200]})")
     return len(events)
+
+
+def events_found(vault: Path, now: datetime) -> list[dict]:
+    """The booked events in the mail; a failure to read it costs the tasks' plans nothing."""
+    from proxenos import events
+
+    try:
+        return events.find(vault, now)
+    except (OSError, ValueError) as e:
+        print(f"plans: couldn't read the mail for bookings ({' '.join(str(e).split())[:200]})")
+        return []
+
+
+def refresh(vault: Path, now: datetime | None = None) -> int:
+    """Write the plans again from the task list as it stands, with no model: for the sync when
+    the tasks clone didn't run, so a booking in the mail reaches the calendar all the same."""
+    try:
+        found = json.loads((vault / "clones" / "tasks" / "tasks.json").read_text("utf-8"))["tasks"]
+    except (OSError, ValueError, KeyError, TypeError):
+        found = []
+    return write(vault, [t for t in found if isinstance(t, dict)], now)
 
 
 def is_event(task: dict) -> bool:

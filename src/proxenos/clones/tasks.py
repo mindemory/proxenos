@@ -90,7 +90,8 @@ _SLACK_EVENTS = re.compile(
 # A ticket or booking confirmation comes from a no-reply sender or the Updates tab and is still
 # the user's own plan: a film, a table, a flight.
 _TICKET = re.compile(
-    r"\b(e-?tickets?|tickets?|bookings?|reservations?|itinerary|boarding pass|you'?re booked)\b",
+    r"\b(e-?tickets?|tickets?|orders?|your info for|bookings?|reservations?|itinerary"
+    r"|boarding pass|you'?re booked)\b",
     re.IGNORECASE,
 )
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")

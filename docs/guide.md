@@ -150,7 +150,7 @@ proxenos import ~/Downloads/takeout-*.zip   # Google Takeout: mail, calendar, Dr
 proxenos sync                   # imports anything dropped into data/, refreshes every source
 ```
 
-Some sources read a folder on your computer: a folder of documents, your website's repo, a Spotify export, slackdump runs. Set them in Settings, or in `.env` as `PROXENOS_DOCS_DIRS`, `PROXENOS_WEBSITE_REPO`, `PROXENOS_SPOTIFY_EXPORT` and `PROXENOS_SLACKDUMP_DIR`. To have plans from your messages (meetings, calls, visits, appointments, tickets and bookings, not tasks about them, and not any your calendar already has) land on one of your calendars, set `PROXENOS_PLANS_CALENDAR` to its name in the Mac's Calendar app, which syncs it to its account (Google, Exchange, iCloud); otherwise subscribe to the page's `/api/plans.ics`. `.env.example` lists every setting.
+Some sources read a folder on your computer: a folder of documents, your website's repo, a Spotify export, slackdump runs. Set them in Settings, or in `.env` as `PROXENOS_DOCS_DIRS`, `PROXENOS_WEBSITE_REPO`, `PROXENOS_SPOTIFY_EXPORT` and `PROXENOS_SLACKDUMP_DIR`. To have plans from your messages (meetings, calls, visits, appointments, tickets and bookings, not tasks about them, and not any your calendar already has; a ticket or booking confirmation in your mail is found in code on every sync, with no model) land on one of your calendars, set `PROXENOS_PLANS_CALENDAR` to its name in the Mac's Calendar app, which syncs it to its account (Google, Exchange, iCloud); otherwise subscribe to the page's `/api/plans.ics`. `.env.example` lists every setting.
 
 Each source, and how it gets in:
 
