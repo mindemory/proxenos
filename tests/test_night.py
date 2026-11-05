@@ -229,13 +229,17 @@ def test_too_few_new_changed_drafts_ask_no_model(calls, tmp_path, monkeypatch, c
     monkeypatch.setattr(voice, "lessons", LESSONS)
     monkeypatch.setattr(llm, "ask", lambda *a, **k: pytest.fail("a model call"))
     measured = [
-        {"source": "whatsapp", "to": "Ana", "closeness": 0.2, "sent": f"2026-03-0{n}T09:00:00Z",
-         "draft_text": f"Dear Ana, note {n}.", "sent_text": f"hey ana, note {n}"}
+        {"id": f"reply-{n}", "source": "whatsapp", "to": "Ana", "closeness": 0.2,
+         "sent": f"2026-03-0{n}T09:00:00Z", "draft_text": f"Dear Ana, note {n}.",
+         "sent_text": f"hey ana, note {n}"}
         for n in range(1, voice.NEW_PAIRS)
     ]  # fmt: skip
     folder = tmp_path / "vault" / "clones" / "drafts"
     folder.mkdir(parents=True)
     (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+    (folder / "feedback.jsonl").write_text(
+        "".join(json.dumps({"draft_id": m["id"], "action": "copy"}) + "\n" for m in measured)
+    )
 
     cli.main(["night"])
 

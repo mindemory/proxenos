@@ -108,7 +108,7 @@ That distance can be measured, so it doesn't rest on impressions:
   unchanged (closeness 0.9 or more)
   comes back as your own message, but its words are the model's, so nothing that learns how you
   write (the examples a draft is shown, the checks on writing rules, the voice model, the
-  observers) reads it as yours; one you changed more stays yours, and teaches the change.
+  observers) reads it as yours; one you changed more stays yours, and teaches the change, if you read it first: copied it, opened it in its app, edited, approved or kept it. A draft nobody opened, beside what you wrote instead, says only that it missed, so it teaches nothing.
 - **Judgment:** how often a draft's "needs from you" questions were the ones you actually had to
   answer, and how often you discarded a draft as wrong rather than unneeded.
 

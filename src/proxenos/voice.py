@@ -34,8 +34,8 @@ Then what they changed. A draft they rewrote says more about how they write than
 fidelity keeps each measured draft beside what they sent instead (clones/drafts/fidelity.json),
 the page keeps each draft they edited there beside their version (an edit's before and after
 in clones/drafts/feedback.jsonl, but not one a model made, such as Think's rewrite of a draft at
-their asking: MODEL_EDITS), and every draft gets those whose closeness was under CHANGED,
-newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
+their asking: MODEL_EDITS), and every draft gets those whose closeness was under CHANGED, of
+the drafts they read (copied, opened in their app, edited, approved or kept: READ), newest first, to the same person first, then on the same channel, CORRECTION_CHARS in all, to
 write like what was sent and never like what was drafted. So a change counts from the next draft
 on, without training anything.
 
@@ -94,6 +94,10 @@ LEARNED = 2000  # pairs remembered as read
 # Edits of a draft a model made, by the `via` their line in feedback.jsonl names: Think's rewrite
 # (proxenos.think), which the user asked for but didn't write. None is the user's correction.
 MODEL_EDITS = frozenset({"think"})
+# What the user does with a draft on the page that shows they read it: a measured draft is a
+# correction only with one of these in feedback.jsonl. Not discard, nor pressing Sent, which
+# may only clear a draft they answered elsewhere.
+READ = ("copy", "opened", "edit", "approve", "keep")
 # Where the user's own posts are, under raw/.
 POSTS = (
     "bluesky/posts",
@@ -190,14 +194,19 @@ class Writing:
     @cached_property
     def corrections(self) -> list[dict]:
         """Drafts they changed before sending, newest sent first, as fidelity measured them:
-        {source, to, draft_text, sent_text}."""
+        {source, to, draft_text, sent_text}. Only drafts they read (READ): one nobody opened,
+        beside what they wrote instead, shows the model guessed wrong, not how they change its
+        words, so it's no correction to learn from."""
         folder = self.vault / "clones" / "drafts"
         try:
             measured = json.loads((folder / "fidelity.json").read_text(encoding="utf-8"))["drafts"]
         except (OSError, ValueError, KeyError, TypeError):
             measured = []
+        read = _read(folder / "feedback.jsonl")
         measured = (
-            [m for m in measured if isinstance(m, dict)] if isinstance(measured, list) else []
+            [m for m in measured if isinstance(m, dict) and str(m.get("id")) in read]
+            if isinstance(measured, list)
+            else []
         )
         # A draft edited on the page and then sent: fidelity pairs the model's text with what
         # was sent, which already holds the edit, so the edit isn't counted again on its own.
@@ -361,6 +370,23 @@ def longer(written: Writing, first: str = "email") -> str:
     person = env("NAME", "the person")
     head = f"How {person} writes at length, their own emails and posts, newest first. {_COPY}"
     return "\n".join([head, *shown])
+
+
+def _read(path: Path) -> set[str]:
+    """The drafts the user read, by id: those with a READ action in feedback.jsonl."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    found = set()
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("action") in READ and event.get("draft_id"):
+            found.add(str(event["draft_id"]))
+    return found
 
 
 def _edits(path: Path) -> list[dict]:

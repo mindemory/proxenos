@@ -71,18 +71,26 @@ def make_vault(tmp_path):
                     # reply held out, so it must never be shown.
                     changed
                     | {
+                        "id": "reply-late",
                         "sent": "2026-03-01T10:05:00Z",
                         "draft_text": "LATE draft of the picnic reply",
                         "sent_text": "yes!! bringing the lemon cake",
                     },
                     changed
                     | {
+                        "id": "reply-early",
                         "sent": "2026-02-20T10:00:00Z",
                         "draft_text": "EARLY draft, very formal",
                         "sent_text": "early words as sent",
                     },
                 ]
             }
+        )
+    )
+    (drafts / "feedback.jsonl").write_text(  # both read: copied from the page
+        "".join(
+            json.dumps({"draft_id": d, "action": "copy"}) + "\n"
+            for d in ("reply-late", "reply-early")
         )
     )
     # Something put out, and a "right now" note, both after Ana's reply.

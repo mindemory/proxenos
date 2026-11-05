@@ -380,20 +380,31 @@ def test_the_rules_say_how_not_to_write_like_a_model():
 def test_drafts_i_changed_teach_the_next_one_with_what_i_sent(tmp_path):
     vault = chat_vault(tmp_path)
     measured = [
-        {"source": "whatsapp", "to": "Ben", "closeness": 0.3, "draft_text": "Dear Ben, kindly.",
-         "sent_text": "yo ben, all good"},
-        {"source": "whatsapp", "to": "Asha", "closeness": 0.2, "draft_text": "Hello Asha!",
-         "sent_text": "hey asha, ya sounds good"},
-        {"source": "whatsapp", "to": "Asha", "closeness": 0.95, "draft_text": "same as sent",
-         "sent_text": "same as sent"},  # barely changed: nothing to learn
-        {"source": "email", "to": "ana@acme.org", "closeness": 0.1, "draft_text": "Hi Ana",
-         "sent_text": "Ana, quick one about the grant"},
-        {"source": "whatsapp", "to": "Cy", "closeness": 0.1, "draft_text": "Hi", "sent_text": "k"},
+        {"id": "ben", "source": "whatsapp", "to": "Ben", "closeness": 0.3,
+         "draft_text": "Dear Ben, kindly.", "sent_text": "yo ben, all good"},
+        {"id": "asha", "source": "whatsapp", "to": "Asha", "closeness": 0.2,
+         "draft_text": "Hello Asha!", "sent_text": "hey asha, ya sounds good"},
+        {"id": "same", "source": "whatsapp", "to": "Asha", "closeness": 0.95,
+         "draft_text": "same as sent", "sent_text": "same as sent"},  # barely changed
+        {"id": "ana", "source": "email", "to": "ana@acme.org", "closeness": 0.1,
+         "draft_text": "Hi Ana", "sent_text": "Ana, quick one about the grant"},
+        {"id": "cy", "source": "whatsapp", "to": "Cy", "closeness": 0.1, "draft_text": "Hi",
+         "sent_text": "k"},
+        # Never opened, or only discarded or marked sent: no sign it was read, so no correction.
+        {"id": "unread", "source": "whatsapp", "to": "Asha", "closeness": 0.1,
+         "draft_text": "Greetings, Asha.", "sent_text": "asha!! where are you"},
+        {"id": "binned", "source": "whatsapp", "to": "Asha", "closeness": 0.1,
+         "draft_text": "Salutations, Asha.", "sent_text": "asha come over"},
         "not a record",
     ]  # fmt: skip
     folder = vault / "clones" / "drafts"
     folder.mkdir(parents=True)
     (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+    acted = [("ben", "copy"), ("asha", "opened"), ("same", "copy"), ("ana", "approve")]
+    acted += [("cy", "keep"), ("binned", "discard"), ("binned", "sent")]
+    (folder / "feedback.jsonl").write_text(
+        "".join(json.dumps({"draft_id": d, "action": a}) + "\n" for d, a in acted)
+    )
 
     shown = voice.corrections(voice.Writing(vault), "whatsapp", "asha")
 
@@ -409,6 +420,7 @@ def test_drafts_i_changed_teach_the_next_one_with_what_i_sent(tmp_path):
     assert "Ana, quick one" in voice.examples(voice.Writing(vault), "email")
     assert "Ana, quick one" not in examples
     assert voice.corrections(voice.Writing(tmp_path / "none"), None) == ""
+    assert {m["id"] for m in voice.Writing(vault).corrections} == {"ben", "asha", "ana"}
 
 
 def test_a_draft_i_rewrote_on_the_page_teaches_the_next_one(tmp_path):
@@ -528,15 +540,20 @@ def offline(monkeypatch):
 
 
 def changed(vault, sent):
-    """A draft to Aai for each text Tess sent instead, as fidelity measured them."""
+    """A draft to Aai for each text Tess sent instead, as fidelity measured them, each one she
+    opened in WhatsApp first."""
     measured = [
-        {"source": "whatsapp", "to": "Aai", "closeness": 0.2, "sent": f"2026-03-{day:02d}T10:00:00Z",
+        {"id": f"reply-aai-{day}", "source": "whatsapp", "to": "Aai", "closeness": 0.2,
+         "sent": f"2026-03-{day:02d}T10:00:00Z",
          "draft_text": f"Dear Mom, {text.capitalize()}. Best regards, Tess", "sent_text": text}
         for day, text in enumerate(sent, 1)
     ]  # fmt: skip
     folder = vault / "clones" / "drafts"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fidelity.json").write_text(json.dumps({"drafts": measured}))
+    (folder / "feedback.jsonl").write_text(
+        "".join(json.dumps({"draft_id": m["id"], "action": "opened"}) + "\n" for m in measured)
+    )
 
 
 def lessons_vault(tmp_path):
