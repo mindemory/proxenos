@@ -53,7 +53,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, memory, research, voice
+from proxenos import dates, llm, memory, research, voice
 from proxenos.clones import work
 from proxenos.config import env
 
@@ -79,7 +79,10 @@ Return:
 done, what's open or waiting on whom, and any risk. Keep what still holds from last time; \
 change what the records show has changed. No title: the file has one. Facts, dates and \
 names only from the records or the last status; never invent any, nor spell out an \
-abbreviation the records don't. Say plainly what isn't known.
+abbreviation the records don't. Say plainly what isn't known. \
+A date after today is still to come: whatever is on it is scheduled, never completed or done, and \
+a meeting that was booked and then cancelled did not happen. Take today's date from the top of what \
+you're given.
 - changed: what's new since the last status, in a few sentences, or "" if nothing is.
 - next: the next steps, most useful first, three to six: each with who does it and by when ("" \
 when there's no date). {doer} Give {person} only what needs them: a decision, their judgment, \
@@ -256,6 +259,7 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
     prompt = "\n\n".join(
         part
         for part in (
+            dates.today(now),
             _about(project),
             f"Where you said it stood last time:\n{last[:STATUS_CHARS]}" if last else "",
             f"The end of its log:\n{_read(log_path)[-LOG_CHARS:]}" if log_path.exists() else "",
@@ -283,6 +287,9 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
     status = str(answer.get("status") or "").strip()
     if not status:
         raise ValueError("the model wrote no status")
+    status, fixed = dates.scheduled(status, now)
+    for line in fixed:
+        print(f"projects: {project['id']}: {line}", file=sys.stderr)
     steps = [s for s in answer.get("next") or [] if isinstance(s, dict) and _text(s.get("step"))]
     asks = [_text(a) for a in answer.get("asks") or [] if _text(a)]
     if project["repo"]:
@@ -358,6 +365,7 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
         if not body:
             continue
         draft_id = f"project-{project['id']}-{now:%Y%m%d}-{i}"
+        body, checked = work.vet(body, now, draft_id)
         message = d.get("kind") not in ("doc", "plan", "checklist", "blocked")
         work._write(
             out / f"{draft_id}.md",
@@ -374,7 +382,7 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
                     "found": work._clip(
                         f"From the {project['name']} project's status.", work.FOUND_CHARS
                     ),
-                    "asks": [work._clip(a, work.ASK_CHARS) for a in asks[: work.ASKS]],
+                    "asks": [work._clip(a, work.ASK_CHARS) for a in [*checked, *asks[: work.ASKS]]],
                     "body": body,
                 }
             ),

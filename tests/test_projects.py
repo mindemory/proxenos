@@ -283,3 +283,23 @@ def test_work_proxenos_can_do_is_queued_for_it_not_given_to_the_user(tmp_path):
     status = (tmp_path / "clones" / "projects" / "cookbook" / "status.md").read_text()
     assert "Plot rise against temperature (Proxenos, queued)" in status
     assert "Choose the publisher (Joe, Mar 20)" in status
+
+
+def test_a_status_is_told_todays_date_and_never_calls_a_future_date_done(tmp_path):
+    write_list(tmp_path, {"id": "clinic", "name": "The clinic", "terms": ["clinic"]})
+
+    class Late(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            return answer | {"status": "Consultation completed (30 Mar), intake done 2 Mar."}
+
+    model = Late()
+
+    projects.projects(tmp_path, now=NOW, model=model)
+
+    assert model.calls[0]["prompt"].startswith(f"Today is {NOW.astimezone():%A %Y-%m-%d}.\n")
+    assert "scheduled" in model.calls[0]["system"] and "cancelled" in model.calls[0]["system"]
+    status = (tmp_path / "clones" / "projects" / "clinic" / "status.md").read_text()
+    assert "Consultation scheduled for 30 Mar, intake done 2 Mar." in status
+    drafts = tmp_path / "clones" / "drafts"
+    assert "Hi Ana, thanks." in (drafts / "project-clinic-20260310-1.md").read_text()
