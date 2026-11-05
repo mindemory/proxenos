@@ -12,9 +12,10 @@ my O-1"):
    each with the rest of its conversation (memory.context), grouped by whom it's with: a firm by
    its mail's domain, someone writing from a personal address (gmail.com and the like) by that
    address, a person in a chat by the chat. Only others' messages make a counterpart, and not
-   bulk or automated mail; the user's own to them come along as what was asked. The
-   COUNTERPARTS with the most about the goal, each with their newest THEIRS messages and the
-   user's newest MINE;
+   bulk or automated mail; the user's own to them come along as what was asked. Only one with
+   a message about the goal, theirs or the user's to them, counts (_about): searches by meaning
+   and by any word also find people who only talk money. The COUNTERPARTS with the most about
+   the goal, each with their newest THEIRS messages and the user's newest MINE;
 2. reads each one's offer, one model call each, their messages inside a tag drawn for the call
    (proxenos.untrusted): who they are, the address they write from, the first step and its
    price, the whole and its price, the other prices and what each covers, what's credited, the
@@ -322,10 +323,13 @@ def find(vault: Path, goal: str, since: str) -> list[dict]:
             if chat := message.pop("chat", None):
                 group["chat"] = chat
     hits = {h["id"] for h in seeds}
+    words = [w.rstrip("*") for w in think._keywords(goal).split()]
     found = []
     for key, group in groups.items():
         if key.startswith("?") or not group["theirs"]:
             continue
+        if not any(_about(words, m) for m in group["theirs"] + group["mine"]):
+            continue  # near the goal in meaning, or by a word, but never about it
         theirs = max(m["ts"] for m in group["theirs"])
         mine = max((m["ts"] for m in group["mine"]), default="")
         group |= {
@@ -338,6 +342,16 @@ def find(vault: Path, goal: str, since: str) -> list[dict]:
         found.append(group)
     found.sort(key=lambda g: (g["hits"], g["last"]), reverse=True)
     return found[:COUNTERPARTS]
+
+
+def _about(words: list[str], message: dict) -> bool:
+    """Whether a message, with its subject, is about the goal: it holds two of the goal's telling
+    words (think._keywords, each with its longer forms), or its one. The searches by meaning and
+    by any of its words also find people who only talk money, or share one word with it ("next
+    steps" for porch steps), and each would get a reply. A goal with none can't be told: any."""
+    said = f"{message.get('subject') or ''}\n{message.get('text') or ''}"
+    held = sum(bool(re.search(rf"(?i)\b{re.escape(w)}", said)) for w in words)
+    return held >= min(2, len(words))
 
 
 def _seeds(vault: Path, goal: str, since: str) -> list[dict]:

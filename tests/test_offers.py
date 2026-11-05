@@ -278,6 +278,39 @@ def test_counterparts_are_firms_by_domain_and_people_by_address_or_chat(vault):
     assert found["chat:instagram:ig-thread-1"]["chat"] is None  # Beeper can't send there
 
 
+def test_only_people_whose_messages_are_about_the_goal_are_counterparts(vault, monkeypatch):
+    # Friends who talk money, one sharing a word with the goal: a search by meaning finds them
+    # as near it, as the demo's porch steps found everyone with a price.
+    write_month(
+        vault,
+        "whatsapp/messages",
+        "2026-10",
+        [
+            chat(
+                1, 12, "beeper:!pat", "Pat Lin", "Pat Lin", "The concert is $80 a ticket, fee in."
+            ),
+            chat(1, 13, "beeper:!dee", "Dee Fox", "Dee Fox", "My visa photos cost $15, so cheap"),
+        ],
+    )
+    memory.build(vault)
+    near = offers.research._search
+
+    def by_meaning(v, query, who, since=None, before=None):
+        loose = memory.search("concert photos", offers.SOURCES, match="any", vault=v)
+        return near(v, query, who, since, before) + loose
+
+    monkeypatch.setattr(offers.research, "_search", by_meaning)
+    found = {cp["key"] for cp in offers.find(vault, GOAL, "2026-01-01")}
+
+    assert "chat:whatsapp:beeper:!pat" not in found  # money, but not the goal
+    assert "chat:whatsapp:beeper:!dee" not in found  # one word of it, "visa", isn't enough
+    assert "chat:whatsapp:beeper:!maria" in found  # "immigration" and "visa"
+    assert offers._about(["porch", "steps"], {"text": "Can fix the porch steps Tuesday, $150"})
+    assert not offers._about(["porch", "steps"], {"text": "Next steps: the fee is $150"})
+    assert offers._about(["kitchen"], {"subject": "Re: Kitchens", "text": "$20k all in"})
+    assert offers._about([], {"text": "anything"})
+
+
 def test_a_price_the_model_made_up_is_dropped_and_said(vault):
     report = offers.compare(vault, GOAL, now=NOW, model=model(), draft=False)
     lee = next(r for r in report["rows"] if r["key"] == "org:leelaw.com")
