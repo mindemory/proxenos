@@ -580,6 +580,8 @@ def paper(tmp_path):
     (folder / ".git" / "config").write_text("[core]")
     (folder / "refs.bib").write_text("@misc{a, title={A}}")
     (folder / "main.bbl").write_text("\\begin{thebibliography}{1}\\end{thebibliography}\n")
+    for written in (p for p in folder.rglob("*") if p.is_file()):  # \n, not Windows' CRLF
+        written.write_bytes(written.read_bytes().replace(b"\r\n", b"\n"))
     os.utime(folder / "refs.bib", (1_000_000, 1_000_000))
     os.utime(folder / "main.bbl", (2_000_000, 2_000_000))
     return folder
