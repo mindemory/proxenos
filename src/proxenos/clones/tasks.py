@@ -87,6 +87,12 @@ _NO_REPLY = re.compile(
 _SLACK_EVENTS = re.compile(
     r"(channel|group)_(join|leave|topic|purpose|name|archive|unarchive)|(un)?pinned_item"
 )
+# A ticket or booking confirmation comes from a no-reply sender or the Updates tab and is still
+# the user's own plan: a film, a table, a flight.
+_TICKET = re.compile(
+    r"\b(e-?tickets?|tickets?|bookings?|reservations?|itinerary|boarding pass|you'?re booked)\b",
+    re.IGNORECASE,
+)
 _MENTION = re.compile(r"<@(\w+)(?:\|[^>]*)?>")
 _REF = re.compile(r"m\d+")
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -126,6 +132,9 @@ only moved stays open with its new time in at.
 ticket at a time: something that happens then, with someone or somewhere. false for a task \
 about one ("Reschedule the meeting", "Follow up with Priya", "Confirm the booking"): that's an \
 action, and the meeting itself is its own entry only when it's agreed.
+A ticket or booking confirmation in email (a film, a play, a concert, a table, a flight) is an \
+event even though nobody asks {person} anything: one task, "Go to ..." with what and with whom, \
+event true, at its time and place from the confirmation, and open until it's over.
 - at: when it happens, for an event at an agreed time: \
 "YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
 agreed time when it moved. "" for anything else, and for a deadline, which is due.
@@ -537,11 +546,14 @@ def _thread(record: dict, by_id: dict[str, dict]) -> str:
 
 def _bulk(record: dict) -> bool:
     """Mail that isn't to the user as a person: promotions, notifications, lists, spam. IMAP writes
-    system labels with a backslash (\\Spam), Takeout and the API without."""
+    system labels with a backslash (\\Spam), Takeout and the API without. Not a ticket or booking
+    confirmation, which is the user's plan, unless it's spam."""
     labels = {
         label.upper().lstrip("\\").replace(" ", "_") for label in record.get("gmail_labels") or []
     }
     local_part = (record.get("from_address") or "").split("@")[0]
+    if _TICKET.search(record.get("subject") or ""):
+        return bool(labels & {"SPAM", "TRASH"})
     return bool(labels & _BULK_LABELS) or bool(_NO_REPLY.match(local_part))
 
 

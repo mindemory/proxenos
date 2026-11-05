@@ -707,3 +707,32 @@ def test_a_task_whose_draft_was_sent_is_done(tmp_path, model):
     }
     assert listed == {"sentsentsent": "done", "waitwaitwait": "open", "keepkeepkeep": "open"}
     assert front(vault, "waitwaitwait")["status"] == "draft"
+
+
+def test_a_ticket_confirmation_from_a_no_reply_sender_reaches_the_model(tmp_path, model):
+    vault = make_vault(tmp_path)
+    mail = [
+        em(
+            ago(days=1),
+            "Your tickets for The Seagull",
+            "Sat 14 March, 19:30, Riverton Theatre, 2 seats",
+            sender="noreply@tickets.example",
+            labels=["Category Updates"],
+        ),
+        em(
+            ago(days=1),
+            "Your tickets, free shipping",
+            "Win a prize",
+            sender="noreply@tickets.example",
+            labels=["\\Spam"],
+        ),
+    ]
+    month = ago(days=1)[:7]
+    with (vault / "raw" / "email" / "gmail" / f"{month}.jsonl").open("a") as f:
+        f.writelines(json.dumps(r) + "\n" for r in mail)
+
+    tasks.plan(vault, now=NOW)
+
+    prompt = model.calls[0]["prompt"]
+    assert "Riverton Theatre" in prompt and "Win a prize" not in prompt
+    assert "ticket or booking confirmation" in model.calls[0]["system"]
