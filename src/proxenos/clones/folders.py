@@ -31,11 +31,13 @@ pandoc makes (PROXENOS_PANDOC, else the one on the PATH):
   file name or path, or by a label their names carry ("Table S4" or "Supplementary Table 4"
   finds S02_tableS4_note_types.csv, a table's label only a table, and "Fig. S2" FigS2_calls.png,
   a figure's only a figure), but not the figures it shows itself (Markdown's images, LaTeX's
-  \\includegraphics), which its copies have. When a table or a figure is left,
+  \\includegraphics), which its copies have. Each is copied under the label it goes by, never
+  its repository name: "Table S4.csv", "Figure S2.png", and "Supplementary Data 1.json" and on
+  for one named without a table's or figure's label. When a table or a figure is left,
   "Supplementary information.docx" and its PDF show them too: each table (.csv, .tsv, and .xlsx
   where openpyxl is installed) cut to ROWS rows and COLUMNS columns, and each figure, under the
-  caption the manuscript gives it, and the data files by name. It's made from Markdown, as the
-  notes are. With only data files left, there's none.
+  caption the manuscript gives it, and the data files by label, naming nothing by file or path.
+  It's made from Markdown, as the notes are. With only data files left, there's none.
 - "Where it stands", "What's known, and the question", "Drafts" and "About this project": the
   project's status.md and brief.md, its drafts still open, and what projects.json says of it.
 - "About this folder": when the manuscript was made, from which branch and commit, what its
@@ -74,6 +76,7 @@ import argparse
 import csv
 import hashlib
 import io
+import itertools
 import json
 import os
 import posixpath
@@ -690,16 +693,18 @@ def _write_supplement(
 ) -> None:
     """The files the manuscript names, by name or path (S1_table.csv, figures/fig2.png) or by a
     label their names carry ("Table S4" for S02_tableS4_types.csv, "Fig. S2" for FigS2.png),
-    found in its repository at `tip`, in Supplement/ beside the copy, each when it changed in
-    git and never over one the user changed, and its tables and figures in a document of their
-    own. Not the figures it shows itself, which its copy has, nor its own PDF, made on its own."""
+    found in its repository at `tip`, in Supplement/ beside the copy under the label each goes
+    by (_labelled: "Table S4.csv"), each when it changed in git and never over one the user
+    changed, and its tables and figures in a document of their own. Not the figures it shows
+    itself, which its copy has, nor its own PDF, made on its own. A copy under a name no longer
+    chosen, a repository's name from before or a label that moved, goes as a stale one does."""
     text = (manuscript._blob(repo, tip, path) or b"").decode("utf-8", "replace")
     text = text.replace("\\_", "_")  # S01\_sites.csv, as LaTeX writes it, and Markdown can
     own_pdf = str(PurePosixPath(path).with_suffix(".pdf"))
-    chosen = _choose(repo, tip, text, own_pdf, labels if labels is not None else {})
-    for base, (kept, blob, _, _) in chosen.items():
-        target = where / SUPPLEMENT / base
-        key = f"{SUPPLEMENT}/{base}"
+    chosen = _labelled(_choose(repo, tip, text, own_pdf, labels if labels is not None else {}))
+    for name, (kept, blob, *_) in chosen.items():
+        target = where / SUPPLEMENT / name
+        key = f"{SUPPLEMENT}/{name}"
         source = _digest("supplement", kept, blob)
         if _found(target, files.get(key), source) == "same":
             continue
@@ -786,6 +791,57 @@ def _choose(
     return chosen
 
 
+# "Supplementary Data 3", "Dataset S1": a data file's own label, at the start of its caption.
+_DATA_CALLED = re.compile(
+    r"(?:Supplementary|Suppl?\.?)[\s~]+(?:Data(?:set)?|File)[\s~]*S?(\d+)"
+    r"|(?:Data(?:set)?|File)[\s~]*S(\d+)",
+    re.IGNORECASE,
+)
+_MAIN_CALLED = re.compile(r"(Table|Fig(?:ure|\.)?)[\s~]*(\d+)\b", re.IGNORECASE)  # "Table 2"
+
+
+def _labelled(
+    chosen: dict[str, tuple[str, str, int, str]],
+) -> dict[str, tuple[str, str, int, str, str]]:
+    """The files chosen, each under the label it goes by and its own extension ("Table S3.csv",
+    "Supplementary Data 1.csv"), as (its path in the repository, its blob, where the manuscript
+    first names it, its caption, its label), in the order the manuscript first names them. A
+    paper's supplement names nothing by file or path, so neither do its copies: a table's or a
+    figure's label (_label), else Supplementary Data and the next number the paper's own data
+    labels don't take, as one it names twice gets too."""
+    order = sorted(chosen.values(), key=lambda c: c[2])
+    labels = [_label(kept, caption) for kept, _, _, caption in order]
+    taken = {int(m[1]) for x in labels if (m := re.fullmatch(r"Supplementary Data (\d+)", x))}
+    out: dict[str, tuple[str, str, int, str, str]] = {}
+    used: set[str] = set()
+    n = 0
+    for (kept, blob, at, caption), label in zip(order, labels, strict=True):
+        if not label or label in used:
+            n = next(i for i in itertools.count(n + 1) if i not in taken)
+            label = f"Supplementary Data {n}"
+        used.add(label)
+        out[label + PurePosixPath(kept).suffix] = (kept, blob, at, caption, label)
+    return out
+
+
+def _label(kept: str, caption: str) -> str:
+    """The label a supplement's file goes by, as "Table S3", "Figure S1", "Table 2" or
+    "Supplementary Data 2": the one its caption starts with, else a supplementary one its file's
+    name carries, of its own kind (a table's for a table, a figure's for a figure). "" with none."""
+    if m := _CALLED.match(caption):
+        kind = "Table" if (m.group(1) or m.group(2)).lower() == "table" else "Figure"
+        return f"{kind} S{int(m.group(3))}"
+    if m := _DATA_CALLED.match(caption):
+        return f"Supplementary Data {int(m.group(1) or m.group(2))}"
+    if m := _MAIN_CALLED.match(caption):
+        return f"{'Table' if m.group(1).lower() == 'table' else 'Figure'} {int(m.group(2))}"
+    suffix = PurePosixPath(kept).suffix.lower()
+    for kind, number in sorted(_carried(kept)):
+        if suffix in (_TABLES if kind == "table" else _FIGURES):
+            return f"{kind.capitalize()} S{number}"
+    return ""
+
+
 def _called(text: str) -> dict[tuple[str, int], tuple[int, str]]:
     """The supplementary tables and figures the manuscript calls by label, as ("table" or
     "figure", its number): (where it gives its caption, its caption), the caption being the
@@ -864,7 +920,7 @@ def _is_shown(kept: str, shown: set[str]) -> bool:
 
 # The supplement as a document beside the manuscript: its title, then each table and figure the
 # manuscript names under the caption it gives it, in the order it names them, each table cut to
-# ROWS rows and COLUMNS columns, then the data files by name.
+# ROWS rows and COLUMNS columns, then the data files by label. It names nothing by file or path.
 SUPPLEMENTARY = "Supplementary information.docx"
 ROWS = 40
 COLUMNS = 12
@@ -884,8 +940,8 @@ _LEAD = re.compile(r"^(?:[\s#>|*+-]+|\d+[.)]\s+)+")
 _MARKUP = re.compile(r"\\(?:label|ref|cite[a-z]*)\{[^}]*\}|\\[A-Za-z]+\*?|[`{}]|\*\*|__")
 _SPECIAL = re.compile(r"([\\`*_\[\]<>|$^~@#])")  # what Markdown would read as more than text
 _UNSHOWN = (
-    "_An SVG, which this PDF can't show without rsvg-convert (`brew install librsvg` on a Mac): "
-    "it's in {file}, and the Word file shows it._"
+    "_This PDF can't draw this figure without rsvg-convert (`brew install librsvg` on a Mac): "
+    "it's {label}, beside this document, and the Word file shows it._"
 )
 
 
@@ -902,19 +958,20 @@ def _drop(where: Path, files: dict, keys: list[str], stats: Counter) -> None:
 
 
 def _supplementary_items(
-    chosen: dict[str, tuple[str, str, int, str]],
-) -> list[tuple[str, str, str, str, str]]:
-    """The files chosen for Supplement/, as the document shows them: (how, its name, its path in
-    the repository, its blob, its caption), in the order the manuscript names them, `how`
-    "table" (.csv, .tsv, and .xlsx where openpyxl is installed), "figure" or "data"."""
+    chosen: dict[str, tuple[str, str, int, str, str]],
+) -> list[tuple[str, str, str, str, str, str]]:
+    """The files chosen for Supplement/, as the document shows them: (how, its name there, its
+    path in the repository, its blob, its caption, its label), in the order the manuscript names
+    them, `how` "table" (.csv, .tsv, and .xlsx where openpyxl is installed), "figure" or
+    "data"."""
     items = []
-    for base, (kept, blob, at, caption) in chosen.items():
+    for base, (kept, blob, at, caption, label) in chosen.items():
         suffix = PurePosixPath(base).suffix.lower()
         if suffix in _DELIMITERS or (suffix == ".xlsx" and _openpyxl()):
             how = "table"
         else:
             how = "figure" if suffix in _FIGURES else "data"
-        items.append((at, (how, base, kept, blob, caption)))
+        items.append((at, (how, base, kept, blob, caption, label)))
     return [item for _, item in sorted(items)]
 
 
@@ -979,7 +1036,7 @@ def _clean(text: str) -> str:
 def _write_supplementary(
     repo: Path,
     tip: str,
-    items: list[tuple[str, str, str, str, str]],
+    items: list[tuple[str, str, str, str, str, str]],
     where: Path,
     files: dict,
     project_name: str,
@@ -1014,23 +1071,24 @@ def _write_supplementary(
 def _supplementary(
     repo: Path,
     tip: str,
-    items: list[tuple[str, str, str, str, str]],
+    items: list[tuple[str, str, str, str, str, str]],
     title: str,
     into: Path,
     svg: bool = True,
 ) -> str:
     """The supplement's Markdown, its figures written beside it under `into`; without `svg`,
-    an SVG figure named, not shown."""
+    an SVG figure named, not shown. Each item goes by its label and the manuscript's caption,
+    never a file's name or path: a paper's supplement names none."""
     lines, listed = [f"# {title}", ""], []
-    for how, base, kept, _, caption in items:
+    for how, base, kept, _, caption, label in items:
         data = manuscript._blob(repo, tip, kept) if how != "data" else None
         table = _table(base, data) if how == "table" and data is not None else None
         if data is None or (how == "table" and table is None):
-            listed.append(base)  # by name, as a data file
+            listed.append((label, caption))  # by label, as a data file
             continue
-        lines += [f"## {caption or _escape(base)}", ""]
+        lines += [f"## {_heading(label, caption)}", ""]
         if how == "figure" and not svg and base.lower().endswith(".svg"):
-            lines += [_UNSHOWN.format(file=f"{SUPPLEMENT}/{_escape(base)}"), ""]
+            lines += [_UNSHOWN.format(label=label), ""]
             continue
         if how == "figure":
             figure = into / "figures" / base
@@ -1047,12 +1105,36 @@ def _supplementary(
         cut = [f"{ROWS} of its {height} rows"] if height > ROWS else []
         cut += [f"{COLUMNS} of its {width} columns"] if width > COLUMNS else []
         if cut:
-            full = f"the full table is in {SUPPLEMENT}/{_escape(base)}"
+            full = f"the full table is {label}, beside this document"
             lines += [f"_This is the first {' and '.join(cut)}: {full}._", ""]
     if listed:
-        lines += ["## Data files", "", f"In {SUPPLEMENT}/, beside this file:", ""]
-        lines += [f"- {_escape(base)}" for base in listed] + [""]
+        lines += ["## Data files", "", "Beside this document:", ""]
+        lines += [_listed(label, caption) for label, caption in listed] + [""]
     return "\n".join(lines)
+
+
+def _heading(label: str, caption: str) -> str:
+    """An item's heading: the manuscript's caption when it starts with a label, else the label
+    and any caption after it; no file's name or path in it either way."""
+    caption = _unnamed(caption)
+    if caption and _LABEL.match(caption):
+        return caption
+    return f"{label}. {caption}" if caption else label
+
+
+def _listed(label: str, caption: str) -> str:
+    """A data file in the document's list: its label, and what the manuscript says of it in a
+    line of its own (its Supplementary materials list, say), without the label again."""
+    said = _unnamed(caption)
+    if m := _LABEL.match(said):
+        said = said[m.end() :].lstrip(" .:;,-–—")
+    return f"- **{label}.** {said}" if said else f"- {label}"
+
+
+def _unnamed(text: str) -> str:
+    """A caption with no file's name or path in it, nor the brackets they leave empty."""
+    text = re.sub(r"[(\[]\s*[,;]?\s*[)\]]", "", _NAMED.sub("", text))
+    return " ".join(text.split()).strip(" ,;:")
 
 
 def _table(base: str, data: bytes) -> tuple[list[list[str]], int, int] | None:
@@ -1338,8 +1420,11 @@ _UNMADE = (
 _SUPPLEMENTARY = (
     f"**{SUPPLEMENTARY}**, and its PDF, hold the tables and figures the manuscript names, by file "
     "name or by a label such as Table S4, but doesn't show itself, under the captions it gives "
-    "them, and list its data files; a long table is cut short there. The files themselves are in "
-    f"{SUPPLEMENT}/, copied from the same version."
+    "them, and list its data files, each by its label and never by a file's name; a long table "
+    f"is cut short there. The files themselves are in {SUPPLEMENT}/, copied from the same "
+    "version and named by their labels: Table S4.csv, Figure S2.png, and Supplementary Data 1, "
+    "2 and on for the files the manuscript names without a table's or a figure's label, in the "
+    "order it first names them."
 )
 _THE_NOTES = (
     "Where it stands, What's known and the question, Drafts and the two About files are "

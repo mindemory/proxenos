@@ -290,7 +290,7 @@ def test_each_project_gets_a_folder_of_its_manuscript_and_notes(setup):
         ]
     )
     # Not the figure it shows: its copies have that.
-    assert [p.name for p in (where / "Supplement").iterdir()] == ["tableS1.csv"]
+    assert [p.name for p in (where / "Supplement").iterdir()] == ["Table S1.csv"]
     # The manuscript at its branch's tip, converted where the files beside it are, and nothing
     # else of the repository, not even the PDF committed beside it; its PDF made there too.
     assert text_of(where / DOCX) == text_of(where / PDF) == PAPER
@@ -858,12 +858,12 @@ def test_the_files_a_manuscript_names_go_to_its_supplement(setup):
 
     # Not the figure it shows, nor the other Table S1 it doesn't name.
     supplement = drive / FOLDER / "Supplement"
-    assert [p.name for p in supplement.iterdir()] == ["S01_tableS1_sites.csv"]
-    assert (supplement / "S01_tableS1_sites.csv").read_text() == "site,n\nA,3\n"
+    assert [p.name for p in supplement.iterdir()] == ["Table S1.csv"]  # by label, not name
+    assert (supplement / "Table S1.csv").read_text() == "site,n\nA,3\n"
     # One the user changed is never written over; an unchanged one isn't written again.
-    (supplement / "S01_tableS1_sites.csv").write_text("site,n\nA,3\nB,4\n")
+    (supplement / "Table S1.csv").write_text("site,n\nA,3\nB,4\n")
     stats = run(vault, NOW + timedelta(days=1))
-    assert (supplement / "S01_tableS1_sites.csv").read_text() == "site,n\nA,3\nB,4\n"
+    assert (supplement / "Table S1.csv").read_text() == "site,n\nA,3\nB,4\n"
     assert stats.get("files_written", 0) == 0
 
 
@@ -908,17 +908,18 @@ def test_the_supplement_is_a_document_of_its_tables_and_figures_under_their_capt
 
     where = drive / FOLDER
     # Not the figure it shows, nor the fixture's tableS1.csv: the file it names is its Table S1.
+    # Each by its label; the two it names with none, data, numbered as it first names them.
     assert sorted(p.name for p in (where / "Supplement").iterdir()) == [
-        "FigS2_dusk.png",
-        "S01_tableS1_sites.csv",
-        "S02_tableS4_note_types_by_species.csv",
-        "S03_book.xlsx",
-        "counts.json",
+        "Figure S2.png",
+        "Supplementary Data 1.json",
+        "Supplementary Data 2.xlsx",
+        "Table S1.csv",
+        "Table S4.csv",
     ]
     text = text_of(where / SUPPLEMENTARY)
     assert text == text_of(where / "Supplementary information.pdf")
     [made] = [m for m in fake.made if m["name"] == "supplementary.md"]
-    assert made["beside"] == ["figures/FigS2_dusk.png", "supplementary.md"]
+    assert made["beside"] == ["figures/Figure S2.png", "supplementary.md"]
     assert fake.pdfs[-1] == made  # the same Markdown, figures beside it
     head, s1, s4, figure, data = text.split("\n## ")
     assert head == "# Calls: the paper?: supplementary information\n"
@@ -926,20 +927,24 @@ def test_the_supplement_is_a_document_of_its_tables_and_figures_under_their_capt
     # "Table S1" it's named with, or the line that names it, from its label; Figure S2, named
     # by its label alone, under the line in the list that starts with it.
     assert s1 == "Table S1\n\n| site | n |\n|---|---|\n| A | 3 |\n| B\\|C | \\*4\\* |\n"
-    assert figure == "Figure S2. Calls at dusk, by site\n\n![](<figures/FigS2_dusk.png>)\n"
+    assert figure == "Figure S2. Calls at dusk, by site\n\n![](<figures/Figure S2.png>)\n"
     caption, _, table = s4.partition("\n\n")
     assert caption == "Table S4. Note types by species"
     rows = table.strip().split("\n")
     assert rows[0] == "| " + " | ".join(f"c{j}" for j in range(12)) + " |"
     assert len(rows) == 2 + 40 + 2 and rows[-3].startswith("| r39c0 | ") and rows[-2] == ""
     assert rows[-1] == (
-        "_This is the first 40 of its 50 rows and 12 of its 15 columns: the full table is in "
-        "Supplement/S02\\_tableS4\\_note\\_types\\_by\\_species.csv._"
+        "_This is the first 40 of its 50 rows and 12 of its 15 columns: the full table is "
+        "Table S4, beside this document._"
     )
-    # The data files, and a workbook with nothing here to read it, by name.
+    # The data files, and a workbook with nothing here to read it, by label, with what the
+    # paper's list says of one; no file's name, path or extension anywhere.
     assert data == (
-        "Data files\n\nIn Supplement/, beside this file:\n\n- counts.json\n- S03\\_book.xlsx\n"
+        "Data files\n\nBeside this document:\n\n- Supplementary Data 1\n"
+        "- **Supplementary Data 2.** The workbook\n"
     )
+    for named in ("S01", "S02", "S03", "counts", "FigS2", ".csv", ".json", ".xlsx", "results/"):
+        assert named not in text
 
     # Nothing changed: nothing made again.
     made, pdfs = len(fake.made), len(fake.pdfs)
@@ -975,17 +980,18 @@ def test_an_svg_figure_is_named_in_the_pdf_until_pandoc_can_draw_it(setup, monke
     run(vault, NOW)
 
     where = drive / FOLDER
-    assert "## Figure S2: Calls by hour\n\n![](<figures/figS2.svg>)\n" in text_of(
+    assert "## Figure S2: Calls by hour\n\n![](<figures/Figure S2.svg>)\n" in text_of(
         where / SUPPLEMENTARY
     )
     pdf = text_of(where / "Supplementary information.pdf")
-    assert "![](" not in pdf and "it's in Supplement/figS2.svg, and the Word file shows it" in pdf
+    assert "![](" not in pdf and "it's Figure S2, beside this document, and the Word" in pdf
+    assert "svg" not in pdf.lower().replace("librsvg", "").replace("rsvg-convert", "")
 
     # rsvg-convert installed: the PDF is made again, showing it; the Word file isn't.
     rsvg = "/opt/homebrew/bin/rsvg-convert"
     made = len(fake.made)
     run(vault, LATER)
-    assert "![](<figures/figS2.svg>)" in text_of(where / "Supplementary information.pdf")
+    assert "![](<figures/Figure S2.svg>)" in text_of(where / "Supplementary information.pdf")
     assert len(fake.made) == made
 
 
@@ -1002,7 +1008,7 @@ def test_a_paper_naming_only_data_gets_no_supplement_document(setup):
     commit(repo, files, "D", 3)
     git(repo, "checkout", "-q", "main")
     stats = run(vault, LATER)
-    assert [p.name for p in (where / "Supplement").iterdir()] == ["counts.json"]
+    assert [p.name for p in (where / "Supplement").iterdir()] == ["Supplementary Data 1.json"]
     assert not (where / SUPPLEMENTARY).exists()
     assert not (where / "Supplementary information.pdf").exists()
     assert stats["removed"] == 3  # the table, and the document as a Word file and a PDF
@@ -1085,17 +1091,45 @@ def test_a_paper_naming_its_tables_and_figures_by_label_gets_the_files_that_carr
 
     where = drive / FOLDER
     assert sorted(p.name for p in (where / "Supplement").iterdir()) == [
-        "FigS2_calls.png",
-        "S01_tableS1_recordings.csv",
-        "supplementary_table_2.tsv",
+        "Figure S2.png",
+        "Table S1.csv",
+        "Table S2.tsv",
     ]
     _, s1, s2, figure = text_of(where / SUPPLEMENTARY).split("\n## ")
     # Each under the line in the list that starts with its label, in the list's order.
     assert s1 == "Table S1. Recordings by species\n\n| species | n |\n|---|---|\n| wren | 12 |\n"
     assert s2 == "Supplementary Table 2: Calls by hour\n\n| hour | n |\n|---|---|\n| 5 | 3 |\n"
-    assert figure == "Fig. S2 — Calls at dusk\n\n![](<figures/FigS2_calls.png>)\n"
+    assert figure == "Fig. S2 — Calls at dusk\n\n![](<figures/Figure S2.png>)\n"
     [made] = [m for m in fake.made if m["name"] == "supplementary.md"]
-    assert made["beside"] == ["figures/FigS2_calls.png", "supplementary.md"]
+    assert made["beside"] == ["figures/Figure S2.png", "supplementary.md"]
+
+
+def test_each_supplementary_file_goes_by_its_label_never_its_name():
+    chosen = {  # base: (path, blob, where it's first named, caption)
+        "a.csv": ("results/a.csv", "1", 10, ""),
+        "raw.json": ("raw.json", "2", 20, "Supplementary Data 2. Raw counts (raw.json)"),
+        "FigS3_x.png": ("figures/FigS3_x.png", "3", 30, ""),
+        "b.tsv": ("b.tsv", "4", 40, "Table S1: Sites"),
+        "c.csv": ("c.csv", "5", 50, "Table S1. Sites again"),  # the label's taken: data
+        "main.png": ("main.png", "6", 60, "Fig. 2. The paper's own"),
+    }
+    labelled = folders._labelled(chosen)
+    assert {name: item[4] for name, item in labelled.items()} == {
+        "Supplementary Data 1.csv": "Supplementary Data 1",
+        "Supplementary Data 2.json": "Supplementary Data 2",  # its own number, kept
+        "Figure S3.png": "Figure S3",  # the label its file's name carries
+        "Table S1.tsv": "Table S1",
+        "Supplementary Data 3.csv": "Supplementary Data 3",
+        "Figure 2.png": "Figure 2",
+    }
+    assert folders._listed("Supplementary Data 2", chosen["raw.json"][3]) == (
+        "- **Supplementary Data 2.** Raw counts"
+    )
+    assert folders._listed("Supplementary Data 1", "") == "- Supplementary Data 1"
+    assert folders._heading("Supplementary Data 1", "Counts (results/counts.csv)") == (
+        "Supplementary Data 1. Counts"
+    )
+    assert folders._heading("Table S1", "Table S1: Sites") == "Table S1: Sites"
 
 
 def test_labels_are_read_from_the_paper_and_from_file_names_whatever_their_case():
@@ -1151,8 +1185,10 @@ def test_a_latex_paper_names_its_files_as_latex_writes_them(setup):
     git(repo, "checkout", "-q", "main")
     run(vault, NOW)
     where = drive / FOLDER
-    assert (where / "Supplement" / "S01_sites.csv").read_text() == "site,n\nA,3\n"
-    assert "## Sites and counts.\n\n| site | n |" in text_of(where / SUPPLEMENTARY)
+    # A table with no label of its own: data, by number, under its caption.
+    assert (where / "Supplement" / "Supplementary Data 1.csv").read_text() == "site,n\nA,3\n"
+    text = text_of(where / SUPPLEMENTARY)
+    assert "## Supplementary Data 1. Sites and counts.\n\n| site | n |" in text
 
 
 def test_what_went_wrong_is_the_line_that_says_so():
@@ -1266,8 +1302,12 @@ def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
     git(repo, "checkout", "-q", "main")
     run(vault, NOW)
     supplement = drive / FOLDER / "Supplement"
-    assert {p.name for p in supplement.iterdir()} == {"S1.csv", "screen.png"}
-    (supplement / "S1.csv").write_text("site,n\nA,3\nB,4\n")  # the owner's own change
+    # Named with no label: data, numbered in the order the paper names them.
+    assert {p.name for p in supplement.iterdir()} == {
+        "Supplementary Data 1.csv",
+        "Supplementary Data 2.png",
+    }
+    (supplement / "Supplementary Data 1.csv").write_text("site,n\nA,3\nB,4\n")  # the owner's
 
     git(repo, "checkout", "-q", "paper-storyline")
     commit(repo, {"docs/paper/paper.md": "# Calls\n\nNo figures or tables now.\n"}, "Unnamed", 4)
@@ -1275,7 +1315,7 @@ def test_a_file_the_paper_stops_naming_leaves_its_supplement(setup):
     stats = run(vault, NOW + timedelta(days=1))
 
     assert stats["removed"] == 3  # the figure, and the document of the two, Word and PDF
-    assert [p.name for p in supplement.iterdir()] == ["S1.csv"]  # theirs stays
+    assert [p.name for p in supplement.iterdir()] == ["Supplementary Data 1.csv"]  # theirs
     assert not (drive / FOLDER / SUPPLEMENTARY).exists()
     assert not any(k.startswith("Supplement/") for k in state(vault)["projects"]["calls"]["files"])
 
@@ -1293,7 +1333,7 @@ def test_a_label_keeps_its_file_after_the_file_name_leaves_the_text(setup):
     git(repo, "checkout", "-q", "main")
     run(vault, NOW)
     supplement = drive / FOLDER / "Supplement"
-    assert (supplement / "S08_median_stability.csv").exists()
+    assert (supplement / "Table S13.csv").exists()
 
     git(repo, "checkout", "-q", "paper-storyline")
     commit(
@@ -1305,7 +1345,7 @@ def test_a_label_keeps_its_file_after_the_file_name_leaves_the_text(setup):
     git(repo, "checkout", "-q", "main")
     run(vault, NOW + timedelta(days=1))
 
-    assert (supplement / "S08_median_stability.csv").exists()  # still found, by what it was
+    assert (supplement / "Table S13.csv").exists()  # still found, by what it was
     assert (
         state(vault)["projects"]["calls"]["labels"]["table:13"]
         == "results/S08_median_stability.csv"
