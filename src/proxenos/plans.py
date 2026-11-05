@@ -11,7 +11,10 @@ Times are floating, local wherever the calendar is read, as the messages say the
 event lasts MINUTES; a plan with a day and no time is an all-day event. A plan is on their
 calendar already when an event in raw/calendar/ is on the same day, within NEAR of its time when
 both have one, and shares a word with it (its title's or the other person's), so the visit they
-put in themselves isn't shown twice. Subscribed calendars aren't read back in (maccalendar leaves
+put in themselves isn't shown twice. So is an event of theirs within SAME_PERSON_DAYS with the
+plan's person (the name, their initials as the title writes them, or a guest or the organizer),
+which knows the real time better than the messages do, and one plan written as two tasks is one
+event. Subscribed calendars aren't read back in (maccalendar leaves
 them out), so this one never counts as theirs.
 
 A subscription only reaches the Calendar apps that subscribe, and Google Calendar can't fetch a
