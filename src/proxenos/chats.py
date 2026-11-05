@@ -7,7 +7,9 @@ when the user has written in it before (for an email, in the thread or to that s
 so businesses, newsletters and strangers they never answered stay out (and an email must be
 addressed to one of their PROXENOS_EMAILS among a few people), and only when what's
 waiting says something: a question, a link or a few words, not a lone "ok" or emoji. A chat
-with an app's own AI assistant, like Meta AI, never counts.
+with an app's own AI assistant, like Meta AI, never counts. Nor does mail from a company's own
+mailbox (no-reply, notifications, connect, hello, info, news, marketing, team) at an address the
+user has never written to, or mail marked bulk (a List-Unsubscribe or Precedence header).
 
 A group chat counts when what's waiting answers the user: a question from someone, among the
 first few messages after the user's own and within a day of it, as when a friend asks back in a
@@ -72,6 +74,11 @@ _ROLE = re.compile(
     r"events?|admin|office|billing|accounts?|careers|jobs|hr|recruiting|community|partners?|"
     r"partnerships|press|media|feedback|(customer)?[-._]?(service|care)|members(hip)?|invites?|"
     r"alerts?|security|system|scheduling|appointments?|reminders?|orders?|receipts?|verify)"
+)
+# A company's own mailbox: nobody there waits on a reply, unless the user has written to that exact
+# address before (the part before the @, whole).
+_COMPANY = re.compile(
+    r"(no-?reply|do-?not-?reply|notifications?|connect|hello|info|news|marketing|team)"
 )
 # What mail sent in bulk or by a company says, whatever its headers: a way out of the next one,
 # which the law asks commercial mail for, or a copyright line.
@@ -174,9 +181,21 @@ def conversations(
 
     names = {w for w in _WORD.findall(env("NAME").casefold()) if len(w) > 2}  # the user's
     for key, messages in threads.items():
+        messages = [_company(m, sent) for m in messages]
         if _first(key, messages, sent, heard, names):
             messages = [{**m, "first": True} for m in messages]
         yield "email", key, messages, to_sender, OWN_EMAILS
+
+
+def _company(message: dict, sent: dict[str, list[dict]]) -> dict:
+    """An email from a company's own mailbox (marketing, notifications: _COMPANY), which the user
+    has never written to at that address, as no one's question: not direct, not personal."""
+    peers = message["peers"]
+    if message["mine"] or not peers or sent.get(peers[0]):
+        return message
+    if _COMPANY.fullmatch(peers[0].split("@")[0]):
+        return {**message, "direct": False, "personal": False}
+    return message
 
 
 def drafted(vault: Path) -> set[tuple[str, str]]:

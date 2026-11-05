@@ -435,3 +435,28 @@ def test_a_group_waits_when_someone_asks_back_right_after_the_user(tmp_path):
 
     assert chat["chat"] == "hike"
     assert [m["text"] for m in chat["waiting"]] == ["sounds good to me", "which day works?"]
+
+
+def test_mail_from_a_companys_own_mailbox_never_waits_unless_the_user_wrote_to_that_address(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_NAME", "Me Person")
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@x.org")
+    ask = "Me, simplify your immigration journey with us? Reply to book a call."
+    write_jsonl(
+        tmp_path / "raw" / "email" / "me-x-org" / "2026-03.jsonl",
+        [
+            mail("t1", "2026-03-08T09:00:00Z", "connect@casium.com", ["me@x.org"], ask),
+            mail("t2", "2026-03-08T09:00:00Z", "priya@casium.com", ["me@x.org"], "Evaluation?"),
+            mail("t3", "2026-03-01T09:00:00Z", "me@x.org", ["info@shop.com"], "Order status", True),
+            mail("t3", "2026-03-08T09:00:00Z", "info@shop.com", ["me@x.org"], "Which size?"),
+            mail("t4", "2026-03-01T09:00:00Z", "me@x.org", ["priya@casium.com"], "Hello", True),
+            mail("t5", "2026-03-08T09:00:00Z", "team@casium.com", ["me@x.org"], "Reply to us?"),
+        ],
+    )
+
+    waiting = {c["chat"] for c in chats.waiting(tmp_path, NOW)}
+
+    # Priya wrote to the user, who has written to her; info@ the user wrote to once. Not connect@
+    # (never written to, a first email), nor team@ (written to nobody there).
+    assert waiting == {"t2", "t3"}
