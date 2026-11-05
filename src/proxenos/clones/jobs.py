@@ -75,7 +75,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
-from proxenos import ask, chats, dates, llm, research, untrusted, voice
+from proxenos import ask, chats, dates, llm, research, tells, untrusted, voice
 from proxenos.clones import choices, errands, tasks, work
 from proxenos.config import env
 
@@ -1492,7 +1492,7 @@ def _write_step(
     subject = choices._one_line(answer.get("subject"))
     if channel == "email" and subject:
         body = f"Subject: {subject}\n\n{body}"
-    body, checked = work.vet(body, now, [], job["draft_id"])
+    body, checked = work.vet(body, now, [], job["draft_id"], own, channel in tells.CHATS)
     asks += checked
     asks += [choices._one_line(a) for a in answer.get("asks") or [] if choices._one_line(a)]
     if about:

@@ -78,6 +78,7 @@ from proxenos import (
     llm,
     plans,
     research,
+    tells,
     told,
     untrusted,
     voice,
@@ -299,7 +300,7 @@ def work(
             else:
                 if chat and llm.voice_on():
                     answer["body"] = _voiced(chat, person) or answer["body"]
-                draft = _draft(job, answer, now, _said(job, shown))
+                draft = _draft(job, answer, now, _said(job, shown), own)
         except Exception as e:  # noqa: BLE001 - one failed draft must not cost the others
             failed += 1
             print(f"work: {job['id']} failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
@@ -922,12 +923,22 @@ def _brief(head: str, fields: list[tuple[str, object]], ask: str) -> str:
 # The answer, and the files
 
 
-def vet(body: str, now: datetime, said: list[str], label: str = "draft") -> tuple[str, list[str]]:
+def vet(
+    body: str,
+    now: datetime,
+    said: list[str],
+    label: str = "draft",
+    writing: voice.Writing | None = None,
+    chat: bool = False,
+) -> tuple[str, list[str]]:
     """A draft's text after the code's own checks, and the questions they raise for the user (the
     draft's asks): a weekday that doesn't fit its date (proxenos.dates), where it can only have
     been the weekday that was wrong it is corrected and logged, and a claim that the user did
     something that none of `said`, their own messages in what the draft was given, shows
-    (proxenos.claims). Every draft that is written runs through it."""
+    (proxenos.claims). And the tells of an AI's writing are taken out unless the user's own
+    `writing` has them (proxenos.tells), with no signature in a `chat`. Every draft that is
+    written runs through it."""
+    body = tells.clean(body, writing.tells if writing else frozenset(), chat)
     body, asks, fixed = dates.check(body, now)
     for line in fixed:
         print(f"work: {label}: {line}", file=sys.stderr)
@@ -943,19 +954,27 @@ def _said(job: dict, examples: str) -> list[str]:
     return [job["prompt"], examples]
 
 
-def _draft(job: dict, answer: dict, now: datetime, said: list[str] = ()) -> dict:
+def _draft(
+    job: dict,
+    answer: dict,
+    now: datetime,
+    said: list[str] = (),
+    writing: voice.Writing | None = None,
+) -> dict:
     body = str(answer["body"]).strip()
     if not body:
         raise ValueError("the model wrote an empty draft")
-    body, checked = vet(body, now, list(said), job["id"])
+    channel = job.get("channel") or (
+        answer["channel"] if answer["channel"] in CHANNELS else "other"
+    )
+    body, checked = vet(body, now, list(said), job["id"], writing, channel in tells.CHATS)
     asks = [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)]
     return {
         "id": job["id"],
         "title": _clip(_one_line(answer["title"]) or job["title"] or "Draft", TITLE_CHARS),
         "kind": answer["kind"] if answer["kind"] in KINDS else "doc",
         "for": job["for"],
-        "channel": job.get("channel")
-        or (answer["channel"] if answer["channel"] in CHANNELS else "other"),
+        "channel": channel,
         "to": job.get("to") or _one_line(answer["to"]),
         "created": _iso(now),
         "status": "draft",

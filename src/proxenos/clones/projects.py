@@ -53,7 +53,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import dates, llm, memory, research, voice
+from proxenos import dates, llm, memory, research, tells, voice
 from proxenos.clones import work
 from proxenos.config import env
 
@@ -360,12 +360,13 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
         if ours.fullmatch(key) and status == "draft" and key not in edited:
             path.unlink(missing_ok=True)
     written = 0
+    writing = voice.Writing(vault)
     for i, d in enumerate([d for d in drafted if isinstance(d, dict)][:DRAFTS], start=1):
         body = str(d.get("body") or "").strip()
         if not body:
             continue
         draft_id = f"project-{project['id']}-{now:%Y%m%d}-{i}"
-        body, checked = work.vet(body, now, draft_id)
+        body, checked = work.vet(body, now, [], draft_id, writing, d.get("channel") in tells.CHATS)
         message = d.get("kind") not in ("doc", "plan", "checklist", "blocked")
         work._write(
             out / f"{draft_id}.md",

@@ -63,7 +63,7 @@ from difflib import SequenceMatcher
 from functools import cached_property
 from pathlib import Path
 
-from proxenos import chats, history, llm
+from proxenos import chats, history, llm, tells
 from proxenos.config import env
 from proxenos.ingest import email as mail
 
@@ -149,12 +149,13 @@ if...") unless their examples use them.
 - Never say {person} did something (paid, sent, signed, submitted, booked, called) unless the \
 records you were given show it. If they don't, leave it out or write it as still to do, and ask \
 {person} whether they did, wherever your answer has a place to ask.
+- Never write these tells of an AI's writing, unless their own examples use them: {never}.
 - A weekday goes with a date only as the calendar you were given has them: never work one out. \
 Where the date isn't in it, leave the weekday out."""
 
 
 def rules(person: str) -> str:
-    return RULES.format(person=person)
+    return RULES.format(person=person, never=tells.NEVER)
 
 
 class Writing:
@@ -234,6 +235,12 @@ class Writing:
             and _tidy(m.get("draft_text"))
             and _enough(_tidy(m.get("sent_text")))
         ]
+
+    @cached_property
+    def tells(self) -> frozenset[str]:
+        """The tells of an AI's writing (proxenos.tells) that their own sent messages and emails
+        really use, which a draft may keep."""
+        return tells.used([m["text"] for m in self.messages] + [t["text"] for t in self.long])
 
     @cached_property
     def rules(self) -> list[str]:

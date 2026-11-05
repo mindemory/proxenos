@@ -276,8 +276,9 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     # How they write where it goes: in their chat with the person, or in the email they send.
     goes = route["channel"] if route else "email" if channel == "any" else channel
     thread = route.get("chat") if route else None
+    writing = voice.Writing(vault)
     own = voice.examples(
-        voice.Writing(vault),
+        writing,
         goes,
         name=name,
         chat=(thread["source"], thread["chat"]) if thread else None,
@@ -304,7 +305,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     errand["why"] = _text(answer.get("why"))
     errand["needs"] = [_text(n) for n in answer.get("needs") or [] if _text(n)][:3]
     said = [e["body"] for e in examples]  # their own emails, the only words of theirs it held
-    body, checked = work.vet(body, now, said, errand["id"])
+    body, checked = work.vet(body, now, said, errand["id"], writing, goes != "email")
     errand["needs"] = [*checked, *errand["needs"]]
     if cv:
         errand["cv"]["notes"] = _stale(answer.get("cv_notes"))
@@ -319,7 +320,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         and to in intro_routes
         and str(intro.get("body") or "").strip()
     ):
-        note, more = work.vet(str(intro["body"]), now, said, errand["id"])
+        note, more = work.vet(str(intro["body"]), now, said, errand["id"], writing)
         errand["needs"] += more
         errand["messages"].append(
             _message(
