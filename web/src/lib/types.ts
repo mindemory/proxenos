@@ -1591,6 +1591,8 @@ export interface ErrandMessage {
   body: string;
   /** The CV goes with it. */
   attach: boolean;
+  /** Written to paste into a chat Proxenos can't send in (Slack, WeChat): Copy, or Send to an address typed in. */
+  copied: boolean;
   state: "ready" | "waiting" | "sent";
   sentAt: string;
 }

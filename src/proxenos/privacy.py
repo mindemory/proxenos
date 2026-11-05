@@ -126,7 +126,11 @@ SENDS = (
     (
         "Errands",
         ("errands",),
-        "The newest records naming the person to reach, your earlier emails with a CV, and the CV.",
+        (
+            "The newest records naming the person to reach (your Slack DMs with them among "
+            "them), your earlier emails with a CV, the CV, and your own messages in your chat "
+            "with them to write like. One for Slack or WeChat is only written to copy there."
+        ),
     ),
     (
         "Offers",

@@ -223,6 +223,7 @@ def test_an_errand_goes_as_far_as_it_can_and_stops_one_tap_short(vault):
         "subject": "The open role at Acme",
         "body": "",
         "attach": True,
+        "copied": False,
         "state": "ready",
         "sent_at": "",
         "from_account": "joe",  # the mailbox they last wrote with Ana Lee in
@@ -306,6 +307,106 @@ def test_a_wechat_message_is_written_to_copy_there_never_sent_another_way(vault)
     assert "in their WeChat chat, where" in model.calls[1]["prompt"]
     assert errand["summary"] == "Written for Ana Lee: copy it into your WeChat chat with them."
     assert errands.recheck(vault, errand, NOW) is False
+
+
+def dm(n, **fields):
+    """A message in a Slack DM with John Murray, as proxenos.ingest.slack writes one."""
+    return {
+        "id": f"D1/17000000{n:02d}.000100",
+        "ts": f"2026-09-{n:02d}T15:00:00Z",
+        "slack_ts": f"17000000{n:02d}.000100",
+        "channel_id": "D1",
+        "channel_name": "John Murray",
+        "channel_type": "dm",
+        "user_id": "U2",
+        "user_name": "John Murray",
+        "from_me": False,
+        "text": "Sure, send it over",
+        "thread_ts": None,
+        "is_reply": False,
+        "subtype": None,
+        "files": None,
+    } | fields
+
+
+def test_a_slack_errand_is_written_like_my_dms_with_them_to_copy_there_never_sent(vault):
+    joe = {"from_me": True, "user_id": "U1", "user_name": "Joe Bloggs"}
+    write_month(
+        vault,
+        "slack/acme-lab/messages",
+        "2026-09",
+        [
+            dm(10, **joe, text="hey john got a sec this week to look at the fig 3 draft?"),
+            dm(11),
+            dm(12, **joe, text="sent! no rush, thursday is fine"),
+            dm(  # John in a channel: not the DM
+                13,
+                id="C1/1700000013.000100",
+                channel_id="C1",
+                channel_name="general",
+                channel_type="channel",
+                text="Lab meeting moved to 3pm",
+            ),
+        ],
+    )
+    john = {"from_address": "john.murray@uni.edu", "from_name": "John Murray"}
+    write_month(vault, "email/joe", "2026-09", [mail(21, **john, subject="Reading group")])
+    memory.build(vault)
+
+    class Slack(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            if "person" in answer:
+                return answer | {"org": "", "channel": "slack", "cv": False}
+            signed = (
+                "Hi John,\n\nWould you read my paper draft this week?\n\nBest,\nJoe Bloggs, PhD"
+            )
+            return answer | {"subject": "My paper", "body": signed}
+
+    model = Slack("John Murray", "")
+    errand = errands.start(vault, "Message John Murray on Slack about my paper", NOW, model)
+
+    (message,) = errand["messages"]  # his email address is known, and isn't used
+    assert message | {"body": ""} == {
+        "role": "main",
+        "to": "John Murray",
+        "channel": "slack",
+        "address": "",
+        "via": "",
+        "chat": None,
+        "evidence": "your Slack DM with them in acme-lab, 3 messages, the last on 2026-09-12",
+        "subject": "",
+        "body": "",
+        "attach": False,
+        "copied": True,
+        "state": "waiting",
+        "sent_at": "",
+    }
+    assert message["body"] == "Hi John,\n\nWould you read my paper draft this week?"
+    assert errand["summary"] == "Written for John Murray: copy it into your Slack chat with them."
+    steps = {s["title"]: s["detail"] for s in errand["steps"]}
+    assert steps["Read the errand"].endswith("By Slack.")
+    assert (
+        "never posts in it. John Murray: your Slack DM" in steps["Looked for a way to reach them"]
+    )
+    assert steps["Read how you write these"].startswith("It goes in a Slack chat")
+    prompt = model.calls[1]["prompt"]
+    own = "In this conversation:\n- sent! no rush, thursday is fine\n- hey john got a sec"
+    assert own in prompt and "DM in the acme-lab workspace" in prompt
+    assert "Interest in the Beta role" not in prompt  # no reach-out emails as the pattern
+
+    sent = []
+    with pytest.raises(SystemExit, match="no way to send it"):
+        errands.send(vault, errand["id"], 0, {}, NOW, lambda m, cv: sent.append(m))
+    assert sent == [] and errands.recheck(vault, errand, NOW) is False
+    assert not (vault / "clones" / "outbox" / "log.jsonl").exists()  # nothing went out
+
+    # A DM in another workspace whose name Slack didn't resolve is known by who wrote in it, and
+    # the newest one is where the next goes.
+    later = dm(1, id="D9/1", channel_id="D9", channel_name=None, ts="2026-10-02T09:00:00Z")
+    write_month(vault, "slack/other-lab/messages", "2026-10", [later])
+    assert errands.slack_dm(vault, "John Murray")["chat"]["chat"] == "other-lab/D9"
+    assert errands.slack_dm(vault, "Ana Lee") is None
 
 
 def test_a_chat_message_loses_the_signature_an_email_would_have(vault):

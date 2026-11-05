@@ -49,6 +49,7 @@ function blocker(m: ErrandMessage, address: string, subject: string, body: strin
   if (!body.trim()) return "The message is empty.";
   if (PLACEHOLDER.test(body)) return "Fill in the [placeholder] first.";
   if (!m.via && !ADDRESS.test(address.trim())) {
+    if (m.copied) return `Proxenos doesn't send in ${channelLabel(m.channel)}: copy it into your chat with ${m.to} there, or type an email address to email it instead.`;
     return m.channel === "email"
       ? "Type their email address to send it."
       : `There's no ${channelLabel(m.channel)} chat with ${m.to} to send it in yet: copy it there, or type an email address.`;
@@ -120,6 +121,9 @@ function MessageBox({
         <p className="text-xs text-muted">
           <span className="text-ink/90">{message.address}</span>: {message.evidence}.
         </p>
+      )}
+      {!sent && message.copied && message.evidence && !message.address && (
+        <p className="text-xs text-muted">Copy it into {message.evidence}.</p>
       )}
       {message.found === "web" && message.sources.length > 0 && (
         <div className="text-xs text-muted">

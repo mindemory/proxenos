@@ -122,6 +122,7 @@ function toMessage(raw: unknown): ErrandMessage | null {
     subject: str(r.subject),
     body,
     attach: r.attach === true,
+    copied: r.copied === true,
     state: r.state === "ready" || r.state === "sent" ? r.state : "waiting",
     sentAt: str(r.sent_at),
   };

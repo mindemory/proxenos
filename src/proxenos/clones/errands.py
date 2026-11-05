@@ -12,7 +12,9 @@ email, with my CV". A run:
    their name that the user already wrote to, or a chat with them through Beeper. When the
    records have no address and an email would do, it looks for one on the web, on their
    organization's own pages only (proxenos.lookup), and says on which. An address is never
-   guessed;
+   guessed. Slack and WeChat are copied, not sent: Proxenos can't post in either, so a message
+   for one is written to paste there, and for Slack the user's DM with the person, in the Slack
+   Proxenos syncs, says where and how they write to them;
 4. finds the user's newest CV: a PDF named CV or resume with the user's name in it, in their
    documents and downloaded exports;
 5. reads the emails the user wrote before with a CV attached, as the pattern for this one;
@@ -22,7 +24,8 @@ email, with my CV". A run:
    settle. When there's no way to reach the person but someone the user knows is there, it
    also writes that person a note asking for an introduction (one model call);
 7. stops one tap short: each message waits on the Errands page, ready to send by Mail (with the
-   CV attached) or Beeper, or for what's missing (an address the user can type in).
+   CV attached) or Beeper, to copy (Slack, WeChat), or for what's missing (an address the user
+   can type in).
 
 Each step goes into the errand's thread as it's taken: what it did, what it found and why, so
 the user can read the whole of it at the end. An errand is clones/errands/<id>.json. Nothing
@@ -55,9 +58,21 @@ EXAMPLE_CHARS = 1500
 CV_CHARS = 4000
 CV_DEPTH = 5  # folders deep a CV is looked for
 OPEN_DAYS = 30  # how long a waiting errand keeps looking each night
-CHANNELS = ("email", "linkedin", "whatsapp", "wechat", "instagram", "messenger", "x", "any")
-# Channels that aren't a source: a message for one is copied there, never sent another way.
-COPIED = {"wechat": "WeChat"}
+CHANNELS = (
+    "email",
+    "linkedin",
+    "whatsapp",
+    "slack",
+    "wechat",
+    "instagram",
+    "messenger",
+    "x",
+    "any",
+)
+# Channels Proxenos can't send in: a message for one is copied there, never sent another way.
+# Slack is read (proxenos.ingest.slack, slackdump) but never posted to, and Beeper's reader
+# leaves it alone, so there's no Slack chat it could send in either.
+COPIED = {"wechat": "WeChat", "slack": "Slack"}
 _CHAT_SOURCES = {"linkedin": "linkedin", "instagram": "instagram", "facebook": "messenger"}
 _CHAT_SOURCES |= {"twitter": "x", "whatsapp": "whatsapp"}
 # A CV's file name: "resume", "Ana_Lee_CV", "AnaLeeCV", "cv.pdf"; not "CVPR".
@@ -204,7 +219,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         f"Reach {name or 'someone'}"
         + (f" at {org}" if org else "")
         + f": {purpose.rstrip('.')}."
-        + ("" if channel == "any" else f" By {channel}.")
+        + ("" if channel == "any" else f" By {COPIED.get(channel, channel)}.")
         + (" With your CV." if read.get("cv") else ""),
     )
     if not name:
@@ -226,6 +241,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
 
     routes = reach(vault, name)
     route = None if channel in COPIED else _pick(routes, channel)
+    dm = slack_dm(vault, name) if channel == "slack" else None  # where it's pasted
     # No address in the records, and an email would do: their organization's pages may have one.
     web = (
         channel not in COPIED
@@ -238,7 +254,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         vault,
         errand,
         "Looked for a way to reach them",
-        f"It goes by {COPIED[channel]}, which you copy it into: Proxenos doesn't read or send there."
+        _copied_found(name, channel, dm)
         if channel in COPIED
         else _routes_found(name, routes, route, web),
     )
@@ -260,7 +276,13 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
             "downloaded exports (PROXENOS_CV_DIRS can name more folders).",
         )
 
-    examples = earlier_emails(vault)
+    # How they write where it goes: in their chat with the person, or in the email they send.
+    goes = route["channel"] if route else "email" if channel == "any" else channel
+    thread = route.get("chat") if route else dm and dm["chat"]
+    # Their reach-outs with a CV are the pattern for an email, or for a message that's about a
+    # CV; in a chat whose messages Proxenos reads, anything else follows those messages alone.
+    in_chat = goes in voice.NAMES or goes in voice._SOURCE_OF
+    examples = [] if in_chat and not read.get("cv") else earlier_emails(vault)
     _step(
         vault,
         errand,
@@ -269,13 +291,13 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         + "; ".join(f"“{e['subject']}” ({e['ts'][:10]})" for e in examples)
         + "."
         if examples
+        else f"It goes in a {voice.NAMES[voice._SOURCE_OF.get(goes, goes)]} chat, so it's "
+        "written like your own messages there, not like your emails."
+        if in_chat and not read.get("cv")
         else "None of your emails had a CV attached, so it follows your voice alone.",
     )
 
     intro_routes = {p["name"]: _pick(reach(vault, p["name"]), "any") for p in colleagues}
-    # How they write where it goes: in their chat with the person, or in the email they send.
-    goes = route["channel"] if route else "email" if channel == "any" else channel
-    thread = route.get("chat") if route else None
     writing = voice.Writing(vault)
     own = voice.examples(
         writing,
@@ -286,7 +308,9 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     prompt = (
         dates.today(now)
         + "\n\n"
-        + _write_prompt(errand, note, hits, colleagues, intro_routes, route, cv, examples, person)
+        + _write_prompt(
+            errand, note, hits, colleagues, intro_routes, route, cv, examples, person, dm
+        )
     )
     system = _WRITE_SYSTEM.format(person=person) + "\n\n" + voice.rules(person)
     answer = model(
@@ -309,9 +333,10 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     errand["needs"] = [*checked, *errand["needs"]]
     if cv:
         errand["cv"]["notes"] = _stale(answer.get("cv_notes"))
-    errand["messages"] = [
-        _message("main", name, channel, route, answer.get("subject"), body, bool(cv))
-    ]
+    main = _message("main", name, channel, route, answer.get("subject"), body, bool(cv))
+    if dm:
+        main["evidence"] = _dm_line(dm)
+    errand["messages"] = [main]
     intro = answer.get("intro") if isinstance(answer.get("intro"), dict) else {}
     to = _text(intro.get("to"))
     if (
@@ -428,7 +453,7 @@ def send(
     if address and address != message.get("address"):
         if not _ADDRESS.fullmatch(address):
             raise SystemExit(f"errands: {address!r} isn't an email address")
-        message.update(channel="email", address=address, via="apple_mail", chat=None)
+        message.update(channel="email", address=address, via="apple_mail", chat=None, copied=False)
         message["evidence"] = "you typed it in"
         message.pop("found", None)
         message.pop("sources", None)
@@ -541,6 +566,48 @@ def reach(vault: Path, name: str) -> list[dict]:
                 how = f"your {channel} chat with them ({ts[:10]})"
                 add((channel, chat), {"channel": channel, "chat": thread}, ts, how)
     return sorted(found.values(), key=lambda f: (f["seen"], f["last"]), reverse=True)
+
+
+def slack_dm(vault: Path, name: str) -> dict | None:
+    """The user's Slack DM with this person, from the Slack Proxenos syncs (raw/slack, written by
+    proxenos.ingest.slack and slackdump), the newest one written in when they share several
+    workspaces: {workspace, chat, seen, last}. Not a way to send, since Proxenos never posts to
+    Slack: where a message for Slack is pasted, and whose messages of the user's it's written
+    like. A DM is known as theirs by its name (Slack names a DM for the other person) or, where
+    that wasn't resolved, by who wrote in it. None when there's none."""
+    dms: dict[tuple[str, str], dict] = {}
+    for path in sorted((vault / "raw" / "slack").glob("*/messages/*.jsonl")):
+        team = path.parent.parent.name
+        with path.open(encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if '"dm"' not in line:
+                    continue  # channels and group DMs: skipped unread
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(r, dict) or r.get("channel_type") != "dm":
+                    continue
+                if not (cid := str(r.get("channel_id") or "")):
+                    continue
+                dm = dms.setdefault((team, cid), {"seen": 0, "last": "", "id": "", "names": set()})
+                dm["seen"] += 1
+                dm["names"].add(
+                    r.get("channel_name") or ("" if r.get("from_me") else r.get("user_name"))
+                )
+                if (ts := str(r.get("ts") or "")) > dm["last"]:
+                    dm["last"], dm["id"] = ts, str(r.get("id") or "")
+    found = [
+        {
+            "workspace": team,
+            "chat": {"source": "slack", "chat": f"{team}/{cid}", "last": dm["id"]},
+            "seen": dm["seen"],
+            "last": dm["last"],
+        }
+        for (team, cid), dm in dms.items()
+        if any(_same(name, n) for n in dm["names"])
+    ]
+    return max(found, key=lambda d: d["last"], default=None)
 
 
 def _pick(routes: list[dict], channel: str) -> dict | None:
@@ -691,6 +758,7 @@ def _write_prompt(
     cv: dict | None,
     examples: list[dict],
     person: str,
+    dm: dict | None = None,
 ) -> str:
     parts = [
         f"The errand: {errand['goal']}",
@@ -715,6 +783,7 @@ def _write_prompt(
         if route
         else f"How {person} can reach them: in their {copied} chat, where {person} pastes it, "
         "so it's a chat message, not an email."
+        + (f" It's their DM in the {dm['workspace']} workspace." if dm else "")
         if copied
         else f"How {person} can reach them: no way found in the records (the message is kept "
         "until an address turns up)."
@@ -761,6 +830,8 @@ def _message(
         "subject": _text(subject).strip("\"'“”‘’ ") if email else "",
         "body": body.strip(),
         "attach": attach and email,
+        # For a chat Proxenos can't send in: the page offers Copy, and Send only to an address.
+        "copied": not route and channel in COPIED,
         "state": "ready" if route else "waiting",
         "sent_at": "",
     }
@@ -839,6 +910,28 @@ def _routes_found(name: str, routes: list[dict], route: dict | None, web: bool =
         )
     others = len(routes) - 1
     return _route_line(name, route) + (f" ({others} other ways too.)" if others else "")
+
+
+def _copied_found(name: str, channel: str, dm: dict | None) -> str:
+    """The thread's account of where a copied message goes."""
+    goes = f"It goes by {COPIED[channel]}, which you copy it into:"
+    if channel != "slack":
+        return f"{goes} Proxenos doesn't read or send there."
+    goes += " Proxenos reads your Slack but never posts in it."
+    if not dm:
+        return (
+            f"{goes} No DM with {name} in the Slack it reads, so it's written like what you "
+            "write there to others."
+        )
+    return f"{goes} {name}: {_dm_line(dm)}, so it's written like what you write them there."
+
+
+def _dm_line(dm: dict) -> str:
+    n = dm["seen"]
+    return (
+        f"your Slack DM with them in {dm['workspace']}, {n} message{'' if n == 1 else 's'}, "
+        f"the last on {dm['last'][:10]}"
+    )
 
 
 def _route_line(name: str, route: dict) -> str:
