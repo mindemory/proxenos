@@ -1,7 +1,7 @@
 """The plans on the user's task list, on their calendar.
 
-A task with a set time (a meeting, a call, a visit: "at" on clones/tasks/tasks.json, which the
-tasks clone reads from their messages) becomes an event in clones/tasks/plans.ics, unless it's
+A task that is a meeting, a call, a visit or an appointment at a set time ("event" and "at" on
+clones/tasks/tasks.json, which the tasks clone reads from their messages) becomes an event in clones/tasks/plans.ics, unless it's
 done or already on one of their own calendars. The page serves the file at /api/plans.ics, so
 Calendar on the Mac (File, New Calendar Subscription) or a phone over Tailscale subscribes to it
 once, and then shows each plan the sync finds, moved when the plan moves and gone once it's done.
@@ -49,6 +49,12 @@ _COMMON = {
     *("about", "and", "appointment", "attend", "call", "check", "coffee", "dinner", "for"),
     *("from", "have", "join", "lunch", "meet", "meeting", "the", "video", "visit", "with", "zoom"),
 }
+# A title that starts with one of these is something to do, not something that happens at a time.
+_ACTION = re.compile(
+    r"\s*(reschedule|follow[ -]?up|email|reply|send|ask|confirm|book|check|find|write|draft|pay"
+    r"|call back)\b",
+    re.IGNORECASE,
+)
 _SOURCES = {"whatsapp": "WhatsApp", "slack": "Slack", "email": "email"}
 WEEK_DAYS = 7  # of the user's calendar a draft sees, to suggest a time that's free
 PUSHED = "pushed.json"  # in clones/tasks/: each plan's event on the user's calendar, by task id
@@ -104,7 +110,7 @@ def write(
     events = []
     for task in tasks:
         when = at(task.get("at"))
-        if task.get("status") in ("done", "cancelled") or when is None:  # gone from the calendar
+        if task.get("status") in ("done", "cancelled") or when is None or not is_event(task):
             continue
         day = when if isinstance(when, date) and not isinstance(when, datetime) else when.date()
         if day < today - timedelta(days=PAST_DAYS) or any(_same(task, when, e) for e in theirs):
@@ -125,6 +131,16 @@ def write(
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             print(f"plans: couldn't update {calendar} ({' '.join(str(e).split())[:200]})")
     return len(events)
+
+
+def is_event(task: dict) -> bool:
+    """Whether a task is something that happens at a time (a meeting, call, visit, appointment,
+    booking) and so belongs on a calendar: the tasks clone says so in "event". Whatever it says,
+    a title that starts with an action ("Reschedule ...", "Follow up ...") is a task about a
+    meeting, not the meeting, and older tasks without the field are judged by that alone."""
+    if _ACTION.match(str(task.get("title") or "")):
+        return False
+    return task.get("event") is not False
 
 
 def week(

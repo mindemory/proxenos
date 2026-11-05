@@ -212,3 +212,17 @@ def test_a_plan_called_off_leaves_the_calendar(tmp_path):
     assert plans.write(vault, [on, off], now) == 1
     text = (vault / "clones" / "tasks" / "plans.ics").read_text()
     assert "Visit the clinic" in text and "Lunch with Noor" not in text
+
+
+def test_only_events_become_plans_not_actions_about_them(tmp_path):
+    tasks = [
+        task("m1", "Meet Hsing-Hao Lee for a quick sync", "2026-03-14T14:00") | {"event": True},
+        task("a1", "Reschedule meeting with Hsing-Hao Lee", "2026-03-14T14:00"),
+        task("a2", "Follow up with Amy Forman about the consultation", "2026-03-14T15:00"),
+        task("a3", "Call back the clinic", "2026-03-14T16:00") | {"event": True},
+        task("a4", "Dinner with Noor", "2026-03-14T19:00") | {"event": False},
+        task("o1", "Lunch with Noor", "2026-03-14T12:00"),  # older task, no field
+    ]
+
+    assert [t["id"] for t in tasks if plans.is_event(t)] == ["m1", "o1"]
+    assert plans.write(tmp_path / "vault", tasks, NOW) == 2

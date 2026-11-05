@@ -14,8 +14,9 @@ closed: the model is told not to bring them back, and anything that comes back a
 dropped. clones/tasks/closed.json remembers them, and when each done task was closed, so done
 tasks leave the list 30 days later.
 
-A task at a set time (a meeting, a call, a visit) also gets when ("at") and where ("place"),
-and proxenos.plans puts those on a calendar the user subscribes to.
+A task that is a meeting, call, visit or appointment at a set time is marked "event" and gets
+when ("at") and where ("place"); a task about one ("Reschedule the meeting") isn't. proxenos.plans
+puts the events on a calendar the user subscribes to.
 
 The same run keeps Drafts current. The model also reads the drafts waiting on the user that are
 addressed to someone (their title, whom they're to and the start of their text) and names those
@@ -121,7 +122,11 @@ answered, "done", thanked for it). cancelled when they show it was called off or
 the visit or meeting cancelled, the ask withdrawn, {person} saying they won't do it. A plan that \
 only moved stays open with its new time in at.
 - evidence: the [m..] refs of the messages that show the task and its current status.
-- at: when it happens, for a meeting, call, visit or appointment at an agreed time: \
+- event: true only when the messages fix a meeting, call, visit, appointment, booking or \
+ticket at a time: something that happens then, with someone or somewhere. false for a task \
+about one ("Reschedule the meeting", "Follow up with Priya", "Confirm the booking"): that's an \
+action, and the meeting itself is its own entry only when it's agreed.
+- at: when it happens, for an event at an agreed time: \
 "YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
 agreed time when it moved. "" for anything else, and for a deadline, which is due.
 - place: where it happens, as the messages say it ("the café on Main Street", "on Zoom"), or "".
@@ -174,6 +179,7 @@ _TASKS_SCHEMA = {
                     "priority": {"type": "string", "enum": list(PRIORITIES)},
                     "status": {"type": "string", "enum": list(STATUSES)},
                     "evidence": {"type": "array", "items": {"type": "string"}},
+                    "event": {"type": "boolean"},
                     "at": {"type": "string"},
                     "place": {"type": "string"},
                 },
@@ -188,6 +194,7 @@ _TASKS_SCHEMA = {
                     "priority",
                     "status",
                     "evidence",
+                    "event",
                     "at",
                     "place",
                 ],
@@ -419,6 +426,7 @@ def merge(
             "evidence": list(
                 dict.fromkeys([*before.get("evidence", []), *(m["id"] for m in cited)])
             ),
+            "event": bool(item.get("event", before.get("event"))),
             "at": _at(item.get("at")) or before.get("at"),
             "place": " ".join(str(item.get("place") or "").split()) or before.get("place"),
         }

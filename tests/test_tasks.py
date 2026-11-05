@@ -16,7 +16,7 @@ from proxenos.clones import tasks
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
 CONTRACT = ["id", "title", "detail", "source", "with", "asked_at", "due", "priority", "status"]
-CONTRACT += ["evidence", "at", "place"]
+CONTRACT += ["evidence", "event", "at", "place"]
 _n = itertools.count()
 NONE = {"overtaken": 0, "plans": 0}  # no drafts waiting and no plans with a time
 
@@ -347,6 +347,7 @@ def test_new_tasks_are_saved_in_the_contract_shape(tmp_path, model):
         "priority": "high",
         "status": "open",
         "evidence": [asked["id"], reply["id"]],
+        "event": False,
         "at": None,
         "place": None,
     }
@@ -562,7 +563,7 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
         lunch, done = ref(prompt, "Lunch tomorrow"), ref(prompt, "wrote to the editor")
         listed = item("Send Asha the slides", id="abcabcabcabc", status="done", evidence=[done])
         lunch_task = item("Lunch with Noor", evidence=[lunch], with_="Noor")
-        lunch_task |= {"at": "2026-03-11T12:00", "place": " Lantern Cafe "}
+        lunch_task |= {"event": True, "at": "2026-03-11T12:00", "place": " Lantern Cafe "}
         why = "Ravi wrote to the editor for the extension today."
         return {
             "tasks": [listed, lunch_task],
@@ -600,7 +601,11 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
     assert (vault / "clones" / "drafts" / "email-journal.md").read_text().endswith("\n\nText.\n")
 
     lunch = by_title(vault)["Lunch with Noor"]
-    assert (lunch["at"], lunch["place"]) == ("2026-03-11T12:00", "Lantern Cafe")
+    assert (lunch["event"], lunch["at"], lunch["place"]) == (
+        True,
+        "2026-03-11T12:00",
+        "Lantern Cafe",
+    )
     ics = (vault / "clones" / "tasks" / "plans.ics").read_text()
     assert "SUMMARY:Lunch with Noor" in ics and "DTSTART:20260311T120000" in ics
     assert stats["overtaken"] == 2 and stats["plans"] == 1
