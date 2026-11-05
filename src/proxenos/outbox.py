@@ -556,9 +556,13 @@ end run"""
         raise RuntimeError(f"Mail: {done.stderr.strip()[:200]}")
 
 
-def send_mail(address: str, subject: str, body: str, attachment: Path | None = None) -> None:
-    """A new email with the Mail app, from its default account or PROXENOS_MAIL_FROM, with one
-    file attached. Only an errand's Send calls it, for the one message the user pressed it on."""
+def send_mail(
+    address: str, subject: str, body: str, attachment: Path | None = None, sender: str = ""
+) -> None:
+    """A new email with the Mail app, from `sender`, else PROXENOS_MAIL_FROM, else its default
+    account, with one file attached. A sender Mail has no account for stops it, since a message
+    that went from another address than it said would start a thread there. Only an errand's
+    Send calls it, for the one message the user pressed it on."""
     script = """on run argv
     set attached to missing value
     if (item 4 of argv) is not "" then set attached to (POSIX file (item 4 of argv)) as alias
@@ -566,7 +570,14 @@ def send_mail(address: str, subject: str, body: str, attachment: Path | None = N
         set m to make new outgoing message with properties {subject:(item 2 of argv), content:(item 3 of argv), visible:false}
         tell m
             make new to recipient at end of to recipients with properties {address:(item 1 of argv)}
-            if (item 5 of argv) is not "" then set sender to (item 5 of argv)
+            if (item 5 of argv) is not "" then
+                set known to false
+                repeat with a in every account
+                    if (email addresses of a) contains (item 5 of argv) then set known to true
+                end repeat
+                if not known then error "Mail has no account for " & (item 5 of argv)
+                set sender to (item 5 of argv)
+            end if
             if attached is not missing value then
                 make new attachment with properties {file name:attached} at after the last paragraph
             end if
@@ -584,7 +595,7 @@ end run"""
             subject,
             body + "\n",
             str(attachment or ""),
-            os.environ.get("PROXENOS_MAIL_FROM", ""),
+            sender or os.environ.get("PROXENOS_MAIL_FROM", ""),
         ],
         check=False,
         capture_output=True,

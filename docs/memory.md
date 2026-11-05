@@ -168,7 +168,9 @@ drafts you never saw.
 - **When:** a reply is queued at one sync and goes out at the next, so you have about fifteen
   minutes to cancel it on the page. At most ten go out a day, or the limit you set.
 - **How:** email through the Mail app, as a reply in its thread from the account the mail came
-  to; Instagram, Messenger, X and LinkedIn, and WhatsApp where Beeper has it, through Beeper
+  to (the draft's `from_address`; an errand's or an offer's email records the address it will go
+  from the same way, the one of your newest email with that person or `PROXENOS_MAIL_FROM`, and
+  Mail stops it if it has no account for that address); Instagram, Messenger, X and LinkedIn, and WhatsApp where Beeper has it, through Beeper
   Desktop. Slack has no way yet.
 - **The record:** every attempt, sent or not, is a line in `clones/outbox/log.jsonl`, and a reply
   that goes out is marked sent, as if you'd pressed Sent. Nothing goes out from `proxenos demo`.

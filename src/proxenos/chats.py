@@ -43,7 +43,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import links
+from proxenos import links, mailbox
 from proxenos.config import env
 from proxenos.ingest import email as mail
 
@@ -114,7 +114,8 @@ def waiting(vault: Path, now: datetime, days: float = DAYS) -> list[dict]:
     waiting, recent, own, first}: id is the newest waiting message's, since when the oldest
     came, waiting the messages since the user's last one and recent the conversation before
     them (messages {ts, mine, sender, text}, oldest first), own the text of the user's own last
-    messages in the chat, and first whether it's someone new's first email, which has no own."""
+    messages in the chat, and first whether it's someone new's first email, which has no own.
+    An email's also has its mailbox, {account, address, provider}: see proxenos.mailbox."""
     since = _iso(now - timedelta(days=days))
     start = _iso(now - timedelta(days=CONTEXT_DAYS))
     found = []
@@ -220,6 +221,7 @@ def _waiting(
     text = " ".join(m["text"] for m in waiting)
     if "?" not in text and not links.find(text) and len(text.split()) < 3:
         return None
+    box = mailbox.of(said)
     return {
         "name": said[-1]["name"] or said[-1]["sender"] or "them",
         "id": said[-1]["id"],
@@ -228,6 +230,7 @@ def _waiting(
         "recent": [_shown(m) for m in before[-CONTEXT_MESSAGES:] if m["ts"] >= start],
         "own": words[-examples:],
         "first": first,
+        **({"mailbox": box} if box else {}),
     }
 
 
@@ -414,6 +417,13 @@ def _email(r: dict, me: set[str]) -> dict | None:
         "peers": peers,
         "personal": personal,
         "in_reply_to": r.get("in_reply_to"),
+        # Which of the user's mailboxes it's in (see proxenos.mailbox).
+        "mail": {
+            "account": str(r.get("account") or ""),
+            "from": next(iter(_ADDRESS.findall(str(r.get("from_address") or "").lower())), ""),
+            "to": to,
+            "thread": r.get("gmail_thread"),
+        },
     }
 
 

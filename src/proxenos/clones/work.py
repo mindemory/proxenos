@@ -26,7 +26,8 @@ Ideas marked not me or done, tasks closed, choices and feed items marked not me 
 draft yet, at most five a sync, so a sync with nothing new waiting makes no model call.
 
 Each draft is clones/drafts/<id>.md: front matter (id, title, kind, for, channel, to, created,
-status) and a markdown body, which the page lists under Drafts. The id is the task's id, or
+status; an email reply also has from_account, from_address and from_provider, the user's own
+mailbox its thread is on, see proxenos.mailbox) and a markdown body, which the page lists under Drafts. The id is the task's id, or
 the idea's or item's with what it's for in front ("outreach-...", "project-...",
 "reading-..."), so each thing has one draft, which later runs write again as it changes;
 things with no draft yet come first when `--max` cuts a run short. A draft becomes the user's
@@ -116,6 +117,7 @@ CHANNELS = (
     "other",
 )
 _CHANNEL_OF = {"facebook": "messenger", "twitter": "x"}  # chat sources by their channel names
+MAILBOX = ("from_account", "from_address", "from_provider")  # an email draft's optional fields
 FIELDS = ("id", "title", "kind", "for", "channel", "to", "created", "status")
 # What a reply's prompt can hold beyond its own chat, as the code put it there, in this order:
 # what memory research found for it, the person's records elsewhere and their network note, the
@@ -353,6 +355,10 @@ def render(draft: dict) -> str:
         lines.append(f"{key}: {value}")
     # A reply's research and chat when it has them, and why it isn't needed when it isn't.
     for key in ("found", "asks", "thread", "overtaken"):
+        if draft.get(key):
+            lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
+    # An email's mailbox, when it's known: where it goes from.
+    for key in MAILBOX:
         if draft.get(key):
             lines.append(f"{key}: {json.dumps(draft[key], ensure_ascii=False)}")
     # And what its prompt held beyond the chat, even nothing, so a draft from before it was kept
@@ -935,6 +941,8 @@ def _draft(job: dict, answer: dict, now: datetime) -> dict:
         "thread": {"source": c["source"], "chat": c["chat"]} if (c := job.get("chat")) else None,
         # And what its prompt held beyond that chat, as the code put it there.
         "drew_on": job.get("drew_on", []) if job.get("chat") else None,
+        # An email reply's mailbox: the user's own address it goes from (proxenos.mailbox).
+        **{f"from_{k}": v for k, v in ((job.get("chat") or {}).get("mailbox") or {}).items()},
         "body": body,
     }
 

@@ -41,7 +41,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos import llm, lookup, memory, outbox, research, voice
+from proxenos import llm, lookup, mailbox, memory, outbox, research, voice
 from proxenos.clones import work
 from proxenos.config import REPO_ROOT, env
 from proxenos.ingest import email as mail
@@ -432,6 +432,7 @@ def send(
         raise SystemExit("errands: fill in the [placeholder] first")
     if not message.get("via"):
         raise SystemExit("errands: no way to send it from here; add an address, or copy it")
+    stamp(vault, message)
     cv = errand.get("cv") if message.get("attach") and message["via"] == "apple_mail" else None
     if cv and not Path(cv["path"]).is_file():
         raise SystemExit(f"errands: the CV isn't at {cv['path']} any more")
@@ -460,6 +461,7 @@ def _send(message: dict, cv: dict | None) -> None:
             message.get("subject") or "",
             message["body"],
             cv and Path(cv["path"]),
+            message.get("from_address", ""),
         )
     elif message["via"] == "beeper" and message.get("chat"):
         outbox._send_beeper(message["chat"], message["body"])
@@ -903,7 +905,33 @@ def listed(vault: Path) -> list[dict]:
     return found
 
 
+def stamp(vault: Path, message: dict) -> None:
+    """Say which mailbox an email message will go from: PROXENOS_MAIL_FROM when it's set, else
+    the address of the user's newest email with that person (proxenos.mailbox.toward). Set once
+    per address, and left alone once sent."""
+    address = _text(message.get("address"))
+    if (
+        message.get("channel") != "email"
+        or message.get("state") == "sent"
+        or message.get("from_for") == address
+    ):
+        return
+    sender = env("MAIL_FROM").strip()
+    box = (
+        {"account": "", "address": sender, "provider": mailbox.provider("", sender)}
+        if sender
+        else mailbox.toward(vault, address)
+    )
+    for key in ("from_account", "from_address", "from_provider"):
+        message.pop(key, None)
+    if box:
+        message |= {f"from_{k}": v for k, v in box.items() if v}
+    message["from_for"] = address
+
+
 def _save(vault: Path, errand: dict, now: datetime) -> None:
+    for message in errand.get("messages") or []:
+        stamp(vault, message)
     errand["updated"] = _iso(now)
     errand["summary"] = summary(errand)
     work._write(

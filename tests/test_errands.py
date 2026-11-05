@@ -225,6 +225,9 @@ def test_an_errand_goes_as_far_as_it_can_and_stops_one_tap_short(vault):
         "attach": True,
         "state": "ready",
         "sent_at": "",
+        "from_account": "joe",  # the mailbox they last wrote with Ana Lee in
+        "from_address": "joe@x.org",
+        "from_for": "ana.lee@acme.org",
     }
     assert [s["title"] for s in errand["steps"]] == [
         "Read the errand",
