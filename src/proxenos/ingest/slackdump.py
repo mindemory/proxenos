@@ -31,7 +31,7 @@ from pathlib import Path
 
 from proxenos.config import REPO_ROOT, env
 from proxenos.ingest import slack
-from proxenos.store import merge_monthly, merge_snapshot
+from proxenos.store import merge_monthly, merge_snapshot, write_private
 
 CATCH_UP_SECONDS = 600  # the most one workspace may take before sync moves on
 QUIET = "p14d"  # channels with nothing newer are looked at once a day, not every sync
@@ -172,8 +172,7 @@ def catch_up(
             ok = False
         stats["workspaces_caught_up" if ok else "workspaces_not_caught_up"] += 1
     if state and not quiet and not stats["workspaces_not_caught_up"]:
-        state.parent.mkdir(parents=True, exist_ok=True)
-        state.write_text(json.dumps({"swept": today}))
+        write_private(state, json.dumps({"swept": today}))
     return dict(stats)
 
 

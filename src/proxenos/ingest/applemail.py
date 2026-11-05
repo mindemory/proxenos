@@ -31,7 +31,7 @@ from pathlib import Path
 
 from proxenos.config import env
 from proxenos.ingest import email
-from proxenos.store import merge_monthly
+from proxenos.store import merge_monthly, write_private
 
 DEFAULT_ROOT = Path("~/Library/Mail").expanduser()
 FIRST_RUN_DAYS = 180
@@ -98,8 +98,7 @@ def ingest(vault: Path, store: Path, me: Iterable[str], full: bool = False) -> d
             stats.update(merge_monthly(batch.values(), out))
 
     if newest:
-        state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        state_path.write_text(json.dumps({"newest": newest, "accounts": addresses}))
+        write_private(state_path, json.dumps({"newest": newest, "accounts": addresses}))
     elif (
         latest
         and (hours := (time.time() - latest) / 3600) >= STALE_HOURS

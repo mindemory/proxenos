@@ -52,7 +52,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from proxenos.config import env, save_secret
 from proxenos.ingest import calendar, email
-from proxenos.store import merge_monthly
+from proxenos.store import merge_monthly, write_private
 
 AUTHORITY = "https://login.microsoftonline.com/common/oauth2/v2.0/"
 SCOPES = "offline_access User.Read Mail.Read Calendars.Read"
@@ -565,5 +565,4 @@ def _parse(value: object) -> datetime | None:
 
 
 def _save(path: Path, state: dict) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.write_text(json.dumps(state), encoding="utf-8")
+    write_private(path, json.dumps(state))

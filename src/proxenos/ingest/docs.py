@@ -11,6 +11,7 @@ from pathlib import Path
 
 from proxenos.config import env
 from proxenos.ingest import notes
+from proxenos.store import write_private
 
 
 def folders() -> list[Path]:
@@ -36,8 +37,7 @@ def ingest(vault: Path, dirs: list[Path], full: bool = False) -> dict[str, int]:
             stats[key] = stats.get(key, 0) + value
         state[str(folder)] = newest
         stats["folders_read"] += 1
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(state))
+    write_private(state_path, json.dumps(state))
     return stats
 
 

@@ -30,7 +30,7 @@ from pathlib import Path
 
 from proxenos.config import env
 from proxenos.ingest import email
-from proxenos.store import merge_monthly
+from proxenos.store import merge_monthly, write_private
 
 HOST = "imap.gmail.com"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
@@ -197,5 +197,4 @@ def _record(meta: bytes, raw: bytes, name: str, me: set[str]) -> dict | None:
 
 
 def _save(path: Path, validity: int, last: int) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.write_text(json.dumps({"uidvalidity": validity, "last_uid": last}), encoding="utf-8")
+    write_private(path, json.dumps({"uidvalidity": validity, "last_uid": last}))

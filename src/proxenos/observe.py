@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from proxenos import chats, llm
 from proxenos.config import env
 from proxenos.ingest import email as mail
+from proxenos.store import write_private
 
 _MONTH_FILE = re.compile(r"\d{4}-\d{2}\.jsonl")
 # Below this much rendered text a month says too little to be worth a model call.
@@ -315,8 +316,7 @@ def observe(vault: Path, since: str | None = None, dry_run: bool = False) -> dic
             system=_OBSERVER_SYSTEM.format(person=person),
             effort="medium",
         )
-        note.parent.mkdir(parents=True, exist_ok=True)
-        note.write_text(f"# {name}, {month}\n\n{answer.strip()}\n", encoding="utf-8")
+        write_private(note, f"# {name}, {month}\n\n{answer.strip()}\n")
         stats["observed"] += 1
     # Roughly four characters per token: enough to see what a backfill will cost.
     stats["est_input_tokens"] = stats.pop("chars", 0) // 4

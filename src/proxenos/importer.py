@@ -32,6 +32,8 @@ import zipfile
 from collections import Counter
 from pathlib import Path
 
+from proxenos import store
+
 _PART = re.compile(r"^(?P<export>.+)-\d{3}$")
 _DELIVERED_TO = re.compile(rb"^Delivered-To:\s*<?([^\s>]+@[^\s>]+)>?", re.IGNORECASE | re.MULTILINE)
 
@@ -98,7 +100,7 @@ def run(vault: Path, paths: list[Path] | None = None, ingest=None) -> dict[str, 
 
 def _file_away(paths: list[Path], folder: Path) -> None:
     """Move imported downloads into the vault, never overwriting one already there."""
-    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    store.private_dir(folder)
     for path in paths:
         target = folder / path.name
         n = 1
@@ -106,6 +108,7 @@ def _file_away(paths: list[Path], folder: Path) -> None:
             target = folder / f"{path.stem}-{n}{path.suffix}"
             n += 1
         shutil.move(path, target)
+        store.private_tree(target)  # a download keeps its mode, often anyone's to read
 
 
 def _waiting(path: Path) -> bool:
@@ -233,7 +236,7 @@ def _unpack(path: Path, dest: Path) -> None:
     marker = dest / f".unpacked-{path.name}"
     if marker.exists():
         return
-    dest.mkdir(parents=True, exist_ok=True)
+    store.private_dir(dest)
     if path.is_dir():
         shutil.copytree(path, dest, dirs_exist_ok=True)
     elif zipfile.is_zipfile(path):
@@ -254,7 +257,8 @@ def _unpack(path: Path, dest: Path) -> None:
                     os.utime(target, (when, when))
     else:
         return
-    marker.touch()
+    store.private_tree(dest)  # what a zip or a folder holds keeps its modes, often anyone's
+    marker.touch(mode=0o600)
 
 
 # Takeout parts can be tens of GB, nearly all of it photo and video files. Those stay in the zip

@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from proxenos.store import merge_monthly
+from proxenos.store import merge_monthly, write_private
 
 BASE = "http://localhost:23373"
 FIRST_DAYS = 90
@@ -67,8 +67,7 @@ def ingest(
         stats.update(merge_monthly(records, vault / "raw" / source / stream))
 
     seen = sorted(set(state.get("sources") or []) | set(streams))
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"since": _iso(now - OVERLAP), "sources": seen}))
+    write_private(state_path, json.dumps({"since": _iso(now - OVERLAP), "sources": seen}))
     return dict(stats)
 
 
