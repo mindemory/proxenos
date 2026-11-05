@@ -116,6 +116,7 @@ def write(
         if day < today - timedelta(days=PAST_DAYS) or any(_same(task, when, e) for e in theirs):
             continue
         events.append((task, when))
+    events = _once(events)
     path = vault / "clones" / "tasks" / "plans.ics"
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -141,6 +142,29 @@ def is_event(task: dict) -> bool:
     if _ACTION.match(str(task.get("title") or "")):
         return False
     return task.get("event") is not False
+
+
+def _once(events: list[tuple[dict, datetime | date]]) -> list[tuple[dict, datetime | date]]:
+    """One event a plan: of tasks on the same day, within NEAR of each other, about the same
+    person or sharing title words, the earliest made is kept, since the model sometimes writes
+    one meeting as two tasks."""
+    kept: list[tuple[dict, datetime | date]] = []
+    for task, when in sorted(events, key=lambda e: (e[0].get("asked_at") or "~", e[0]["id"])):
+        if not any(_alike(task, when, k, w) for k, w in kept):
+            kept.append((task, when))
+    return [e for e in events if any(e[0] is k for k, _ in kept)]
+
+
+def _alike(task: dict, when: datetime | date, other: dict, then: datetime | date) -> bool:
+    """Whether two tasks are one plan: same day, close in time, the same person or title words."""
+    if (when.date() if isinstance(when, datetime) else when) != (
+        then.date() if isinstance(then, datetime) else then
+    ):
+        return False
+    if isinstance(when, datetime) and isinstance(then, datetime) and abs(when - then) > NEAR:
+        return False
+    ours = _words(task.get("with")) | _words(task.get("title"))
+    return bool(ours & (_words(other.get("with")) | _words(other.get("title"))))
 
 
 def week(

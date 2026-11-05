@@ -226,3 +226,16 @@ def test_only_events_become_plans_not_actions_about_them(tmp_path):
 
     assert [t["id"] for t in tasks if plans.is_event(t)] == ["m1", "o1"]
     assert plans.write(tmp_path / "vault", tasks, NOW) == 2
+
+
+def test_one_meeting_written_as_two_tasks_is_one_event(tmp_path):
+    first = task("t1", "Meet Hsing-Hao Lee for a quick sync", "2026-03-14T14:00", with_="Lee")
+    second = task("t2", "Quick sync with Lee", "2026-03-14T14:30", with_="Lee")
+    other = task("t3", "Lunch with Noor", "2026-03-14T14:00", with_="Noor")
+    later = task("t4", "Meet Lee again", "2026-03-14T19:00", with_="Lee")
+    first["asked_at"], second["asked_at"] = "2026-03-09T10:00:00Z", "2026-03-08T10:00:00Z"
+
+    assert plans.write(tmp_path / "v", [first, second, other, later], NOW) == 3
+    text = (tmp_path / "v" / "clones" / "tasks" / "plans.ics").read_text()
+    assert "UID:t2@proxenos" in text and "UID:t1@proxenos" not in text  # t2 was made first
+    assert "UID:t3@proxenos" in text and "UID:t4@proxenos" in text
