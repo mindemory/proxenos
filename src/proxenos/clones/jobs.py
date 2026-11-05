@@ -1492,7 +1492,7 @@ def _write_step(
     subject = choices._one_line(answer.get("subject"))
     if channel == "email" and subject:
         body = f"Subject: {subject}\n\n{body}"
-    body, checked = work.vet(body, now, job["draft_id"])
+    body, checked = work.vet(body, now, [], job["draft_id"])
     asks += checked
     asks += [choices._one_line(a) for a in answer.get("asks") or [] if choices._one_line(a)]
     if about:

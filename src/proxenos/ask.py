@@ -424,7 +424,7 @@ def _deep(
 def _save_draft(vault: Path, ask_id: str, result: dict, now: datetime) -> None:
     draft = result["draft"]
     channel = draft["channel"] if draft["channel"] in work.CHANNELS else "other"
-    body, checked = work.vet(draft["body"], now, ask_id)
+    body, checked = work.vet(draft["body"], now, [], ask_id)
     work._write(
         vault / "clones" / "drafts" / f"{ask_id}.md",
         work.render(
@@ -565,7 +565,7 @@ def _save_openings(vault: Path, result: dict, now: datetime) -> None:
             continue
         what = f"{opening['title']}, {opening['org']}" if opening["org"] else opening["title"]
         to = draft["to"] or opening["org"] or "them"
-        body, checked = work.vet(draft["body"], now, draft["id"])
+        body, checked = work.vet(draft["body"], now, [], draft["id"])
         title, kind = {
             "message": (f"Note to {to} about {opening['title']}", "reply"),
             "cover_letter": (f"Cover letter: {what}", "doc"),

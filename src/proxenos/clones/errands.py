@@ -303,7 +303,8 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
     errand["who"] = _text(answer.get("who"))
     errand["why"] = _text(answer.get("why"))
     errand["needs"] = [_text(n) for n in answer.get("needs") or [] if _text(n)][:3]
-    body, checked = work.vet(body, now, errand["id"])
+    said = [e["body"] for e in examples]  # their own emails, the only words of theirs it held
+    body, checked = work.vet(body, now, said, errand["id"])
     errand["needs"] = [*checked, *errand["needs"]]
     if cv:
         errand["cv"]["notes"] = _stale(answer.get("cv_notes"))
@@ -318,7 +319,7 @@ def carry(vault: Path, errand: dict, now: datetime, model: Callable[..., object]
         and to in intro_routes
         and str(intro.get("body") or "").strip()
     ):
-        note, more = work.vet(str(intro["body"]), now, errand["id"])
+        note, more = work.vet(str(intro["body"]), now, said, errand["id"])
         errand["needs"] += more
         errand["messages"].append(
             _message(

@@ -146,6 +146,9 @@ their voice; keep it.
 - No stock openers or closers ("I hope this finds you well", "Happy to help", "Let me know \
 if...") unless their examples use them.
 - Never more polished or more organized than they are.
+- Never say {person} did something (paid, sent, signed, submitted, booked, called) unless the \
+records you were given show it. If they don't, leave it out or write it as still to do, and ask \
+{person} whether they did, wherever your answer has a place to ask.
 - A weekday goes with a date only as the calendar you were given has them: never work one out. \
 Where the date isn't in it, leave the weekday out."""
 

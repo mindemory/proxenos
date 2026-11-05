@@ -794,7 +794,7 @@ def reply(
     body = str(answer.get("body") or "").strip()
     if not body:
         raise ValueError("the model wrote no message")
-    body, checked = work.vet(body, now, errand["id"])
+    body, checked = work.vet(body, now, [m["text"] for m in cp["mine"]], errand["id"])
     errand["needs"] += checked
     allowed = _figures(" ".join([prompt, report["goal"]]))
     if not _figures(body) <= allowed:

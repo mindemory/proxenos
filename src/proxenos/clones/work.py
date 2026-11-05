@@ -71,6 +71,7 @@ from pathlib import Path
 
 from proxenos import (
     chats,
+    claims,
     dates,
     history,
     links,
@@ -298,7 +299,7 @@ def work(
             else:
                 if chat and llm.voice_on():
                     answer["body"] = _voiced(chat, person) or answer["body"]
-                draft = _draft(job, answer, now)
+                draft = _draft(job, answer, now, _said(job, shown))
         except Exception as e:  # noqa: BLE001 - one failed draft must not cost the others
             failed += 1
             print(f"work: {job['id']} failed ({' '.join(str(e).split())[:200]})", file=sys.stderr)
@@ -921,22 +922,32 @@ def _brief(head: str, fields: list[tuple[str, object]], ask: str) -> str:
 # The answer, and the files
 
 
-def vet(body: str, now: datetime, label: str = "draft") -> tuple[str, list[str]]:
+def vet(body: str, now: datetime, said: list[str], label: str = "draft") -> tuple[str, list[str]]:
     """A draft's text after the code's own checks, and the questions they raise for the user (the
-    draft's asks): a weekday that doesn't fit its date (proxenos.dates); where it can only have
-    been the weekday that was wrong it is corrected and logged. Every draft that is written
-    runs through it."""
+    draft's asks): a weekday that doesn't fit its date (proxenos.dates), where it can only have
+    been the weekday that was wrong it is corrected and logged, and a claim that the user did
+    something that none of `said`, their own messages in what the draft was given, shows
+    (proxenos.claims). Every draft that is written runs through it."""
     body, asks, fixed = dates.check(body, now)
     for line in fixed:
         print(f"work: {label}: {line}", file=sys.stderr)
-    return body, asks
+    return body, [*asks, *claims.unproven(body, said)]
 
 
-def _draft(job: dict, answer: dict, now: datetime) -> dict:
+def _said(job: dict, examples: str) -> list[str]:
+    """The user's own words a job's prompt held: for a reply their messages in the chat, for the
+    rest what the task said and the examples of their writing."""
+    if chat := job.get("chat"):
+        theirs = (m["text"] for m in [*chat["recent"], *chat["waiting"]] if m["mine"])
+        return [*chat["own"], *theirs]
+    return [job["prompt"], examples]
+
+
+def _draft(job: dict, answer: dict, now: datetime, said: list[str] = ()) -> dict:
     body = str(answer["body"]).strip()
     if not body:
         raise ValueError("the model wrote an empty draft")
-    body, checked = vet(body, now, job["id"])
+    body, checked = vet(body, now, list(said), job["id"])
     asks = [_clip(_one_line(a), ASK_CHARS) for a in answer.get("asks") or [] if _one_line(a)]
     return {
         "id": job["id"],
