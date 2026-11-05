@@ -373,6 +373,7 @@ def _queue_comments(
                 by="comments",
                 authors=authors,
                 approved=mine,
+                quoted=not mine,  # others' words: the runner's brief marks them off
             )
         except SystemExit as e:  # the queue is full, or the step isn't one: the next run tries
             print(f"folders: {project['id']}'s comments weren't queued ({e})", file=sys.stderr)

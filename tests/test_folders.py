@@ -799,6 +799,8 @@ def test_comments_on_a_manuscript_become_a_step_once(setup, monkeypatch):
     assert "1. In general (Joe): Shorten the abstract." in mine["text"]
     assert (theirs["approved"], theirs["authors"]) == (False, ["Ana Lee"])
     assert "1. On “dawn and dusk” (Ana Lee): Say which species." in theirs["text"]
+    # Others' words reach the runner marked off as theirs; the user's own stay instructions.
+    assert theirs["quoted"] is True and "quoted" not in mine
     assert "comments_queued" not in run(vault, NOW + timedelta(days=2))  # each once
     assert len(steps.queued(vault, "calls")) == 2
     assert folders.comments(drive / "not a word file.docx") == []
