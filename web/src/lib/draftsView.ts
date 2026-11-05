@@ -7,7 +7,7 @@ import { getDraftCloseness, getDraftReviews, getDrafts, vaultPath } from "@/lib/
 
 /**
  * Every file in clones/drafts, newest first, with what each draft that is still the reader's can open
- * (a Gmail compose link, a chat picker, a download) and how reviews have gone so far. Addresses and
+ * (a compose link in the mailbox it's on, a chat picker, a download) and how reviews have gone so far. Addresses and
  * phones come from the last look-up through the vault, at once; the server makes the first one as it
  * starts (src/instrumentation.ts), and a name never looked up waits at most a moment (recipients.ts).
  */
@@ -15,7 +15,7 @@ export async function draftsView(): Promise<DraftsViewResponse> {
   const base = await getDrafts();
   const live = base.drafts.filter((d) => isLive(d.status));
 
-  const mail = live.filter((d) => openTarget(d) === "gmail");
+  const mail = live.filter((d) => openTarget(d) === "email");
   const chats = live.filter((d) => openTarget(d) === "whatsapp" && d.to);
   const [found, phones] = await Promise.all([
     findAddresses(

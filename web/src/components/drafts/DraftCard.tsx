@@ -6,6 +6,7 @@ import { Check, CheckCheck, ChevronDown, Copy, MessagesSquare, Pencil, RotateCcw
 import { ActionButton } from "@/components/ActionButton";
 import { Markdown } from "@/components/Markdown";
 import { Listen } from "@/components/reading/Listen";
+import { openTarget } from "@/lib/actions";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Draft, DraftOpen } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
   const sent = d.status === "sent";
   const overtaken = d.status === "overtaken";
   const long = d.body.length > CLIP_CHARS;
+  const isEmail = openTarget(d) === "email";
 
   const start = () => {
     setText(d.body);
@@ -102,6 +104,19 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
             </span>
           )}
         </p>
+        {isEmail && (
+          <p
+            className="text-sm text-muted mt-0.5 break-words"
+            title="The mailbox its thread is on: open it from there, so a reply doesn't start a new conversation from another address."
+          >
+            Reply from:{" "}
+            {d.fromAddress ? (
+              <span className="text-ink/90">{d.fromAddress}</span>
+            ) : (
+              <span>not recorded for this draft, so check the From line</span>
+            )}
+          </p>
+        )}
       </div>
 
       {overtaken && (
@@ -203,7 +218,7 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
 
       {!editing && !sent && !overtaken && plan?.alt && !asking && (
         <p className="-mt-1 text-xs text-muted">
-          Not using Gmail? <AltOpenLink plan={plan} onOpen={() => void open(true)} />
+          Another way: <AltOpenLink plan={plan} onOpen={() => void open(true)} />
         </p>
       )}
 

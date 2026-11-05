@@ -606,6 +606,10 @@ export interface Draft {
   found: string; // for a reply: what the twin's look through memory showed, "" when nothing
   asks: string[]; // for a reply: what only the reader can decide, as questions
   overtaken: string; // why the messages made it moot, "" when they haven't
+  thread: { source: string; chat: string } | null; // for a reply: the chat it answers (email: Gmail's thread id, else its subject and people)
+  fromAccount: string; // for an email: the vault's mail stream the thread is in, "" when not recorded
+  fromAddress: string; // the reader's own address it goes from, "" when not recorded
+  fromProvider: string; // "gmail", "google-workspace" or "outlook"; "" when it isn't known
 }
 
 export interface DraftsResponse {
@@ -616,7 +620,7 @@ export interface DraftsResponse {
 }
 
 /** Where a draft's one-click action goes. "file" is a download. */
-export type OpenTarget = "gmail" | "whatsapp" | "slack" | "linkedin" | "instagram" | "messenger" | "x" | "file";
+export type OpenTarget = "email" | "whatsapp" | "slack" | "linkedin" | "instagram" | "messenger" | "x" | "file";
 
 /** One way to open a draft in its app. The reader still presses send there. */
 export interface DraftOpenStep {

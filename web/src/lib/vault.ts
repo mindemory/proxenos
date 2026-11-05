@@ -1604,7 +1604,25 @@ function toDraft(file: DraftFile): Draft {
     found: (f.found ?? "").trim(),
     asks: stringList(f.asks),
     overtaken: (f.overtaken ?? "").trim(),
+    thread: draftThread(f.thread),
+    fromAccount: (f.from_account ?? "").trim(),
+    fromAddress: (f.from_address ?? "").trim().toLowerCase(),
+    fromProvider: (f.from_provider ?? "").trim().toLowerCase(),
   };
+}
+
+/** A front matter `thread` written as JSON, {"source": ..., "chat": ...}; null for anything else. */
+function draftThread(raw: string | undefined): Draft["thread"] {
+  try {
+    const t: unknown = JSON.parse(raw ?? "");
+    if (t && typeof t === "object") {
+      const { source, chat } = t as Record<string, unknown>;
+      if (typeof source === "string" && typeof chat === "string") return { source, chat };
+    }
+  } catch {
+    // Not a reply's, or not JSON: no thread.
+  }
+  return null;
 }
 
 /** A front matter value written as a JSON list of strings; [] for anything else. */

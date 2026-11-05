@@ -7,7 +7,7 @@ import type { DraftOpen, OpenTarget } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ICON: Record<OpenTarget, LucideIcon> = {
-  gmail: Mail,
+  email: Mail,
   whatsapp: MessageCircle,
   slack: Hash,
   linkedin: ExternalLink,

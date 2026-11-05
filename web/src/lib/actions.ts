@@ -9,10 +9,15 @@
 
 import type { Draft, DraftOpen, DraftOpenStep, OpenTarget } from "./types";
 
+/** Outlook.com's own domains: a mailbox there is a personal one, and opens on outlook.live.com. */
+const OUTLOOK_PERSONAL_DOMAINS = new Set(["outlook.com", "hotmail.com", "live.com", "msn.com"]);
+
 /** The most a link may carry of the draft's text, counted as it's written in the link. */
 export const MAX_URL_BODY = 6000;
 
 const GMAIL = "https://mail.google.com/mail/";
+const OUTLOOK_WORK = "https://outlook.office.com/mail/deeplink/compose";
+const OUTLOOK_PERSONAL = "https://outlook.live.com/mail/0/deeplink/compose";
 const LINKEDIN_FEED = "https://www.linkedin.com/feed/";
 const INSTAGRAM_INBOX = "https://www.instagram.com/direct/inbox/";
 const MESSENGER = "https://www.messenger.com/";
@@ -27,7 +32,7 @@ export function openTarget(d: Pick<Draft, "channel" | "kind">): OpenTarget {
   switch (d.channel) {
     case "email":
     case "gmail":
-      return "gmail";
+      return "email";
     case "whatsapp":
       return "whatsapp";
     case "slack":
@@ -41,7 +46,7 @@ export function openTarget(d: Pick<Draft, "channel" | "kind">): OpenTarget {
     case "x":
       return "x";
     case "":
-      return d.kind === "email" ? "gmail" : "file";
+      return d.kind === "email" ? "email" : "file";
     default:
       return "file";
   }
@@ -127,7 +132,7 @@ export function splitSubject(d: Pick<Draft, "title" | "body">): { subject: strin
 
 /** The text a draft puts on the clipboard when it's copied as part of opening: an email's has no subject line. */
 export function openText(d: Pick<Draft, "channel" | "kind" | "title" | "body">): string {
-  return openTarget(d) === "gmail" ? splitSubject(d).body : d.body;
+  return openTarget(d) === "email" ? splitSubject(d).body : d.body;
 }
 
 /** The draft as a markdown file for download: its title over its text, unless the text starts with one. */
@@ -180,50 +185,129 @@ function fits(text: string, encode: (t: string) => string = enc): string | null 
   return e.length <= MAX_URL_BODY ? e : null;
 }
 
-/** The two ways to open an email: Gmail in the browser, and the default mail app. */
+/** Gmail's thread id (X-GM-THRID, decimal) as the hex its web address uses, or null for anything else. */
+export function gmailThreadHex(chat: string): string | null {
+  if (!/^\d{1,24}$/.test(chat)) return null;
+  // Decimal to hex a digit at a time: ids are past what a number holds exactly.
+  let digits = chat.split("").map(Number);
+  let hex = "";
+  while (digits.some((d) => d !== 0)) {
+    let rest = 0;
+    const next: number[] = [];
+    for (const d of digits) {
+      const n = rest * 10 + d;
+      const q = Math.floor(n / 16);
+      rest = n % 16;
+      if (next.length > 0 || q > 0) next.push(q);
+    }
+    hex = rest.toString(16) + hex;
+    digits = next;
+  }
+  return hex || "0";
+}
+
+/**
+ * Whose mail an email draft is. "google" and "outlook" are mailboxes whose provider is known;
+ * "unknown" is one the draft names but whose provider no record settles; "legacy" is a draft
+ * written before drafts recorded their mailbox, which opens in Gmail as they always did.
+ */
+export type MailKind = "google" | "outlook" | "unknown" | "legacy";
+
+export function mailKind(d: Pick<Draft, "fromProvider" | "fromAddress" | "fromAccount">): MailKind {
+  if (d.fromProvider === "gmail" || d.fromProvider === "google-workspace") return "google";
+  if (d.fromProvider === "outlook") return "outlook";
+  return d.fromAddress || d.fromAccount ? "unknown" : "legacy";
+}
+
+/** The way into the default mail app: a mailto link, which can't say which account it goes from. */
+function mailAppStep(d: Draft, to: string, su: string, body: string): DraftOpenStep {
+  const mailBody = fits(body, (t) => enc(crlf(t)));
+  const mailUrl = `mailto:${to}?subject=${su}${mailBody === null ? "" : `&body=${mailBody}`}`;
+  const from = d.fromAddress ? ` Check it goes from ${d.fromAddress}.` : "";
+  return mailBody === null
+    ? {
+        label: "Copy & open mail app",
+        hint: `The text is too long for a link: copies it, and opens your mail app with the recipient and subject filled in.${from}`,
+        url: mailUrl,
+        copy: true,
+        note: `Copied, and your mail app is open: paste the text in, then press send.${from}`,
+      }
+    : {
+        label: "Open in mail app",
+        hint: `Opens your default mail app with the recipient, subject and text filled in. You press send.${from}`,
+        url: mailUrl,
+        copy: false,
+        note: `Your mail app is open with your draft: press send there.${from}`,
+      };
+}
+
+/** A compose window on the web, in Gmail or Outlook, with the recipient and subject filled in and the text too when it fits. */
+function composeStep(name: string, url: (body: string) => string, inBody: string | null, from: string): DraftOpenStep {
+  const where = from ? ` for ${from}` : "";
+  return inBody === null
+    ? {
+        label: `Copy & open ${name}`,
+        hint: `The text is too long for a link: copies it, and opens ${name}${where} with the recipient and subject filled in. Paste it in, then press send.`,
+        url: url(""),
+        copy: true,
+        note: `Copied, and ${name} is open: paste the text in, then press send`,
+      }
+    : {
+        label: `Open in ${name}`,
+        hint: `Opens a ${name} compose window${where} with the recipient, subject and text filled in. You press send.`,
+        url: url(inBody),
+        copy: false,
+        note: `${name} is open with your draft: press send there`,
+      };
+}
+
+/**
+ * The ways to open an email, in the mailbox its thread is on. A Gmail or Google Workspace one opens
+ * in that account (authuser), and a reply in a Gmail thread opens that thread so the answer stays in
+ * it. An Outlook one opens Outlook on the web, never Gmail. A mailbox of unknown kind still gets the
+ * mail app, and only a draft that predates the record gets Gmail with no account.
+ */
 function emailSteps(d: Draft, address: string): { main: DraftOpenStep; alt: DraftOpenStep } {
   const { subject, body } = splitSubject(d);
   const to = encAddress(address);
   const su = enc(subject);
-
   const inBody = fits(body);
-  const gmailUrl = `${GMAIL}?view=cm&fs=1&to=${to}&su=${su}${inBody === null ? "" : `&body=${inBody}`}`;
-  const main: DraftOpenStep =
-    inBody === null
-      ? {
-          label: "Copy & open Gmail",
-          hint: "The text is too long for a link: copies it, and opens Gmail with the recipient and subject filled in. Paste it in, then press send.",
-          url: gmailUrl,
-          copy: true,
-          note: "Copied, and Gmail is open: paste the text in, then press send",
-        }
-      : {
-          label: "Open in Gmail",
-          hint: "Opens a Gmail compose window with the recipient, subject and text filled in. You press send.",
-          url: gmailUrl,
-          copy: false,
-          note: "Gmail is open with your draft: press send there",
-        };
+  const bodyParam = (b: string) => (b ? `&body=${b}` : "");
+  const mailApp = mailAppStep(d, to, su, body);
+  const from = d.fromAddress;
+  const kind = mailKind(d);
 
-  const mailBody = fits(body, (t) => enc(crlf(t)));
-  const mailUrl = `mailto:${to}?subject=${su}${mailBody === null ? "" : `&body=${mailBody}`}`;
-  const alt: DraftOpenStep =
-    mailBody === null
-      ? {
-          label: "Copy & open mail app",
-          hint: "The text is too long for a link: copies it, and opens your mail app with the recipient and subject filled in.",
-          url: mailUrl,
-          copy: true,
-          note: "Copied, and your mail app is open: paste the text in, then press send",
-        }
-      : {
-          label: "Open in mail app",
-          hint: "Opens your default mail app with the recipient, subject and text filled in. You press send.",
-          url: mailUrl,
-          copy: false,
-          note: "Your mail app is open with your draft: press send there",
-        };
-  return { main, alt };
+  if (kind === "outlook") {
+    const personal = OUTLOOK_PERSONAL_DOMAINS.has(from.slice(from.lastIndexOf("@") + 1));
+    const hint = from ? `&login_hint=${encAddress(from)}` : "";
+    const url = (b: string) => `${personal ? OUTLOOK_PERSONAL : OUTLOOK_WORK}?to=${to}&subject=${su}${bodyParam(b)}${hint}`;
+    return { main: composeStep("Outlook", url, inBody, from), alt: mailApp };
+  }
+  if (kind === "unknown") {
+    // Nothing says which web mail it is: the mail app, and the text to paste into any other.
+    const copy: DraftOpenStep = {
+      label: "Copy the text",
+      hint: "Copies the text, to paste into the mailbox it belongs in.",
+      url: null,
+      copy: true,
+      note: "Copied: paste it into the mailbox it belongs in",
+    };
+    return { main: mailApp, alt: copy };
+  }
+
+  const account = kind === "google" && from ? `&authuser=${encAddress(from)}` : "";
+  const compose = composeStep("Gmail", (b) => `${GMAIL}?view=cm&fs=1${account}&to=${to}&su=${su}${bodyParam(b)}`, inBody, kind === "google" ? from : "");
+  const hex = kind === "google" && from && d.thread?.source === "email" ? gmailThreadHex(d.thread.chat) : null;
+  if (hex === null) return { main: compose, alt: mailApp };
+  // The thread itself: the answer is pasted under its last message, so it stays in the thread.
+  const thread: DraftOpenStep = {
+    label: "Copy & open the thread in Gmail",
+    hint: `Copies the text and opens the conversation in Gmail for ${from}. Press reply, paste it in, then press send: it stays in the thread.`,
+    url: `${GMAIL}u/${encAddress(from)}/#all/${hex}`,
+    copy: true,
+    note: "Copied, and the thread is open in Gmail: press reply, paste the text in, then press send",
+  };
+  return { main: thread, alt: { ...compose, label: compose.label.replace("Open in", "New message in") } };
 }
 
 /**
@@ -234,7 +318,7 @@ function emailSteps(d: Draft, address: string): { main: DraftOpenStep; alt: Draf
 export function draftOpen(d: Draft, address: string, phone = ""): DraftOpen {
   const target = openTarget(d);
   switch (target) {
-    case "gmail": {
+    case "email": {
       const { main, alt } = emailSteps(d, address);
       return { target, ...main, alt };
     }
