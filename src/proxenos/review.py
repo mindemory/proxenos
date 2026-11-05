@@ -624,6 +624,9 @@ DOI where you know it: each is looked up in the scholarly indexes and any not fo
 In your text, cite only works the manuscript itself cites. Never invent a fact about the \
 manuscript or its code: what you couldn't check, say you couldn't.
 
+The paper's own author{author} keeps to a house rule: {rules} Raise each breach as a minor \
+concern, with where (a running header counts once, where it's defined).
+
 Return:
 - summary: what the paper does and claims and your overall view, a paragraph or two.
 - strengths: what is good about it, each a sentence or two.
@@ -731,6 +734,8 @@ def _reviews(
             lens=reviewer["lens"],
             focus=reviewer["focus"],
             literature=LITERATURE,
+            author=f" ({env('NAME')})" if env("NAME") else "",
+            rules=steps.AUTHOR_RULES,
         ) + (_AGAIN.format(round=n) if n > 1 else "")
         parts = [paper]
         if n > 1:
@@ -1008,7 +1013,8 @@ text then reports it;
 - later: needs new data, other people or more time than a revision: say what's planned;
 - decline: say why, with a reason a reviewer would accept.
 Agree where the reviewer is right, which is most of the time; decline only with a reason. Never \
-plan to invent data, results or citations. Each item: id, action, change (for text and analysis \
+plan to invent data, results or citations. A breach of the house rule on your own name is a text \
+change: {rules} Each item: id, action, change (for text and analysis \
 what changes and where, concretely enough to make it; for later the plan; for decline the reason). \
 summary: how you'll answer the round, in a few sentences."""
 
@@ -1056,7 +1062,13 @@ def _plan(vault: Path, run: dict, paper: str, asker: _Asker, n: int, open_: list
         ]
     )
     _note(vault, run, f"Round {n}: planning the response", f"{len(open_)} concerns to answer.")
-    answer = _asked(asker, prompt, _PLAN.format(person=person), _PLAN_SCHEMA, ANSWER_TOKENS)
+    answer = _asked(
+        asker,
+        prompt,
+        _PLAN.format(person=person, rules=steps.AUTHOR_RULES),
+        _PLAN_SCHEMA,
+        ANSWER_TOKENS,
+    )
     sorted_: dict[str, dict] = {}
     for item in answer.get("items") or []:
         cid = _text(item.get("id")) if isinstance(item, dict) else ""

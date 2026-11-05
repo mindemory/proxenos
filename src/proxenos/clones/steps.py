@@ -118,6 +118,16 @@ _HIDDEN += tuple(
 )
 
 
+# How a paper names its own author, the user's rule for every manuscript: a step that changes one
+# keeps to it, and a review (proxenos.review) flags each breach and plans its fix.
+AUTHOR_RULES = (
+    "The author's own name goes only in the title block, with their affiliation and email: never "
+    'in a running header or footer, nor in the text, where they\'re "the author" or "we". Their '
+    "own work is cited at most once per distinct work: one software reference for a tool, not "
+    "separate entries for its repository, its releases and a blog post about it."
+)
+
+
 class GitError(RuntimeError):
     pass
 
@@ -321,7 +331,7 @@ def brief(vault: Path, project: dict, step: dict, person: str) -> str:
         parts.append(
             f"It's a change to the manuscript, {paper['path']} in this folder, which is on "
             f"{paper.get('branch') or step['base']}. Change that file, in its own style and "
-            "markup, and only what was asked."
+            "markup, and only what was asked. " + AUTHOR_RULES
         )
     if step.get("builds_on"):
         earlier = _load_quietly(vault, step["builds_on"])

@@ -341,6 +341,12 @@ def test_a_paper_is_reviewed_in_rounds_until_no_major_concern_is_left(setup, cap
     assert made[1]["manuscript"] == {"path": "paper.md", "branch": "main"}
     assert "R1-M1" in runner.briefs[0] and "Don't change paper.md" in runner.briefs[0]
     assert "11% (95% CI 6 to 16)" in runner.briefs[1]  # the text step reads what it found
+    # The author's name stays in the title block: the text step keeps to it, reviewers flag a
+    # breach, and the plan makes it a change to the text.
+    assert steps.AUTHOR_RULES in runner.briefs[1] and steps.AUTHOR_RULES not in runner.briefs[0]
+    systems = {who: system for who, system, _ in model.prompts}
+    assert steps.AUTHOR_RULES in systems["R1.1"] and "(Joe)" in systems["R1.1"]
+    assert steps.AUTHOR_RULES in systems["plan"]
     assert "A Real Work on Song" in runner.briefs[1] and "Ghost" not in runner.briefs[1]
     assert git(repo, "rev-parse", "HEAD") == head and git(repo, "status", "--porcelain") == ""
 

@@ -116,7 +116,8 @@ SENDS = (
         (
             "Only for a review you start, or one a project you opted in starts: the project's "
             "manuscript and its code and data descriptions from its repository, its name, "
-            "description and brief, to the review model, Claude unless you choose another; the "
+            "description and brief, and your name, to spot it outside the title block, to the "
+            "review model, Claude unless you choose another; the "
             "reviews, plan and letter go back to it in later rounds. Never a message from your "
             "vault. The works a reviewer suggests are looked up by title, first author and DOI at "
             "Crossref, DataCite, arXiv and OpenAlex."
