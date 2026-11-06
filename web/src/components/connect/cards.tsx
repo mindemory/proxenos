@@ -317,12 +317,14 @@ export function WhatsAppCard({
   s,
   now,
   job,
+  inApp,
   onRead,
   onCancel,
 }: {
   s: ConnectSource;
   now: string;
   job: ConnectJob | null;
+  inApp: boolean;
   onRead: () => void;
   onCancel: () => void;
 }) {
@@ -352,7 +354,8 @@ export function WhatsAppCard({
       {s.problem === "blocked" && (
         <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
           macOS is keeping Proxenos out of WhatsApp&apos;s store. In System Settings, Privacy &amp; Security, Full Disk
-          Access, allow the app that runs Proxenos (Terminal, if you started it there), then read again.{" "}
+          Access, allow {inApp ? "Proxenos" : "the app that runs Proxenos (Terminal, if you started it there)"}, then read
+          again.{" "}
           <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
             Open Full Disk Access
             <ExternalLink size={12} aria-hidden="true" />
@@ -416,8 +419,12 @@ function workspaceName(text: string): string | null {
   return WORKSPACE_NAME.test(name) ? name : null;
 }
 
-/** Slack: the workspaces signed in, and the Terminal command that adds another. */
-export function SlackCard({ s, now }: { s: ConnectSource; now: string }) {
+/**
+ * Slack: the workspaces signed in, and the Terminal command that adds another. The desktop app
+ * has no slackdump or `proxenos` command to point a person at, so there it says plainly that
+ * adding one isn't ready yet.
+ */
+export function SlackCard({ s, now, inApp }: { s: ConnectSource; now: string; inApp: boolean }) {
   const [text, setText] = useState("");
   const name = workspaceName(text);
   const command = `proxenos auth slackdump ${name ?? "NAME"}`;
@@ -443,29 +450,35 @@ export function SlackCard({ s, now }: { s: ConnectSource; now: string }) {
         </p>
       )}
 
-      <div className="space-y-2.5">
-        <p className="smallcaps text-faint">{s.workspaces.length ? "Add a workspace" : "Add your first"}</p>
-        <label className="block space-y-1 sm:max-w-xs">
-          <span className="text-xs text-muted">Workspace name, the part before .slack.com</span>
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="acme"
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            maxLength={100}
-            className={inputClass}
-          />
-        </label>
-        {text.trim() && !name && (
-          <p className="text-sm text-bad-ink" role="alert">
-            That isn&apos;t a workspace name. Use letters, digits and dashes, like acme.
-          </p>
-        )}
-        <p className="text-sm leading-relaxed text-muted">Run this in Terminal and follow what it asks, then reload this page.</p>
-        <Command block>{command}</Command>
-      </div>
+      {inApp ? (
+        <p className="text-sm leading-relaxed text-muted">
+          Adding a Slack workspace from the app isn&apos;t ready yet. There&apos;s nothing to run for now.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          <p className="smallcaps text-faint">{s.workspaces.length ? "Add a workspace" : "Add your first"}</p>
+          <label className="block space-y-1 sm:max-w-xs">
+            <span className="text-xs text-muted">Workspace name, the part before .slack.com</span>
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="acme"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              maxLength={100}
+              className={inputClass}
+            />
+          </label>
+          {text.trim() && !name && (
+            <p className="text-sm text-bad-ink" role="alert">
+              That isn&apos;t a workspace name. Use letters, digits and dashes, like acme.
+            </p>
+          )}
+          <p className="text-sm leading-relaxed text-muted">Run this in Terminal and follow what it asks, then reload this page.</p>
+          <Command block>{command}</Command>
+        </div>
+      )}
     </section>
   );
 }

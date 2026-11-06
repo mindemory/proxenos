@@ -117,9 +117,9 @@ export function Connect() {
           />
         )}
         {whatsapp && (
-          <WhatsAppCard s={whatsapp} now={data.now} job={job("whatsapp")} onRead={readWhatsApp} onCancel={() => cancel("whatsapp")} />
+          <WhatsAppCard s={whatsapp} now={data.now} job={job("whatsapp")} inApp={data.inApp} onRead={readWhatsApp} onCancel={() => cancel("whatsapp")} />
         )}
-        {slack && <SlackCard s={slack} now={data.now} />}
+        {slack && <SlackCard s={slack} now={data.now} inApp={data.inApp} />}
         {beeper && (
           <BeeperCard s={beeper} now={data.now} job={job("beeper")} onSave={saveBeeperToken} onCancel={() => cancel("beeper")} />
         )}
