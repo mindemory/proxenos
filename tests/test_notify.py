@@ -138,6 +138,7 @@ def vault(tmp_path):
             {"id": "t2", "title": "Renew the lease", "status": "open", "due": "2026-11-20"},
             {"id": "t3", "title": "Call Ana back", "status": "open", "due": "2026-10-30"},
             {"id": "t4", "title": "Pay rent", "status": "done", "due": "2026-11-01"},
+            {"id": "t5", "title": "Old ask", "status": "open", "due": "2026-10-20", "stale": True},
         ],
         [{"task_id": "t3", "action": "not_mine", "ts": "2026-11-01T10:00:00Z"}],
     )

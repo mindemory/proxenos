@@ -10,13 +10,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from proxenos import llm
+from proxenos import llm, memory
 from proxenos.clones import tasks
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 GENERATED = "2026-03-10T12:00:00Z"
 CONTRACT = ["id", "title", "detail", "source", "with", "asked_at", "due", "priority", "status"]
-CONTRACT += ["evidence", "event", "at", "place"]
+CONTRACT += ["evidence", "event", "at", "place", "changed"]
 _n = itertools.count()
 NONE = {"overtaken": 0, "plans": 0}  # no drafts waiting and no plans with a time
 
@@ -350,6 +350,7 @@ def test_new_tasks_are_saved_in_the_contract_shape(tmp_path, model):
         "event": False,
         "at": None,
         "place": None,
+        "changed": GENERATED,
     }
     # Written twice by the model, kept once: the later copy wins. Asked at the first evidence.
     assert form["status"] == "waiting" and form["due"] is None and form["with"] is None
@@ -736,3 +737,163 @@ def test_a_ticket_confirmation_from_a_no_reply_sender_reaches_the_model(tmp_path
     prompt = model.calls[0]["prompt"]
     assert "Riverton Theatre" in prompt and "Win a prize" not in prompt
     assert "ticket or booking confirmation" in model.calls[0]["system"]
+
+
+# The model-free pass: tidy.
+
+
+def listed(vault, *items, feedback=()):
+    folder = vault / "clones" / "tasks"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "tasks.json").write_text(json.dumps({"generated": GENERATED, "tasks": list(items)}))
+    (folder / "feedback.jsonl").write_text("".join(json.dumps(e) + "\n" for e in feedback))
+
+
+def by_id(vault):
+    path = vault / "clones" / "tasks" / "tasks.json"
+    return {t["id"]: t for t in json.loads(path.read_text())["tasks"]}
+
+
+def local(**delta):
+    return (NOW - timedelta(**delta)).astimezone().strftime("%Y-%m-%dT%H:%M")
+
+
+def test_an_event_is_done_once_its_time_passed_by_more_than_two_hours(tmp_path):
+    vault = tmp_path / "vault"
+    meeting = task("a", "Lab meeting", asked_at=ago(days=1)) | {"event": True}
+    listed(
+        vault,
+        meeting | {"at": local(hours=3)},
+        meeting | {"id": "b", "at": local(hours=1)},
+        meeting | {"id": "c", "at": local(days=2)[:10]},
+        meeting | {"id": "d", "at": local(hours=-5)},
+        task("e", "Call the bank", asked_at=ago(hours=5)) | {"at": local(hours=4)},
+    )
+
+    assert tasks.tidy(vault, NOW) == {"tasks_closed": 3, "tasks_stale": 0}
+
+    done = by_id(vault)
+    assert [done[k]["status"] for k in "abcde"] == ["done", "open", "done", "open", "done"]
+    assert done["a"]["closed_by"] == "time"
+    assert done["a"]["closed_why"] == "its time passed"
+    assert done["a"]["closed_at"] == GENERATED
+    assert "closed_by" not in done["b"]
+
+
+def test_a_task_about_a_meeting_is_not_closed_by_its_time(tmp_path):
+    vault = tmp_path / "vault"
+    listed(vault, task("a", "Reschedule the meeting", asked_at=ago(days=1)) | {"at": local(days=1)})
+
+    tasks.tidy(vault, NOW)
+
+    assert by_id(vault)["a"]["status"] == "open"
+
+
+def test_a_task_is_done_when_the_user_wrote_to_that_person_after_it_was_asked(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PROXENOS_EMAILS", "me@example.com")
+    vault = tmp_path / "vault"
+    ana = em(ago(days=9), "Lease", "Can you send the lease?", sender="ana.lee@acme.org")
+    reply = em(ago(days=8), "Re: Lease", "Attached.", me=True, to=("Ana Lee <ana.lee@acme.org>",))
+    write_stream(vault / "raw" / "email" / "gmail", [ana | {"from_name": "Ana Lee"}, reply])
+    memory.build(vault)
+    lease = task("a", "Send Ana the lease", asked_at=ago(days=9), source="email")
+    lease |= {"with": "Ana Lee"}
+    listed(vault, lease, lease | {"id": "w", "status": "waiting"})
+
+    assert tasks.tidy(vault, NOW) == {"tasks_closed": 1, "tasks_stale": 0}
+
+    done = by_id(vault)
+    assert done["a"]["status"] == "done"
+    assert done["a"]["closed_by"] == "elsewhere"
+    assert done["a"]["closed_why"].startswith("you wrote to ana.lee@acme.org on ")
+    assert done["w"]["status"] == "waiting"  # writing to them doesn't finish what waits on them
+
+
+def test_a_chat_with_them_on_any_channel_settles_a_task_and_an_earlier_message_does_not(tmp_path):
+    vault = tmp_path / "vault"
+    write_stream(
+        vault / "raw" / "whatsapp" / "messages",
+        [
+            wa(ago(days=5), "Asha Rao", "Before the ask", me=True),
+            wa(ago(days=2), "Cy Doe", "After the ask", me=True),
+        ],
+    )
+    asha = task("a", "Send Asha Rao the list", asked_at=ago(days=3)) | {"with": "Asha Rao"}
+    listed(vault, asha, asha | {"id": "b", "title": "Send Cy Doe the list", "with": "Cy Doe"})
+
+    tasks.tidy(vault, NOW)
+
+    done = by_id(vault)
+    assert done["a"]["status"] == "open"
+    assert done["b"]["closed_by"] == "elsewhere"
+    assert "WhatsApp" in done["b"]["closed_why"]
+
+
+def test_an_open_task_unchanged_for_a_week_is_stale_and_keeping_it_starts_over(tmp_path):
+    vault = tmp_path / "vault"
+    old = task("a", "Old ask", asked_at=ago(days=8)) | {"with": None}
+    listed(
+        vault,
+        old,
+        old | {"id": "b", "asked_at": ago(days=2)},
+        old | {"id": "c", "changed": ago(days=1)},
+        old | {"id": "d", "status": "waiting"},
+        old | {"id": "e"},
+        feedback=[{"task_id": "e", "action": "keep", "ts": ago(hours=1)}],
+    )
+
+    assert tasks.tidy(vault, NOW) == {"tasks_closed": 0, "tasks_stale": 1}
+
+    found = by_id(vault)
+    assert [bool(found[k].get("stale")) for k in "abcde"] == [True, False, False, False, False]
+    assert found["e"]["changed"] == ago(hours=1)
+    assert tasks.tidy(vault, NOW) == {"tasks_closed": 0, "tasks_stale": 0}  # nothing new to say
+
+
+def test_tidy_leaves_a_task_the_user_closed_on_the_page_and_one_it_closed_once(tmp_path):
+    vault = tmp_path / "vault"
+    meeting = task("a", "Lab meeting", asked_at=ago(days=1)) | {"event": True, "at": local(days=1)}
+    listed(
+        vault,
+        meeting,
+        meeting | {"id": "r", "closed_by": "time"},  # reopened by the user since
+        feedback=[{"task_id": "a", "action": "done", "ts": ago(hours=1)}],
+    )
+
+    assert tasks.tidy(vault, NOW)["tasks_closed"] == 0
+    assert by_id(vault)["a"]["status"] == "open"  # `plan` records the user's verdict
+    assert by_id(vault)["r"]["status"] == "open"
+
+
+def test_the_model_cannot_reopen_a_task_tidy_closed_but_the_user_can():
+    closed = task("a", "Lab meeting", status="done", asked_at=ago(days=1)) | {
+        "closed_by": "time",
+        "closed_why": "its time passed",
+        "changed": ago(days=3),
+    }
+    shown = {"a": closed, "r": closed | {"id": "r", "status": "open"}}
+    answer = [item("Lab meeting", id="a"), item("Lab meeting", id="r")]
+
+    merged, new = tasks.merge(answer, shown, {}, set(), NOW)
+
+    assert new == 0
+    assert merged["a"]["status"] == "done"
+    assert merged["a"]["closed_by"] == "time"
+    assert merged["a"]["closed_why"] == "its time passed"
+    assert merged["r"]["status"] == "open"
+
+
+def test_a_change_from_the_model_ends_staleness():
+    stale = task("a", "Old ask", asked_at=ago(days=20)) | {"stale": True, "changed": ago(days=9)}
+
+    merged, _ = tasks.merge(
+        [item("Old ask", id="a", due="2026-03-12")], {"a": stale}, {}, set(), NOW
+    )
+    assert "stale" not in merged["a"]
+    assert merged["a"]["changed"] == GENERATED
+
+    merged, _ = tasks.merge([item("Old ask", id="a")], {"a": stale}, {}, set(), NOW)
+    assert merged["a"]["stale"] is True
+    assert merged["a"]["changed"] == ago(days=9)

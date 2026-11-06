@@ -568,7 +568,7 @@ def settle(vault: Path, now: datetime | None = None) -> dict[str, int]:
         for e in listed(vault)
         if e.get("status") in OPEN and str(e.get("created", "")) >= oldest and e.get("messages")
     ]
-    out = _Outgoing(vault, min((str(e["created"]) for e in found), default=""))
+    out = Outgoing(vault, min((str(e["created"]) for e in found), default=""))
     settled = 0
     for errand in found:
         since = _when(errand["created"])
@@ -606,10 +606,10 @@ _CHANNEL_NAMES = {
 }
 
 
-class _Outgoing:
+class Outgoing:
     """The user's own outgoing messages since a time, read once and only when asked: their mail
     (all accounts, by the address it went to) and their chats (one-to-one, by their name or
-    the chat a message was found in)."""
+    the chat a message was found in). The tasks clone settles its own the same way."""
 
     def __init__(self, vault: Path, since: str) -> None:
         self.vault, self.since = vault, since
@@ -622,7 +622,21 @@ class _Outgoing:
         people often answer the same thing wherever they last talked."""
         return self._on_channel(message, since) or self._anywhere(message, since)
 
-    def _anywhere(self, message: dict, since: datetime) -> tuple[str, str] | None:
+    def wrote_to(self, name: str, since: datetime) -> tuple[str, str] | None:
+        """(when, evidence) for the user's first message after `since` to someone known only by
+        name: mail to an address the records tie to them, or a one-to-one chat on any channel."""
+        found = []
+        for route in reach(self.vault, name):
+            message = {"to": name, "channel": "email", "address": route.get("address")}
+            if route["channel"] == "email" and (hit := self._on_channel(message, since)):
+                found.append(hit)
+        if hit := self._anywhere({"to": name}, since, ""):
+            found.append(hit)
+        return min(found, default=None)
+
+    def _anywhere(
+        self, message: dict, since: datetime, note: str = ", not where this was drafted"
+    ) -> tuple[str, str] | None:
         found = []
         for src, _key, names, sent in self._conversations():
             if not any(_same(message["to"], n) for n in names):
@@ -635,7 +649,7 @@ class _Outgoing:
             return None
         _, ts, src = min(found)
         label = _CHANNEL_NAMES.get(src, src)
-        return ts, f"you wrote to them on {label} on {ts[:10]}, not where this was drafted"
+        return ts, f"you wrote to them on {label} on {ts[:10]}{note}"
 
     def _on_channel(self, message: dict, since: datetime) -> tuple[str, str] | None:
         address = _text(message.get("address")).lower()

@@ -180,6 +180,12 @@ def sync(vault: Path) -> dict[str, int]:
         stats |= errands.settle(vault)
     except (Exception, SystemExit):  # noqa: BLE001
         stats["errands_failed"] = 1
+    # Likewise a task that was an event, or that the user answered elsewhere, is marked done, and
+    # one nothing has touched in a week is marked stale: no model, so on every sync.
+    try:
+        stats |= tasks.tidy(vault)
+    except (Exception, SystemExit):  # noqa: BLE001
+        stats["tasks_tidy_failed"] = 1
     # Then the outbox, after the measure it goes by: off unless the user switched it on.
     try:
         stats |= outbox.run(vault)

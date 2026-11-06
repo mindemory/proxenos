@@ -373,14 +373,16 @@ def _steps(vault: Path) -> int:
 
 
 def _tasks(vault: Path, now: datetime) -> int:
-    """Open tasks the user hasn't marked, overdue or due within SOON_DAYS days of today."""
+    """Open tasks the user hasn't marked, overdue or due within SOON_DAYS days of today. A stale
+    one (unchanged for a week, see proxenos.clones.tasks.tidy) is the user's to keep or drop
+    first, so it isn't counted."""
     folder = vault / "clones" / "tasks"
     acted = _acted(folder / "feedback.jsonl", "task_id", _TASK_ACTIONS)
     today = now.astimezone().date()
     due = 0
     for task in _unique(_json(folder / "tasks.json").get("tasks")):
         when = task.get("due")
-        if (task.get("status") or "open") != "open" or task["id"] in acted:
+        if (task.get("status") or "open") != "open" or task["id"] in acted or task.get("stale"):
             continue
         if isinstance(when, str) and _DAY.fullmatch(when):
             try:

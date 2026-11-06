@@ -27,6 +27,14 @@ Each gets status overtaken and why in its front matter, and the page folds it aw
 reason, unless the user said to keep it there (clones/drafts/feedback.jsonl), which holds for good.
 A reply draft tied to its chat is left to fidelity and the work clone, which already follow it.
 
+The list also keeps itself current with no model (`tidy`, on every sync): a task that was an
+event is done once its time passed by more than EVENT_GRACE, and one with a person is done once
+the user's own records show a message to them after it was asked, as proxenos.clones.errands
+settles an errand's message. Each says who closed it ("closed_by": "time" or "elsewhere") and
+why. A task that nothing has changed for STALE_AFTER is marked stale, and the page folds it
+under "Older, still needed?" until the user keeps it. The model's later runs leave a task `tidy`
+closed closed (see `merge`).
+
 The night job runs it over DAYS, and so does the sync, at most once in EVERY and only when
 something was said since the last run (`due`), over SYNC_DAYS beside the list it keeps, so the
 list and the drafts keep up during the day without reading two weeks of messages each time.
@@ -43,7 +51,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from proxenos import llm, plans, told, untrusted
-from proxenos.clones import work
+from proxenos.clones import errands, work
 from proxenos.config import env
 
 DAYS = 14
@@ -55,6 +63,8 @@ MESSAGE_CHARS = 2000  # long mails and pasted documents are clipped to this
 DONE_KEEP = timedelta(days=30)  # how long a done task stays on the list
 CLOSED_KEEP = timedelta(days=90)  # how long a closed task is remembered, at least
 ADDRESS_MONTHS = 6  # newest months searched for the user's own mail addresses and Slack ids
+EVENT_GRACE = timedelta(hours=2)  # how long after its time an event is still on the list
+STALE_AFTER = timedelta(days=7)  # how long an open task can go unchanged before it's "older"
 EVERY = timedelta(hours=2)  # the soonest the sync brings the list up to date again
 # The sync's pass reads this many days of messages, beside the list it keeps: it catches up on
 # what's new, and the night's pass reads all DAYS. A local model reads a long prompt for minutes.
@@ -68,6 +78,8 @@ STATUSES = ("open", "waiting", "done", "cancelled")
 SETTLED = ("done", "cancelled")
 PRIORITIES = ("high", "medium", "low")
 _CLOSING = ("done", "not_mine", "dismiss")
+_CARRIED = ("closed_by", "closed_why", "closed_at", "stale", "changed")  # `tidy`'s, kept by merge
+_CHANGES = ("title", "due", "priority", "status", "at")  # what counts as a task changing
 _MARKED = {"done": "done", "not_mine": "not theirs", "dismiss": "dismissed"}
 # Gmail's tabs and folders for mail that isn't to the user as a person. Takeout writes
 # "Category Promotions" where the API says CATEGORY_PROMOTIONS; both normalize to the latter.
@@ -256,7 +268,7 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
             system=_system(vault / "self" / "identity.md", days),
             schema=_schema(list(asked)),
         )
-        updated, new = merge(answer["tasks"], shown, refs, _closed_keys(closed, mine))
+        updated, new = merge(answer["tasks"], shown, refs, _closed_keys(closed, mine), now)
         tasks = {k: task for k, task in tasks.items() if k in mine} | updated
         overtaken = _overtaken(answer.get("overtaken") or [], asked, refs)
 
@@ -298,6 +310,73 @@ def due(vault: Path, now: datetime | None = None) -> bool:
         if since is None or now - since < EVERY:
             return False
     return bool(conversations(vault, _iso(since)))
+
+
+def tidy(vault: Path, now: datetime | None = None) -> dict[str, int]:
+    """Bring the list up to date with no model, the way proxenos.clones.errands.settle does an
+    errand's: an event whose time passed more than EVENT_GRACE ago is done ("closed_by":
+    "time"); a task with someone, not one waiting on them, is done ("elsewhere", with the
+    evidence) when the user wrote to that person after it was asked; and an open task nothing has
+    changed for STALE_AFTER is "stale" until the user keeps it on the page. A task already
+    closed this way once, then reopened, is left as the user has it. Tasks the user closed on
+    the page are left to `plan`."""
+    now = now or datetime.now(UTC)
+    path = vault / "clones" / "tasks" / "tasks.json"
+    if not path.exists():
+        return {"tasks_closed": 0, "tasks_stale": 0}
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    tasks = _load_tasks(path)
+    out = vault / "clones" / "tasks"
+    verdicts, kept = _feedback(out / "feedback.jsonl"), _keeps(out / "feedback.jsonl")
+    live = [
+        t
+        for t in tasks
+        if t.get("status") in ("open", "waiting")
+        and t["id"] not in verdicts
+        and not t.get("closed_by")
+    ]
+    asked = [str(t["asked_at"]) for t in live if t.get("with") and t.get("asked_at")]
+    wrote = errands.Outgoing(vault, min(asked, default=""))
+    closed = stale = 0
+    for task in live:
+        why = None
+        if (task.get("event") or task.get("at")) and plans.is_event(task) and _passed(task, now):
+            task |= {"closed_by": "time"}
+            why = "its time passed"
+        elif (
+            task["status"] == "open" and task.get("with") and (since := _when(task.get("asked_at")))
+        ):
+            if hit := wrote.wrote_to(str(task["with"]), since):
+                task |= {"closed_by": "elsewhere"}
+                why = hit[1]
+        if why:
+            task |= {"status": "done", "closed_why": why, "closed_at": _iso(now)}
+            closed += 1
+            continue
+        if task["id"] in kept and kept[task["id"]] > str(task.get("changed") or ""):
+            task |= {"changed": kept[task["id"]]}
+        task.setdefault("changed", task.get("asked_at") or _iso(now))
+        old = _when(task["changed"]) or now
+        if task["status"] == "open" and now - old >= STALE_AFTER:
+            stale += not task.get("stale")
+            task["stale"] = True
+        else:
+            task.pop("stale", None)
+    if tasks != _load_tasks(path):
+        _write_json(path, {**doc, "tasks": _sorted(tasks)})
+    return {"tasks_closed": closed, "tasks_stale": stale}
+
+
+def _passed(task: dict, now: datetime) -> bool:
+    """Whether a task's "at" is more than EVENT_GRACE ago: a day counts from its end."""
+    when = plans.at(task.get("at"))
+    if isinstance(when, datetime):
+        start = when.astimezone()  # no zone: the user's local time, as the messages said it
+    elif when:
+        start = datetime.combine(when + timedelta(days=1), datetime.min.time()).astimezone()
+    else:
+        return False
+    return now - start > EVENT_GRACE
 
 
 def waiting_drafts(vault: Path) -> dict[str, dict]:
@@ -402,11 +481,18 @@ def render(
 
 
 def merge(
-    answer: list[dict], shown: dict[str, dict], refs: dict[str, dict], closed_keys: set
+    answer: list[dict],
+    shown: dict[str, dict],
+    refs: dict[str, dict],
+    closed_keys: set,
+    now: datetime | None = None,
 ) -> tuple[dict[str, dict], int]:
     """The model's list applied to the tasks it was shown, and how many it added. Shown tasks
     it left out stay as they were, and anything new that matches a task the user closed is
-    dropped."""
+    dropped. A task `tidy` closed stays done whatever the model says: it saw the messages, not
+    what the user's own records show, and only the user reopens it (status open again, and
+    `tidy` leaves it be). A task's "changed" moves when the model changes what it's about."""
+    stamp = _iso(now or datetime.now(UTC))
     tasks = dict(shown)
     new = 0
     for item in answer:
@@ -423,6 +509,9 @@ def merge(
                 continue
             new += 1
         before = old or {}
+        status = item["status"]
+        if before.get("closed_by") and before.get("status") == "done":
+            status = "done"
         tasks[key] = {
             "id": key,
             "title": title,
@@ -432,7 +521,7 @@ def merge(
             "asked_at": before.get("asked_at") or asked_at,
             "due": _due(item["due"]),
             "priority": item["priority"],
-            "status": item["status"],
+            "status": status,
             "evidence": list(
                 dict.fromkeys([*before.get("evidence", []), *(m["id"] for m in cited)])
             ),
@@ -440,6 +529,10 @@ def merge(
             "at": _at(item.get("at")) or before.get("at"),
             "place": " ".join(str(item.get("place") or "").split()) or before.get("place"),
         }
+        tasks[key] |= {k: before[k] for k in _CARRIED if k in before}
+        if any(tasks[key].get(k) != before.get(k) for k in _CHANGES):
+            tasks[key] |= {"changed": stamp}
+            tasks[key].pop("stale", None)
     return tasks, new
 
 
@@ -801,6 +894,22 @@ def _feedback(path: Path) -> dict[str, tuple[str, str]]:
             if task not in verdicts or _iso(when) >= verdicts[task][1]:
                 verdicts[task] = (action, _iso(when))
     return verdicts
+
+
+def _keeps(path: Path) -> dict[str, str]:
+    """When the user last kept each task on the page ("keep" in feedback.jsonl): {task_id: ts}."""
+    kept: dict[str, str] = {}
+    if path.exists():
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    event = json.loads(line)
+                    task, when = event["task_id"], _when(event["ts"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if event.get("action") == "keep" and when and isinstance(task, str):
+                    kept[task] = max(kept.get(task, ""), _iso(when))
+    return kept
 
 
 def _write_json(path: Path, data: object) -> None:
