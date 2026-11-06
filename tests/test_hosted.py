@@ -6,9 +6,9 @@ import json
 from urllib.error import HTTPError
 
 import pytest
+from test_llm import Events, evented  # the same fake server stream as test_llm uses
 
 from proxenos import config, hosted, llm, setup
-from tests.test_llm import Events, evented
 
 OPENAI_KEY = "sk-proj-" + "o" * 40
 GEMINI_KEY = "AIza" + "g" * 35
