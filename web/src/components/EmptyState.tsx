@@ -3,8 +3,11 @@
 import { Check, Copy, FolderX, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
+import { PrimaryButton } from "@/components/connect/parts";
 import { FeedSkeleton } from "@/components/Skeleton";
 import { useToast } from "@/components/Toasts";
+import { MAKE_COMMANDS } from "@/lib/makeCommands";
+import { useRunJob } from "@/lib/runJobClient";
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -27,7 +30,7 @@ function Rings() {
   );
 }
 
-/** Explains why a view is empty and which command fills it. */
+/** Explains why a view is empty and which command fills it: a button that runs it, where the page can, and the command for a terminal. */
 export function EmptyState({ icon: Icon, title, children, command }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
@@ -39,11 +42,63 @@ export function EmptyState({ icon: Icon, title, children, command }: EmptyStateP
       </div>
       <h2 className="title-2 text-2xl">{title}</h2>
       <div className="max-w-md leading-relaxed text-muted">{children}</div>
-      {command && (
-        <div className="mt-1 flex flex-col items-center gap-2">
-          <span className="smallcaps">Run this</span>
-          <Command block>{command}</Command>
+      {command && Object.hasOwn(MAKE_COMMANDS, command) ? (
+        <div className="mt-1 flex flex-col items-center gap-3">
+          <MakeIt command={command} />
+          <p className="max-w-full text-xs leading-relaxed text-faint">
+            or from a terminal: <Command>{command}</Command>
+          </p>
         </div>
+      ) : (
+        command && (
+          <div className="mt-1 flex flex-col items-center gap-2">
+            <span className="smallcaps">Run this</span>
+            <Command block>{command}</Command>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Make it now": runs the command in the background through /api/make (which runs only the
+ * commands it lists), says what it's doing as it goes, and reloads the page when it's done so the
+ * view has what was made. One at a time: while another view's is being made, this waits.
+ */
+function MakeIt({ command }: { command: string }) {
+  const { job, error, start, stop } = useRunJob("/api/make", (ended) => {
+    if (ended.state === "done" && ended.command === command) window.location.reload();
+  });
+  const mine = job?.command === command ? job : null;
+  const making = mine?.state === "running";
+  const other = job?.state === "running" && !mine;
+  const failed = error ?? (mine?.state === "failed" ? mine.message || "It failed." : null);
+  return (
+    <div className="flex max-w-md flex-col items-center gap-2">
+      <div className="flex items-center gap-3">
+        <PrimaryButton disabled={making || other} onClick={() => start({ command })}>
+          {making ? "Making it…" : "Make it now"}
+        </PrimaryButton>
+        {making && (
+          <button type="button" onClick={stop} className="rounded-full px-2 py-1 text-sm text-muted hover:text-ink">
+            Stop
+          </button>
+        )}
+      </div>
+      {making && (
+        <p className="break-words text-sm text-muted" role="status">
+          {mine.message || "Starting…"}
+        </p>
+      )}
+      {other && <p className="text-sm text-muted">Something else is being made. This can start once it&apos;s done.</p>}
+      {mine?.state === "done" && (
+        <p className="break-words text-sm text-muted">It ran, and the view is still empty: {mine.message || "nothing was made."}</p>
+      )}
+      {failed && (
+        <p className="break-words text-sm text-bad-ink" role="alert">
+          {failed}
+        </p>
       )}
     </div>
   );
