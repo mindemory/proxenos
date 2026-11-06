@@ -17,6 +17,7 @@ export function Segmented<T extends string>({
       {tabs.map((t) => (
         <button
           key={t.id}
+          type="button"
           onClick={() => onChange(t.id)}
           aria-pressed={value === t.id}
           className={cn(
