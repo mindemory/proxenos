@@ -160,8 +160,7 @@ function OnThisComputer({ status, apply, onReload }: { status: SetupStatus; appl
     <div className="space-y-3">
       <p className="text-sm leading-relaxed text-muted">
         A model that runs on this computer. What you write to it never leaves, and you need no account or key.{" "}
-        {status.here.capable && "In Proxenos needs nothing else. Ollama and LM Studio are free apps that run models too, if you already use one."}{" "}
-        {status.computer.advice}
+        {status.here.capable && "In Proxenos needs nothing else. Ollama and LM Studio are free apps that run models too, if you already use one."}
       </p>
       <Segmented
         label="What runs the model"
@@ -239,6 +238,8 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
   const download = useDownload(onReload);
   return (
     <div className="space-y-3">
+      {/* Which of Ollama's models fit this computer's memory, in Ollama's names. */}
+      <p className="text-sm leading-relaxed text-muted">{status.computer.advice}</p>
       {!running ? (
         <Missing onReload={onReload} state="Ollama isn't running.">
           <li>
