@@ -414,10 +414,13 @@ class Scheduler:
             running.stopping = now
             self.say(f"schedule: stopping {running.job}")
             running.process.stop()
-        elif running.stopping is not None and not running.killed:
-            if self.stops > 1 or now - running.stopping >= timedelta(seconds=STOP_GRACE):
-                running.killed = True
-                running.process.kill()
+        elif (
+            running.stopping is not None
+            and not running.killed
+            and (self.stops > 1 or now - running.stopping >= timedelta(seconds=STOP_GRACE))
+        ):
+            running.killed = True
+            running.process.kill()
         self.clock.sleep(POLL, lambda: False)
 
     def _finished(self, running: _Running, code: int, now: datetime) -> None:
