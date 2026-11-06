@@ -344,11 +344,13 @@ def tidy(vault: Path, now: datetime | None = None) -> dict[str, int]:
             task |= {"closed_by": "time"}
             why = "its time passed"
         elif (
-            task["status"] == "open" and task.get("with") and (since := _when(task.get("asked_at")))
+            task["status"] == "open"
+            and task.get("with")
+            and (since := _when(task.get("asked_at")))
+            and (hit := wrote.wrote_to(str(task["with"]), since))
         ):
-            if hit := wrote.wrote_to(str(task["with"]), since):
-                task |= {"closed_by": "elsewhere"}
-                why = hit[1]
+            task |= {"closed_by": "elsewhere"}
+            why = hit[1]
         if why:
             task |= {"status": "done", "closed_why": why, "closed_at": _iso(now)}
             closed += 1
