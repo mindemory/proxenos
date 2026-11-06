@@ -13,7 +13,7 @@ import {
   SlackCard,
   WhatsAppCard,
 } from "@/components/connect/cards";
-import { SourceRow } from "@/components/connect/parts";
+import { SourceRow, Steps } from "@/components/connect/parts";
 import { Command, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { StatusSkeleton } from "@/components/Skeleton";
 import { useConnect } from "@/lib/connectClient";
@@ -28,19 +28,19 @@ function Group({ kicker, title, children, note }: { kicker: string; title: strin
       <div>
         <p className="smallcaps">{kicker}</p>
         <h2 className="title-2">{title}</h2>
-        {note && <p className="mt-1 text-sm leading-relaxed text-muted">{note}</p>}
+        {note && <div className="mt-1 space-y-1.5 text-sm leading-relaxed text-muted">{note}</div>}
       </div>
       {children}
     </section>
   );
 }
 
-function Rows({ sources, now }: { sources: ConnectSource[]; now: string }) {
+function Rows({ sources, now, inApp }: { sources: ConnectSource[]; now: string; inApp: boolean }) {
   if (!sources.length) return null;
   return (
     <div className="card divide-y divide-line">
       {sources.map((s) => (
-        <SourceRow key={s.id} s={s} now={now} />
+        <SourceRow key={s.id} s={s} now={now} inApp={inApp} />
       ))}
     </div>
   );
@@ -79,10 +79,10 @@ export function Connect() {
             <span className="num">{connected}</span> of <span className="num">{data.sources.length}</span> connected
           </p>
           <p className="leading-relaxed text-muted">
-            Connect a source once and Proxenos reads it on every sync. It only reads: nothing here sends, posts or changes
-            anything in your accounts, apart from Google Docs, which makes a manuscript&apos;s doc in your own Drive when you
-            ask. Tokens and passwords stay on this computer, and this page never shows one back. The Beeper token is the only
-            one you paste here.
+            Connect a source once and Proxenos reads it again on every sync. It only reads. Nothing here sends or posts anything, or
+            changes anything in your accounts, except Google Docs, which makes a manuscript&apos;s doc in your own Drive when you ask.
+            Tokens and passwords stay on this computer, and this page never shows one back. The Beeper token is the only secret you
+            paste on this page.
           </p>
         </div>
       </section>
@@ -138,14 +138,14 @@ export function Connect() {
         {beeper && (
           <BeeperCard s={beeper} now={data.now} job={job("beeper")} onSave={saveBeeperToken} onCancel={() => cancel("beeper")} />
         )}
-        <Rows sources={of("live")} now={data.now} />
+        <Rows sources={of("live")} now={data.now} inApp={data.inApp} />
       </Group>
 
       {gdocs && (
         <Group
           kicker="Papers"
           title="Write with your co-authors"
-          note="The manuscript stays in git. This sign-in lets Projects & papers open it as a Google Doc in your own Drive, which you share from Docs, and bring its changes back for you to accept."
+          note="The manuscript stays in git. This sign-in lets Projects & papers open it as a Google Doc in your own Drive. You share it from Docs, and Proxenos brings its changes back for you to accept."
         >
           <GoogleDocsCard
             s={gdocs}
@@ -160,24 +160,42 @@ export function Connect() {
       )}
 
       <Group kicker="Phone" title="Reach it from your phone">
-        <PhoneCard phone={data.phone} />
+        <PhoneCard phone={data.phone} inApp={data.inApp} />
       </Group>
 
       <Group
         kicker="Downloads"
         title="From an export"
         note={
-          <>
-            Ask each service for a copy of your data. When it arrives, put the zip in the repo&apos;s data/ folder or the
-            vault&apos;s inbox/, then run <Command>proxenos import</Command>
-          </>
+          data.inApp ? (
+            <>
+              <Steps>
+                <li>Ask each service below for a copy of your data. It usually arrives by email, as a zip.</li>
+                <li>
+                  Put the zip, as it is, in your vault&apos;s inbox folder: <code className="num break-all text-ink">{data.vault.path}/inbox</code>
+                </li>
+                <li>
+                  Choose <strong>Sync now</strong> from the Proxenos icon&apos;s menu. Or wait: the next sync imports it too.
+                </li>
+              </Steps>
+              <span className="mt-1.5 block">
+                You&apos;ll see the source marked Imported. A zip Proxenos doesn&apos;t recognize stays in the inbox, and it tries again on
+                each sync.
+              </span>
+            </>
+          ) : (
+            <>
+              Ask each service for a copy of your data. When it arrives, put the zip in the repo&apos;s data/ folder or the vault&apos;s
+              inbox/. From a terminal, run <Command>proxenos import</Command>, or wait for the next sync.
+            </>
+          )
         }
       >
-        <Rows sources={of("download")} now={data.now} />
+        <Rows sources={of("download")} now={data.now} inApp={data.inApp} />
       </Group>
 
       <Group kicker="Folders" title="From a folder on this computer">
-        <Rows sources={of("folder")} now={data.now} />
+        <Rows sources={of("folder")} now={data.now} inApp={data.inApp} />
       </Group>
     </div>
   );

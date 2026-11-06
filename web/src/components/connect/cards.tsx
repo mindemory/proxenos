@@ -78,6 +78,8 @@ interface SignInCopy {
   /** The source's problem when its sign-in client isn't set up yet. */
   noClientProblem: string;
   noClient: React.ReactNode;
+  /** In the desktop app, where there's no .env to put it in. */
+  noClientInApp?: React.ReactNode;
   /** What the consent page asks to read, and what Proxenos reads after, for the running and done lines. */
   asks: string;
   reads: string;
@@ -103,8 +105,9 @@ const GMAIL_COPY: SignInCopy = {
   google: true,
   noClient: (
     <>
-      Sign-in needs a Google OAuth client first. In Google Cloud, make a <em>Desktop app</em> client with the Gmail API on, put
-      its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page. <StepsLink href={MAIL_STEPS} />
+      Sign-in needs a Google sign-in client first (a code pair from Google that lets Proxenos ask you to sign in). In Google Cloud,
+      make a <em>Desktop app</em> client with the Gmail API turned on. Put its ID and secret in .env as GOOGLE_CLIENT_ID and
+      GOOGLE_CLIENT_SECRET, or load the file Google gives you below, then reload this page. <StepsLink href={MAIL_STEPS} />
     </>
   ),
   asks: "allow access to your mail. Proxenos only reads it.",
@@ -117,10 +120,18 @@ const MICROSOFT_COPY: SignInCopy = {
   noClientProblem: "no_microsoft_client",
   noClient: (
     <>
-      Sign-in needs your own Microsoft app registration first. In the Azure portal, Microsoft Entra ID, App registrations,
-      register an app for any organization&apos;s and personal Microsoft accounts, add http://localhost as a{" "}
-      <em>Mobile and desktop applications</em> redirect, put its Application (client) ID in .env as MICROSOFT_CLIENT_ID, then
-      reload this page. It needs no secret. <StepsLink href={MAIL_STEPS} />
+      Sign-in needs your own Microsoft app registration first (a free entry that tells Microsoft which app is asking). In the Azure
+      portal, open Microsoft Entra ID, then App registrations, and register an app for any organization&apos;s and personal Microsoft
+      accounts. Add http://localhost as a <em>Mobile and desktop applications</em> redirect. Put its Application (client) ID in .env as
+      MICROSOFT_CLIENT_ID, then reload this page. It needs no secret. <StepsLink href={MAIL_STEPS} />
+    </>
+  ),
+  noClientInApp: (
+    <>
+      Sign-in needs your own Microsoft app registration first (a free entry that tells Microsoft which app is asking). Follow the
+      steps, then open <strong>Settings → Keys and sign-ins</strong>, press <strong>Add</strong> beside{" "}
+      <strong>Microsoft sign-in client ID</strong>, paste the Application (client) ID, and press <strong>Save</strong>. Then come
+      back here. <StepsLink href={MAIL_STEPS} />
     </>
   ),
   asks: "accept read access to your mail and calendar. Proxenos only reads them.",
@@ -134,9 +145,9 @@ const CALENDAR_COPY: SignInCopy = {
   google: true,
   noClient: (
     <>
-      Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Calendar
-      API turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this
-      page. <StepsLink href={CALENDAR_STEPS} />
+      Sign-in needs a Google sign-in client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Calendar
+      API turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or load the file
+      Google gives you below, then reload this page. <StepsLink href={CALENDAR_STEPS} />
     </>
   ),
   asks: "allow read-only access to your calendar.",
@@ -150,13 +161,13 @@ const DOCS_COPY: SignInCopy = {
   google: true,
   noClient: (
     <>
-      Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Drive API
-      turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then reload this page.{" "}
-      <StepsLink href={DOCS_STEPS} />
+      Sign-in needs a Google sign-in client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Drive API
+      turned on in its project. Put its ID and secret in .env as GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or load the file Google
+      gives you below, then reload this page. <StepsLink href={DOCS_STEPS} />
     </>
   ),
   asks: "allow access to only the files Proxenos makes in your Drive.",
-  reads: "Open in Google Docs on a project's manuscript now makes its doc in that Drive.",
+  reads: "Pressing Open in Google Docs on a manuscript now makes its doc in that Drive.",
   unread: "used when you open a manuscript in Google Docs",
 };
 
@@ -248,6 +259,31 @@ function SignInCard({ s, now, job, inApp, onClient, onSignIn, onCancel, copy }: 
         </ul>
       )}
 
+      {!noClient && (
+        <Setup open={!s.connected}>
+          <Steps>
+            <li>
+              Type a short name for the account (like <strong>personal</strong> or <strong>work</strong>) and its email address.
+            </li>
+            <li>
+              Press <strong>{copy.button}</strong>. A tab opens in your browser.
+            </li>
+            <li>Sign in there as that account.</li>
+            {copy.google && (
+              <li>
+                Google warns that it hasn&apos;t verified Proxenos. That&apos;s because Proxenos hasn&apos;t been through Google&apos;s
+                review yet. To go on, press <strong>Advanced</strong>, then <strong>Go to Proxenos (unsafe)</strong>.
+              </li>
+            )}
+            <li>On the next screen, {copy.asks}</li>
+          </Steps>
+          <p className="text-xs leading-relaxed text-muted">
+            You&apos;ll see &quot;Signed in as …&quot; here when it works. If you close the tab before you finish, press Cancel and try
+            again.
+          </p>
+        </Setup>
+      )}
+
       <form onSubmit={submit} className="space-y-2.5">
         <p className="smallcaps text-faint">{s.accounts.length ? "Add an account" : "Sign in"}</p>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] sm:items-end">
@@ -285,19 +321,21 @@ function SignInCard({ s, now, job, inApp, onClient, onSignIn, onCancel, copy }: 
             {formError}
           </p>
         )}
-        {copy.google && !noClient && (
-          <p className="text-xs leading-relaxed text-muted">
-            Google will say it hasn&apos;t verified Proxenos. Press Advanced, then Go to Proxenos.
-          </p>
-        )}
       </form>
 
       {noClient && (
         <div className="space-y-2.5">
           <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
-            {copy.google && inApp
-              ? "This copy of the app was built without Google sign-in. If you have a Google client file of your own, load it below."
-              : copy.noClient}
+            {copy.google && inApp ? (
+              <>
+                This copy of Proxenos has no Google sign-in built in. If you made a Google sign-in client of your own, load its file
+                below. <StepsLink href={MAIL_STEPS} />
+              </>
+            ) : inApp && copy.noClientInApp ? (
+              copy.noClientInApp
+            ) : (
+              copy.noClient
+            )}
           </p>
           {copy.google && (
             <GoogleClientFile save={(change) => postChange(change).then((r) => (onClient(), r.message ?? "Saved."))} />
@@ -310,7 +348,7 @@ function SignInCard({ s, now, job, inApp, onClient, onSignIn, onCancel, copy }: 
         onCancel={onCancel}
         running={
           <>
-            Waiting for you in the browser tab that just opened: sign in as {job?.account} and {copy.asks}
+            Waiting for you in the browser tab that just opened. Sign in as {job?.account}, then {copy.asks}
           </>
         }
         done={
@@ -375,9 +413,10 @@ export function WhatsAppCard({
 
       {s.problem === "blocked" && (
         <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
-          macOS is keeping Proxenos out of WhatsApp&apos;s store. In System Settings, Privacy &amp; Security, Full Disk
-          Access, allow {inApp ? "Proxenos" : "the app that runs Proxenos (Terminal, if you started it there)"}, then read
-          again.{" "}
+          macOS is keeping {inApp ? "Proxenos" : "this app"} out of WhatsApp&apos;s files. In{" "}
+          <strong>System Settings → Privacy &amp; Security → Full Disk Access</strong>, turn on{" "}
+          {inApp ? "Proxenos" : "the app that runs Proxenos (Terminal, if you started it there)"}, then press{" "}
+          <strong>Read WhatsApp now</strong> again.{" "}
           <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
             Open Full Disk Access
             <ExternalLink size={12} aria-hidden="true" />
@@ -385,9 +424,18 @@ export function WhatsAppCard({
         </p>
       )}
       {s.problem === "missing" && (
-        <p className="text-sm leading-relaxed text-muted">
-          WhatsApp for Mac isn&apos;t signed in on this computer. Install it from the App Store, sign in with your phone, then
-          come back.
+        <Steps>
+          <li>Install WhatsApp for Mac from the App Store.</li>
+          <li>Open it and sign in by scanning its code with your phone.</li>
+          <li>
+            Come back here and press <strong>Read WhatsApp now</strong>.
+          </li>
+        </Steps>
+      )}
+      {s.problem === null && !s.connected && (
+        <p className="text-xs leading-relaxed text-muted">
+          You&apos;ll see &quot;Read: …new messages&quot; here when it works. The WhatsApp app on a Mac may hold less history than your
+          phone.
         </p>
       )}
 
@@ -424,18 +472,24 @@ export function AppleMailCard({
       <SyncLine s={s} now={now} />
       <Setup open={!s.connected}>
         <Steps>
-          <li>Add each email account in System Settings, Internet Accounts, with Mail turned on for it.</li>
-          <li>Keep Mail open: in the Dock, right-click Mail, then Options, Open at Login.</li>
+          <li>
+            Open <strong>System Settings → Internet Accounts</strong>. Add each email account, with <strong>Mail</strong> turned on for it.
+          </li>
+          <li>
+            Keep the Mail app open, so it downloads new mail. To open it at every login, right-click Mail in the Dock and choose{" "}
+            <strong>Options → Open at Login</strong>.
+          </li>
           {inApp ? (
             <li className="space-y-2">
-              <p>Let Proxenos read Mail&apos;s folder with Full Disk Access.</p>
+              <p>Let Proxenos read Mail&apos;s folder, with Full Disk Access.</p>
               <FullDiskAccess allowed={fullDiskAccess} inApp onCheck={onCheck} />
             </li>
           ) : (
             <li className="space-y-2">
               <p>
-                Give {s.detail ? "this Python" : "the Python that runs Proxenos"} Full Disk Access: System Settings, Privacy &amp;
-                Security, Full Disk Access, press +, press Cmd-Shift-G and paste{s.detail ? " its path" : " the path"}.
+                Let {s.detail ? "this Python" : "the Python that runs Proxenos"} read Mail&apos;s folder, with Full Disk Access. In{" "}
+                <strong>System Settings → Privacy &amp; Security → Full Disk Access</strong>, press <strong>+</strong>, press{" "}
+                <strong>Cmd-Shift-G</strong> and paste {s.detail ? "its path" : "the path"}.
               </p>
               {s.detail && <CopyBox text={s.detail} what="Path" />}
               <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
@@ -444,7 +498,14 @@ export function AppleMailCard({
               </a>
             </li>
           )}
+          <li>
+            Wait for the next sync. This card then says when Mail was last read. The first read covers the last 180 days.
+          </li>
         </Steps>
+        <p className="text-xs leading-relaxed text-muted">
+          Proxenos also has to know which addresses are yours, to match each Mail account to one. That is the PROXENOS_EMAILS setting,
+          which the app has no box for, so set it in .env if you run from source. Without it, Mail isn&apos;t read.
+        </p>
       </Setup>
     </section>
   );
@@ -516,6 +577,29 @@ export function SlackCard({
         </p>
       )}
 
+      <Setup open={!s.connected}>
+        <Steps>
+          <li>
+            Type the workspace name: the part of your Slack address before .slack.com (<strong>acme</strong> for acme.slack.com).
+          </li>
+          <li>
+            If you sign in to Slack with Google, tick <strong>I sign in to Slack with Google</strong>.
+          </li>
+          <li>
+            Press <strong>Sign in to Slack</strong>.
+            {inApp && " The first time, Proxenos downloads slackdump, the free program that reads Slack, from its GitHub page."}
+          </li>
+          <li>
+            Sign in in the window that opens, on Slack&apos;s own login page, as you usually do. With Google, it opens in your own browser
+            (Chrome or Firefox) instead.
+          </li>
+        </Steps>
+        <p className="text-xs leading-relaxed text-muted">
+          You&apos;ll see &quot;Signed in to …&quot; here when it works. Proxenos then saves your last 30 days, without attachments, and
+          reads new messages on every sync. If it can&apos;t open your browser, quit Chrome and press the button again.
+        </p>
+      </Setup>
+
       <form onSubmit={submit} className="space-y-2.5">
         <p className="smallcaps text-faint">{s.workspaces.length ? "Add a workspace" : "Add your first"}</p>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,16rem)_auto] sm:items-end">
@@ -546,12 +630,6 @@ export function SlackCard({
             {formError ?? "That isn't a workspace name. Use letters, digits and dashes, like acme."}
           </p>
         )}
-        <p className="text-xs leading-relaxed text-muted">
-          A browser window opens on Slack&apos;s login page: sign in there as you usually do. If you sign in with Google, tick the box first: Slack then opens in your own browser, and if
-          it can&apos;t, quit Chrome and press again. Proxenos then saves the last 30 days, without
-          attachments, and reads new messages on every sync.
-          {inApp && " The first time, it downloads slackdump, the program that reads Slack, from its GitHub page."}
-        </p>
       </form>
       <JobLine
         job={job}
@@ -561,7 +639,7 @@ export function SlackCard({
       />
       {!inApp && (
         <div className="space-y-1.5">
-          <p className="text-sm leading-relaxed text-muted">Or in Terminal, following what it asks, then reload this page:</p>
+          <p className="text-xs leading-relaxed text-faint">From a terminal (it asks how to sign in; follow it), then reload this page:</p>
           <Command block>{command}</Command>
         </div>
       )}
@@ -618,11 +696,22 @@ export function BeeperCard({
 
       <Setup open={!s.connected}>
         <Steps>
-          <li>Keep Beeper Desktop open, with Instagram, Messenger, X or LinkedIn added to it.</li>
-          <li>In Beeper, open Settings, Developers, and turn on the Desktop API.</li>
-          <li>Still in Settings, open Integrations, press + next to Approved connections, and create a token.</li>
-          <li>Paste the token below and press Save.</li>
+          <li>Open Beeper Desktop and keep it open. Add Instagram, Messenger, X or LinkedIn to it.</li>
+          <li>
+            In Beeper, open <strong>Settings → Developers</strong> and turn on the <strong>Desktop API</strong>.
+          </li>
+          <li>
+            Still in Settings, open <strong>Integrations</strong>. Press <strong>+</strong> next to <strong>Approved connections</strong>{" "}
+            and create a token. A token is a long code that lets Proxenos read Beeper.
+          </li>
+          <li>
+            Paste the token below and press <strong>Save</strong>.
+          </li>
         </Steps>
+        <p className="text-xs leading-relaxed text-muted">
+          You&apos;ll see &quot;Saved; Beeper has …&quot; here when it works. If it can&apos;t reach Beeper, check that Beeper Desktop is open and the
+          Desktop API is on.
+        </p>
       </Setup>
 
       <form onSubmit={submit} className="space-y-2.5">
@@ -666,7 +755,7 @@ export function BeeperCard({
 }
 
 /** Your phone: the address it opens, a code to scan, and the steps that put the app on it. */
-export function PhoneCard({ phone }: { phone: PhoneInfo }) {
+export function PhoneCard({ phone, inApp = false }: { phone: PhoneInfo; inApp?: boolean }) {
   const { address, login } = phone;
   return (
     <section className="card space-y-4 p-4 sm:p-5">
@@ -683,7 +772,8 @@ export function PhoneCard({ phone }: { phone: PhoneInfo }) {
             <StatePill on={!!address} label={address ? "Ready" : "Not set up"} />
           </div>
           <p className="mt-1 text-sm leading-relaxed text-muted">
-            Open Proxenos as an app on your phone. It goes over your private Tailscale network and answers only your own login.
+            Open Proxenos as an app on your phone. It goes over your own private network, made with Tailscale (a free app), and
+            answers only your own login.
           </p>
         </div>
       </div>
@@ -707,14 +797,26 @@ export function PhoneCard({ phone }: { phone: PhoneInfo }) {
                 {login ? <span className="break-words text-ink">{login}</span> : "the same account as on this Mac"}.
               </li>
               <li>In Chrome on your phone, open that address, or scan the code.</li>
-              <li>Tap the ⋮ menu, then Install app (or Add to home screen).</li>
+              <li>
+                Tap the <strong>⋮</strong> menu, then <strong>Install app</strong> (or <strong>Add to home screen</strong>).
+              </li>
             </Steps>
+            <p className="text-xs leading-relaxed text-muted">
+              You&apos;ll see Proxenos as an app on your home screen. If the address doesn&apos;t open, check that Tailscale is on, on
+              both the phone and this Mac.
+            </p>
           </div>
         </div>
       ) : (
         <p className="text-sm leading-relaxed text-muted">
-          Install Tailscale on this Mac and on your phone, signed in to the same account. Then run <Command>proxenos phone</Command>{" "}
-          in Terminal. Its address and a QR code show up here.
+          {inApp ? (
+            "Turning on the phone link needs a terminal, so it isn't available in the app."
+          ) : (
+            <>
+              Install Tailscale on this Mac and on your phone, signed in to the same account. Then, from a terminal, run{" "}
+              <Command>proxenos phone</Command>. Its address and a QR code show up here.
+            </>
+          )}
         </p>
       )}
     </section>

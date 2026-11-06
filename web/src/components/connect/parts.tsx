@@ -16,8 +16,13 @@ interface SourceCopy {
   kind?: string;
   /** How to connect it until it has a button of its own. */
   how: string;
+  /** What to say in the desktop app in place of `how`, where there's no terminal: its own steps, or that it needs one. */
+  app?: string;
   command?: string;
 }
+
+/** What the desktop app says of a source that can only be set up from a terminal. */
+const NEEDS_TERMINAL = "This one can't be set up from the app. It needs a terminal.";
 
 /** Every source the page lists: its name, and how to connect it for now. */
 export const SOURCE_COPY: Record<string, SourceCopy> = {
@@ -26,67 +31,92 @@ export const SOURCE_COPY: Record<string, SourceCopy> = {
     kind: "email",
     how: "Email from every account in the Mail app on this Mac. Nothing to sign in to here.",
   },
-  gmail: { label: "Gmail", kind: "email", how: "Your mail, read over IMAP and kept current. One sign-in per account." },
+  gmail: { label: "Gmail", kind: "email", how: "Your Gmail, read again on every sync. Sign in once for each account." },
   microsoft: {
     label: "Microsoft 365 and Outlook",
     kind: "email",
-    how: "Your mail and calendar, read through Microsoft's sign-in and kept current, on any computer. One sign-in per account.",
+    how: "Your Outlook or Microsoft 365 mail and calendar, read again on every sync. Sign in once for each account.",
   },
   gcalendar: {
     label: "Google Calendar",
     kind: "calendar",
-    how: "Your calendar, a year back and two months ahead, read through a read-only Google sign-in. One per account.",
+    how: "Your calendar, from a year back to two months ahead. Proxenos can only read it. Sign in once for each account.",
   },
   gdocs: {
     label: "Google Docs",
     kind: "drive",
-    how: "A project's manuscript as a Google Doc in your own Drive, to edit, comment on and share with co-authors, and its changes brought back to git as a step for you to accept. Made only when you click Open in Google Docs on the manuscript; the sign-in sees only the files Proxenos makes.",
+    how: "A paper's manuscript as a Google Doc in your own Drive, to edit, comment on and share with co-authors. Its changes come back as a step for you to accept. A doc is made only when you press Open in Google Docs on a manuscript. Proxenos can see only the files it makes.",
   },
-  whatsapp: { label: "WhatsApp", how: "Your messages and groups, from WhatsApp for Mac's own store on this computer." },
-  slack: { label: "Slack", how: "Your messages in each workspace, read with slackdump signed in as you. Add each workspace once." },
+  whatsapp: { label: "WhatsApp", how: "Your messages and groups, read from the WhatsApp app on this Mac." },
+  slack: {
+    label: "Slack",
+    how: "Your Slack messages, one workspace at a time. Proxenos uses a free program called slackdump to read them, signed in as you.",
+  },
   beeper: {
     label: "Beeper",
-    how: "Instagram, Messenger, X and LinkedIn chats, read through Beeper Desktop. It's free for up to 5 accounts, so connect only those networks there: WhatsApp, Slack and email are read directly.",
+    how: "Instagram, Messenger, X and LinkedIn chats, read through Beeper Desktop. Beeper is free for up to 5 accounts, so add only those networks there. Proxenos reads WhatsApp, Slack and email itself.",
   },
-  strava: { label: "Strava", how: "With a Strava app's ID and secret in .env, sign in once:", command: "proxenos auth strava" },
-  bluesky: { label: "Bluesky", how: "Your public posts. Put your handle in .env as PROXENOS_BLUESKY_HANDLE." },
-  mentions: { label: "Papers and mentions", how: "News mentions and your papers. Put your full name in .env as PROXENOS_FULL_NAME." },
-  linkedin: { label: "LinkedIn", how: "Settings, Data privacy, Get a copy of your data." },
-  twitter: { label: "X", how: "Settings, Your account, Download an archive of your data." },
+  strava: {
+    label: "Strava",
+    how: "Needs a Strava app's ID and secret in .env. Then sign in once. From a terminal:",
+    app: NEEDS_TERMINAL,
+    command: "proxenos auth strava",
+  },
+  bluesky: {
+    label: "Bluesky",
+    how: "Your public posts. Put your handle in .env as PROXENOS_BLUESKY_HANDLE.",
+    app: NEEDS_TERMINAL,
+  },
+  mentions: {
+    label: "Papers and mentions",
+    how: "News about you, and your papers. Put your full name in .env as PROXENOS_FULL_NAME.",
+    app: NEEDS_TERMINAL,
+  },
+  linkedin: { label: "LinkedIn", how: "On LinkedIn: Settings, Data privacy, Get a copy of your data." },
+  twitter: { label: "X", how: "On X: Settings, Your account, Download an archive of your data." },
   instagram: {
     label: "Instagram",
-    how: "Accounts Center, Your information and permissions, Download your information. JSON, all time, with messages.",
+    how: "In Accounts Center: Your information and permissions, Download your information. Choose JSON, all time, with messages.",
   },
   facebook: {
     label: "Facebook",
-    how: "Accounts Center, Your information and permissions, Download your information. JSON, all time, with messages.",
+    how: "In Accounts Center: Your information and permissions, Download your information. Choose JSON, all time, with messages.",
   },
   threads: { label: "Threads", how: "The same Download your information page, with Threads picked." },
-  calendar: { label: "Calendar export", how: "Google Takeout, Calendar, or any calendar's .ics export." },
-  drive: { label: "Google Drive", how: "Google Takeout, Drive." },
-  photos: { label: "Google Photos", how: "Google Takeout, Google Photos. Only dates, places and people are read." },
-  keep: { label: "Google Keep", how: "Google Takeout, Keep." },
-  gtasks: { label: "Google Tasks", how: "Google Takeout, Tasks." },
-  youtube: { label: "YouTube", how: "Google Takeout, YouTube and YouTube Music. Pick JSON if it's offered." },
-  chrome: { label: "Chrome history", how: "Google Takeout, Chrome." },
+  calendar: { label: "Calendar export", how: "From Google Takeout, pick Calendar. Or use any calendar's .ics export." },
+  drive: { label: "Google Drive", how: "From Google Takeout, pick Drive." },
+  photos: { label: "Google Photos", how: "From Google Takeout, pick Google Photos. Proxenos reads only dates, places and people." },
+  keep: { label: "Google Keep", how: "From Google Takeout, pick Keep." },
+  gtasks: { label: "Google Tasks", how: "From Google Takeout, pick Tasks." },
+  youtube: { label: "YouTube", how: "From Google Takeout, pick YouTube and YouTube Music. Choose JSON if it's offered." },
+  chrome: { label: "Chrome history", how: "From Google Takeout, pick Chrome." },
+  chatgpt: { label: "ChatGPT", how: "On ChatGPT: Settings, Data controls, Export data. The email it sends has a zip." },
+  claude: { label: "Claude", how: "On claude.ai: Settings, Privacy, Export data. The email it sends has a zip." },
   email: {
     label: "Other email",
     kind: "email",
-    how: "An mbox file, from Takeout's Mail or your mail client:",
+    how: "An mbox file, from Takeout's Mail or your mail program. From a terminal:",
+    app: NEEDS_TERMINAL,
     command: "proxenos ingest email --account NAME --mbox PATH",
   },
   spotify: {
     label: "Spotify",
-    how: "Live: make an app at developer.spotify.com (Web API, redirect URI http://127.0.0.1:8723/callback), put its Client ID in Settings as SPOTIFY_CLIENT_ID, and sign in once. Each sync then reads your latest plays. Your whole history: Account, Privacy settings, Extended streaming history, which can take up to 30 days.",
+    how: "Live: make an app at developer.spotify.com (Web API, redirect URI http://127.0.0.1:8723/callback), save its Client ID in Settings as SPOTIFY_CLIENT_ID, then sign in once from a terminal. Each sync then reads your latest plays. Your whole history: in Spotify, Account, Privacy settings, ask for Extended streaming history. It can take up to 30 days.",
+    app: "Your whole history: in Spotify, open Account, Privacy settings, and ask for Extended streaming history. It can take up to 30 days. When it arrives, unzip it and pick that folder in Settings, under Spotify export. The live feed needs a terminal.",
     command: "proxenos auth spotify",
   },
-  letterboxd: { label: "Letterboxd", how: "Settings, Data, Export your data." },
+  letterboxd: { label: "Letterboxd", how: "On Letterboxd: Settings, Data, Export your data." },
   notes: {
     label: "Notes and PDFs",
-    how: "A Notion export, an Obsidian vault or a folder of PDFs:",
+    how: "A Notion export, an Obsidian vault or a folder of PDFs. From a terminal:",
+    app: NEEDS_TERMINAL,
     command: "proxenos ingest notes --export DIR",
   },
-  website: { label: "Your website", how: "Its local git repo, as PROXENOS_WEBSITE_REPO in .env." },
+  website: {
+    label: "Your website",
+    how: "Its local git folder, set as PROXENOS_WEBSITE_REPO in .env.",
+    app: "In Settings, under Folders, type its folder next to Your website, then press Save folders.",
+  },
 };
 
 export function copyFor(id: string): SourceCopy {
@@ -150,6 +180,9 @@ export function FullDiskAccess({ allowed, inApp, onCheck }: { allowed: boolean |
   }
   return (
     <div className="space-y-2.5">
+      <p className="text-sm leading-relaxed text-muted">
+        macOS keeps Mail&apos;s and WhatsApp&apos;s files private until you allow this.
+      </p>
       <a
         href={FULL_DISK_ACCESS}
         className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-accent-ink transition-opacity hover:opacity-90"
@@ -158,13 +191,26 @@ export function FullDiskAccess({ allowed, inApp, onCheck }: { allowed: boolean |
         <ExternalLink size={13} aria-hidden="true" />
       </a>
       <Steps>
+        <li>
+          Press <strong>Open Full Disk Access</strong>. System Settings opens at <strong>Privacy &amp; Security → Full Disk Access</strong>.
+        </li>
         {inApp ? (
-          <li>Turn on Proxenos. If it isn&apos;t in the list, press + and pick Proxenos in Applications.</li>
+          <li>
+            Turn on the switch beside <strong>Proxenos</strong>. If it isn&apos;t listed, press <strong>+</strong> and choose Proxenos
+            in Applications. macOS may ask for your password.
+          </li>
         ) : (
-          <li>Turn on the app that runs Proxenos (Terminal, if you started it there). If it isn&apos;t in the list, press + and pick it.</li>
+          <li>
+            Turn on the switch beside the app that runs Proxenos (Terminal, if you started it there). If it isn&apos;t listed, press{" "}
+            <strong>+</strong> and choose it.
+          </li>
         )}
-        <li>Come back here: this checks again by itself.</li>
+        <li>If macOS offers <strong>Quit &amp; Reopen</strong>, choose it. Then come back here.</li>
       </Steps>
+      <p className="text-xs leading-relaxed text-muted">
+        You&apos;ll see &quot;{inApp ? "Proxenos" : "This Python"} can read Mail and WhatsApp&quot; here when it works. This page checks again
+        by itself. Still blocked? {inApp ? "Choose Quit Proxenos from its menu-bar icon, open Proxenos again" : "Quit and start Proxenos again"}.
+      </p>
     </div>
   );
 }
@@ -208,7 +254,7 @@ export function LastRead({ iso, now }: { iso: string | null; now: string }) {
 }
 
 /** One source with no button yet: its state, when it was last read, and how to connect it. */
-export function SourceRow({ s, now }: { s: ConnectSource; now: string }) {
+export function SourceRow({ s, now, inApp = false }: { s: ConnectSource; now: string; inApp?: boolean }) {
   const copy = copyFor(s.id);
   const on = s.connected;
   const live = s.how === "live";
@@ -229,9 +275,15 @@ export function SourceRow({ s, now }: { s: ConnectSource; now: string }) {
               <LastRead iso={s.lastRead} now={now} />
             </div>
           )}
-          {!on && copy.how && (
+          {!on && (inApp ? (copy.app ?? copy.how) : copy.how) && (
             <div>
-              {copy.how} {copy.command && <Command>{copy.command}</Command>}
+              {inApp ? (copy.app ?? copy.how) : copy.how}
+              {!inApp && copy.command && (
+                <>
+                  {" "}
+                  <Command>{copy.command}</Command>
+                </>
+              )}
             </div>
           )}
         </div>
