@@ -28,7 +28,7 @@ From source, on a Mac with [Homebrew](https://brew.sh):
 git clone https://github.com/mindemory/proxenos && cd proxenos && scripts/install.sh
 ```
 
-It installs what's missing (Node, Ollama's own app, and Miniforge if there's no conda), sets up the `proxenos` conda env and the page, and pulls a local model that fits your Mac's memory. Running it again only adds what's missing. `--no-model` skips it if you'll use Claude; `--start-at-login` keeps the page and a sync running from login on.
+It installs what's missing (Node, Ollama's own app, and Miniforge if there's no conda), sets up the `proxenos` conda env and the page, and pulls a local model that fits your Mac's memory. Running it again only adds what's missing. `--no-model` skips it if you'll use a hosted model; `--start-at-login` keeps the page and a sync running from login on.
 
 ```bash
 conda activate proxenos
@@ -36,7 +36,7 @@ proxenos demo    # try it on a made-up person first; prints how to open it
 proxenos web     # your own, at http://127.0.0.1:4747
 ```
 
-Setup asks your name, where to keep the vault and which model to use, then Connect adds a first source. A model is needed for anything to be drafted: an open one on your computer through [Ollama](https://ollama.com) (`gemma4:26b` fits a 32 GB Mac), or Claude with your own Anthropic API key. Windows and Linux run from source too, though less tried ([docs/apps.md](docs/apps.md)). Every step by hand is in [the guide](docs/guide.md); every command, in [docs/commands.md](docs/commands.md).
+Setup asks your name, where to keep the vault and which model to use, then Connect adds a first source. A model is needed for anything to be drafted: an open one on your computer, which setup downloads with one button (a small one first, ready in minutes, then a bigger one in the background if your computer has the memory), or a hosted one with your own key from Anthropic, OpenAI or Google Gemini. Empty pages have a **Make it now** button, so nothing needs a terminal once it's installed. Windows and Linux run from source too, though less tried ([docs/apps.md](docs/apps.md)). Every step by hand is in [the guide](docs/guide.md); every command, in [docs/commands.md](docs/commands.md).
 
 ## How it works
 
@@ -58,8 +58,8 @@ Many tools keep a memory for you or act for you. What Proxenos does that they do
 
 ## Privacy
 
-Everything personal stays in a vault on your computer, outside this repository, readable only by you, and keys go to your system's secure store. Each part sends a model only what its job needs, picked out in code. With a local model none of it leaves the computer, and before a prompt goes to Claude, card numbers, passwords and keys are blanked. Other services get little: artist names to MusicBrainz, counts to ntfy if you turn on phone notices, a manuscript to your Google Drive or cloud folder if you choose, a person's name and organization to a search engine when you need their public email address, and a paper's references to Crossref, arXiv and OpenAlex when you check them. The page answers only this computer, or your phone over your own Tailscale network. There's no telemetry. Every part, in full: [docs/privacy.md](docs/privacy.md).
+Everything personal stays in a vault on your computer, outside this repository, readable only by you, and keys go to your system's secure store. Each part sends a model only what its job needs, picked out in code. With a local model none of it leaves the computer, and before a prompt goes to a hosted model (Claude, OpenAI's or Gemini, under your own key), card numbers, passwords and keys are blanked. Other services get little: a model's name when you download one, artist names to MusicBrainz, counts to ntfy if you turn on phone notices, a manuscript to your Google Drive or cloud folder if you choose, a person's name and organization to a search engine when you need their public email address, and a paper's references to Crossref, arXiv and OpenAlex when you check them. The page answers only this computer, or your phone over your own Tailscale network. There's no telemetry. Every part, in full: [docs/privacy.md](docs/privacy.md).
 
 ## Status and contributing
 
-It works, and its author uses it every day: about 83,000 lines of code, with 30,000 more in 1,123 tests, checked on macOS and Windows on every push. It runs best on a Mac, some sign-ins still need your own developer account, and it isn't medical advice: what matters belongs with your care team. Help is welcome, from people with medical training especially: see [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions), the [roadmap](docs/roadmap.md), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) and [the website](https://www.mindemory.io/proxenos).
+It works, and its author uses it every day: about 98,000 lines of code, with 38,000 more in 1,429 tests, checked on macOS and Windows on every push. It runs best on a Mac, some sign-ins still need your own developer account, and it isn't medical advice: what matters belongs with your care team. Help is welcome, from people with medical training especially: see [CONTRIBUTING.md](CONTRIBUTING.md#good-first-contributions), the [roadmap](docs/roadmap.md), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) and [the website](https://www.mindemory.io/proxenos).
