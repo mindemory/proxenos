@@ -503,8 +503,8 @@ export function AppleMailCard({
           </li>
         </Steps>
         <p className="text-xs leading-relaxed text-muted">
-          Proxenos also has to know which addresses are yours, to match each Mail account to one. That is the PROXENOS_EMAILS setting,
-          which the app has no box for, so set it in .env if you run from source. Without it, Mail isn&apos;t read.
+          Proxenos works out which address is yours in each Mail account from the mail you&apos;ve sent, so there&apos;s nothing to type.
+          If Mail has no mail yet, let it finish downloading first.
         </p>
       </Setup>
     </section>
