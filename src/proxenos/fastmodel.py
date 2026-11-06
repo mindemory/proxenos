@@ -56,10 +56,15 @@ def capable(
     system: Callable[[], str] = platform.system,
     machine: Callable[[], str] = platform.machine,
     spec: Callable[[str], object] = importlib.util.find_spec,
+    release: Callable[[], str] = lambda: platform.mac_ver()[0],
 ) -> bool:
-    """Whether this is an Apple-silicon Mac with mlx-lm, which can serve BASE (downloading it
-    the first time). The arguments stand in for the computer in tests."""
-    return system() == "Darwin" and machine() == "arm64" and spec("mlx_lm") is not None
+    """Whether this is an Apple-silicon Mac on macOS 14 or newer (MLX needs it; the app installs
+    on 13) with mlx-lm, which can serve BASE (downloading it the first time). The arguments stand
+    in for the computer in tests."""
+    if system() != "Darwin" or machine() != "arm64" or spec("mlx_lm") is None:
+        return False
+    major = release().split(".")[0]
+    return major.isdigit() and int(major) >= 14
 
 
 def found(cached: Callable[[str], bool] | None = None, **computer: Callable) -> bool:

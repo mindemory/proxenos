@@ -15,11 +15,12 @@ _real_found, _real_capable, _real_running = (
 )  # conftest stands them in for every test; these test them
 
 
-def mac(system="Darwin", machine="arm64", mlx=True):
+def mac(system="Darwin", machine="arm64", mlx=True, release="15.3"):
     return {
         "system": lambda: system,
         "machine": lambda: machine,
         "spec": lambda name: object() if mlx and name == "mlx_lm" else None,
+        "release": lambda: release,
     }
 
 
@@ -30,6 +31,8 @@ def test_the_fast_model_is_found_on_apple_silicon_with_mlx_and_the_weights_downl
     assert not _real_capable(**mac(machine="x86_64"))
     assert not _real_capable(**mac(system="Linux"))
     assert not _real_capable(**mac(mlx=False))
+    assert not _real_capable(**mac(release="13.6"))  # MLX needs macOS 14
+    assert _real_capable(**mac(release="26.1"))
     assert _real_found(cached=lambda base: base == fastmodel.BASE, **mac())
     assert not _real_found(cached=lambda base: False, **mac())
     assert not _real_found(cached=lambda base: True, **mac(mlx=False))
