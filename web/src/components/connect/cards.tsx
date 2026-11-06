@@ -477,20 +477,21 @@ export function SlackCard({
   now: string;
   job: ConnectJob | null;
   inApp: boolean;
-  onSignIn: (workspace: string) => Promise<string | null>;
+  onSignIn: (workspace: string, google: boolean) => Promise<string | null>;
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
+  const [google, setGoogle] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const name = workspaceName(text);
-  const command = `proxenos auth slackdump ${name ?? "NAME"}`;
+  const command = `proxenos auth slackdump ${name ?? "NAME"}${google ? " --google" : ""}`;
   const busy = job?.state === "running";
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) setFormError("That isn't a workspace name. Use letters, digits and dashes, like acme.");
     else {
       setFormError(null);
-      onSignIn(name).then(setFormError);
+      onSignIn(name, google).then(setFormError);
     }
   };
 
@@ -536,13 +537,18 @@ export function SlackCard({
             Sign in to Slack
           </PrimaryButton>
         </div>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={google} onChange={(e) => setGoogle(e.target.checked)} className="accent-[var(--c-accent)]" />
+          I sign in to Slack with Google
+        </label>
         {(formError || (text.trim() && !name)) && (
           <p className="text-sm text-bad-ink" role="alert">
             {formError ?? "That isn't a workspace name. Use letters, digits and dashes, like acme."}
           </p>
         )}
         <p className="text-xs leading-relaxed text-muted">
-          A browser window opens on Slack&apos;s login page: sign in there as you usually do. Proxenos then saves the last 30 days, without
+          A browser window opens on Slack&apos;s login page: sign in there as you usually do. If you sign in with Google, tick the box first: Slack then opens in your own browser, and if
+          it can&apos;t, quit Chrome and press again. Proxenos then saves the last 30 days, without
           attachments, and reads new messages on every sync.
           {inApp && " The first time, it downloads slackdump, the program that reads Slack, from its GitHub page."}
         </p>

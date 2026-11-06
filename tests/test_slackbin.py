@@ -127,8 +127,11 @@ FAKE = textwrap.dedent(
             sys.exit(3)
     sys.stdout.write("\\x1b[2KSelect login type for [acme]\\r\\n> Interactive\\r\\n")
     sys.stdout.flush()
-    os.read(0, 1)  # Enter
-    open({log!r}, "w").write("interactive " + " ".join(sys.argv[1:]))
+    keys = b""
+    while not keys.endswith(b"\\n"):  # Enter, which the terminal hands on as a newline
+        keys += os.read(0, 16)
+    picked = {{0: "interactive", 2: "user-browser"}}.get(keys.count(b"\\x1b[B"), "other")
+    open({log!r}, "w").write(picked + " " + " ".join(sys.argv[1:]))
     sys.exit(0)
     """
 )
@@ -136,7 +139,10 @@ FAKE = textwrap.dedent(
 
 @pytest.mark.skipif(os.name == "nt", reason="pseudo-terminals are for Macs and Linux")
 @pytest.mark.parametrize("known", [False, True])
-def test_the_login_runs_under_a_pseudo_terminal_and_picks_the_browser_login(tmp_path, known):
+@pytest.mark.parametrize("google", [False, True])
+def test_the_login_runs_under_a_pseudo_terminal_and_picks_the_browser_login(
+    tmp_path, known, google
+):
     log, marker = tmp_path / "log", tmp_path / "known"
     if known:
         marker.write_text("")
@@ -145,10 +151,12 @@ def test_the_login_runs_under_a_pseudo_terminal_and_picks_the_browser_login(tmp_
     script.chmod(0o700)
     said = []
 
-    status = auth._slack_pty_login(str(script), "acme", seconds=20, say=said.append)
+    status = auth._slack_pty_login(str(script), "acme", seconds=20, say=said.append, google=google)
 
     assert status == 0
-    assert log.read_text() == "interactive workspace new acme"
+    # Interactive's clean browser can't sign in with Google; User Browser, two down, can.
+    picked = "user-browser" if google else "interactive"
+    assert log.read_text() == f"{picked} workspace new acme"
     assert said == ["A browser window is opening. Sign in to acme there."]
 
 
@@ -171,8 +179,27 @@ def test_without_a_terminal_the_sign_in_uses_the_pseudo_terminal(tmp_path, monke
     monkeypatch.setattr(slackdump, "archives", list)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False, raising=False)
     seen = []
-    monkeypatch.setattr(auth, "_slack_pty_login", lambda binary, ws: seen.append((binary, ws)) or 0)
+    monkeypatch.setattr(
+        auth,
+        "_slack_pty_login",
+        lambda binary, ws, google=False: seen.append((binary, ws, google)) or 0,
+    )
     monkeypatch.setattr(slackdump, "FROM_SOURCE", False)
     monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path / "vault"))
     auth.slackdump("acme", run=lambda command: SimpleNamespace(returncode=0))
-    assert seen == [("slackdump", "acme")]
+    auth.slackdump("acme", run=lambda command: SimpleNamespace(returncode=0), google=True)
+    assert seen == [("slackdump", "acme", False), ("slackdump", "acme", True)]
+
+
+def test_slackdumps_own_failures_become_plain_sentences():
+    missing = "ERROR 004 (Authentication Error): failed to initialise the\n   auth provider: workspace not found: 404."
+    with pytest.raises(SystemExit, match=r"no Slack workspace at acme\.slack\.com"):
+        auth._slack_status(4, missing, "acme")
+    with pytest.raises(SystemExit, match="needs Chrome or Firefox"):
+        auth._slack_status(
+            4, "ERROR 004: failed to initialise the auth provider: no browsers found.", "acme"
+        )
+    assert auth._slack_status(3, "something else went wrong", "acme") == 3
+    assert (
+        auth._slack_status(0, missing, "acme") == 0
+    )  # it signed in: what it said earlier doesn't count

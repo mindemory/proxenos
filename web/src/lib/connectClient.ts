@@ -110,8 +110,8 @@ export function useConnect() {
 
   /** Start signing in to a Slack workspace, named as before .slack.com. Resolves with why it couldn't start, or null. */
   const signInToSlack = useCallback(
-    (workspace: string): Promise<string | null> =>
-      post<{ job: ConnectJob }>("/api/connect/slack", { workspace }).then(
+    (workspace: string, google = false): Promise<string | null> =>
+      post<{ job: ConnectJob }>("/api/connect/slack", { workspace, google }).then(
         (r) => {
           started(r.job);
           return null;

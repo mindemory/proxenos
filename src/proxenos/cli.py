@@ -230,6 +230,11 @@ def main(argv: list[str] | None = None) -> None:
         help="for gmail, gcalendar, gdocs and microsoft: NAME ADDRESS, e.g. personal me@x.com; "
         "for slackdump: the workspace",
     )
+    sign_in.add_argument(
+        "--google",
+        action="store_true",
+        help="for slackdump: your Slack account signs in with Google",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "web":
@@ -312,7 +317,7 @@ def main(argv: list[str] | None = None) -> None:
         elif args.service == "slackdump":
             if len(args.account) != 1:
                 raise SystemExit("usage: proxenos auth slackdump WORKSPACE, e.g. acme")
-            print(auth.slackdump(args.account[0]))
+            print(auth.slackdump(args.account[0], google=args.google))
         elif args.service in ("gmail", "gcalendar", "gdocs", "microsoft"):
             if len(args.account) != 2:
                 raise SystemExit(f"usage: proxenos auth {args.service} NAME ADDRESS")

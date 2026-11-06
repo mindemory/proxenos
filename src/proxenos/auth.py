@@ -72,6 +72,7 @@ import urllib.request
 import webbrowser
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -87,9 +88,13 @@ from proxenos.ingest import spotify as spotify_api
 
 PORT = 8723
 SLACK_LOGIN_SECONDS = 10 * 60  # how long the person has to sign in in the browser window
-# What slackdump's login asks for, as its text appears on the terminal, and what to answer: the
-# first login method (a menu, Enter takes the highlighted one), and yes to overwrite a workspace.
-_SLACK_PROMPTS = (("(y/N)", b"y\r"), ("Select login type", b"\r"))
+# What slackdump's login asks for, as its text appears on the terminal, and what to answer: yes to
+# overwrite a workspace, and a login method from its menu. Enter takes the first, Interactive (a
+# clean browser on Slack's login page), which can't sign in with Google; for an account that does,
+# two down to User Browser, which opens the person's own browser profile.
+_SLACK_OVERWRITE = ("(y/N)", b"y\r")
+_SLACK_MENU = "Select login type"
+_SLACK_PICK = {False: b"\r", True: b"\x1b[B\x1b[B\r"}
 _ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][A-Z0-9]|.)")
 SLACK_FIRST_DAYS = 30  # how far back a workspace's first archive goes
 _STRAVA_AUTHORIZE = "https://www.strava.com/oauth/authorize"
@@ -459,10 +464,12 @@ def _slack_pty_login(
     workspace: str,
     seconds: float = SLACK_LOGIN_SECONDS,
     say: Callable[[str], None] | None = None,
+    google: bool = False,
 ) -> int:
     """`slackdump workspace new` with no terminal of ours: under a pseudo-terminal, which it needs,
-    answering its prompts (see the module's notes) so the browser login starts, and waiting for the
-    person to finish in that window. Its exit status; 1 when it takes longer than `seconds`."""
+    answering its prompts (see the module's notes) so the browser login starts, the one that works
+    with Google when `google`, and waiting for the person to finish in that window. Its exit
+    status; 1 when it takes longer than `seconds`."""
     import fcntl
     import pty
     import struct
@@ -491,16 +498,16 @@ def _slack_pty_login(
                 except OSError:  # the other end closed: it has finished
                     chunk = b""
                 if not chunk:
-                    return child.wait()
+                    return _slack_status(child.wait(), seen, workspace)
                 seen = (seen + _ANSI.sub("", chunk.decode(errors="replace")))[-4000:]
-                for marker, reply in _SLACK_PROMPTS:
+                for marker, reply in (_SLACK_OVERWRITE, (_SLACK_MENU, _SLACK_PICK[google])):
                     if marker in seen and marker not in answered:
                         answered.add(marker)
                         os.write(master, reply)
-                        if marker == "Select login type":
+                        if marker == _SLACK_MENU:
                             say(f"A browser window is opening. Sign in to {workspace} there.")
             elif child.poll() is not None:
-                return child.returncode
+                return _slack_status(child.returncode, seen, workspace)
         child.kill()
         child.wait()
         say("Slack's login window was open too long; try again.")
@@ -512,12 +519,31 @@ def _slack_pty_login(
             child.wait()
 
 
+def _slack_status(status: int, seen: str, workspace: str) -> int:
+    """The login's exit status, or SystemExit with a plain sentence for the failures slackdump's
+    own words name (as seen on its terminal): a workspace that doesn't exist, and the Google login
+    finding no browser of the person's to open (it reads Chrome's or Firefox's profile)."""
+    said = " ".join(seen.split())
+    if status and "workspace not found" in said:
+        raise SystemExit(
+            f"There's no Slack workspace at {workspace}.slack.com. "
+            "Check the name in its address and try again."
+        )
+    if status and "no browsers found" in said:
+        raise SystemExit(
+            "Signing in to Slack with Google needs Chrome or Firefox on this Mac. Install one and "
+            "try again, or untick Google to sign in with your email."
+        )
+    return status
+
+
 def slackdump(
     name: str,
     data: Path | None = None,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     now: datetime | None = None,
     signin: Callable[[str, str], int] | None = None,
+    google: bool = False,
 ) -> str:
     binary = slackbin.ensure()
     # "acme", "acme.slack.com" or its address: slackdump knows it by "acme".
@@ -526,7 +552,8 @@ def slackdump(
         raise SystemExit("Name the workspace as in its address, e.g. acme for acme.slack.com.")
     if signin is None:
         at_terminal = sys.stdin.isatty() and sys.stdout.isatty()
-        signin = _slack_terminal_login if at_terminal else _slack_pty_login
+        # At a terminal the person picks the login method from slackdump's own menu.
+        signin = _slack_terminal_login if at_terminal else partial(_slack_pty_login, google=google)
     if signin(binary, workspace) != 0:
         raise SystemExit(f"slackdump didn't sign in to {workspace}")
     saved = {slack_api._slug(slack_archives._team(db) or "") for db in slack_archives.archives()}
