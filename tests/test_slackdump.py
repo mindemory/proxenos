@@ -1,7 +1,9 @@
 """slackdump archives, against a synthetic SQLite file in slackdump's layout. No real data."""
 
 import json
+import os
 import sqlite3
+import stat
 import subprocess
 from types import SimpleNamespace
 
@@ -127,6 +129,26 @@ def test_without_a_root_the_setting_and_the_data_folder_are_searched(tmp_path, m
     monkeypatch.setenv("PROXENOS_SLACKDUMP_DIR", str(tmp_path / "elsewhere"))
     assert found() == ["slackdump_20250101_000000", "slackdump_20250202_000000"]
     assert found(tmp_path / "elsewhere") == ["slackdump_20250202_000000"]  # a root is all it reads
+
+
+def test_an_installed_app_saves_to_the_vaults_downloads_and_reads_from_there(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    monkeypatch.setenv("PROXENOS_VAULT", str(vault))
+    monkeypatch.setattr(slackdump, "REPO_ROOT", tmp_path / "package")  # no data/ folder there
+    monkeypatch.delenv("PROXENOS_SLACKDUMP_DIR", raising=False)
+    monkeypatch.setattr(slackdump, "FROM_SOURCE", False)
+
+    folder = slackdump.saves_to()
+    assert folder == vault / "downloads" / "slack" and folder.is_dir()
+    if os.name != "nt":
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700
+        assert stat.S_IMODE(folder.parent.stat().st_mode) == 0o700
+    assert slackdump.archives() == []
+    make_archive(folder, "slackdump_20250303_000000")
+    assert [db.parent.name for db in slackdump.archives()] == ["slackdump_20250303_000000"]
+
+    monkeypatch.setattr(slackdump, "FROM_SOURCE", True)  # a checkout keeps using data/
+    assert slackdump.saves_to() == tmp_path / "package" / "data"
 
 
 def test_catch_up_resumes_the_newest_archive_of_each_signed_in_workspace(tmp_path, monkeypatch):

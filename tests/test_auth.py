@@ -221,6 +221,28 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
     assert len(calls) == 1  # signed in again; its archive is already there
 
 
+def test_slackdump_sign_in_saves_to_the_vault_when_this_isnt_a_checkout(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from proxenos.ingest import slackdump
+
+    monkeypatch.setattr(auth.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackdump, "FROM_SOURCE", False)
+    monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setattr(slackdump, "archives", list)
+    calls = []
+
+    def run(command):
+        calls.append(command)
+        return SimpleNamespace(returncode=0)
+
+    auth.slackdump("acme", run=run, now=datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+
+    saved = tmp_path / "vault" / "downloads" / "slack"
+    assert calls[1][-1].startswith(str(saved / "slackdump_2026")) and saved.is_dir()
+
+
 @pytest.mark.parametrize(
     "address", ["me@example.com\nANTHROPIC_API_KEY=x", "me:oauth@example.com", "me", "a b@c.com"]
 )

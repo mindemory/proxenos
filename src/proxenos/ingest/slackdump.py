@@ -6,8 +6,9 @@ and messages. Records are built with the API ingester's code, so they land in
 vault/raw/slack/<team>/messages/ field for field the same and merge with it by id. Every
 archive under --root is read on each run, oldest first; a message saved by several chunks keeps
 its latest copy. Archives still being written are read as they stand. Without --root, the
-folder named by PROXENOS_SLACKDUMP_DIR is searched, and so is the repo's data/ folder; when
-the setting is empty, data/ alone.
+folder named by PROXENOS_SLACKDUMP_DIR is searched, and so are the repo's data/ folder and the
+vault's downloads/slack, where `proxenos auth slackdump` saves a first archive when this isn't a
+checkout (an installed package, such as the desktop app's, has no data/ folder of its own).
 
 Who is in each channel (its CHANNEL_USER table) goes to raw/slack/<team>/channels/snapshot.jsonl,
 one record per channel or group DM, as the API ingester writes it: every member's user id, name
@@ -29,9 +30,9 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from proxenos.config import REPO_ROOT, env
+from proxenos.config import FROM_SOURCE, REPO_ROOT, env, vault_path
 from proxenos.ingest import slack
-from proxenos.store import merge_monthly, merge_snapshot, write_private
+from proxenos.store import merge_monthly, merge_snapshot, private_dir, write_private
 
 CATCH_UP_SECONDS = 600  # the most one workspace may take before sync moves on
 QUIET = "p14d"  # channels with nothing newer are looked at once a day, not every sync
@@ -50,12 +51,27 @@ _RESUME = (
 )
 
 
+def downloads() -> Path:
+    """The vault's downloads/slack: where a first archive is saved when this isn't a checkout."""
+    return vault_path() / "downloads" / "slack"
+
+
+def saves_to() -> Path:
+    """The folder `proxenos auth slackdump` saves a first archive in: the repo's data/ folder from
+    a checkout, else downloads/slack in the vault, made if it's missing (0700)."""
+    return REPO_ROOT / "data" if FROM_SOURCE else private_dir(downloads())
+
+
 def archives(root: Path | None = None) -> list[Path]:
     """Every slackdump run under root. Without one, those under PROXENOS_SLACKDUMP_DIR (when
-    set) and any dropped into the repo's data/ folder."""
+    set), any dropped into the repo's data/ folder, and those saved in the vault's downloads/slack."""
     if root is not None:
         return sorted(root.glob("slackdump_*/slackdump.sqlite"))
     found = set((REPO_ROOT / "data").glob("slackdump_*/slackdump.sqlite"))
+    try:
+        found |= set(downloads().glob("slackdump_*/slackdump.sqlite"))
+    except ValueError:  # a vault set inside the repo; nothing is read from it
+        pass
     if folder := env("SLACKDUMP_DIR"):
         found |= set(Path(folder).expanduser().glob("slackdump_*/slackdump.sqlite"))
     return sorted(found)

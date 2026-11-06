@@ -43,7 +43,8 @@ Integrations) as BEEPER_ACCESS_TOKEN, once Beeper has taken it. It reads the tok
 prompt, or from stdin when the page passes it on, never from the command line.
 
 `proxenos auth slackdump NAME` signs in to a Slack workspace through slackdump (which keeps the
-sign-in itself) and, the first time, saves its last 30 days into data/, without attachments.
+sign-in itself) and, the first time, saves its last 30 days without attachments: into data/ from a checkout, else into the vault's
+downloads/slack (the desktop app has no data/ folder of its own).
 From then on every sync fetches its new messages.
 """
 
@@ -68,7 +69,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from proxenos import gdocs as gdocs_api
-from proxenos.config import REPO_ROOT, save_secret
+from proxenos.config import save_secret
 from proxenos.ingest import beeper as beeper_api
 from proxenos.ingest import gcalendar as gcalendar_api
 from proxenos.ingest import microsoft as microsoft_api
@@ -437,7 +438,7 @@ def _check_address(address: str) -> None:
 
 def slackdump(
     name: str,
-    data: Path = REPO_ROOT / "data",
+    data: Path | None = None,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     now: datetime | None = None,
 ) -> str:
@@ -453,6 +454,7 @@ def slackdump(
     if slack_api._slug(workspace) in saved:
         return f"signed in to {workspace}; `proxenos sync` now fetches its new messages every run"
 
+    data = data or slack_archives.saves_to()
     now = (now or datetime.now()).astimezone()
     since = now - timedelta(days=SLACK_FIRST_DAYS)
     print(f"Saving the last {SLACK_FIRST_DAYS} days of {workspace}, without attachments.")
