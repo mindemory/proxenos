@@ -690,7 +690,8 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     request = urllib.request.Request(
         f"{_OLLAMA}/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"}
     )
-    deadline = time.monotonic() + _LOCAL_DEADLINE
+    began = deadline = time.monotonic()
+    deadline += _LOCAL_DEADLINE
     words: list[str] = []
     last: dict = {}
     try:
@@ -702,6 +703,8 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
                 if chunk.get("error"):
                     raise ModelError(f"local model {model}: {str(chunk['error'])[:300]}")
                 words.append((chunk.get("message") or {}).get("content") or "")
+                if words[-1] and getattr(_usage, "first", None) is None:
+                    _usage.first = time.monotonic() - began
                 if chunk.get("done"):
                     last = chunk
                     break
@@ -733,7 +736,8 @@ def _complete(model: str, body: dict, answer_room: int, url: str | None = None) 
     request = urllib.request.Request(
         url, json.dumps(body).encode(), {"Content-Type": "application/json"}
     )
-    deadline = time.monotonic() + _LOCAL_DEADLINE
+    began = deadline = time.monotonic()
+    deadline += _LOCAL_DEADLINE
     words: list[str] = []
     stopped, usage = None, {}
     try:
@@ -754,6 +758,8 @@ def _complete(model: str, body: dict, answer_room: int, url: str | None = None) 
                 usage = chunk.get("usage") or usage
                 for choice in chunk.get("choices") or []:
                     words.append((choice.get("delta") or {}).get("content") or "")
+                    if words[-1] and getattr(_usage, "first", None) is None:
+                        _usage.first = time.monotonic() - began
                     stopped = choice.get("finish_reason") or stopped
                 if time.monotonic() > deadline:
                     raise ModelError(
@@ -831,12 +837,24 @@ def _ask_voice(model: str, prompt: str, system: str, max_tokens: int) -> str:
 _usage = threading.local()
 
 
+def last_call() -> dict:
+    """The last call this thread made: the tokens it read and wrote where the model counts them,
+    and the seconds to its first word, which is the time spent reading the prompt (proxenos.
+    fastmodel's bench sets reading and writing speed by them)."""
+    tokens_in, tokens_out = getattr(_usage, "tokens", (None, None))
+    return {
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "first": getattr(_usage, "first", None),
+    }
+
+
 @contextmanager
 def _recorded(model: str, sent: int, images: int) -> Iterator[Callable[[object], None]]:
     """Time the call inside it and leave its line in the calls log, whether it worked or not.
     The call hands its answer to the function this yields, for the answer's size."""
     began, got = time.monotonic(), {}
-    _usage.tokens, _usage.redacted = (None, None), None
+    _usage.tokens, _usage.redacted, _usage.first = (None, None), None, None
     try:
         yield lambda answer: got.setdefault("answer", answer)
     finally:

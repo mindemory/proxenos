@@ -158,7 +158,9 @@ def main(argv: list[str] | None = None) -> None:
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
     voicemodel.add_arguments(tune)
-    models = commands.add_parser("model", help="serve the fast model for light jobs on this Mac")
+    models = commands.add_parser(
+        "model", help="serve the fast model for light jobs on this Mac, and time your models"
+    )
     fastmodel.add_arguments(models)
     speaking = commands.add_parser(
         "speech", help="Listen's natural voice or your own, made on this Mac; nothing is sent"

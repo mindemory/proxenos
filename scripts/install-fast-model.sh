@@ -11,6 +11,7 @@
 # It needs a Mac with Apple silicon and mlx-lm in the proxenos conda env (pip install mlx-lm).
 #
 #   scripts/install-fast-model.sh                              install or restart the job
+#   proxenos model bench                                       time it against the main model
 #   launchctl bootout gui/$(id -u)/local.proxenos.fastmodel    stop it until the next install
 set -euo pipefail
 

@@ -851,6 +851,14 @@ def test_a_fast_model_that_isnt_running_leaves_the_job_to_the_main_model(monkeyp
         llm.ask("light")
 
 
+def test_the_last_call_says_what_it_read_wrote_and_how_soon_it_began(monkeypatch):
+    served(monkeypatch, "hello there")
+    llm.ask("hi")
+    call = llm.last_call()
+    assert (call["tokens_in"], call["tokens_out"]) == (12, 5)
+    assert call["first"] is not None and 0 <= call["first"] < 5
+
+
 def test_a_models_name_without_where_it_runs():
     assert llm.bare("ollama:gemma4:26b") == "gemma4:26b"
     assert llm.bare("local:qwen/qwen3-8b") == "qwen/qwen3-8b"
