@@ -20,6 +20,8 @@ from pathlib import Path
 SHARE = 0.7
 CONTEXT_ROOM = 4 * 10**9  # bytes beside the model, for what it's reading
 SUGGESTED, SUGGESTED_BYTES = "gemma4:26b", 17 * 10**9  # docs/landscape.md's pick, and its size
+# What to get first: 6.6 GB in Ollama's registry, so ready in minutes and fits a 16 GB Mac.
+STARTER, STARTER_BYTES = "gemma4:e4b", 7 * 10**9
 RULE = (
     "A model fits when its size plus 4 GB for what it's reading stays under 70% of this "
     "computer's memory, leaving the rest for everything else."
@@ -63,16 +65,26 @@ def best(models: dict[str, int | None], memory: int | None) -> str | None:
 
 
 def advice(memory: int | None) -> str:
-    """Which size of model to get, in plain words, for when none is there yet."""
+    """Which size of model to get, in plain words, for when none is there yet: the starter first
+    where it fits, as it's ready in minutes, then the suggested one for better writing."""
     if memory is None:
-        return f"{SUGGESTED}, about 17 GB, fits a computer with 32 GB of memory."
+        return (
+            f"{STARTER}, about 7 GB, fits a computer with 16 GB of memory; {SUGGESTED}, about "
+            "17 GB, writes better and fits 32 GB."
+        )
     have = f"This computer has {round(memory / 2**30)} GB of memory"
     if fits(SUGGESTED_BYTES, memory):
-        return f"{have}, enough for {SUGGESTED}, about 17 GB."
+        return (
+            f"{have}, enough for {SUGGESTED}, about 17 GB. {STARTER}, about 7 GB, is ready sooner."
+        )
     most = (room(memory) or 0) // 10**9
     if most < 1:
         return f"{have}, too little for a model to run beside everything else: use an API key."
-    return f"{have}, so get a model of {most} GB or less. {SUGGESTED}, about 17 GB, needs 32 GB."
+    start = f" {STARTER}, about 7 GB, fits." if fits(STARTER_BYTES, memory) else ""
+    return (
+        f"{have}, so get a model of {most} GB or less.{start} "
+        f"{SUGGESTED}, about 17 GB, needs 32 GB."
+    )
 
 
 def _platform() -> str:

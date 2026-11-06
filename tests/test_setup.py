@@ -255,7 +255,7 @@ def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
     pulled = {"gemma4:26b": 17 * GB, "big:70b": 42 * GB, "qwen3-embedding:0.6b": GB // 2}
     monkeypatch.setattr(setup, "_ollama_models", lambda: pulled)
     monkeypatch.setattr(setup.machine, "memory", lambda: 32 * GIB)
-    assert "ollama pull qwen3:8b" in apply({"ollama": "qwen3:8b"})["error"]
+    assert "Ollama doesn't have qwen3:8b yet" in apply({"ollama": "qwen3:8b"})["error"]
     result = apply({"ollama": "gemma4:26b"})
 
     assert result["ok"] and config.env("MODEL") == "ollama:gemma4:26b"
@@ -272,7 +272,28 @@ def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
     assert status["computer"]["memory"] == 32 * GIB
     assert "enough for gemma4:26b" in status["computer"]["advice"]
     assert status["computer"]["get"] == "gemma4:26b"
+    assert status["computer"]["starter"] == "gemma4:e4b"
+    assert status["computer"]["upgrade"] is None  # already on the big one
     assert status["server"]["running"] is False and status["server"]["models"] == []
+
+
+def test_a_small_model_in_use_is_offered_the_bigger_one_while_it_fits_and_isnt_pulled(
+    home, monkeypatch
+):
+    small = {"gemma4:e4b": 7 * GB}
+    monkeypatch.setattr(setup, "_ollama_models", lambda: small)
+    monkeypatch.setattr(setup.machine, "memory", lambda: 32 * GIB)
+    assert apply({"ollama": "gemma4:e4b"})["status"]["computer"]["upgrade"] == "gemma4:26b"
+
+    monkeypatch.setattr(setup, "_ollama_models", lambda: small | {"gemma4:26b": 17 * GB})
+    assert setup.status()["computer"]["upgrade"] is None  # already pulled
+    monkeypatch.setattr(setup, "_ollama_models", lambda: small)
+    monkeypatch.setattr(setup.machine, "memory", lambda: 16 * GIB)
+    computer = setup.status()["computer"]
+    assert computer["upgrade"] is None and computer["get"] is None  # it doesn't fit
+    assert computer["starter"] == "gemma4:e4b"
+    monkeypatch.setattr(setup.machine, "memory", lambda: 4 * GIB)
+    assert setup.status()["computer"]["starter"] is None  # nor does the starter
 
 
 def test_a_model_on_another_server_here_must_be_served(home, monkeypatch):

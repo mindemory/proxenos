@@ -20,6 +20,7 @@ secret's value: only whether it's set.
   Claude unless one is set already); the model for the rest stays as it was, a local one theirs.
   With no model set, one Ollama has on this computer is used first (llm.default).
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
+  (`proxenos model pull` downloads one, and does this on its own when it's done.)
 - {"server": "qwen3-8b"} checks that the server at PROXENOS_LOCAL_URL serves that model, and
   uses it, as "local:qwen3-8b".
 - {"fast": "auto"} sets the fast model to the one `proxenos model serve-fast` serves, when this
@@ -104,6 +105,7 @@ def status() -> dict:
     memory = machine.memory()
     # The model to pull when there's none yet, unless it's known not to fit.
     get = None if machine.fits(machine.SUGGESTED_BYTES, memory) is False else machine.SUGGESTED
+    starter = None if machine.fits(machine.STARTER_BYTES, memory) is False else machine.STARTER
     pulled = _chat_models(_ollama_models())
     served = _chat_models(_server_models())
     try:
@@ -133,6 +135,8 @@ def status() -> dict:
             "advice": machine.advice(memory),
             "rule": machine.RULE,
             "get": get,
+            "starter": starter,
+            "upgrade": _upgrade(kind, via, name, pulled, memory),
         },
         "ollama": _listed(pulled, memory),
         "server": {
@@ -146,6 +150,23 @@ def status() -> dict:
         "secret_store": keychain.store(),
         "secrets": secrets(),
     }
+
+
+def _upgrade(
+    kind: str, via: str | None, name: str, pulled: dict[str, int | None] | None, memory: int | None
+) -> str | None:
+    """The suggested model's name when the page can offer it in the background: the main model is
+    a smaller one of Ollama's, the suggested one fits this computer, and Ollama hasn't pulled it."""
+    if kind != "local" or via != "ollama" or pulled is None:
+        return None
+    size = pulled.get(name) or pulled.get(f"{name}:latest")
+    if (
+        not size
+        or size >= machine.SUGGESTED_BYTES
+        or machine.fits(machine.SUGGESTED_BYTES, memory) is not True
+    ):
+        return None
+    return None if machine.SUGGESTED in pulled else machine.SUGGESTED
 
 
 def _fast() -> dict:
@@ -417,7 +438,7 @@ def _use_ollama(model: str) -> str:
     if pulled is None:
         raise ValueError("Ollama isn't running. Open the Ollama app (ollama.com), then try again.")
     if model not in pulled and f"{model}:latest" not in pulled:
-        raise ValueError(f"Ollama doesn't have {model} yet. Run: ollama pull {model}")
+        raise ValueError(f"Ollama doesn't have {model} yet. Download it first.")
     where = config.save_setting("MODEL", llm.OLLAMA + model)
     return f"Using {model} on this computer, through Ollama. Saved in {_place(where)}."
 

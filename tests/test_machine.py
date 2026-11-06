@@ -105,15 +105,20 @@ def test_the_list_marks_each_model_and_suggests_the_largest_that_fits():
 
 def test_with_no_model_yet_it_says_which_size_to_get():
     assert machine.advice(32 * GIB) == (
-        "This computer has 32 GB of memory, enough for gemma4:26b, about 17 GB."
+        "This computer has 32 GB of memory, enough for gemma4:26b, about 17 GB. "
+        "gemma4:e4b, about 7 GB, is ready sooner."
     )
-    assert machine.advice(64 * GIB).endswith("enough for gemma4:26b, about 17 GB.")
+    assert "enough for gemma4:26b, about 17 GB." in machine.advice(64 * GIB)
     assert machine.advice(16 * GIB) == (
-        "This computer has 16 GB of memory, so get a model of 8 GB or less. gemma4:26b, about "
-        "17 GB, needs 32 GB."
+        "This computer has 16 GB of memory, so get a model of 8 GB or less. gemma4:e4b, about "
+        "7 GB, fits. gemma4:26b, about 17 GB, needs 32 GB."
     )
     assert "a model of 2 GB or less" in machine.advice(8 * GIB)
+    assert "e4b" not in machine.advice(8 * GIB)  # the starter doesn't fit 8 GB
     assert "too little" in machine.advice(4 * GIB)
-    assert machine.advice(None) == "gemma4:26b, about 17 GB, fits a computer with 32 GB of memory."
+    assert machine.advice(None).startswith("gemma4:e4b, about 7 GB, fits a computer with 16 GB")
+    assert machine.fits(machine.STARTER_BYTES, 16 * GIB) and not machine.fits(
+        machine.STARTER_BYTES, 8 * GIB
+    )
     assert "70%" in machine.RULE and "4 GB" in machine.RULE
     assert machine.SHARE == 0.7 and machine.CONTEXT_ROOM == 4 * GB  # as RULE says

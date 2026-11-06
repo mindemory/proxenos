@@ -1,5 +1,5 @@
 """A fast model for the light jobs, and a way to measure it: `proxenos model serve-fast` and
-`proxenos model bench`.
+`proxenos model bench`; `proxenos model pull` (proxenos.pull) downloads one through Ollama.
 
 A laptop's big model reads about 50 to 250 tokens a second and writes 15 to 30, and the task list,
 the network, the notes on each month and the like read tens of thousands of tokens a run. A small
@@ -32,7 +32,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from proxenos import llm, voicemodel
+from proxenos import llm, pull, voicemodel
 from proxenos.config import env
 
 # The weights the voice model trains from too: 5 GB at 4 bits; with 16 GB, gemma-4-e2b-it-4bit.
@@ -208,7 +208,15 @@ def models_to_time() -> tuple[list[str], list[str]]:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("action", choices=["serve-fast", "bench"])
+    parser.add_argument("action", choices=["serve-fast", "bench", "pull"])
+    parser.add_argument("name", nargs="?", help="pull: the model to download, e.g. gemma4:e4b")
+    parser.add_argument(
+        "--as",
+        dest="use",
+        choices=pull.AS,
+        help="pull: use it as the main model (the one it replaces keeps the light jobs), or as "
+        "the starter; the default is the starter while no model is set",
+    )
     parser.add_argument("--port", type=int, default=llm.FAST_PORT, help="where serve-fast answers")
     parser.add_argument(
         "--chars", type=int, default=LONG_CHARS, help="bench: the long prompt's length"
@@ -218,6 +226,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(vault: Path, args: argparse.Namespace) -> None:
     if args.action == "serve-fast":
         serve(args.port)
+        return
+    if args.action == "pull":
+        pull.run(args)
         return
     chosen, notes = models_to_time()
     if notes:
