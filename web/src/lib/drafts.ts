@@ -47,7 +47,10 @@ export const STALE_DAYS = 3;
 
 /** Not changed for STALE_DAYS: not drafted again, edited or acted on since. */
 export function isStale(d: Draft, now: number): boolean {
-  const changed = Math.max(d.created ? Date.parse(d.created) || 0 : 0, d.updated ? Date.parse(d.updated) || 0 : 0);
+  const changed = Math.max(
+    d.created ? Date.parse(d.created) || 0 : 0,
+    d.updated ? Date.parse(d.updated) || 0 : 0,
+  );
   return now - changed > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
@@ -60,7 +63,10 @@ export const CHECK_DAYS = 7;
  */
 export function needsCheck(d: Draft, now: number): boolean {
   if (!isAwaiting(d.status) || isNote(d) || d.thread) return false;
-  const changed = Math.max(d.created ? Date.parse(d.created) || 0 : 0, d.updated ? Date.parse(d.updated) || 0 : 0);
+  const changed = Math.max(
+    d.created ? Date.parse(d.created) || 0 : 0,
+    d.updated ? Date.parse(d.updated) || 0 : 0,
+  );
   return now - changed > CHECK_DAYS * 24 * 60 * 60 * 1000;
 }
 
@@ -106,10 +112,16 @@ export function groupDrafts(drafts: Draft[]): DraftGroup[] {
   const known = new Set(DRAFT_GROUPS.map((g) => g.id));
   const groups = [...DRAFT_GROUPS, OTHER_GROUP].map((g) => ({
     ...g,
-    drafts: drafts.filter((d) => (g.id === OTHER_GROUP.id ? !known.has(d.for) : d.for === g.id)),
+    drafts: drafts.filter((d) =>
+      g.id === OTHER_GROUP.id ? !known.has(d.for) : d.for === g.id,
+    ),
   }));
   for (const g of groups) {
-    g.drafts.sort((a, b) => Number(isAwaiting(b.status)) - Number(isAwaiting(a.status)) || createdMs(b) - createdMs(a));
+    g.drafts.sort(
+      (a, b) =>
+        Number(isAwaiting(b.status)) - Number(isAwaiting(a.status)) ||
+        createdMs(b) - createdMs(a),
+    );
   }
   return groups.filter((g) => g.drafts.length > 0);
 }
@@ -126,10 +138,21 @@ export function openErrandItems(errands: readonly Errand[]): ErrandItem[] {
   return errands.flatMap((errand) =>
     errand.status === "ready" || errand.status === "waiting"
       ? errand.messages.flatMap((message, index) =>
-          message.state === "ready" || message.state === "waiting" ? [{ errand, index, message }] : [],
+          message.state === "ready" || message.state === "waiting"
+            ? [{ errand, index, message }]
+            : [],
         )
       : [],
   );
+}
+
+/** An errand message left STALE_DAYS since its errand last changed: folded away as older, like a draft. */
+export function isStaleErrand(item: ErrandItem, now: number): boolean {
+  const changed = Math.max(
+    Date.parse(item.errand.created) || 0,
+    Date.parse(item.errand.updated) || 0,
+  );
+  return now - changed > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
 /** Whether two recipient lines name one person: the same name, or a first name alone and a full name it begins. */
@@ -137,7 +160,10 @@ export function samePerson(a: string, b: string): boolean {
   const x = a.toLowerCase().split(/\s+/).filter(Boolean);
   const y = b.toLowerCase().split(/\s+/).filter(Boolean);
   if (x.length === 0 || y.length === 0) return false;
-  return x.join(" ") === y.join(" ") || ((x.length === 1 || y.length === 1) && x[0] === y[0]);
+  return (
+    x.join(" ") === y.join(" ") ||
+    ((x.length === 1 || y.length === 1) && x[0] === y[0])
+  );
 }
 
 /** One thing waiting to be sent: a draft or an errand's message, with what it's the same as folded under it. */
@@ -151,18 +177,28 @@ export type Waiting =
  * waiting, so they make one card, the newer of the two, with the other folded under it. The server
  * counts the same way (proxenos.notify), and so do the Home counts.
  */
-export function waitingToSend(drafts: readonly Draft[], items: readonly ErrandItem[]): Waiting[] {
+export function waitingToSend(
+  drafts: readonly Draft[],
+  items: readonly ErrandItem[],
+): Waiting[] {
   const free = [...drafts];
   const out: Waiting[] = [];
   for (const item of items) {
-    const at = free.findIndex((d) => d.channel === item.message.channel && samePerson(d.to, item.message.to));
+    const at = free.findIndex(
+      (d) =>
+        d.channel === item.message.channel && samePerson(d.to, item.message.to),
+    );
     if (at === -1) {
       out.push({ kind: "errand", item, under: null });
       continue;
     }
     const [twin] = free.splice(at, 1);
     const itemMs = Date.parse(item.errand.created) || 0;
-    out.push(itemMs >= createdMs(twin) ? { kind: "errand", item, under: twin } : { kind: "draft", draft: twin, under: item });
+    out.push(
+      itemMs >= createdMs(twin)
+        ? { kind: "errand", item, under: twin }
+        : { kind: "draft", draft: twin, under: item },
+    );
   }
   for (const draft of free) out.push({ kind: "draft", draft, under: null });
   return out;
@@ -186,7 +222,10 @@ interface Fate {
  * sending it is the strongest approval there is. How much an edit changed isn't logged, so any
  * edit counts as a light one.
  */
-export function foldReviews(entries: readonly unknown[], now: number = Date.now()): DraftReviews {
+export function foldReviews(
+  entries: readonly unknown[],
+  now: number = Date.now(),
+): DraftReviews {
   const fates = new Map<string, Fate>();
   let copied = 0;
   let last: string | null = null;
@@ -201,8 +240,19 @@ export function foldReviews(entries: readonly unknown[], now: number = Date.now(
       copied++;
       continue;
     }
-    if (action !== "edit" && action !== "approve" && action !== "discard" && action !== "sent") continue;
-    const fate = fates.get(id) ?? { edited: false, decision: null, sent: false, at: 0 };
+    if (
+      action !== "edit" &&
+      action !== "approve" &&
+      action !== "discard" &&
+      action !== "sent"
+    )
+      continue;
+    const fate = fates.get(id) ?? {
+      edited: false,
+      decision: null,
+      sent: false,
+      at: 0,
+    };
     if (action === "edit") fate.edited = true;
     else if (action === "sent") {
       fate.sent = true;
