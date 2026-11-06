@@ -264,6 +264,10 @@ def test_full_disk_access_is_whether_a_protected_folder_opens(tmp_path, monkeypa
 
     monkeypatch.setattr(type(library), "iterdir", refused)
     assert real(tmp_path, "darwin") is False
+    # Every Mac has the folder macOS keeps permissions in, so it's asked first, Mail or not.
+    (library / "Application Support" / "com.apple.TCC").mkdir(parents=True)
+    monkeypatch.setattr(type(library), "iterdir", real_iterdir)
+    assert real(tmp_path, "darwin") is True
 
 
 def test_the_report_carries_full_disk_access(tmp_path, monkeypatch):

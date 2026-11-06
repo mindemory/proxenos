@@ -59,9 +59,9 @@ DOWNLOADS = (
 FOLDERS = ("notes", "website")
 
 
-# Folders macOS keeps behind Full Disk Access, under ~/Library, tried in turn: a Mac that has never
-# opened Mail has no folder there to try, but every Mac has Safari's.
-PROTECTED = ("Mail", "Safari")
+# Folders macOS keeps behind Full Disk Access, under ~/Library, tried in turn. The first is where
+# macOS keeps who may read what, which every Mac has, even one that has never opened Mail or Safari.
+PROTECTED = ("Application Support/com.apple.TCC", "Mail", "Safari")
 
 
 def full_disk_access(home: Path | None = None, platform: str = sys.platform) -> bool | None:
