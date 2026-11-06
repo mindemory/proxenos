@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Copy, FileText, Paperclip, Send, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Check, CheckCheck, Copy, FileText, Paperclip, Send, TriangleAlert, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
 import { Fold, QuestionText } from "@/components/ask/parts";
@@ -61,8 +61,8 @@ function blocker(m: ErrandMessage, address: string, subject: string, body: strin
   return null;
 }
 
-/** One message the errand wrote: who it's to and how, editable, and its Send. */
-function MessageBox({
+/** One message the errand wrote: who it's to and how, editable, and its Send, Mark sent and Done. */
+export function MessageBox({
   message,
   cv,
   busy,
@@ -249,10 +249,12 @@ interface ErrandCardProps {
   onMarkSent: (index: number) => void;
   onMarkDone: (index: number) => void;
   onDrop: () => void;
+  /** Open the Drafts view, where a message still to send waits beside the other drafts. */
+  onDrafts?: () => void;
 }
 
 /** One errand: what it was, where it stands, what it wrote, and every step it took to get there. */
-export function ErrandCard({ errand, now, busy, onSend, onMarkSent, onMarkDone, onDrop }: ErrandCardProps) {
+export function ErrandCard({ errand, now, busy, onSend, onMarkSent, onMarkDone, onDrop, onDrafts }: ErrandCardProps) {
   const status = STATUS[errand.status];
   const done = errand.status === "sent" || errand.status === "done" || errand.status === "dropped";
   return (
@@ -281,18 +283,29 @@ export function ErrandCard({ errand, now, busy, onSend, onMarkSent, onMarkDone, 
       )}
       {errand.who && <p className="text-sm leading-relaxed text-muted">{errand.who}</p>}
 
-      {errand.messages.map((m, i) => (
-        <MessageBox
-          // A change on the server (a Send, a night's look for an address) starts the box afresh.
-          key={`${i}-${errand.updated}`}
-          message={m}
-          cv={errand.cv}
-          busy={busy}
-          onSend={(edits) => onSend(i, edits)}
-          onMarkSent={() => onMarkSent(i)}
-          onMarkDone={() => onMarkDone(i)}
-        />
-      ))}
+      {errand.messages.map((m, i) =>
+        m.state === "ready" || m.state === "waiting" ? (
+          // What's still to send isn't shown twice: it waits in Drafts, with the other drafts.
+          <div key={`${i}-${errand.updated}`} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line-strong bg-surface-2 p-3.5 text-sm text-muted">
+            <span className="min-w-0 break-words">
+              {m.role === "intro" ? "A note" : "The message"} to <span className="text-ink/90">{m.to}</span>{" "}
+              {m.state === "ready" ? "is ready" : "waits for an address"}, in Drafts.
+            </span>
+            {onDrafts && <ActionButton icon={ArrowRight} label="Send it in Drafts" tone="accent" onClick={onDrafts} />}
+          </div>
+        ) : (
+          <MessageBox
+            // A change on the server (a Send, a night's look for an address) starts the box afresh.
+            key={`${i}-${errand.updated}`}
+            message={m}
+            cv={errand.cv}
+            busy={busy}
+            onSend={(edits) => onSend(i, edits)}
+            onMarkSent={() => onMarkSent(i)}
+            onMarkDone={() => onMarkDone(i)}
+          />
+        ),
+      )}
 
       {(errand.cv || errand.needs.length > 0) && (
         <div className="space-y-2 border-l-2 border-line-strong pl-3 text-xs leading-relaxed text-muted">

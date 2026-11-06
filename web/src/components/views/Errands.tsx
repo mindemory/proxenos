@@ -19,14 +19,19 @@ interface ErrandsProps {
   /** An errand to open on, by id, as an offer's reply asks. */
   focus?: string | null;
   onFocused?: () => void;
+  /** Open the Drafts view, where what an errand wrote waits to be sent. */
+  onDrafts?: () => void;
+  /** Runs after a Send, Mark sent or Done lands, to refresh the counts elsewhere. */
+  onChange?: () => void;
 }
 
 /**
  * Hand the twin something to get done: it carries it as far as it can without you, and stops one
- * tap short, with an account of every step. Nothing goes out until you press Send on it.
+ * tap short, with an account of every step. What it wrote waits in Drafts with the rest, where
+ * nothing goes out until you press Send on it; here is each errand's history.
  */
-export function Errands({ focus, onFocused }: ErrandsProps = {}) {
-  const { data, error, clearError, waiting, start, send, drop, markSent, markDone } = useErrands();
+export function Errands({ focus, onFocused, onDrafts, onChange }: ErrandsProps = {}) {
+  const { data, error, clearError, waiting, start, send, drop, markSent, markDone } = useErrands(onChange);
   const [goal, setGoal] = useState(kept);
   const [starting, setStarting] = useState(false);
   const [scrollTo, setScrollTo] = useState<string | null>(focus ?? null);
@@ -150,6 +155,7 @@ export function Errands({ focus, onFocused }: ErrandsProps = {}) {
                 onMarkSent={(index) => void markSent(e.id, index)}
                 onMarkDone={(index) => void markDone(e.id, index)}
                 onDrop={() => void drop(e.id)}
+                onDrafts={onDrafts}
               />
             ))}
         </section>

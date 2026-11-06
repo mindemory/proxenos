@@ -1,7 +1,7 @@
 // How drafts are grouped, labelled and ordered. Shared by the Drafts view, the Home
 // card and the server, so none of them has to know every value `for` or `kind` can take.
 
-import type { Draft, DraftReviews } from "./types";
+import type { Draft, DraftReviews, Errand, ErrandMessage } from "./types";
 
 /** The groups, in the order the Drafts view shows them. */
 export const DRAFT_GROUPS: readonly { id: string; label: string }[] = [
@@ -112,6 +112,60 @@ export function groupDrafts(drafts: Draft[]): DraftGroup[] {
     g.drafts.sort((a, b) => Number(isAwaiting(b.status)) - Number(isAwaiting(a.status)) || createdMs(b) - createdMs(a));
   }
   return groups.filter((g) => g.drafts.length > 0);
+}
+
+/** One of an errand's messages still waiting on the reader: ready to send, or waiting for an address. */
+export interface ErrandItem {
+  errand: Errand;
+  index: number;
+  message: ErrandMessage;
+}
+
+/** The messages of errands that wait on the reader: not sent, set aside, or of an errand dropped or still working. */
+export function openErrandItems(errands: readonly Errand[]): ErrandItem[] {
+  return errands.flatMap((errand) =>
+    errand.status === "ready" || errand.status === "waiting"
+      ? errand.messages.flatMap((message, index) =>
+          message.state === "ready" || message.state === "waiting" ? [{ errand, index, message }] : [],
+        )
+      : [],
+  );
+}
+
+/** Whether two recipient lines name one person: the same name, or a first name alone and a full name it begins. */
+export function samePerson(a: string, b: string): boolean {
+  const x = a.toLowerCase().split(/\s+/).filter(Boolean);
+  const y = b.toLowerCase().split(/\s+/).filter(Boolean);
+  if (x.length === 0 || y.length === 0) return false;
+  return x.join(" ") === y.join(" ") || ((x.length === 1 || y.length === 1) && x[0] === y[0]);
+}
+
+/** One thing waiting to be sent: a draft or an errand's message, with what it's the same as folded under it. */
+export type Waiting =
+  | { kind: "draft"; draft: Draft; under: ErrandItem | null }
+  | { kind: "errand"; item: ErrandItem; under: Draft | null };
+
+/**
+ * Everything waiting to be sent, each thing once: the drafts to send (isToSend) and the errands'
+ * messages. An errand message and a draft to the same person on the same channel are the same thing
+ * waiting, so they make one card, the newer of the two, with the other folded under it. The server
+ * counts the same way (proxenos.notify), and so do the Home counts.
+ */
+export function waitingToSend(drafts: readonly Draft[], items: readonly ErrandItem[]): Waiting[] {
+  const free = [...drafts];
+  const out: Waiting[] = [];
+  for (const item of items) {
+    const at = free.findIndex((d) => d.channel === item.message.channel && samePerson(d.to, item.message.to));
+    if (at === -1) {
+      out.push({ kind: "errand", item, under: null });
+      continue;
+    }
+    const [twin] = free.splice(at, 1);
+    const itemMs = Date.parse(item.errand.created) || 0;
+    out.push(itemMs >= createdMs(twin) ? { kind: "errand", item, under: twin } : { kind: "draft", draft: twin, under: item });
+  }
+  for (const draft of free) out.push({ kind: "draft", draft, under: null });
+  return out;
 }
 
 /** The roadmap's gate looks at the last two weeks of reviews. */

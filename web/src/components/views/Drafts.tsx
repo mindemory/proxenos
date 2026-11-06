@@ -5,11 +5,13 @@ import { ChevronRight, PenLine, ShieldCheck } from "lucide-react";
 
 import { DraftCard } from "@/components/drafts/DraftCard";
 import { Outbox } from "@/components/drafts/Outbox";
+import { ErrandMessageCard } from "@/components/errands/ErrandMessageCard";
 import { TrackRecord } from "@/components/drafts/TrackRecord";
 import { EmptyState, ErrorBanner, NoVault } from "@/components/EmptyState";
 import { DraftSkeleton } from "@/components/Skeleton";
 import { useDrafts } from "@/lib/client";
-import { groupDrafts, isNote, isStale, needsCheck, STALE_DAYS } from "@/lib/drafts";
+import { groupDrafts, isNote, isStale, needsCheck, openErrandItems, STALE_DAYS, waitingToSend } from "@/lib/drafts";
+import { useErrands } from "@/lib/errandsClient";
 import { scrollBehavior } from "@/lib/reading";
 import type { Draft, ThinkStart } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,14 +26,18 @@ export function Drafts({
   focus,
   onFocused,
   onThink,
+  onErrand,
 }: {
   onChange?: () => void;
   focus?: string | null;
   onFocused?: () => void;
   /** Think a draft through with Proxenos, in a new thread that starts from it. */
   onThink?: (start: ThinkStart) => void;
+  /** Open an errand, to read its steps. */
+  onErrand?: (id: string) => void;
 }) {
   const { data, error, flashId, discard, sent: markSent, keep, done, renew, edit, copy, open, clearError } = useDrafts(onChange);
+  const errands = useErrands(onChange);
   const [showSent, setShowSent] = useState<boolean | null>(null);
   const [showNotes, setShowNotes] = useState<boolean | null>(null);
   const [showOlder, setShowOlder] = useState<boolean | null>(null);
@@ -73,6 +79,13 @@ export function Drafts({
   const older = unsent.filter((d) => !isNote(d) && isStale(d, nowMs) && !needsCheck(d, nowMs));
   const notes = unsent.filter((d) => isNote(d));
   const sent = kept.filter((d) => d.status === "sent");
+  // One list of what waits to be sent: the drafts, and the messages errands wrote, each thing once.
+  const items = openErrandItems(errands.data?.errands ?? []);
+  const waiting = waitingToSend(toSend, items);
+  const draftsToSend = waiting.flatMap((w) => (w.kind === "draft" ? [w.draft] : []));
+  const underOf = new Map(waiting.flatMap((w) => (w.kind === "draft" && w.under ? [[w.draft.id, w.under] as const] : [])));
+  const fromErrands = waiting.flatMap((w) => (w.kind === "errand" ? [w] : []));
+  const busySend = errands.data?.sending?.state === "running" || errands.waiting.some((w) => w.kind === "send");
 
   const card = (d: Draft) => (
     <DraftCard
@@ -87,6 +100,8 @@ export function Drafts({
       onSent={markSent}
       onEdit={edit}
       onKeep={keep}
+      under={underOf.get(d.id) ?? null}
+      onErrand={onErrand}
       check={needsCheck(d, nowMs) ? { onKeep: renew, onDone: done } : undefined}
       focused={d.id === focusId}
       onThink={
@@ -102,7 +117,7 @@ export function Drafts({
     />
   );
 
-  if (kept.length === 0) {
+  if (kept.length === 0 && items.length === 0) {
     return (
       <div className="pb-24 md:pb-20">
         {error && <ErrorBanner message={error} onDismiss={clearError} />}
@@ -133,7 +148,7 @@ export function Drafts({
       ))}
     </div>
   );
-  const groups = groupDrafts(toSend);
+  const groups = groupDrafts(draftsToSend);
 
   return (
     <div className="pb-24 md:pb-20">
@@ -144,20 +159,46 @@ export function Drafts({
 
       <div className="px-4 sm:px-6 py-3 border-b border-line flex flex-wrap items-center gap-x-4 gap-y-2">
         <p className="text-sm text-ink">
-          To send <span className="num text-muted">{toSend.length}</span>
+          To send <span className="num text-muted">{waiting.length}</span>
         </p>
         <p className="flex items-center gap-1.5 text-sm text-muted sm:ml-auto">
           <ShieldCheck size={15} className="text-ok-ink flex-shrink-0" />
-          Copy one, or open it in its app with the text filled in. You press send, then mark it sent here.
+          Drafts and what your errands wrote, each once. Copy one, or open it in its app with the text filled in. You press send, then mark it sent here, or
+          Done when it isn&apos;t needed.
         </p>
       </div>
 
-      {groups.length === 0 ? (
+      {errands.error && <ErrorBanner message={errands.error} onDismiss={errands.clearError} />}
+
+      {waiting.length === 0 ? (
         <p className="px-4 sm:px-6 py-8 text-sm text-muted">
           Nothing left to send.
         </p>
       ) : (
         <div className="p-4 sm:p-6 space-y-8">
+          {fromErrands.length > 0 && (
+            <section aria-labelledby="drafts-errands">
+              <h2 id="drafts-errands" className="font-display text-2xl text-ink mb-3 flex items-baseline gap-2">
+                From errands
+                <span className="num text-sm text-muted">{fromErrands.length}</span>
+              </h2>
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 items-start">
+                {fromErrands.map(({ item, under }) => (
+                  <ErrandMessageCard
+                    key={`${item.errand.id}-${item.index}`}
+                    item={item}
+                    now={data.now}
+                    busy={busySend}
+                    under={under}
+                    onSend={(edits) => void errands.send(item.errand.id, item.index, edits)}
+                    onMarkSent={() => void errands.markSent(item.errand.id, item.index)}
+                    onMarkDone={() => void errands.markDone(item.errand.id, item.index)}
+                    onErrand={onErrand}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
           {groups.map((g) => (
             <section key={g.id} aria-labelledby={`drafts-${g.id}`}>
               <h2 id={`drafts-${g.id}`} className="font-display text-2xl text-ink mb-3 flex items-baseline gap-2">

@@ -128,7 +128,7 @@ def counts(vault: Path, now: datetime | None = None) -> dict[str, int]:
     can't be read is left out, so a broken file is never news."""
     now = now or datetime.now(UTC)
     counters: dict[str, Callable[[], int]] = {
-        "drafts": lambda: _drafts(vault, now),
+        "drafts": lambda: _to_send(vault, now),
         "care": lambda: _care(vault),
         "steps": lambda: _steps(vault),
         "tasks": lambda: _tasks(vault, now),
@@ -267,14 +267,60 @@ def report() -> dict:
 # ── Counting what waits, as the page does ───────────────────────────────────
 
 
-def _drafts(vault: Path, now: datetime) -> int:
-    """Drafts to send (web/src/lib/drafts.ts isToSend): not sent, discarded or overtaken, not a
-    note kept for the user, and changed in the last STALE_DAYS days. Newest file first per id."""
+def _to_send(vault: Path, now: datetime) -> int:
+    """Everything waiting to be sent, each counted once (web/src/lib/drafts.ts waitingToSend): the
+    drafts to send, and an errand's messages ready or waiting, except one to the same person on
+    the same channel as a draft to send, which is the same thing waiting."""
+    free = _drafts(vault, now)
+    waiting = len(free)
+    for to, channel in _errand_messages(vault):
+        twin = next(
+            (i for i, (t, c) in enumerate(free) if c == channel and same_person(to, t)), None
+        )
+        if twin is None:
+            waiting += 1
+        else:
+            free.pop(twin)  # one card for the pair
+    return waiting
+
+
+def same_person(a: str, b: str) -> bool:
+    """Whether two recipient lines name one person: the same name, or a first name alone and a
+    full name it begins (web/src/lib/drafts.ts samePerson)."""
+    a, b = a.casefold().split(), b.casefold().split()
+    if not a or not b:
+        return False
+    return a == b or ((len(a) == 1 or len(b) == 1) and a[0] == b[0])
+
+
+def _errand_messages(vault: Path) -> list[tuple[str, str]]:
+    """(to, channel) of each message of an errand still ready or waiting on the user, for errands
+    that aren't working, failed or dropped (clones/errands/<id>.json)."""
+    found = []
+    for path in sorted((vault / "clones" / "errands").glob("errand-*.json")):
+        try:
+            errand = json.loads(path.read_text(encoding="utf-8"))
+            messages = errand.get("messages") or []
+            live = errand.get("status") in ("ready", "waiting")
+            found += [
+                (str(m["to"]), str(m.get("channel") or "email"))
+                for m in messages
+                if live and m.get("state") in ("ready", "waiting") and m.get("body")
+            ]
+        except (OSError, ValueError, AttributeError, KeyError, TypeError):
+            continue
+    return found
+
+
+def _drafts(vault: Path, now: datetime) -> list[tuple[str, str]]:
+    """The drafts to send (web/src/lib/drafts.ts isToSend), as (to, channel): not sent, discarded
+    or overtaken, not a note kept for the user, and changed in the last STALE_DAYS days. Newest
+    file first per id."""
     folder = vault / "clones" / "drafts"
     try:
         entries = [e for e in os.scandir(folder) if e.name.lower().endswith(".md")]
     except OSError:
-        return 0
+        return []
     files = []
     for entry in entries:
         try:
@@ -284,7 +330,7 @@ def _drafts(vault: Path, now: datetime) -> int:
         plain = entry.is_file(follow_symlinks=False) and not entry.name.startswith(".")
         if plain and info.st_size <= MAX_DRAFT_BYTES:
             files.append((info.st_mtime, entry))
-    seen, waiting = set(), 0
+    seen, waiting = set(), []
     for mtime, entry in sorted(files, key=lambda f: (-f[0], f[1].name)):
         try:
             fields = work._front(Path(entry.path).read_text(encoding="utf-8")) or {}
@@ -299,7 +345,8 @@ def _drafts(vault: Path, now: datetime) -> int:
         note = kind in _NOTES and not to
         changed = max(mtime, _stamp(fields.get("created")))
         fresh = now.timestamp() - changed <= STALE_DAYS * 24 * 3600
-        waiting += status not in _SETTLED and not note and fresh
+        if status not in _SETTLED and not note and fresh:
+            waiting.append((to, (fields.get("channel") or "").strip().lower()))
     return waiting
 
 

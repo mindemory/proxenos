@@ -390,3 +390,25 @@ def test_the_privacy_report_says_where_notices_go_never_the_topic(monkeypatch):
     said = notify.report()
     assert said["on"] is True and said["server"] == "push.example.org" and said["quiet"] is None
     assert TOPIC not in json.dumps(said)
+
+
+def test_an_errands_waiting_messages_count_once_beside_the_drafts(tmp_path):
+    vault = tmp_path / "vault"
+    draft(vault, "reply-1", to="Ana Lee")  # whatsapp, to Ana
+
+    def errand(name, status, *messages):
+        errand = {"id": name, "status": status, "messages": list(messages)}
+        write(vault / "clones" / "errands" / f"{name}.json", json.dumps(errand))
+
+    def message(to, channel, state="ready"):
+        return {"to": to, "channel": channel, "state": state, "body": "Hi"}
+
+    errand("errand-1", "ready", message("Ana", "whatsapp"))  # the same thing as the draft
+    errand("errand-2", "ready", message("Ana Lee", "email"))  # another channel: its own
+    errand(
+        "errand-3", "waiting", message("Cy Doe", "email", "waiting"), message("Bo", "email", "done")
+    )
+    errand("errand-4", "sent", message("Di Ng", "email", "sent"))
+    errand("errand-5", "dropped", message("Ed Ox", "email"))
+
+    assert notify.counts(vault, NOON)["drafts"] == 3

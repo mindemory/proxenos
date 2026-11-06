@@ -23,7 +23,7 @@ email, with my CV". A run:
    (proxenos.voice), and says what in the CV looks out of date and what only the user can
    settle. When there's no way to reach the person but someone the user knows is there, it
    also writes that person a note asking for an introduction (one model call);
-7. stops one tap short: each message waits on the Errands page, ready to send by Mail (with the
+7. stops one tap short: each message waits in Drafts (with the rest), ready to send by Mail (with the
    CV attached) or Beeper, to copy (Slack, WeChat), or for what's missing (an address the user
    can type in).
 

@@ -76,7 +76,8 @@ import type {
   JournalResponse,
   WatchResponse,
 } from "./types";
-import { foldReviews, isToSend } from "./drafts";
+import { foldReviews, isToSend, openErrandItems, waitingToSend } from "./drafts";
+import { getErrands } from "./errands";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
 import {
@@ -1926,17 +1927,23 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
     .slice(0, 3);
 
   // Independent reads, side by side: the page waits for the slowest, not for all of them in turn.
-  const [tasks, advice, network, drafts, info, self, sources] = await Promise.all([
+  const [tasks, advice, network, drafts, errands, info, self, sources] = await Promise.all([
     getTasks(),
     getAdvice(),
     getNetwork(),
     getDrafts(),
+    getErrands(),
     vaultInfo(vault),
     selfSummary(vault),
     sourceSyncs(vault),
   ]);
   const unanswered = advice.suggestions.filter((s) => s.action === null);
-  const awaiting = drafts.drafts.filter((d) => isToSend(d, Date.now()));
+  // Each thing waiting once: an errand's message and a draft to the same person are one.
+  const waiting = waitingToSend(
+    drafts.drafts.filter((d) => isToSend(d, Date.now())),
+    openErrandItems(errands.errands),
+  );
+  const awaiting = waiting.flatMap((w) => (w.kind === "draft" ? [w.draft] : []));
 
   return {
     now: nowIso(),
@@ -1964,7 +1971,12 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
       met: network.people.list.filter((p) => p.relation === "met").length,
       outreach: network.ideas.outreach.find((o) => o.action === null) ?? null,
     },
-    drafts: { exists: drafts.exists, awaiting: awaiting.length, top: awaiting.slice(0, 5) },
+    drafts: {
+      exists: drafts.exists || errands.errands.length > 0,
+      awaiting: waiting.length,
+      top: awaiting.slice(0, 5),
+      fromErrands: waiting.length - awaiting.length,
+    },
     self,
     sources,
   };

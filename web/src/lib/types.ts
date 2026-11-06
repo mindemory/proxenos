@@ -768,8 +768,9 @@ export interface HomeResponse {
   };
   drafts: {
     exists: boolean;
-    awaiting: number; // not sent or discarded
-    top: Draft[]; // up to three of them, newest first
+    awaiting: number; // not sent or discarded, with an errand's messages waiting to be sent; each thing once
+    top: Draft[]; // up to five drafts of them, newest first
+    fromErrands: number; // of awaiting, how many are an errand's message
   };
   self: {
     exists: boolean; // self/ has any markdown

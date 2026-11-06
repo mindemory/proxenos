@@ -53,7 +53,7 @@ interface Waiting {
   label: string;
 }
 
-export function useErrands() {
+export function useErrands(onChange?: () => void) {
   const [data, setData] = useState<ErrandsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<Waiting[]>([]);
@@ -77,12 +77,15 @@ export function useErrands() {
           left.push(w);
           continue;
         }
-        if (job.state === "done") notify(w.label, "ok");
+        if (job.state === "done") {
+          notify(w.label, "ok");
+          onChange?.();
+        }
         else setError(job.message || "It stopped before it finished.");
       }
       if (left.length !== waitingRef.current.length) track(left);
     },
-    [notify, track],
+    [notify, track, onChange],
   );
 
   const load = useCallback(() => {

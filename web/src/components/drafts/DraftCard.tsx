@@ -4,9 +4,11 @@ import { useRef, useState } from "react";
 import { Check, CheckCheck, ChevronDown, Copy, MessagesSquare, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 
 import { ActionButton } from "@/components/ActionButton";
+import { Fold } from "@/components/ask/parts";
 import { Markdown } from "@/components/Markdown";
 import { Listen } from "@/components/reading/Listen";
 import { openTarget } from "@/lib/actions";
+import type { ErrandItem } from "@/lib/drafts";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import type { Draft, DraftOpen } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -35,13 +37,17 @@ interface DraftCardProps {
   onKeep: (d: Draft) => void;
   /** Asks "Is this still needed?" of a draft no thread backs that has waited a week: Keep (asked again in a week) or Done. */
   check?: { onKeep: (d: Draft) => void; onDone: (d: Draft) => void };
+  /** The same thing waiting from an errand, older than this draft: shown folded under it. */
+  under?: ErrandItem | null;
+  /** Open that errand's steps. */
+  onErrand?: (id: string) => void;
   /** The draft someone opened from another view (the home page): shown whole and highlighted. */
   focused?: boolean;
   /** Think it through with Proxenos before sending it. */
   onThink?: (d: Draft) => void;
 }
 
-export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, check, focused, onThink }: DraftCardProps) {
+export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpen, onSent, onEdit, onKeep, check, under, onErrand, focused, onThink }: DraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -226,6 +232,17 @@ export function DraftCard({ draft: d, now, flash, plan, onCopy, onDiscard, onOpe
             </>
           )}
         </div>
+      )}
+
+      {under && (
+        <Fold label={`Also an errand: ${under.errand.goal.slice(0, 60)}`}>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink/80">{under.message.body}</p>
+          {onErrand && (
+            <button onClick={() => onErrand(under.errand.id)} className="mt-1 text-xs text-accent hover:underline underline-offset-4">
+              See that errand&apos;s steps
+            </button>
+          )}
+        </Fold>
       )}
 
       {!editing && !sent && !overtaken && plan?.alt && !asking && (

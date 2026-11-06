@@ -81,10 +81,10 @@ export interface NavItem {
 /** Every view, in the order the sidebar, the phone's sheet and the command box list them. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { icon: House, label: "Home", id: "home", group: "today", words: "today brief briefing start overview" },
-  { icon: PenLine, label: "Drafts", id: "drafts", group: "today", words: "messages replies email send outbox" },
+  { icon: PenLine, label: "Drafts", id: "drafts", group: "today", words: "messages replies email send outbox errands waiting to send mark sent done" },
   { icon: ListTodo, label: "Tasks", id: "tasks", group: "today", words: "todo to-do reminders due" },
   { icon: HeartPulse, label: "Care", id: "care", group: "today", words: "health doctor medical appointments insurance bills" },
-  { icon: Route, label: "Errands", id: "errands", group: "today", words: "get done reach out cv" },
+  { icon: Route, label: "Errands", id: "errands", group: "today", words: "get done reach out cv steps history" },
   { icon: Phone, label: "Calls", id: "calls", group: "today", words: "phone ring hold call sheet" },
   { icon: MessageSquare, label: "Ask", id: "ask", group: "think", words: "question answer chat draft a message" },
   { icon: MessagesSquare, label: "Think", id: "think", group: "think", words: "thread reflect think through decide" },

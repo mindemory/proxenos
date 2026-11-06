@@ -249,7 +249,7 @@ export default function AppPage() {
       case "think":
         return <Think intent={thinkIntent} onConsumed={thinkConsumed} onAsk={openAsk} onMemory={openMemory} />;
       case "errands":
-        return <Errands focus={errandIntent} onFocused={errandConsumed} />;
+        return <Errands focus={errandIntent} onFocused={errandConsumed} onDrafts={() => navigate("drafts")} onChange={home.reload} />;
       case "saved":
         return <Saved />;
       case "tasks":
@@ -259,7 +259,7 @@ export default function AppPage() {
       case "care":
         return <Care onChange={home.reload} onMemory={openMemory} focus={careIntent} onFocused={careConsumed} />;
       case "drafts":
-        return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} onThink={openThink} />;
+        return <Drafts onChange={home.reload} focus={draftIntent} onFocused={draftConsumed} onThink={openThink} onErrand={openErrand} />;
       case "advice":
         return <Advice onChange={home.reload} />;
       case "choices":
@@ -267,7 +267,7 @@ export default function AppPage() {
       case "jobs":
         return <Jobs onDraft={openDraft} onErrands={() => navigate("errands")} onMemory={openMemory} />;
       case "offers":
-        return <Offers onErrand={openErrand} />;
+        return <Offers onErrand={openErrand} onDrafts={() => navigate("drafts")} />;
       case "journal":
         return <Journal />;
       case "life":

@@ -460,7 +460,7 @@ function DraftsCard({ data, briefing, onNavigate, onDraft }: { data: HomeRespons
         </Meta>
       ) : null}
       {d.top.length === 0 ? (
-        d.exists ? (
+        d.fromErrands > 0 ? null : d.exists ? (
           <Meta>Nothing left to send.</Meta>
         ) : (
           <QuietLine command="proxenos clone work">No drafts yet. This writes them from your tasks and ideas:</QuietLine>
@@ -471,6 +471,11 @@ function DraftsCard({ data, briefing, onNavigate, onDraft }: { data: HomeRespons
             <DraftRow key={x.id} draft={x} onOpen={() => onDraft(x.id)} />
           ))}
         </ul>
+      )}
+      {d.fromErrands > 0 && (
+        <Meta>
+          {d.fromErrands === 1 ? "1 more is a message an errand wrote" : `${d.fromErrands} more are messages errands wrote`}: see them in Drafts.
+        </Meta>
       )}
     </Card>
   );

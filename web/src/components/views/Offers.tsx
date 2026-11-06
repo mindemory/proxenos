@@ -92,7 +92,7 @@ function Table({ rows, now }: { rows: OfferRow[]; now: string }) {
 }
 
 /** A row's reply as its errand stands: who it goes to and how, and the way to it in Errands. */
-function Reply({ row, onErrand }: { row: OfferRow; onErrand?: (id: string) => void }) {
+function Reply({ row, onErrand, onDrafts }: { row: OfferRow; onErrand?: (id: string) => void; onDrafts?: () => void }) {
   const reply = row.reply;
   if (!reply) return null;
   const where = reply.address || (reply.state === "waiting" ? "no address yet" : `their ${reply.channel} chat`);
@@ -121,20 +121,40 @@ function Reply({ row, onErrand }: { row: OfferRow; onErrand?: (id: string) => vo
       <Fold label={reply.subject ? `“${reply.subject}”` : "The message"}>
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink/90">{reply.body}</p>
       </Fold>
-      {onErrand && (
-        <ActionButton
-          icon={ArrowRight}
-          label={reply.state === "sent" || reply.state === "done" ? "See it in Errands" : "Edit and send in Errands"}
-          name={`${reply.state === "sent" || reply.state === "done" ? "See it in Errands" : "Edit and send in Errands"}: the reply to ${reply.to}`}
-          tone="accent"
-          onClick={() => onErrand(reply.errand)}
-        />
-      )}
+      {reply.state === "sent" || reply.state === "done"
+        ? onErrand && (
+            <ActionButton
+              icon={ArrowRight}
+              label="See it in Errands"
+              name={`See it in Errands: the reply to ${reply.to}`}
+              tone="accent"
+              onClick={() => onErrand(reply.errand)}
+            />
+          )
+        : onDrafts && (
+            <ActionButton
+              icon={ArrowRight}
+              label="Edit and send in Drafts"
+              name={`Edit and send in Drafts: the reply to ${reply.to}`}
+              tone="accent"
+              onClick={onDrafts}
+            />
+          )}
     </li>
   );
 }
 
-function ComparisonCard({ offers, now, onErrand }: { offers: Comparison; now: string; onErrand?: (id: string) => void }) {
+function ComparisonCard({
+  offers,
+  now,
+  onErrand,
+  onDrafts,
+}: {
+  offers: Comparison;
+  now: string;
+  onErrand?: (id: string) => void;
+  onDrafts?: () => void;
+}) {
   const dropped = offers.rows.filter((r) => r.unconfirmed.length > 0);
   const replies = offers.rows.filter((r) => r.reply);
   return (
@@ -184,7 +204,7 @@ function ComparisonCard({ offers, now, onErrand }: { offers: Comparison; now: st
           <p className="smallcaps">Replies asking for what&apos;s missing</p>
           <ul className="space-y-2">
             {replies.map((r) => (
-              <Reply key={r.key} row={r} onErrand={onErrand} />
+              <Reply key={r.key} row={r} onErrand={onErrand} onDrafts={onDrafts} />
             ))}
           </ul>
         </section>
@@ -194,16 +214,18 @@ function ComparisonCard({ offers, now, onErrand }: { offers: Comparison; now: st
 }
 
 interface OffersProps {
-  /** Open a reply's errand in Errands, to edit and send it there. */
+  /** Open a reply's errand in Errands, to read its steps. */
   onErrand?: (id: string) => void;
+  /** Open Drafts, where a reply still to send waits. */
+  onDrafts?: () => void;
 }
 
 /**
  * What several people or firms offered for one goal, side by side from your own mail and chats,
  * with a reply to each asking for what's missing. Every price is as they wrote it; nothing goes out
- * until you press Send on a reply in Errands.
+ * until you press Send on a reply in Drafts.
  */
-export function Offers({ onErrand }: OffersProps) {
+export function Offers({ onErrand, onDrafts }: OffersProps) {
   const { data, error, clearError, waiting, start } = useOffers();
   const [goal, setGoal] = useState(kept);
   const [months, setMonths] = useState<number>(12);
@@ -316,7 +338,7 @@ export function Offers({ onErrand }: OffersProps) {
       ) : (
         <section aria-label="Comparisons" className="space-y-4">
           {data.comparisons.map((c) => (
-            <ComparisonCard key={c.slug} offers={c} now={data.now} onErrand={onErrand} />
+            <ComparisonCard key={c.slug} offers={c} now={data.now} onErrand={onErrand} onDrafts={onDrafts} />
           ))}
         </section>
       )}
