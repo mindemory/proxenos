@@ -16,7 +16,14 @@ secret's value: only whether it's set.
   SearXNG's ("searxng_url"), for looking people up (proxenos.lookup), is any web address, and
   "lookup" is on or off.
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
-  it would use) and saves it. Claude then answers what the user waits on (the ask model, set to
+  it would use) and saves it. With "provider": "openai" or "gemini" it's that provider's key
+  (OPENAI_API_KEY, GEMINI_API_KEY): checked by listing the provider's models (proxenos.hosted;
+  no tokens), saved, and the ask model set to one of them (the one suggested, unless one of
+  that provider's is chosen already); the answer carries "models" ({provider, names, suggested,
+  chosen}) for the page to pick another from. With no model on this computer and no Anthropic
+  key, it's the main model too. {"models": "openai"} lists a saved key's models again, and
+  {"hosted_model": "openai:<name>"} chooses another of them. What goes to them is treated as
+  what goes to Claude. Claude then answers what the user waits on (the ask model, set to
   Claude unless one is set already); the model for the rest stays as it was, a local one theirs.
   With no model set, one Ollama has on this computer is used first (llm.default).
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
@@ -31,6 +38,7 @@ Secrets come in on stdin, never as arguments, and never go back out.
 """
 
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -38,7 +46,7 @@ from pathlib import Path
 
 import anthropic
 
-from proxenos import config, fastmodel, keychain, llm, machine, notify
+from proxenos import config, fastmodel, hosted, keychain, llm, machine, notify
 
 # What the page can change, by its key in the settings file, and how many folders each takes.
 SETTINGS = {
@@ -68,6 +76,8 @@ FOLDERS = ("website_repo", "spotify_export", "slackdump_dir", "project_folder", 
 # they are.
 SECRETS = (
     "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
     "BEEPER_ACCESS_TOKEN",
     "STRAVA_REFRESH_TOKEN",
     "STRAVA_CLIENT_ID",
@@ -88,6 +98,10 @@ _MODEL = re.compile(r"[\w.:/@+-]{1,200}")
 _VOICE = re.compile(r"mlx(:\d{1,5})?|(ollama|local):[\w.:/@+-]{1,200}")
 _FAST = re.compile(r"off|(ollama|local):[\w.:/@+-]{1,200}")
 _KEY = re.compile(r"sk-ant-[\w-]{10,500}")
+_HOSTED_KEYS = {
+    "openai": re.compile(r"sk-(?!ant-)[\w-]{10,500}"),
+    "gemini": re.compile(r"AIza[\w-]{20,100}"),
+}
 _MAX_NAME = 100
 _KEY_CHECK_SECONDS = 20
 
@@ -101,7 +115,12 @@ def status() -> dict:
         kind, name = "local", llm.bare(model)
         via = "ollama" if model.startswith(llm.OLLAMA) else "server"
     else:
-        kind, name, via = ("api" if "ANTHROPIC_API_KEY" in held else "none"), model, None
+        host = llm.chat_host(model)
+        kind, name, via = (
+            ("api" if (host[2] if host else "ANTHROPIC_API_KEY") in held else "none"),
+            llm.bare(model),
+            None,
+        )
     memory = machine.memory()
     # The model to pull when there's none yet, unless it's known not to fit.
     get = None if machine.fits(machine.SUGGESTED_BYTES, memory) is False else machine.SUGGESTED
@@ -129,7 +148,7 @@ def status() -> dict:
             "exists": vault.is_dir(),
             "cloud": cloud(vault),
         },
-        "model": {"kind": kind, "name": name, "via": via},
+        "model": {"kind": kind, "name": name, "via": via, "provider": _provider(model)},
         "computer": {
             "memory": memory,
             "advice": machine.advice(memory),
@@ -150,6 +169,15 @@ def status() -> dict:
         "secret_store": keychain.store(),
         "secrets": secrets(),
     }
+
+
+def _provider(model: str) -> str | None:
+    """Who answers for a model that isn't on this computer: anthropic, openai or gemini."""
+    if model.startswith(llm.LOCAL):
+        return None
+    return {llm.OPENAI: "openai", llm.GEMINI: "gemini"}.get(
+        next((p for p in llm.CHAT_HOSTS if model.startswith(p)), ""), "anthropic"
+    )
 
 
 def _upgrade(
@@ -199,15 +227,16 @@ def needed() -> bool:
 
 def apply(request: object) -> dict:
     """Make one change (see the module's notes) and say how it went, with the new status."""
+    extra: dict = {}  # what a change adds to its answer: a hosted provider's models
     try:
-        message = _apply(request)
+        message = _apply(request, extra)
     except (ValueError, keychain.KeychainError) as e:
         return {"ok": False, "error": str(e), "status": status()}
     except SystemExit as e:
         return {"ok": False, "error": str(e.code), "status": status()}
     if _first_run_step(request):
         message += _adopt_fast()
-    return {"ok": True, "message": message, "status": status()}
+    return {"ok": True, "message": message, "status": status(), **extra}
 
 
 def _first_run_step(request: object) -> bool:
@@ -250,13 +279,20 @@ def cloud(path: Path) -> str | None:
     return None
 
 
-def _apply(request: object) -> str:
+def _apply(request: object, extra: dict) -> str:
     if not isinstance(request, dict):
         request = {}  # nothing in it to change
     if isinstance(request.get("settings"), dict):
         return _save_settings(request["settings"])
     if "key" in request:
+        provider = str(request.get("provider") or "anthropic")
+        if provider != "anthropic":
+            return _save_hosted_key(provider, str(request["key"]).strip(), extra)
         return _save_key(str(request["key"]).strip())
+    if "models" in request:
+        return _list_hosted(str(request["models"]), extra)
+    if "hosted_model" in request:
+        return _use_hosted(str(request["hosted_model"]).strip(), extra)
     if "fast" in request:
         return _use_fast(str(request["fast"]).strip())
     if "ollama" in request:
@@ -267,6 +303,8 @@ def _apply(request: object) -> str:
         name, value = str(request["secret"]), str(request.get("value", "")).strip()
         if name == "ANTHROPIC_API_KEY":
             return _save_key(value)
+        if name in ("OPENAI_API_KEY", "GEMINI_API_KEY"):
+            return _save_hosted_key(name.split("_")[0].lower(), value, extra)
         _known_secret(name)
         if not value or len(value) > 4096 or any(c in value for c in "\r\n\0"):
             raise ValueError("Paste the new value on one line.")
@@ -389,6 +427,94 @@ def _save_key(key: str) -> str:
             f"(Ask, Think, errands, calls); the rest stays on {llm.bare(rest)}, on this computer."
         )
     return f"The key works with {model}. Saved in {where}. With no model on this computer, it answers everything."
+
+
+def _save_hosted_key(provider: str, key: str, extra: dict) -> str:
+    """Check an OpenAI or Gemini key by listing the provider's models, keep it, and make the ask
+    model one of them (what the user waits on goes there, as Claude's key does for Anthropic);
+    with no model on this computer and no Anthropic key, it takes the rest too."""
+    lead = hosted.prefix(provider)
+    label, _, secret = llm.CHAT_HOSTS[lead]
+    if key.startswith("sk-ant-"):
+        raise ValueError("That's an Anthropic key. Choose Anthropic for it.")
+    if not _HOSTED_KEYS[provider].fullmatch(key):
+        start = "sk-" if provider == "openai" else "AIza"
+        raise ValueError(f"That isn't {label}'s API key: they start with {start}.")
+    names = hosted.list_models(provider, key)
+    suggested = hosted.suggest(provider, names)
+    if not suggested:
+        raise ValueError(f"The key works, but it can't use any of {label}'s chat models.")
+    where = config.save_secret(secret, key)
+    ask = config.env("ASK_MODEL")
+    chosen = ask.removeprefix(lead) if ask.startswith(lead) else ""
+    chosen = chosen if chosen in names else suggested
+    config.save_setting("ASK_MODEL", lead + chosen)
+    rest = config.env("MODEL") or llm.default()
+    if not rest.startswith(llm.LOCAL) and "ANTHROPIC_API_KEY" not in config.secrets():
+        config.save_setting("MODEL", lead + chosen)
+        rest = lead + chosen
+    extra["models"] = {
+        "provider": provider,
+        "names": names,
+        "suggested": suggested,
+        "chosen": chosen,
+    }
+    said = f"The key works with {label}. Saved in {where}. {chosen} answers what you wait on"
+    if rest.startswith(llm.LOCAL):
+        return (
+            f"{said} (Ask, Think, errands, calls); the rest stays on {llm.bare(rest)}, on this "
+            "computer."
+        )
+    return f"{said}, and everything else."
+
+
+def _hosted_key(provider: str) -> tuple[str, str]:
+    """(model-name prefix, the saved key) of a provider, or ValueError when none is saved."""
+    lead = hosted.prefix(provider)
+    label, _, secret = llm.CHAT_HOSTS[lead]
+    key = os.environ.get(secret, "")
+    if not key:
+        raise ValueError(f"No {label} key is saved yet.")
+    return lead, key
+
+
+def _list_hosted(provider: str, extra: dict) -> str:
+    """List the models a saved key can use, for the page to pick from."""
+    lead, key = _hosted_key(provider)
+    names = hosted.list_models(provider, key)
+    ask = config.env("ASK_MODEL")
+    chosen = ask.removeprefix(lead) if ask.startswith(lead) else None
+    suggested = hosted.suggest(provider, names)
+    extra["models"] = {
+        "provider": provider,
+        "names": names,
+        "suggested": suggested,
+        "chosen": chosen,
+    }
+    return f"{len(names)} models."
+
+
+def _use_hosted(model: str, extra: dict) -> str:
+    """Choose another model of a provider whose key is saved for what the user waits on, and for
+    the rest too when that was already the provider's."""
+    provider = next((p for p in ("openai", "gemini") if model.startswith(f"{p}:")), None)
+    if provider is None:
+        raise ValueError("Name a model as openai:<name> or gemini:<name>.")
+    lead, key = _hosted_key(provider)
+    names = hosted.list_models(provider, key)
+    name = model.removeprefix(lead)
+    if name not in names:
+        raise ValueError(f"{llm.CHAT_HOSTS[lead][0]} doesn't list {name} for this key.")
+    config.save_setting("ASK_MODEL", model)
+    if config.env("MODEL").startswith(lead):
+        config.save_setting("MODEL", model)
+    extra["models"] = {
+        "provider": provider,
+        "names": names,
+        "suggested": hosted.suggest(provider, names),
+        "chosen": name,
+    }
+    return f"{name} answers what you wait on."
 
 
 def _check_key(key: str, model: str) -> str | None:

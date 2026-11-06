@@ -99,8 +99,9 @@ def model(name: str) -> str:
 
 
 def where(name: str) -> str:
-    """Where a model runs: "this computer" or "Anthropic", as the calls log says it."""
-    return "this computer" if name.startswith((*llm.LOCAL, VOICE)) else "Anthropic"
+    """Where a model runs: "this computer", "Anthropic", "OpenAI" or "Google", as the calls log
+    says it."""
+    return "this computer" if name.startswith(VOICE) else llm.where(name)
 
 
 def label(name: str) -> str:
@@ -131,9 +132,9 @@ def start(
     if models[0] == models[1]:
         raise ValueError(f"Both are {models[0]}: name another with --against.")
     for name in models:
-        if where(name) == "Anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
+        if where(name) != "this computer" and not llm.has_key(name):
             raise SystemExit(
-                f"There's no Anthropic API key to draft with {name}: add one in Settings."
+                f"There's no {where(name)} API key to draft with {name}: add one in Settings."
             )
     folder = vault / FOLDER
     done = {  # replies these two have both drafted already; one a round didn't finish is free

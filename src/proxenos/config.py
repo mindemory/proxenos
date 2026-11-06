@@ -42,7 +42,7 @@ KEYCHAIN = "keychain"  # the settings file's list of the secrets in the secure s
 # phone notices go to, which anyone who knows it can read (proxenos.notify), and a search
 # engine's key (proxenos.lookup).
 SECRET = re.compile(
-    r"ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|BRAVE_SEARCH_KEY|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?"
+    r"ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|BEEPER_ACCESS_TOKEN|BRAVE_SEARCH_KEY|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?"
     r"|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)"
     r"|GOOGLE_CLIENT_(ID|SECRET)"
     r"|GCALENDAR_[A-Z0-9_]+|GDOCS_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+"

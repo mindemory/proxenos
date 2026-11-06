@@ -21,12 +21,14 @@ from proxenos import config, connect, keychain, llm, lookup, musicbrainz, notify
 DAYS = 30
 NEWEST = 50  # calls listed one by one
 HERE, HOSTED = "this computer", "Anthropic"
+# Where a call may have run, as llm.where says: here, or at the provider whose key is set.
+WHERES = (HERE, HOSTED, "OpenAI", "Google")
 # The vault's own folders, as the page names them; the rest (its history, the voice model, the
 # feed, the inbox) count together as "other".
 FOLDERS = ("raw", "memory", "clones", "self", "observations", "state")
 # A call's line as it goes out: these fields and no others, numbers only as numbers.
 _TEXT = ("at", "step", "model")
-# "redacted": the numbers and secrets blanked before a call went to Anthropic (proxenos.redact).
+# "redacted": the numbers and secrets blanked before a call went to a hosted model (proxenos.redact).
 _COUNTS = ("sent_chars", "images", "redacted", "answer_chars", "tokens_in", "tokens_out")
 _TEXT_CHARS = 80
 
@@ -301,9 +303,7 @@ def sent(vault: Path, now: datetime) -> dict:
         "days": DAYS,
         "since": since,
         "totals": _totals(calls),
-        "by_where": {
-            where: _totals([c for c in calls if c["where"] == where]) for where in (HERE, HOSTED)
-        },
+        "by_where": {where: _totals([c for c in calls if c["where"] == where]) for where in WHERES},
         "by_step": sorted(
             (
                 {"step": step, "part": parts.get(step), **_totals(rows)}
@@ -398,7 +398,8 @@ def _call(line: dict) -> dict:
     """One line of the calls log, with only the fields it's meant to have."""
     call = {key: _text(line.get(key)) for key in _TEXT}
     call["step"] = call["step"] or "proxenos"  # as llm names a call from outside a module
-    call["where"] = HERE if line.get("where") == HERE else HOSTED  # unsure counts as sent away
+    where = line.get("where")  # one it doesn't know counts as sent away, to Anthropic
+    call["where"] = where if where in WHERES else HOSTED
     call |= {key: _count(line.get(key)) for key in _COUNTS}
     seconds = line.get("seconds")
     is_number = isinstance(seconds, int | float) and not isinstance(seconds, bool)
@@ -411,7 +412,7 @@ def _totals(calls: list[dict]) -> dict:
     return {
         "calls": len(calls),
         "failed": sum(not c["ok"] for c in calls),
-        "hosted": sum(c["where"] == HOSTED for c in calls),
+        "hosted": sum(c["where"] != HERE for c in calls),
         **{key: sum(c[key] or 0 for c in calls) for key in _COUNTS},
     }
 

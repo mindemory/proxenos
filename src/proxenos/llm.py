@@ -7,7 +7,11 @@ any other server on this computer that speaks OpenAI's chat API, at PROXENOS_LOC
 (http://127.0.0.1:1234/v1, the default), llama.cpp's llama-server (http://127.0.0.1:8080/v1),
 vLLM (http://127.0.0.1:8000/v1), Jan or LocalAI. That address has to be this computer's own
 (localhost, 127.0.0.0/8 or ::1), and the request goes through no proxy and follows no redirect,
-so nothing leaves the computer that way either. Any other name calls the Anthropic API with a
+so nothing leaves the computer that way either. "openai:<name>" and "gemini:<name>" are hosted
+models, spoken to in the same chat API at OpenAI's and Google's own addresses with a bearer key
+(OPENAI_API_KEY, GEMINI_API_KEY): what goes to them is treated as what goes to Anthropic (the
+same blanking, never the fast model, logged as not on this computer), and the rule that holds
+"local:" to this computer's address stays as it was. Any other name calls the Anthropic API with a
 personal key (ANTHROPIC_API_KEY, in the Keychain or .env), kept apart from any work or university
 account; its base URL is pinned so a host app's ANTHROPIC_BASE_URL (the Claude desktop app sets
 one) never reroutes the key. Everything goes through `ask`.
@@ -27,13 +31,13 @@ someone is waiting on (`foreground`). A "local:" fast model is served at PROXENO
 (`proxenos model serve-fast`, mlx-lm's server, by default), apart from PROXENOS_LOCAL_URL. A job
 whose fast server isn't answering goes to the main model instead, rather than failing.
 
-What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
+What goes to Anthropic, OpenAI or Google has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
 (proxenos.redact).
 
 Every call leaves one line in <vault>/state/model-calls.jsonl, for the privacy screen and for
-seeing what a night costs: when, which step asked, the model, where it ran (this computer or
-Anthropic), how many characters went in and came back, the tokens where the model counts them,
+seeing what a night costs: when, which step asked, the model, where it ran (this computer,
+Anthropic, OpenAI or Google), how many characters went in and came back, the tokens where the model counts them,
 how many numbers and secrets were blanked, how long it took and whether it worked. Never the
 words, nor what was blanked. A project step leaves one line of the same shape for its run
 (`log_run`): Claude Code takes one on the account it's signed in to, through no `ask`.
@@ -74,6 +78,18 @@ SERVER = "local:"  # an OpenAI-compatible server on this computer: LM Studio, ll
 # Either runs on this computer. A tuple, so `model.startswith(LOCAL)` asks about both.
 LOCAL = (OLLAMA, SERVER)
 _OLLAMA = "http://127.0.0.1:11434"
+OPENAI, GEMINI = "openai:", "gemini:"
+# Hosted models spoken to in OpenAI's chat API, by their prefix: how the calls log names the
+# provider, its base address (pinned here, never a setting) and the secret that holds the key.
+CHAT_HOSTS = {
+    OPENAI: ("OpenAI", "https://api.openai.com/v1", "OPENAI_API_KEY"),
+    GEMINI: (
+        "Google",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "GEMINI_API_KEY",
+    ),
+}
+HOSTED_ANSWER = 16000  # tokens a hosted answer may run to; some models stop short of the default
 # LM Studio's server; PROXENOS_LOCAL_URL names another, such as llama-server's on port 8080.
 DEFAULT_LOCAL_URL = "http://127.0.0.1:1234/v1"
 # Tokens a local model reads and writes at once: room for a reply's chat and pages, within
@@ -192,6 +208,8 @@ def _ask(
         return _ask_local(
             model, prompt, system, schema, effort, max_tokens, images, _url_for(model)
         )
+    if chat_host(model):
+        return _ask_hosted(model, prompt, system, schema, max_tokens, images, keep)
     # Leaving this computer: the numbers and secrets no draft needs are blanked first, and the
     # log keeps only how many. Images go as they are; nothing here reads the text in them.
     prompt, blanked = redact.redact(prompt, keep)
@@ -366,7 +384,7 @@ def _ask_model() -> str:
     take what the user waits on, as setup now says by setting it, and a key saved before that
     meant all of it."""
     model = env("ASK_MODEL") or ("" if env("MODEL") else DEFAULT_MODEL)
-    if model and (model.startswith(LOCAL) or os.environ.get("ANTHROPIC_API_KEY")):
+    if model and (model.startswith(LOCAL) or has_key(model)):
         return model
     return ""
 
@@ -433,8 +451,8 @@ def _turn() -> Iterator[None]:
 def configured() -> bool:
     """Whether a model is set up (a local one, or a key), so steps that are optional can skip
     the model rather than fail."""
-    local = current().startswith(LOCAL)
-    return local or bool(os.environ.get("ANTHROPIC_API_KEY"))
+    model = current()
+    return model.startswith(LOCAL) or has_key(model)
 
 
 def prompt_chars() -> int | None:
@@ -452,9 +470,31 @@ def fit(limit: int, overhead: int = 30_000) -> int:
     return limit if room is None else max(10_000, min(limit, room - overhead))
 
 
+def chat_host(model: str) -> tuple[str, str, str] | None:
+    """(provider, base address, key's name) when `model` is a hosted one in OpenAI's chat API
+    ("openai:" or "gemini:"), else None."""
+    return next((host for prefix, host in CHAT_HOSTS.items() if model.startswith(prefix)), None)
+
+
+def has_key(model: str) -> bool:
+    """Whether the key a hosted `model` needs is set: its provider's, and Anthropic's for any
+    name that isn't OpenAI's or Google's."""
+    host = chat_host(model)
+    return bool(os.environ.get(host[2] if host else "ANTHROPIC_API_KEY"))
+
+
+def where(model: str) -> str:
+    """Where a model runs, as the calls log says it: "this computer", "OpenAI", "Google" or
+    "Anthropic". A voice model on this computer counts as on it."""
+    if model.startswith((*LOCAL, *(f"voice:{p}" for p in (*LOCAL, "mlx")))):
+        return "this computer"
+    host = chat_host(model)
+    return host[0] if host else "Anthropic"
+
+
 def bare(model: str) -> str:
     """A model's name without what says where it runs: "gemma4:26b" for "ollama:gemma4:26b"."""
-    for prefix in LOCAL:
+    for prefix in (*LOCAL, *CHAT_HOSTS):
         if model.startswith(prefix):
             return model.removeprefix(prefix)
     return model
@@ -510,6 +550,9 @@ def _opener() -> urllib.request.OpenerDirector:
 
 
 _direct = _opener().open
+# A hosted provider is reached over the ordinary network (and a proxy the environment names), but
+# follows no redirect, so the key goes to the address pinned here and nowhere else.
+_remote = urllib.request.build_opener(_Stay()).open
 
 
 def _content(prompt: str, images: list[dict] | None) -> str | list[dict]:
@@ -609,6 +652,63 @@ def _served_body(
         "stream_options": {"include_usage": True},  # the tokens, in a last piece of their own
         "max_tokens": answer_room,
     }
+
+
+def _ask_hosted(
+    model: str,
+    prompt: str,
+    system: str | None,
+    schema: dict | None,
+    max_tokens: int,
+    images: list[dict] | None,
+    keep: Iterable[str] = (),
+) -> str | dict:
+    """`ask`, answered by OpenAI or Gemini through the chat API the "local:" path speaks, at the
+    provider's own address with the key as a bearer token. What leaves is blanked first, as for
+    Anthropic. A schema goes in the system prompt and as `response_format`, as for a local
+    server, and a provider that refuses it is asked again without, once, and not asked with one
+    again in this process; the answer is held to the schema here either way."""
+    host = chat_host(model)
+    assert host is not None
+    label, base, key_name = host
+    key = os.environ.get(key_name)
+    if not key:
+        raise ModelError(
+            f"{key_name} is not set. Add a key from "
+            f"{'platform.openai.com' if label == 'OpenAI' else 'aistudio.google.com'} in Settings."
+        )
+    prefix = OPENAI if label == "OpenAI" else GEMINI
+    name = model.removeprefix(prefix)
+    prompt, blanked = redact.redact(prompt, keep)
+    system, also = redact.redact(system, keep) if system else (system, {})
+    _usage.redacted = sum(blanked.values()) + sum(also.values())
+    answer_room = min(max_tokens, HOSTED_ANSWER)
+    if schema is not None:
+        system = f"{system or ''}\n\n{_JSON_ONLY}\n{json.dumps(schema)}".strip()
+    messages = [{"role": "system", "content": system}] if system else []
+    body = _served_body(name, messages, prompt, images, answer_room)
+    if prefix == OPENAI:  # newer OpenAI models take only this name for the limit
+        body["max_completion_tokens"] = body.pop("max_tokens")
+    if schema is not None and model not in _NO_GRAMMAR:
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "answer", "schema": schema},
+        }
+    chat = partial(_complete, url=base, host=(label, key))
+    for _ in range(2):
+        try:
+            text = chat(name, body, answer_room)
+        except ModelError as e:
+            if "response_format" not in body or not _NO_SCHEMA.search(str(e)):
+                raise
+            _NO_GRAMMAR.add(model)
+            body.pop("response_format")
+            text = chat(name, body, answer_room)
+        if schema is None:
+            return text
+        if (answer := _object(text, schema)) is not None:
+            return answer
+    raise ModelError(f"{label} model {name} didn't answer with the JSON asked for")
 
 
 # A backslash that starts one of JSON's escapes, or one on its own, as LaTeX's \section is.
@@ -727,21 +827,34 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     return "".join(words)
 
 
-def _complete(model: str, body: dict, answer_room: int, url: str | None = None) -> str:
+def _complete(
+    model: str,
+    body: dict,
+    answer_room: int,
+    url: str | None = None,
+    host: tuple[str, str] | None = None,
+) -> str:
     """The answer to one chat request to the OpenAI-compatible server, read as it streams in:
     server-sent events, each a `data:` line with a piece of the words, until one says why it
     stopped and `data: [DONE]` ends them. Thinking the server parts out (`reasoning_content`) is
-    left out, and so is a <think> block a model leaves at the start of its words."""
-    url = f"{local_url(url)}/chat/completions"
-    request = urllib.request.Request(
-        url, json.dumps(body).encode(), {"Content-Type": "application/json"}
-    )
+    left out, and so is a <think> block a model leaves at the start of its words. With `host`
+    (provider, key), `url` is a hosted provider's own address, and the key goes as a bearer token,
+    through the ordinary network, following no redirect, and is blanked from anything said back."""
+    headers = {"Content-Type": "application/json"}
+    if host:
+        who, key = f"{host[0]} model {model}", host[1]
+        url, opener = f"{url}/chat/completions", _remote
+        headers["Authorization"] = f"Bearer {key}"
+    else:
+        who, key = f"local model {model}", ""
+        url, opener = f"{local_url(url)}/chat/completions", _direct
+    request = urllib.request.Request(url, json.dumps(body).encode(), headers)
     began = deadline = time.monotonic()
     deadline += _LOCAL_DEADLINE
     words: list[str] = []
     stopped, usage = None, {}
     try:
-        with _direct(request, timeout=_LOCAL_TIMEOUT) as response:
+        with opener(request, timeout=_LOCAL_TIMEOUT) as response:
             for line in response:
                 field, _, data = line.strip().partition(b":")
                 if field != b"data" or not data.strip():
@@ -754,7 +867,8 @@ def _complete(model: str, body: dict, answer_room: int, url: str | None = None) 
                 if not isinstance(chunk, dict):
                     continue
                 if chunk.get("error"):
-                    raise ModelError(f"local model {model}: {str(chunk['error'])[:300]}")
+                    said = str(chunk["error"])[:300]
+                    raise ModelError(f"{who}: {said.replace(key, '[hidden]') if key else said}")
                 usage = chunk.get("usage") or usage
                 for choice in chunk.get("choices") or []:
                     words.append((choice.get("delta") or {}).get("content") or "")
@@ -763,20 +877,22 @@ def _complete(model: str, body: dict, answer_room: int, url: str | None = None) 
                     stopped = choice.get("finish_reason") or stopped
                 if time.monotonic() > deadline:
                     raise ModelError(
-                        f"local model {model} was still answering after "
-                        f"{_LOCAL_DEADLINE // 60} minutes"
+                        f"{who} was still answering after {_LOCAL_DEADLINE // 60} minutes"
                     )
     except urllib.error.HTTPError as e:  # a redirect, too, which is followed no further
         said = e.read().decode(errors="replace")[:300] or f"HTTP {e.code} {e.reason}"
-        raise ModelError(f"local model {model}: {said}") from e
+        raise ModelError(f"{who}: {said.replace(key, '[hidden]') if key else said}") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise _down(
-            e, f"the local model isn't answering ({e}); is its server running at {url}?"
+            e,
+            f"{host[0]} isn't answering ({e}); check the internet connection."
+            if host
+            else f"the local model isn't answering ({e}); is its server running at {url}?",
         ) from e
     except (OSError, ValueError, AttributeError, http.client.HTTPException) as e:
-        raise ModelError(f"local model {model} stopped mid-answer ({e})") from e
+        raise ModelError(f"{who} stopped mid-answer ({e})") from e
     if stopped is None:
-        raise ModelError(f"local model {model} stopped mid-answer")
+        raise ModelError(f"{who} stopped mid-answer")
     _usage.tokens = (usage.get("prompt_tokens"), usage.get("completion_tokens"))
     if stopped == "length":
         raise ModelError(f"answer cut off at {answer_room} tokens")
@@ -904,8 +1020,7 @@ def log_run(step: str, model: str, seconds: float, ok: bool, **about: str) -> No
 
 def _where(model: str) -> str:
     """Where a model runs, as the calls log says it."""
-    here = model.startswith((*LOCAL, *(f"voice:{p}" for p in (*LOCAL, "mlx"))))
-    return "this computer" if here else "Anthropic"
+    return where(model)
 
 
 def _now() -> str:

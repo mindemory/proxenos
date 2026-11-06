@@ -67,7 +67,12 @@ def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
         "exists": False,
         "cloud": None,
     }
-    assert status["model"] == {"kind": "none", "name": "claude-opus-5-5", "via": None}
+    assert status["model"] == {
+        "kind": "none",
+        "name": "claude-opus-5-5",
+        "via": None,
+        "provider": "anthropic",
+    }
     assert status["saves_to"] == "settings"
     assert {s["name"] for s in status["secrets"]} == set(setup.SECRETS)
     assert not any(s["set"] for s in status["secrets"])
@@ -208,7 +213,12 @@ def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
     assert fake_keychain.items == {"ANTHROPIC_API_KEY": KEY}
     # Claude takes what the user waits on; the rest stays on the model on this computer.
     assert config.env("ASK_MODEL") == "claude-opus-5-5"
-    assert result["status"]["model"] == {"kind": "local", "name": "gemma4:26b", "via": "ollama"}
+    assert result["status"]["model"] == {
+        "kind": "local",
+        "name": "gemma4:26b",
+        "via": "ollama",
+        "provider": None,
+    }
     assert "the rest stays on gemma4:26b" in result["message"]
     key = next(s for s in result["status"]["secrets"] if s["name"] == "ANTHROPIC_API_KEY")
     assert key == {"name": "ANTHROPIC_API_KEY", "set": True, "from": "keychain"}
@@ -224,7 +234,12 @@ def test_a_key_with_no_model_here_has_claude_answer_all_and_keeps_a_chosen_ask_m
         result["ok"]
         and "With no model on this computer, it answers everything" in (result["message"])
     )
-    assert result["status"]["model"] == {"kind": "api", "name": "claude-opus-5-5", "via": None}
+    assert result["status"]["model"] == {
+        "kind": "api",
+        "name": "claude-opus-5-5",
+        "via": None,
+        "provider": "anthropic",
+    }
 
     config.save_setting("ASK_MODEL", "claude-sonnet-5")
     assert apply({"key": KEY})["ok"]
@@ -260,7 +275,12 @@ def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
 
     assert result["ok"] and config.env("MODEL") == "ollama:gemma4:26b"
     status = result["status"]
-    assert status["model"] == {"kind": "local", "name": "gemma4:26b", "via": "ollama"}
+    assert status["model"] == {
+        "kind": "local",
+        "name": "gemma4:26b",
+        "via": "ollama",
+        "provider": None,
+    }
     assert status["ollama"] == {
         "running": True,
         "models": [  # the embedding model isn't one to write with
@@ -310,7 +330,12 @@ def test_a_model_on_another_server_here_must_be_served(home, monkeypatch):
 
     assert result["ok"] and config.env("MODEL") == "local:qwen3-8b@q4_k_m"
     status = result["status"]
-    assert status["model"] == {"kind": "local", "name": "qwen3-8b@q4_k_m", "via": "server"}
+    assert status["model"] == {
+        "kind": "local",
+        "name": "qwen3-8b@q4_k_m",
+        "via": "server",
+        "provider": None,
+    }
     assert status["server"]["models"] == [
         {"name": "qwen3-30b-a3b", "bytes": None, "fits": None},  # its server didn't say its size
         {"name": "qwen3-8b@q4_k_m", "bytes": 5 * GB, "fits": True},
