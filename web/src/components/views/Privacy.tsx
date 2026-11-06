@@ -8,7 +8,7 @@ import { CloudWarning, originLabel, secretLabel } from "@/components/setup/parts
 import { StatusSkeleton } from "@/components/Skeleton";
 import { usePrivacy } from "@/lib/client";
 import { formatDateTime, joinAnd, plural } from "@/lib/format";
-import { VAULT_FOLDERS, type CallTotals, type LookupEngine, type PrivacyReport, type VaultFolder } from "@/lib/types";
+import { MODEL_WHERES, VAULT_FOLDERS, type CallTotals, type LookupEngine, type PrivacyReport, type VaultFolder } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const LOOKUP_NAMES: Record<LookupEngine, string> = {
@@ -194,27 +194,31 @@ function StaysHere({ here }: { here: PrivacyReport["here"] }) {
 
 // ── Sent to a model ─────────────────────────────────────────────────────────
 
-function where(t: CallTotals): string {
+function where(t: CallTotals, host: string): string {
   if (t.hosted === 0) return "This computer";
-  return t.hosted === t.calls ? "Anthropic" : `${t.hosted.toLocaleString()} at Anthropic`;
+  return t.hosted === t.calls ? host : `${t.hosted.toLocaleString()} at ${host}`;
 }
 
 function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
   const { model, totals, days } = sent;
-  const hosted = sent.byWhere.Anthropic.calls;
+  // Each provider a call went to, and how many went away and had numbers and secrets blanked.
+  const away = MODEL_WHERES.filter((w) => w !== "this computer" && sent.byWhere[w].calls > 0);
+  const hosted = away.reduce((n, w) => n + sent.byWhere[w].calls, 0);
+  const blanked = away.reduce((n, w) => n + sent.byWhere[w].redacted, 0);
+  const host = joinAnd(away.length ? away : [model.host ?? "Anthropic"]);
   const partOf = new Map(sent.sends.flatMap((s) => s.steps.map((step) => [step, s.part] as const)));
   const lead =
     model.kind === "local"
       ? `Proxenos writes with ${model.name} on this computer, so what it reads stays here.`
       : model.kind === "api"
-        ? `Proxenos writes with ${model.name} at Anthropic, under your key. Each part sends only what's listed below.`
+        ? `Proxenos writes with ${model.name} at ${model.host ?? "Anthropic"}, under your key. Each part sends only what's listed below.`
         : "No model is set up, so nothing is drafted and nothing is sent.";
   const said =
     totals.calls === 0
       ? `No model calls in the last ${days} days.`
       : hosted === 0
         ? `Nothing went to a hosted model in the last ${days} days: all ${plural(totals.calls, "call")} ran on this computer.`
-        : `${hosted.toLocaleString()} of ${plural(totals.calls, "call")} in the last ${days} days went to Anthropic.`;
+        : `${hosted.toLocaleString()} of ${plural(totals.calls, "call")} in the last ${days} days went to ${host}.`;
 
   return (
     <Section icon={Cpu} kicker="Sent to a model" title="To a model" lead={lead}>
@@ -231,7 +235,7 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
       </p>
       {hosted > 0 && (
         <p className="px-1 text-sm leading-relaxed text-muted">
-          Numbers and secrets blanked before sending: {sent.byWhere.Anthropic.redacted.toLocaleString()} in {days} days (card and
+          Numbers and secrets blanked before sending: {blanked.toLocaleString()} in {days} days (card and
           Social Security numbers, one-time codes, passwords, keys and tokens, and bank account numbers).
         </p>
       )}
@@ -241,7 +245,7 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {[
               { label: "Calls", value: totals.calls.toLocaleString() },
-              { label: "To Anthropic", value: hosted.toLocaleString() },
+              { label: `To ${host}`, value: hosted.toLocaleString() },
               { label: "Characters sent", value: compact(totals.sentChars) },
               { label: "Tokens in · out", value: `${compact(totals.tokensIn)} · ${compact(totals.tokensOut)}` },
             ].map((t) => (
@@ -285,7 +289,7 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
                       {s.part && <span className="num ml-2 text-xs text-faint">{s.step}</span>}
                     </th>
                     <td className="num px-3 py-2.5 text-right">{s.calls.toLocaleString()}</td>
-                    <td className={cn("px-3 py-2.5", s.hosted ? "text-ink" : "text-muted")}>{where(s)}</td>
+                    <td className={cn("px-3 py-2.5", s.hosted ? "text-ink" : "text-muted")}>{where(s, host)}</td>
                     <td className="num px-3 py-2.5 text-right text-muted">{compact(s.sentChars)}</td>
                     <td className="num px-3 py-2.5 text-right text-muted">
                       {compact(s.tokensIn)} · {compact(s.tokensOut)}
@@ -347,8 +351,8 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
                     </td>
                     <td className="px-3 py-2 text-ink">{partOf.get(c.step) ?? c.step}</td>
                     <td className="px-3 py-2" title={c.model}>
-                      <span className={c.where === "Anthropic" ? "text-ink" : "text-muted"}>
-                        {c.where === "Anthropic" ? "Anthropic" : "This computer"}
+                      <span className={c.where === "this computer" ? "text-muted" : "text-ink"}>
+                        {c.where === "this computer" ? "This computer" : c.where}
                       </span>
                       <span className="num ml-2 text-xs text-faint">{c.model.replace(/^(ollama|local):/, "")}</span>
                     </td>

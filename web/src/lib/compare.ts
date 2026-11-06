@@ -12,6 +12,7 @@ import { ASK_MS, lastLine, latestJob, NO_COMMAND, startJob, stopJob, type Job } 
 import {
   COMPARE_MAX_ROUND,
   COMPARE_PICKS,
+  MODEL_WHERES,
   type CompareFared,
   type CompareItem,
   type CompareJob,
@@ -76,7 +77,7 @@ function share(v: unknown): number | null {
 }
 
 function where(v: unknown): ModelWhere {
-  return v === "this computer" ? "this computer" : "Anthropic";
+  return MODEL_WHERES.find((w) => w === v) ?? "Anthropic";
 }
 
 function toMessage(raw: unknown): CompareMessage | null {

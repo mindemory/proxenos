@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getJson } from "./client";
-import type { SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
+import type { HostedModels, HostedProvider, SetupChange, SetupResponse, SetupResult, SetupStatus } from "./types";
 import { JSON_HEADERS } from "./headers";
 
 /** Paths under these, relative to the home folder, are synced to a cloud on most Macs. */
@@ -25,6 +25,18 @@ export function cloudFor(typed: string, home: string): "icloud" | "drive" | null
   else if (home && p.startsWith(home + "/")) rel = p.slice(home.length + 1);
   if (rel === null) return null;
   return SYNCED.find(([dir]) => rel === dir || rel.startsWith(dir + "/"))?.[1] ?? null;
+}
+
+/** The chat models an OpenAI or Gemini key already saved can use (the provider is asked, no tokens spent). Rejects with why not. */
+export async function hostedModels(provider: HostedProvider): Promise<HostedModels> {
+  const res = await fetch("/api/setup", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ models: provider }),
+  });
+  const answer = (await res.json().catch(() => ({}))) as Partial<SetupResult>;
+  if (!res.ok || !answer.ok || !answer.models) throw new Error(answer.error ?? `The models weren't listed (${res.status}).`);
+  return answer.models;
 }
 
 export function useSetup() {

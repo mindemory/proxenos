@@ -9,6 +9,8 @@
 
 import { lastLine, NO_COMMAND } from "./connect";
 import type {
+  HostedModels,
+  HostedProvider,
   LocalModel,
   LocalModels,
   SecretState,
@@ -30,9 +32,20 @@ const MAX_VALUE = 4096;
 const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain"];
 /** The secrets `proxenos setup` keeps, as config.SECRET names them. */
 const SECRET_NAME =
-  /^(ANTHROPIC_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)|GCALENDAR_[A-Z0-9_]+|GDOCS_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)|NTFY_(TOPIC|TOKEN))$/;
+  /^(ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)|GCALENDAR_[A-Z0-9_]+|GDOCS_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)|NTFY_(TOPIC|TOKEN))$/;
 /** As setup._MODEL: LM Studio's names may say a quantization after an @ (qwen3-8b@q4_k_m). */
 const MODEL_NAME = /^[\w.:/@+-]{1,200}$/;
+const PROVIDERS: readonly HostedProvider[] = ["anthropic", "openai", "gemini"];
+
+/** A hosted provider's models as `proxenos setup` lists them, names that look like a model's only. */
+function hostedModels(v: unknown): HostedModels | null {
+  const r = rec(v);
+  const provider = PROVIDERS.find((p) => p === r.provider);
+  if (!provider || !Array.isArray(r.names)) return null;
+  const names = r.names.filter((n): n is string => typeof n === "string" && MODEL_NAME.test(n));
+  const pick = (n: unknown) => (typeof n === "string" && names.includes(n) ? n : null);
+  return { provider, names, suggested: pick(r.suggested), chosen: pick(r.chosen) };
+}
 
 /** A first run: no name and no vault, from the environment, the repo's .env or the settings file. */
 export function setupNeeded(): boolean {
@@ -100,6 +113,7 @@ function toStatus(raw: unknown): SetupStatus | null {
       kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
       name: str(model.name) ?? "",
       via: model.via === "ollama" || model.via === "server" ? model.via : null,
+      provider: PROVIDERS.find((p) => p === model.provider) ?? null,
     },
     computer: {
       memory: positive(computer.memory),
@@ -179,6 +193,7 @@ export async function getSetup(): Promise<SetupResponse> {
 /** Make one change through `proxenos setup --apply`, the change on its stdin. */
 export async function applySetup(change: SetupChange): Promise<SetupResult> {
   const secret = "key" in change ? change.key : "value" in change ? change.value : null;
+  // Whatever the provider's models are is the page's to show; nothing of the key is in it.
   const done = await run(["--apply"], JSON.stringify(change), secret);
   if ("error" in done) return { ok: false, message: null, error: done.error, status: null };
   const r = rec(done.answer);
@@ -188,6 +203,7 @@ export async function applySetup(change: SetupChange): Promise<SetupResult> {
     message: hide(str(r.message)),
     error: r.ok === true ? null : (hide(str(r.error)) ?? "That didn't work."),
     status: toStatus(r.status),
+    models: hostedModels(r.models),
   };
 }
 
@@ -212,7 +228,19 @@ export function parseChange(body: Record<string, unknown>): SetupChange | { erro
     return { settings };
   }
   if ("key" in body) {
-    return oneLine(body.key, 512) && body.key.trim() ? { key: body.key.trim() } : { error: "Paste the key on one line." };
+    if (!oneLine(body.key, 512) || !body.key.trim()) return { error: "Paste the key on one line." };
+    if (body.provider === undefined) return { key: body.key.trim() };
+    const provider = PROVIDERS.find((p) => p === body.provider);
+    return provider ? { key: body.key.trim(), provider } : { error: "The provider is Anthropic, OpenAI or Gemini." };
+  }
+  if ("models" in body) {
+    const provider = PROVIDERS.find((p) => p === body.models);
+    return provider ? { models: provider } : { error: "The provider is Anthropic, OpenAI or Gemini." };
+  }
+  if ("hosted_model" in body) {
+    return typeof body.hosted_model === "string" && /^(openai|gemini):[\w.:/@+-]{1,200}$/.test(body.hosted_model)
+      ? { hosted_model: body.hosted_model }
+      : { error: "Name a model as openai:<name> or gemini:<name>." };
   }
   if ("ollama" in body) {
     return typeof body.ollama === "string" && MODEL_NAME.test(body.ollama.trim())

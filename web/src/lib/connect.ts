@@ -80,13 +80,15 @@ const MAX_MESSAGE = 300;
 export const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
 
 // Shapes a secret could take in a command's output: a sign-in as .env keeps it, Slack,
-// Anthropic, Google and Microsoft tokens (an access token is a JWT; a refresh token starts M.C
+// Anthropic, OpenAI (sk-) and Gemini (AIza) keys, Google and Microsoft tokens (an access token is a JWT; a refresh token starts M.C
 // for a personal account and 0.A for a work one), a bearer header, and any long run of letters
 // and digits.
 const SECRET_SHAPES = [
   /oauth:\S*/gi,
   /\bxox[a-z]-[\w-]+/gi,
   /\bsk-ant-[\w-]+/gi,
+  /\bsk-[\w-]{20,}/gi,
+  /\bAIza[\w-]{20,}/g,
   /\bya29\.[\w.-]+/g,
   /\b1\/\/[\w-]+/g,
   /\beyJ[\w-]*\.[\w.-]+/g,

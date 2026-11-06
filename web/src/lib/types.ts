@@ -1106,6 +1106,7 @@ export const SETTING_KEYS = [
   "name",
   "vault",
   "model",
+  "ask_model",
   "review_model",
   "local_url",
   "fast_model",
@@ -1147,7 +1148,7 @@ export interface SetupStatus {
   settings: Record<SettingKey, SettingValue>;
   vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
   /** A model on this computer (through Ollama or another server), Anthropic's with a key, or none yet. */
-  model: { kind: "local" | "api" | "none"; name: string; via: "ollama" | "server" | null };
+  model: { kind: "local" | "api" | "none"; name: string; via: "ollama" | "server" | null; provider: HostedProvider | null };
   /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, the model to pull unless it's too big, the small one to download first (null: too big too), and the bigger one to offer in the background while a small one is in use (null: none to offer). */
   computer: { memory: number | null; advice: string; rule: string; get: string | null; starter: string | null; upgrade: string | null };
   ollama: LocalModels;
@@ -1181,9 +1182,22 @@ export interface SetupResponse {
 }
 
 /** One change: settings ("" removes one), an Anthropic key to check and keep, a model in Ollama or on another local server, a secret replaced or removed. */
+/** Who answers for a model that isn't on this computer. */
+export type HostedProvider = "anthropic" | "openai" | "gemini";
+
+/** The chat models an OpenAI or Gemini key can use, by the provider's own names, the one suggested, and the one chosen. */
+export interface HostedModels {
+  provider: HostedProvider;
+  names: string[];
+  suggested: string | null;
+  chosen: string | null;
+}
+
 export type SetupChange =
   | { settings: Partial<Record<SettingKey, string>> }
-  | { key: string }
+  | { key: string; provider?: HostedProvider }
+  | { models: HostedProvider }
+  | { hosted_model: string }
   | { ollama: string }
   | { server: string }
   | { secret: string; value: string }
@@ -1194,6 +1208,7 @@ export interface SetupResult {
   message: string | null; // what was done, when it was
   error: string | null; // why not, when it wasn't
   status: SetupStatus | null;
+  models?: HostedModels | null; // a hosted provider's models, when the change listed them
 }
 
 /** What `proxenos notify test` said: whether a test notice reached ntfy, in the page's words. */
@@ -2205,8 +2220,8 @@ export interface CallsResponse {
 // a token or a key.
 
 /** Where a model call ran. A line that doesn't say counts as Anthropic. */
-export type ModelWhere = "this computer" | "Anthropic";
-export const MODEL_WHERES: readonly ModelWhere[] = ["this computer", "Anthropic"];
+export type ModelWhere = "this computer" | "Anthropic" | "OpenAI" | "Google";
+export const MODEL_WHERES: readonly ModelWhere[] = ["this computer", "Anthropic", "OpenAI", "Google"];
 
 /** Where a lookup of someone's address searches: the user's own SearXNG, Brave Search, or DuckDuckGo. */
 export type LookupEngine = "searxng" | "brave" | "duckduckgo";
@@ -2281,7 +2296,7 @@ export interface PrivacyReport {
     secrets: { name: string; from: SettingOrigin | null }[];
   };
   sent: {
-    model: { name: string; kind: "local" | "api" | "none"; voice: string | null; fast: string | null };
+    model: { name: string; kind: "local" | "api" | "none"; host: ModelWhere | null; voice: string | null; fast: string | null };
     days: number;
     since: string;
     totals: CallTotals;

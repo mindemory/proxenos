@@ -427,8 +427,8 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
   };
   const hint = s.name.startsWith("GMAIL_")
     ? "address:app password. Or sign in again from Connect."
-    : s.name === "ANTHROPIC_API_KEY"
-      ? "Checked with Anthropic before it's saved."
+    : s.name === "ANTHROPIC_API_KEY" || s.name === "OPENAI_API_KEY" || s.name === "GEMINI_API_KEY"
+      ? "Checked with its provider before it's saved."
       : s.name === "NTFY_TOPIC"
         ? "20 to 64 letters, digits, - and _, random. The same name you subscribed to in the app."
         : s.name === "NTFY_TOKEN"

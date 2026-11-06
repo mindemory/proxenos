@@ -1,13 +1,14 @@
 "use client";
 
 import { Check, Cpu, KeyRound, RefreshCw, TriangleAlert, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PrimaryButton } from "@/components/connect/parts";
 import { Command } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
 import { useRunJob } from "@/lib/runJobClient";
-import type { LocalModel, SetupChange, SettingOrigin, SetupStatus } from "@/lib/types";
+import { hostedModels } from "@/lib/setupClient";
+import type { HostedModels, HostedProvider, LocalModel, SetupChange, SettingOrigin, SetupStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const inputClass =
@@ -126,7 +127,7 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
           </span>
         ) : model.kind === "api" ? (
           <span>
-            Using <span className="num text-ink">{model.name}</span> through Anthropic, with your key.
+            Using <span className="num text-ink">{model.name}</span> through {PROVIDERS[model.provider ?? "anthropic"].label}, with your key.
           </span>
         ) : (
           "No model yet."
@@ -136,7 +137,7 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
         label="Where the model runs"
         tabs={[
           { id: "local", label: "On this computer" },
-          { id: "api", label: "Anthropic API key" },
+          { id: "api", label: "API key" },
         ]}
         value={tab}
         onChange={setTab}
@@ -216,7 +217,7 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
             </>
           ) : (
             <p className="text-sm leading-relaxed text-muted">
-              Ollama is running, but no model Proxenos suggests fits this computer&apos;s memory. Use an Anthropic API key instead.
+              Ollama is running, but no model Proxenos suggests fits this computer&apos;s memory. Use an API key instead.
             </p>
           )}
           <Downloading download={download} />
@@ -475,34 +476,128 @@ function ModelPicker({
   );
 }
 
+const PROVIDERS: Record<
+  HostedProvider,
+  { label: string; secret: string; site: string; href: string; start: string; tell: React.ReactNode }
+> = {
+  anthropic: {
+    label: "Anthropic",
+    secret: "ANTHROPIC_API_KEY",
+    site: "console.anthropic.com",
+    href: "https://console.anthropic.com/settings/keys",
+    start: "sk-ant-…",
+    tell: "Claude, with a personal key kept apart from any work account.",
+  },
+  openai: {
+    label: "OpenAI",
+    secret: "OPENAI_API_KEY",
+    site: "platform.openai.com",
+    href: "https://platform.openai.com/api-keys",
+    start: "sk-…",
+    tell: "A ChatGPT subscription doesn't include this. The key is billed per use. OpenAI doesn't train on what's sent through its API by default, and keeps it up to 30 days to watch for abuse.",
+  },
+  gemini: {
+    label: "Google Gemini",
+    secret: "GEMINI_API_KEY",
+    site: "aistudio.google.com",
+    href: "https://aistudio.google.com/apikey",
+    start: "AIza…",
+    tell: "A Gemini app subscription doesn't include this. The key is billed per use.",
+  },
+};
+
+/** Which provider the model for what you wait on is at, from the ask model setting, else the main model's. */
+function hostedNow(status: SetupStatus): HostedProvider {
+  const ask = status.settings.ask_model.value ?? "";
+  if (ask.startsWith("openai:")) return "openai";
+  if (ask.startsWith("gemini:")) return "gemini";
+  return status.model.provider ?? "anthropic";
+}
+
+/** A hosted model: Anthropic's, OpenAI's or Google's, with your own key. OpenAI's and Gemini's list their own models to pick from. */
 function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
+  const [provider, setProvider] = useState<HostedProvider>(() => hostedNow(status));
   const [key, setKey] = useState("");
+  const [listed, setModels] = useState<HostedModels | null>(null);
+  const [pick, setPick] = useState("");
   const { busy, said, run } = useChange(apply);
-  const saved = status.secrets.find((s) => s.name === "ANTHROPIC_API_KEY");
+  const info = PROVIDERS[provider];
+  const saved = status.secrets.find((s) => s.name === info.secret);
+  const models = listed?.provider === provider ? listed : null; // another provider's list isn't this one's
+  const keySaved = !!saved?.set;
   const where = status.savesTo === ".env" ? "the repo's .env" : status.keychain ? `the ${status.secretStore}` : "your settings";
+
+  // A key already saved: ask its provider for the models to pick from.
+  useEffect(() => {
+    if (provider === "anthropic" || !keySaved) return;
+    let current = true;
+    hostedModels(provider).then(
+      (m) => {
+        if (!current) return;
+        setModels(m);
+        setPick(m.chosen ?? m.suggested ?? m.names[0] ?? "");
+      },
+      () => {}, // the key tells why when it's checked again
+    );
+    return () => {
+      current = false;
+    };
+  }, [provider, keySaved]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    run({ key }).then((ok) => ok && setKey(""));
+    run(provider === "anthropic" ? { key } : { key, provider }).then((ok) => {
+      if (!ok) return;
+      setKey("");
+      if (provider !== "anthropic") hostedModels(provider).then((m) => {
+        setModels(m);
+        setPick(m.chosen ?? m.suggested ?? m.names[0] ?? "");
+      }, () => {});
+    });
   };
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <Segmented
+        label="Which provider"
+        tabs={[
+          { id: "anthropic", label: "Anthropic" },
+          { id: "openai", label: "OpenAI" },
+          { id: "gemini", label: "Google Gemini" },
+        ]}
+        value={provider}
+        onChange={(p) => {
+          setProvider(p);
+          setKey("");
+        }}
+      />
       <p className="text-sm leading-relaxed text-muted">
-        Anthropic&apos;s models, with a personal key from{" "}
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-accent hover:underline">
-          console.anthropic.com
+        {info.label}&apos;s models, with a personal key from{" "}
+        <a href={info.href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+          {info.site}
         </a>
-        , kept apart from any work account. Claude then answers what you wait on (Ask, Think, errands, calls), sent to
-        Anthropic under your key; the rest stays on the model on this computer, if you have one.
+        . {info.tell} The model then answers what you wait on (Ask, Think, errands, calls), sent to {info.label} under your key;
+        the rest stays on the model on this computer, if you have one.
       </p>
+      {provider === "gemini" && (
+        <div
+          className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm text-warn-ink"
+          role="status"
+        >
+          <TriangleAlert size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <span className="leading-relaxed">
+            On Google&apos;s free tier, Google may use what&apos;s sent to improve its products. That includes other people&apos;s
+            messages that Proxenos sends. Use a key with billing turned on, or a model on this computer.
+          </span>
+        </div>
+      )}
       <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <Field label={saved?.set ? "Replace the key" : "API key"}>
           <input
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={saved?.set ? `Saved ${originLabel(saved.from, status.secretStore)}` : "sk-ant-…"}
+            placeholder={saved?.set ? `Saved ${originLabel(saved.from, status.secretStore)}` : info.start}
             className={inputClass}
             {...NOT_A_LOGIN}
           />
@@ -512,8 +607,25 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
           {busy ? "Checking…" : "Check and save"}
         </PrimaryButton>
       </div>
+      {provider !== "anthropic" && models && models.names.length > 0 && (
+        <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Field label="Model" hint={models.suggested ? `${models.suggested} is suggested. These are the models ${info.label} lists for your key.` : undefined}>
+            <select value={pick} onChange={(e) => setPick(e.target.value)} className={cn(inputClass, "num")}>
+              {models.names.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <PrimaryButton disabled={busy || !pick || pick === models.chosen} onClick={() => run({ hosted_model: `${provider}:${pick}` })}>
+            {pick === models.chosen ? "In use" : "Use this model"}
+          </PrimaryButton>
+        </div>
+      )}
       <p className="text-xs leading-relaxed text-muted">
-        Proxenos asks Anthropic once whether the key works, then keeps it in {where}. This page never shows it again.
+        Proxenos asks {info.label} once {provider === "anthropic" ? "whether the key works" : "which models the key can use"}, then keeps it
+        in {where}. This page never shows it again.
       </p>
       <SaidLine said={said} />
     </form>
@@ -524,6 +636,8 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
 export function secretLabel(name: string): string {
   const fixed: Record<string, string> = {
     ANTHROPIC_API_KEY: "Anthropic API key",
+    OPENAI_API_KEY: "OpenAI API key",
+    GEMINI_API_KEY: "Gemini API key",
     BEEPER_ACCESS_TOKEN: "Beeper token",
     STRAVA_REFRESH_TOKEN: "Strava sign-in",
     STRAVA_CLIENT_ID: "Strava app ID",

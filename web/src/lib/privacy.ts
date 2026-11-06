@@ -50,7 +50,7 @@ function count(v: unknown): number | null {
 }
 
 function where(v: unknown): ModelWhere {
-  return v === "this computer" ? "this computer" : "Anthropic";
+  return MODEL_WHERES.find((w) => w === v) ?? "Anthropic"; // one it doesn't know counts as sent away
 }
 
 function toTotals(raw: unknown): CallTotals {
@@ -153,6 +153,7 @@ function toReport(raw: unknown): PrivacyReport | null {
       model: {
         name: text(model.name),
         kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
+        host: MODEL_WHERES.find((w) => w === model.host && w !== "this computer") ?? null,
         voice: text(model.voice) || null,
         fast: text(model.fast) || null,
       },

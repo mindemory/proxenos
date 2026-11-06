@@ -8,7 +8,7 @@ import { ErrorBanner } from "@/components/EmptyState";
 import { Listen } from "@/components/reading/Listen";
 import { Field, inputClass, NOT_A_LOGIN } from "@/components/setup/parts";
 import { useCompare } from "@/lib/compareClient";
-import { plural, shortDate } from "@/lib/format";
+import { joinAnd, plural, shortDate } from "@/lib/format";
 import {
   COMPARE_MAX_ROUND,
   COMPARE_MIN_PICKS,
@@ -253,8 +253,8 @@ function RoundHead({ data, onShow }: { data: CompareResponse; onShow: (round: st
       </div>
       <p className="text-sm text-muted">
         Started {shortDate(round.started, data.now)}, {plural(round.n, "reply", "replies")}.{" "}
-        {first.where === "Anthropic" || second.where === "Anthropic"
-          ? "One of them runs at Anthropic."
+        {first.where !== "this computer" || second.where !== "this computer"
+          ? `${first.where !== "this computer" && second.where !== "this computer" ? "Both run" : "One of them runs"} at ${joinAnd([...new Set([first.where, second.where].filter((w) => w !== "this computer"))])}.`
           : "Both run on this computer."}
       </p>
       {(round.status === "failed" || round.status === "stopped") && (
