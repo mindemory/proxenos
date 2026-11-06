@@ -61,14 +61,14 @@ export function Ready({ status, onModel, onConnect }: { status: SetupStatus; onM
         <Row
           done={status.model.kind !== "none"}
           label="A model"
-          detail={status.model.kind === "none" ? "None yet: nothing is drafted until there's one." : `Using ${status.model.name}.`}
+          detail={status.model.kind === "none" ? "None yet. Nothing is drafted until you choose one." : `Using ${status.model.label}.`}
           action={status.model.kind === "none" ? <button type="button" className={button} onClick={onModel}>Choose a model</button> : null}
         />
         {access !== null && (
           <Row
             done={access}
             label="Full Disk Access"
-            detail={access ? `${inApp ? "Proxenos" : "This Python"} can read Mail and WhatsApp.` : "Needed to read Mail and WhatsApp."}
+            detail={access ? `${inApp ? "Proxenos" : "This Python"} can read Mail and WhatsApp.` : "Lets Proxenos read Mail and WhatsApp on this Mac."}
             action={
               access ? null : (
                 <a href={FULL_DISK_ACCESS} className={button}>
@@ -77,7 +77,13 @@ export function Ready({ status, onModel, onConnect }: { status: SetupStatus; onM
                 </a>
               )
             }
-            note={access ? null : "Turn on Proxenos. If it isn't in the list, press + and pick Proxenos in Applications."}
+            note={
+              access
+                ? null
+                : inApp
+                  ? "Press the button, then turn on the switch beside Proxenos. If it isn't listed, press + and choose Proxenos in Applications. If macOS offers Quit & Reopen, choose it."
+                  : "Press the button, then turn on the app that runs Proxenos (Terminal, if you started it there). If it isn't listed, press + and choose it."
+            }
           />
         )}
         <Row
@@ -87,15 +93,15 @@ export function Ready({ status, onModel, onConnect }: { status: SetupStatus; onM
             googleDone
               ? "Signed in."
               : noClient && inApp
-                ? "This copy of the app was built without Google sign-in."
-                : "For Gmail, Calendar and Docs."
+                ? "This copy of Proxenos has no Google sign-in built in, so Gmail and Calendar can't connect here."
+                : "For Gmail, Google Calendar and Google Docs. This opens Connect, where you sign in."
           }
           action={googleDone || (noClient && inApp) ? null : <button type="button" className={button} onClick={onConnect}>Sign in with Google</button>}
         />
         <Row
           done={!!slack?.connected}
           label="Slack"
-          detail={slack?.connected ? slack.workspaces.join(", ") || "Connected." : "Not connected."}
+          detail={slack?.connected ? slack.workspaces.join(", ") || "Connected." : "Not connected. This opens Connect, where you sign in."}
           action={slack?.connected ? null : <button type="button" className={button} onClick={onConnect}>Sign in to Slack</button>}
         />
         <Row
@@ -105,9 +111,9 @@ export function Ready({ status, onModel, onConnect }: { status: SetupStatus; onM
             whatsapp?.connected
               ? "Read."
               : whatsapp?.problem === "missing"
-                ? "WhatsApp for Mac isn't signed in on this Mac."
+                ? "WhatsApp for Mac isn't on this Mac. Install it and sign in with your phone, then come back."
                 : whatsapp?.problem === "blocked"
-                  ? "Allow Full Disk Access first."
+                  ? "Turn on Full Disk Access first (above)."
                   : "Not read yet."
           }
           action={

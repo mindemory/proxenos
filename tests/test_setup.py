@@ -70,6 +70,7 @@ def test_a_first_run_is_needed_until_a_name_or_vault_is_set(home):
     assert status["model"] == {
         "kind": "none",
         "name": "claude-opus-5-5",
+        "label": "claude-opus-5-5",
         "via": None,
         "provider": "anthropic",
     }
@@ -155,9 +156,11 @@ def test_a_fast_model_is_on_this_computer_or_off(home, monkeypatch):
     status = setup.status()["fast"]  # nothing here to serve one: conftest has no MLX
     assert status == {
         "model": None,
+        "label": None,
         "found": False,
         "running": False,
         "suggested": "local:mlx-community/gemma-4-e4b-it-4bit",
+        "suggested_label": "Gemma 4 E4B",
     }
     assert "Apple silicon" in apply({"fast": "auto"})["error"]
     assert "auto or off" in apply({"fast": "sometimes"})["error"]
@@ -216,6 +219,7 @@ def test_a_key_is_checked_with_one_call_then_kept_in_the_keychain(
     assert result["status"]["model"] == {
         "kind": "local",
         "name": "gemma4:26b",
+        "label": "gemma4:26b",
         "via": "ollama",
         "provider": None,
     }
@@ -237,6 +241,7 @@ def test_a_key_with_no_model_here_has_claude_answer_all_and_keeps_a_chosen_ask_m
     assert result["status"]["model"] == {
         "kind": "api",
         "name": "claude-opus-5-5",
+        "label": "claude-opus-5-5",
         "via": None,
         "provider": "anthropic",
     }
@@ -278,6 +283,7 @@ def test_a_local_model_must_be_running_and_pulled(home, monkeypatch):
     assert status["model"] == {
         "kind": "local",
         "name": "gemma4:26b",
+        "label": "gemma4:26b",
         "via": "ollama",
         "provider": None,
     }
@@ -333,6 +339,7 @@ def test_a_model_on_another_server_here_must_be_served(home, monkeypatch):
     assert status["model"] == {
         "kind": "local",
         "name": "qwen3-8b@q4_k_m",
+        "label": "qwen3-8b@q4_k_m",
         "via": "server",
         "provider": None,
     }

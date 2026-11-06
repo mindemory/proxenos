@@ -127,6 +127,7 @@ function toStatus(raw: unknown): SetupStatus | null {
     model: {
       kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
       name: str(model.name) ?? "",
+      label: str(model.label) ?? str(model.name) ?? "",
       via: model.via === "ollama" || model.via === "server" || model.via === "app" ? model.via : null,
       provider: PROVIDERS.find((p) => p === model.provider) ?? null,
     },
@@ -142,9 +143,11 @@ function toStatus(raw: unknown): SetupStatus | null {
     // An older proxenos doesn't say: it had no fast model.
     fast: {
       model: str(fast.model)?.slice(0, 200) || null,
+      label: str(fast.label)?.slice(0, 200) || str(fast.model)?.slice(0, 200) || null,
       found: fast.found === true,
       running: fast.running === true,
       suggested: str(fast.suggested) && MODEL_NAME.test(str(fast.suggested) ?? "") ? (str(fast.suggested) ?? "") : "",
+      suggestedLabel: str(fast.suggested_label)?.slice(0, 200) || str(fast.suggested)?.slice(0, 200) || "",
     },
     server: {
       ...localModels(server),

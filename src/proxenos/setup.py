@@ -159,7 +159,14 @@ def status() -> dict:
             "exists": vault.is_dir(),
             "cloud": cloud(vault),
         },
-        "model": {"kind": kind, "name": name, "via": via, "provider": _provider(model)},
+        "model": {
+            "kind": kind,
+            "name": name,
+            # What a person reads; `name` stays the id the page goes by.
+            "label": _label(name),
+            "via": via,
+            "provider": _provider(model),
+        },
         "computer": {
             "memory": memory,
             "advice": machine.advice(memory),
@@ -181,6 +188,12 @@ def status() -> dict:
         "secret_store": keychain.store(),
         "secrets": secrets(),
     }
+
+
+def _label(name: str) -> str:
+    """A model's name for people to read: Gemma 4 E4B for the repo the app serves, else as it is."""
+    here = localmodel.CATALOG.get(name)
+    return here.name if here else name
 
 
 def _provider(model: str) -> str | None:
@@ -239,9 +252,11 @@ def _fast() -> dict:
     on = model.startswith(llm.SERVER)
     return {
         "model": model or None,
+        "label": _label(llm.bare(model)) if model else None,  # what a person reads
         "found": fastmodel.found(),
         "running": fastmodel.running() if on else False,
         "suggested": fastmodel.NAME,
+        "suggested_label": _label(llm.bare(fastmodel.NAME)),
     }
 
 
@@ -475,7 +490,8 @@ def _save_key(key: str) -> str:
     if rest.startswith(llm.LOCAL):
         return (
             f"The key works with {model}. Saved in {where}. {model} answers what you wait on "
-            f"(Ask, Think, errands, calls); the rest stays on {llm.bare(rest)}, on this computer."
+            f"(Ask, Think, errands, calls); the rest stays on {_label(llm.bare(rest))}, on this "
+            "computer."
         )
     return f"The key works with {model}. Saved in {where}. With no model on this computer, it answers everything."
 
@@ -513,8 +529,8 @@ def _save_hosted_key(provider: str, key: str, extra: dict) -> str:
     said = f"The key works with {label}. Saved in {where}. {chosen} answers what you wait on"
     if rest.startswith(llm.LOCAL):
         return (
-            f"{said} (Ask, Think, errands, calls); the rest stays on {llm.bare(rest)}, on this "
-            "computer."
+            f"{said} (Ask, Think, errands, calls); the rest stays on "
+            f"{_label(llm.bare(rest))}, on this computer."
         )
     return f"{said}, and everything else."
 

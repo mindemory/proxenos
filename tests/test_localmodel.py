@@ -206,6 +206,9 @@ def test_setup_says_what_the_app_can_run_and_that_the_model_is_served_here(mac, 
     localmodel.use(SMALL, "starter", lambda line: None)
     status = setup.status()
     assert status["model"]["via"] == "app"
+    # People read the friendly name; the id stays in `name`.
+    assert status["model"]["name"] == SMALL and status["model"]["label"] == "Gemma 4 E4B"
+    assert status["fast"]["suggested_label"] == "Gemma 4 E4B"
     here = status["here"]
     assert here["capable"] is True
     assert here["small"] | {"bytes": 0} == {

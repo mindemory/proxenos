@@ -3,7 +3,7 @@
 import { Check, Cpu, FileUp, KeyRound, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { PrimaryButton } from "@/components/connect/parts";
+import { PrimaryButton, Steps } from "@/components/connect/parts";
 import { Command } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
 import { googleClientFrom } from "@/lib/googleClient";
@@ -91,7 +91,7 @@ export function CloudWarning({ where }: { where: "icloud" | "drive" | null }) {
         {where === "icloud"
           ? "iCloud may copy this folder to Apple's servers: Desktop and Documents sync whenever Desktop & Documents Folders is on in iCloud Drive."
           : "This is a cloud drive's folder, which copies it to that service's servers."}{" "}
-        Your records would leave this Mac. A folder straight in your home folder, like ~/proxenos_vault, stays here.
+        Your records would leave this computer. A folder straight in your home folder, like ~/proxenos_vault, stays here.
       </span>
     </div>
   );
@@ -117,7 +117,7 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
         <span className={cn("h-2 w-2 flex-shrink-0 rounded-full", model.kind === "none" ? "bg-muted/60" : "bg-ok-ink")} aria-hidden="true" />
         {model.kind === "local" ? (
           <span className="min-w-0 break-words">
-            Using <span className="num text-ink">{model.name}</span> on this computer
+            Using <span className="num text-ink">{model.label}</span> on this computer
             {model.via === "server" ? (
               <>
                 , through the server at <span className="num">{status.server.url}</span>
@@ -131,7 +131,7 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
           </span>
         ) : model.kind === "api" ? (
           <span>
-            Using <span className="num text-ink">{model.name}</span> through {PROVIDERS[model.provider ?? "anthropic"].label}, with your key.
+            Using <span className="num text-ink">{model.label}</span> through {PROVIDERS[model.provider ?? "anthropic"].label}, with your key.
           </span>
         ) : (
           "No model yet."
@@ -159,7 +159,9 @@ function OnThisComputer({ status, apply, onReload }: { status: SetupStatus; appl
   return (
     <div className="space-y-3">
       <p className="text-sm leading-relaxed text-muted">
-        An open model running on this computer: nothing leaves it, and there&apos;s no account or key. {status.computer.advice}
+        A model that runs on this computer. What you write to it never leaves, and you need no account or key.{" "}
+        {status.here.capable && "In Proxenos needs nothing else. Ollama and LM Studio are free apps that run models too, if you already use one."}{" "}
+        {status.computer.advice}
       </p>
       <Segmented
         label="What runs the model"
@@ -201,9 +203,10 @@ function AppModel({ status, onReload }: { status: SetupStatus; onReload: () => v
             {small.ready ? `Use ${small.name}` : `Download the model (about ${gb(small.bytes)})`}
           </PrimaryButton>
           <p className="text-xs leading-relaxed text-faint">
-            {small.name} runs inside Proxenos on this Mac: no other app to install, no account. It&apos;s downloaded once from Hugging Face,
-            and nothing of yours is sent there.
-            {big.fits && ` When it's ready you can also get ${big.name} (about ${gb(big.bytes)}), which writes better.`}
+            {small.name} runs inside Proxenos on this Mac. You install no other app and make no account. It downloads once from Hugging
+            Face, a site that shares open models, and nothing of yours is sent there. It can take a while on a slow connection. You&apos;ll
+            see &quot;Using {small.name}&quot; here when it&apos;s ready.
+            {big.fits && ` Then you can also get ${big.name} (about ${gb(big.bytes)}), which writes better.`}
           </p>
         </>
       ) : (
@@ -214,8 +217,8 @@ function AppModel({ status, onReload }: { status: SetupStatus; onReload: () => v
           {big.fits && !(big.ready && big.serving) && (
             <div className="space-y-2">
               <p className="text-sm leading-relaxed text-muted">
-                A bigger model writes better drafts: get {big.name} (about {gb(big.bytes)}) in the background. Proxenos keeps using{" "}
-                <span className="num text-ink">{status.model.name}</span> until it&apos;s ready, and {small.name} goes on doing the light jobs.
+                A bigger model writes better drafts. Get {big.name} (about {gb(big.bytes)}) in the background. Proxenos keeps using{" "}
+                <span className="num text-ink">{status.model.label}</span> until it&apos;s ready, and {small.name} goes on doing the light jobs.
               </p>
               <PrimaryButton disabled={download.running} onClick={() => download.start(big.repo, "main", true)}>
                 Get {big.name}
@@ -239,12 +242,14 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
       {!running ? (
         <Missing onReload={onReload} state="Ollama isn't running.">
           <li>
-            Install Ollama from{" "}
+            Download Ollama from{" "}
             <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="text-accent hover:underline">
-              ollama.com
+              ollama.com/download
             </a>{" "}
-            and open it. Then Proxenos can download a model for you here.
+            and install it.
           </li>
+          <li>Open Ollama.</li>
+          <li>Come back here and press <strong>Check again</strong>. You&apos;ll see a button to download a model.</li>
         </Missing>
       ) : !models.length ? (
         <div className="space-y-3 rounded-xl border border-line-strong bg-surface-2/60 p-3.5">
@@ -266,12 +271,13 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
                 )}
               </div>
               <p className="text-xs leading-relaxed text-faint">
-                Ollama is running, with no model yet. The model comes from Ollama&apos;s own library, and is used as soon as it&apos;s here.
+                Ollama is running but has no model yet. Press the button to download one from Ollama&apos;s library. Proxenos uses it as soon
+                as it&apos;s here.
               </p>
             </>
           ) : (
             <p className="text-sm leading-relaxed text-muted">
-              Ollama is running, but no model Proxenos suggests fits this computer&apos;s memory. Use an API key instead.
+              Ollama is running, but no model Proxenos suggests fits this computer&apos;s memory. Use the API key tab instead.
             </p>
           )}
           <Downloading download={download} />
@@ -291,8 +297,8 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
               {upgrade && (
                 <>
                   <p className="text-sm leading-relaxed text-muted">
-                    A bigger model writes better drafts: get {upgrade} (about {approx(upgrade)}) in the background. Proxenos keeps using{" "}
-                    <span className="num text-ink">{status.model.name}</span> until it&apos;s ready.
+                    A bigger model writes better drafts. Get {upgrade} (about {approx(upgrade)}) in the background. Proxenos keeps using{" "}
+                    <span className="num text-ink">{status.model.label}</span> until it&apos;s ready.
                   </p>
                   <PrimaryButton disabled={download.running} onClick={() => download.start(upgrade, "main")}>
                     Get {upgrade}
@@ -309,9 +315,9 @@ function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: 
   );
 }
 
-/** About how big a model Proxenos suggests is to download, as Ollama's library lists it. */
+/** About how big a model Proxenos suggests is to download: the sizes proxenos.machine uses, so every sentence agrees. */
 function approx(name: string | null): string {
-  return (name && { "gemma4:e4b": "7 GB", "gemma4:26b": "19 GB" }[name]) || "a few GB";
+  return (name && { "gemma4:e4b": "7 GB", "gemma4:26b": "17 GB" }[name]) || "a few GB";
 }
 
 /** A model download the page started, followed by its last line; `onDone` is told when it finishes. */
@@ -367,20 +373,22 @@ function ServerModel({ status, apply, onReload }: { status: SetupStatus; apply: 
   return (
     <div className="space-y-3">
       <p className="text-sm leading-relaxed text-muted">
-        Any app that serves OpenAI&apos;s API on this computer: LM Studio, llama.cpp&apos;s llama-server, Jan, LocalAI or vLLM. Load the
-        model there with a context of <span className="num">{context.toLocaleString("en-US")}</span> tokens, as long as
-        Proxenos&apos;s longest prompts.
+        Use this if an app like LM Studio, llama-server, Jan, LocalAI or vLLM already runs a model on this computer and shares it with
+        other programs. Load the model there with a context length of <span className="num">{context.toLocaleString("en-US")}</span>{" "}
+        (how much text it can read at once), so Proxenos&apos;s longest prompts fit.
       </p>
       <ServerAddress status={status} apply={apply} />
       {error ? null : !running || !models.length ? (
         <Missing onReload={onReload} state={running ? `The server at ${url} has no model loaded.` : `Nothing answers at ${url}.`}>
+          {!running && <li>Start its server. In LM Studio, open the <strong>Developer</strong> tab and turn the server on.</li>}
+          <li>Load a model there, with a context length of {context.toLocaleString("en-US")}.</li>
+          <li>Come back here and press <strong>Check again</strong>.</li>
           {!running && (
             <li>
-              Start its server: in LM Studio, from the Developer tab. For llama-server, give its address above as
-              http://127.0.0.1:8080/v1 and run <Command>{`llama-server -m MODEL.gguf -c ${context} --port 8080`}</Command>
+              Using llama-server? Type http://127.0.0.1:8080/v1 as the server address above, then run this in a terminal:{" "}
+              <Command>{`llama-server -m MODEL.gguf -c ${context} --port 8080`}</Command>
             </li>
           )}
-          <li>Load a model of the size above there.</li>
         </Missing>
       ) : (
         <ModelPicker
@@ -627,12 +635,24 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
         }}
       />
       <p className="text-sm leading-relaxed text-muted">
-        {info.label}&apos;s models, with a personal key from{" "}
-        <a href={info.href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-          {info.site}
-        </a>
-        . {info.tell} The model then answers what you wait on (Ask, Think, errands, calls), sent to {info.label} under your key;
-        the rest stays on the model on this computer, if you have one.
+        A key is a password-like code from {info.label} that lets Proxenos use its models. {info.tell}
+      </p>
+      <Steps>
+        <li>
+          Open{" "}
+          <a href={info.href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+            {info.site}
+          </a>{" "}
+          and sign in.
+        </li>
+        <li>Make a new key and copy it.</li>
+        <li>
+          Paste it below and press <strong>Check and save</strong>.
+        </li>
+      </Steps>
+      <p className="text-sm leading-relaxed text-muted">
+        {info.label}&apos;s model then answers what you wait on (Ask, Think, errands, calls), and that text is sent to {info.label} under
+        your key. The rest stays on the model on this computer, if you have one.
       </p>
       {provider === "gemini" && (
         <div
@@ -680,7 +700,7 @@ function ApiKey({ status, apply }: { status: SetupStatus; apply: Apply }) {
       )}
       <p className="text-xs leading-relaxed text-muted">
         Proxenos asks {info.label} once {provider === "anthropic" ? "whether the key works" : "which models the key can use"}, then keeps it
-        in {where}. This page never shows it again.
+        in {where}. This page never shows it again. You&apos;ll see &quot;The key works&quot; here when it&apos;s saved.
       </p>
       <SaidLine said={said} />
     </form>
@@ -730,7 +750,7 @@ export function GoogleClientFile({ save, label = "Load the file you downloaded f
     setProblem(null);
     if (!file) return;
     const client = file.size <= 64 * 1024 ? googleClientFrom(await file.text().catch(() => "")) : null;
-    if (!client) setProblem("That isn't the file Google gave you for an OAuth client. It has a client_id and a client_secret.");
+    if (!client) setProblem("That isn't the sign-in client file from Google. It should hold a client_id and a client_secret. Download it again from Google Cloud and try once more.");
     else await run({ google_client: client });
   };
   return (

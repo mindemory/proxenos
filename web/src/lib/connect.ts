@@ -44,7 +44,7 @@ const STATUS_MS = 30_000;
 // of each of up to fifty replies, a minute or two each on a laptop's model. A comparison of
 // offers reads up to twelve offers and writes a reply to each, a couple of minutes apiece there.
 // A paper's review is rounds of reports, a plan, the revision's steps and a letter: up to an hour
-// and a half a round, and up to five rounds. A model's download is 7 to 19 GB, a few minutes on a
+// and a half a round, and up to five rounds. A model's download is 5 to 17 GB, a few minutes on a
 // fast line and hours on a slow one. A view made on demand is a clone's run, as long as a step.
 export const ASK_MS = 15 * 60_000;
 export const STEP_MS = 40 * 60_000;

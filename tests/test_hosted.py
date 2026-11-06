@@ -157,6 +157,7 @@ def test_with_no_model_on_this_computer_and_no_claude_key_a_gemini_key_answers_e
     assert result["status"]["model"] == {
         "kind": "api",
         "name": "gemini-2.5-flash",
+        "label": "gemini-2.5-flash",
         "via": None,
         "provider": "gemini",
     }

@@ -1149,13 +1149,13 @@ export interface SetupStatus {
   home: string; // the home folder, to tell which typed paths iCloud syncs
   settings: Record<SettingKey, SettingValue>;
   vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
-  /** A model on this computer (through Ollama or another server), Anthropic's with a key, or none yet. */
-  model: { kind: "local" | "api" | "none"; name: string; via: "ollama" | "server" | "app" | null; provider: HostedProvider | null };
+  /** A model on this computer (through Ollama or another server), Anthropic's with a key, or none yet. `name` is its id; `label` is what a person reads (Gemma 4 E4B for an in-app model's repo id). */
+  model: { kind: "local" | "api" | "none"; name: string; label: string; via: "ollama" | "server" | "app" | null; provider: HostedProvider | null };
   /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, the model to pull unless it's too big, the small one to download first (null: too big too), and the bigger one to offer in the background while a small one is in use (null: none to offer). */
   computer: { memory: number | null; advice: string; rule: string; get: string | null; starter: string | null; upgrade: string | null };
   ollama: LocalModels;
   /** The model for light jobs: the one set ("off" is a choice), whether this Mac has mlx-lm and the model to serve, whether its server answers, and the name setup would set. */
-  fast: { model: string | null; found: boolean; running: boolean; suggested: string };
+  fast: { model: string | null; label: string | null; found: boolean; running: boolean; suggested: string; suggestedLabel: string };
   /** An OpenAI-compatible server on this computer (LM Studio, llama-server, ...) at `url`; `error` when that isn't this computer's own. */
   server: LocalModels & { url: string; error: string | null; context: number };
   /** The models Proxenos can run itself on an Apple-silicon Mac that has mlx-lm (the desktop app does): the small one to start with and the big one to write with, each with its size and whether it's downloaded and served; `fits` is whether the big one fits this computer's memory. */

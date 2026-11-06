@@ -102,7 +102,7 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
             className="space-y-6"
           >
             <Heading title="What should Proxenos call you?">
-              It&apos;s the name in the notes and the picture of you that Proxenos writes from your records. Your first name is enough.
+              Proxenos puts this name in the notes it writes about you. Your first name is enough.
             </Heading>
             <Field label="Your name">
               <input
@@ -132,10 +132,10 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
             className="space-y-6"
           >
             <Heading title="Where should your vault live?">
-              The vault is one folder on this Mac that holds everything: what Proxenos reads from your accounts, its notes, and the drafts
-              it writes. Nothing in it leaves the computer unless you send it.
+              The vault is one folder on this computer. It holds what Proxenos reads from your accounts, its notes, and the drafts it
+              writes. Nothing in it leaves this computer unless you send it.
             </Heading>
-            <Field label="Folder" hint="Type its path. Proxenos makes the folder if it isn't there yet.">
+            <Field label="Folder" hint="Keep this one unless you want another place. Proxenos makes the folder if it isn't there.">
               <input
                 value={vault}
                 onChange={(e) => setVault(e.target.value)}
@@ -159,8 +159,8 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
         return (
           <div className="space-y-6">
             <Heading title="Which model should draft for you?">
-              Proxenos uses a model to write its notes and draft your next steps. You can skip this: your sources still sync and search
-              still works, but nothing is drafted until you pick one in Settings.
+              A model is the program that writes for Proxenos: its notes and your drafts. Pick one below. You can skip this for now. Your
+              sources still sync and search still works, but nothing is drafted until you pick a model in Settings.
             </Heading>
             <ModelChoice status={status} apply={apply} onReload={onReload} />
             <div className="flex items-center justify-between gap-3 border-t border-line pt-5">
@@ -182,8 +182,8 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
         return (
           <div className="space-y-6">
             <Heading title="Get Proxenos ready">
-              Proxenos reads only what you connect: your mail, WhatsApp, Slack, a download of your data. Do what you like here; the rest can
-              come any time from Connect.
+              Proxenos reads only what you connect. Each line below is one thing to set up. Do the ones you want now. You can do the rest
+              any time from Connect.
             </Heading>
             <ul className="divide-y divide-line rounded-xl border border-line text-sm">
               <Done label="Name" value={status.settings.name.value} />
@@ -214,8 +214,8 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
         {body}
       </section>
       <p className="text-center text-xs leading-relaxed text-faint">
-        Saved {status.savesTo === ".env" ? "in the repo's .env" : <span className="num">{status.settingsFile}</span>}. Change any of it
-        later in Settings.
+        Saved {status.savesTo === ".env" ? "in the repo's .env" : <span className="num">{status.settingsFile}</span>}. You can change any
+        of it later in Settings.
       </p>
     </div>
   );
