@@ -161,7 +161,7 @@ export async function getConnect(): Promise<ConnectResponse> {
   const vault = vaultPath();
   // The desktop app starts this server with PROXENOS_PYTHON set (see vault.ts proxenos()).
   const inApp = !!process.env.PROXENOS_PYTHON?.trim();
-  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE, inApp };
+  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE, inApp, fullDiskAccess: null };
   const cli = await proxenos();
   if (!cli) return { ...base, sources: [], error: NO_COMMAND };
   return new Promise((resolve) => {
@@ -173,8 +173,13 @@ export async function getConnect(): Promise<ConnectResponse> {
       }
       let sources: unknown;
       let phone: unknown;
+      let access: unknown;
       try {
-        ({ sources, phone } = JSON.parse(stdout) as { sources?: unknown; phone?: unknown });
+        ({ sources, phone, full_disk_access: access } = JSON.parse(stdout) as {
+          sources?: unknown;
+          phone?: unknown;
+          full_disk_access?: unknown;
+        });
       } catch {
         sources = null;
       }
@@ -186,6 +191,7 @@ export async function getConnect(): Promise<ConnectResponse> {
         ...base,
         sources: sources.map(toSource).filter((s): s is ConnectSource => s !== null),
         phone: toPhone(phone),
+        fullDiskAccess: typeof access === "boolean" ? access : null,
         error: null,
       });
     });

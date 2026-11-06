@@ -88,7 +88,7 @@ export function Connect() {
       </section>
 
       <Group kicker="Live" title="Sign in or read directly">
-        {applemail && <AppleMailCard s={applemail} now={data.now} />}
+        {applemail && <AppleMailCard s={applemail} now={data.now} inApp={data.inApp} fullDiskAccess={data.fullDiskAccess} onCheck={reload} />}
         {gmail && (
           <GmailCard
             s={gmail}

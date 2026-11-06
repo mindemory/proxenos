@@ -10,12 +10,11 @@ import { postChange } from "@/lib/setupClient";
 import type { ConnectJob, ConnectSource, MailAccount, PhoneInfo } from "@/lib/types";
 
 import { QrCode } from "./QrCode";
-import { Chip, CopyBox, copyFor, JobLine, LastRead, PrimaryButton, Steps, StatePill } from "./parts";
+import { Chip, CopyBox, copyFor, FULL_DISK_ACCESS, FullDiskAccess, JobLine, LastRead, PrimaryButton, Steps, StatePill } from "./parts";
 
 const MAIL_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#email";
 const CALENDAR_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#activity-and-habits";
 const DOCS_STEPS = "https://github.com/mindemory/proxenos/blob/main/docs/data_sources.md#a-manuscript-in-google-docs";
-const FULL_DISK_ACCESS = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const ACCOUNT_NAME = /^[A-Za-z0-9_]{1,32}$/;
 /** A Slack workspace's name as it appears before .slack.com. */
 const WORKSPACE_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -406,7 +405,19 @@ export function WhatsAppCard({
  * Apple Mail: whether it has been read, and what to set up so it can be. It's read on every
  * sync, so there's no button; macOS decides whether this Python may open Mail's files.
  */
-export function AppleMailCard({ s, now }: { s: ConnectSource; now: string }) {
+export function AppleMailCard({
+  s,
+  now,
+  inApp,
+  fullDiskAccess,
+  onCheck,
+}: {
+  s: ConnectSource;
+  now: string;
+  inApp: boolean;
+  fullDiskAccess: boolean | null;
+  onCheck: () => void;
+}) {
   return (
     <section className="card space-y-4 p-4 sm:p-5">
       <CardHead s={s} pill={<StatePill on={s.connected} label={s.connected ? "Connected" : "Not connected"} />} />
@@ -415,17 +426,24 @@ export function AppleMailCard({ s, now }: { s: ConnectSource; now: string }) {
         <Steps>
           <li>Add each email account in System Settings, Internet Accounts, with Mail turned on for it.</li>
           <li>Keep Mail open: in the Dock, right-click Mail, then Options, Open at Login.</li>
-          <li className="space-y-2">
-            <p>
-              Give {s.detail ? "this Python" : "the Python that runs Proxenos"} Full Disk Access: System Settings, Privacy &amp;
-              Security, Full Disk Access, press +, press Cmd-Shift-G and paste{s.detail ? " its path" : " the path"}.
-            </p>
-            {s.detail && <CopyBox text={s.detail} what="Path" />}
-            <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
-              Open Full Disk Access
-              <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          </li>
+          {inApp ? (
+            <li className="space-y-2">
+              <p>Let Proxenos read Mail&apos;s folder with Full Disk Access.</p>
+              <FullDiskAccess allowed={fullDiskAccess} inApp onCheck={onCheck} />
+            </li>
+          ) : (
+            <li className="space-y-2">
+              <p>
+                Give {s.detail ? "this Python" : "the Python that runs Proxenos"} Full Disk Access: System Settings, Privacy &amp;
+                Security, Full Disk Access, press +, press Cmd-Shift-G and paste{s.detail ? " its path" : " the path"}.
+              </p>
+              {s.detail && <CopyBox text={s.detail} what="Path" />}
+              <a href={FULL_DISK_ACCESS} className="inline-flex items-center gap-1 underline underline-offset-2">
+                Open Full Disk Access
+                <ExternalLink size={12} aria-hidden="true" />
+              </a>
+            </li>
+          )}
         </Steps>
       </Setup>
     </section>

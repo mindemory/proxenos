@@ -8,6 +8,8 @@ import pytest
 from proxenos import auth, cli, connect
 from proxenos.ingest import whatsapp
 
+_real_full_disk_access = connect.full_disk_access  # conftest stands it in for every test
+
 SECRET = "s3cret-value-that-must-never-show"
 
 
@@ -243,3 +245,27 @@ def test_the_page_starts_the_new_sign_ins_the_same_way(tmp_path, monkeypatch, ca
     assert capsys.readouterr().out.strip() == "saved"
     with pytest.raises(SystemExit, match=f"usage: proxenos auth {service} NAME ADDRESS"):
         cli.main(["auth", service, "work"])
+
+
+def test_full_disk_access_is_whether_a_protected_folder_opens(tmp_path, monkeypatch):
+    real = _real_full_disk_access
+    library = tmp_path / "Library"
+    assert real(tmp_path, "linux") is None  # not a Mac
+    assert real(tmp_path, "darwin") is None  # no protected folder to try
+    (library / "Safari").mkdir(parents=True)
+    assert real(tmp_path, "darwin") is True
+    (library / "Mail").mkdir()  # tried first
+    real_iterdir = type(library).iterdir
+
+    def refused(self):
+        if self.name == "Mail":
+            raise PermissionError("Operation not permitted")
+        return real_iterdir(self)
+
+    monkeypatch.setattr(type(library), "iterdir", refused)
+    assert real(tmp_path, "darwin") is False
+
+
+def test_the_report_carries_full_disk_access(tmp_path, monkeypatch):
+    monkeypatch.setattr(connect, "full_disk_access", lambda: False)
+    assert connect.report(tmp_path)["full_disk_access"] is False

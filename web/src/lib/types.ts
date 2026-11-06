@@ -1093,6 +1093,8 @@ export interface ConnectResponse extends ConnectJobsResponse {
   phone: PhoneInfo;
   /** Whether this is the desktop app, which has no `proxenos` command or slackdump on the PATH to point a person at. */
   inApp: boolean;
+  /** Whether this can read the folders macOS protects (Mail's, WhatsApp's store): null off a Mac. */
+  fullDiskAccess: boolean | null;
   /** Why the sources couldn't be read, when they couldn't. */
   error: string | null;
 }

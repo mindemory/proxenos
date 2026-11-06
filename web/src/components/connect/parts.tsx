@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Copy, LoaderCircle, X } from "lucide-react";
-import { useState } from "react";
+import { Check, Copy, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Command } from "@/components/EmptyState";
 import { SourceChip } from "@/components/SourceBadge";
@@ -122,6 +122,49 @@ export function CopyBox({ text, what }: { text: string; what: string }) {
         <Icon size={14} aria-hidden="true" />
         <span className="sr-only">{copied ? "Copied" : `Copy the ${what.toLowerCase()}`}</span>
       </button>
+    </div>
+  );
+}
+
+/** The Full Disk Access pane of System Settings, which macOS lets a link open. */
+export const FULL_DISK_ACCESS = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+
+/**
+ * Full Disk Access, which Mail's and WhatsApp's folders need: a button that opens the pane, what to
+ * do there, and a green line once it's on. `onCheck` looks again whenever this window gets focus
+ * back, which is when someone returns from Settings. Nothing shows off a Mac (`allowed` null).
+ */
+export function FullDiskAccess({ allowed, inApp, onCheck }: { allowed: boolean | null; inApp: boolean; onCheck: () => void }) {
+  useEffect(() => {
+    window.addEventListener("focus", onCheck);
+    return () => window.removeEventListener("focus", onCheck);
+  }, [onCheck]);
+  if (allowed === null) return null;
+  if (allowed) {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-ok-ink" role="status">
+        <Check size={15} aria-hidden="true" />
+        {inApp ? "Proxenos" : "This Python"} can read Mail and WhatsApp.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      <a
+        href={FULL_DISK_ACCESS}
+        className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-accent-ink transition-opacity hover:opacity-90"
+      >
+        Open Full Disk Access
+        <ExternalLink size={13} aria-hidden="true" />
+      </a>
+      <Steps>
+        {inApp ? (
+          <li>Turn on Proxenos. If it isn&apos;t in the list, press + and pick Proxenos in Applications.</li>
+        ) : (
+          <li>Turn on the app that runs Proxenos (Terminal, if you started it there). If it isn&apos;t in the list, press + and pick it.</li>
+        )}
+        <li>Come back here: this checks again by itself.</li>
+      </Steps>
     </div>
   );
 }

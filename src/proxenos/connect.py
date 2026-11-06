@@ -8,6 +8,10 @@ download. Last read is the newest change to the source's files under raw/.
 Google Docs is a sign-in too, though nothing is read from it on a sync: a project's manuscript
 goes there and comes back when the user asks (proxenos.paperdoc), and it was last read when a
 doc's comments were last kept.
+
+`full_disk_access` says whether this process can read the folders macOS protects (Mail's, Safari's):
+True or False, or None off a Mac and where no protected folder is there to try. The page shows it
+with a button that opens the right Settings pane and checks again when the window gets focus.
 """
 
 import os
@@ -53,6 +57,29 @@ DOWNLOADS = (
     "claude",
 )
 FOLDERS = ("notes", "website")
+
+
+# Folders macOS keeps behind Full Disk Access, under ~/Library, tried in turn: a Mac that has never
+# opened Mail has no folder there to try, but every Mac has Safari's.
+PROTECTED = ("Mail", "Safari")
+
+
+def full_disk_access(home: Path | None = None, platform: str = sys.platform) -> bool | None:
+    """Whether this process may list a folder macOS protects: True when one opens, False when
+    macOS refuses one, None when this isn't a Mac or none of them is there. Reads only a folder's
+    names to see if it opens, and doesn't keep or show even those."""
+    if platform != "darwin":
+        return None
+    library = (home or Path.home()) / "Library"
+    for name in PROTECTED:
+        try:
+            next(iter((library / name).iterdir()), None)
+        except PermissionError:
+            return False
+        except OSError:
+            continue  # not there, or not a folder: ask the next
+        return True
+    return None
 
 
 def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
@@ -177,7 +204,7 @@ def report(vault: Path, whatsapp_db: Path = whatsapp.DEFAULT_DB) -> dict:
         "address": f"https://{remote}" if remote else None,
         "login": env("REMOTE_USER") or None,
     }
-    return {"sources": sources, "phone": phone}
+    return {"sources": sources, "phone": phone, "full_disk_access": full_disk_access()}
 
 
 def _subdirs(folder: Path) -> list[Path]:
