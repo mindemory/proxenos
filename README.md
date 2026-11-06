@@ -22,21 +22,27 @@ Proxenos reads your own mail, chats, calendars, notes, documents and health reco
 
 ## Get started
 
-From source, on a Mac with [Homebrew](https://brew.sh):
+**With the desktop app** (no terminal, no code):
+
+1. Open the [latest release](https://github.com/mindemory/proxenos/releases/latest) and download Proxenos for your computer: the `.dmg` for a Mac with Apple silicon (macOS 13 or newer), or the `.exe` for Windows.
+2. On a Mac, open the `.dmg` and drag **Proxenos** into **Applications**. On Windows, run the `.exe`.
+3. Open Proxenos. The app isn't signed yet, so your computer warns you the first time. That's expected.
+   - Mac: try to open it once. Then open **System Settings → Privacy & Security**, scroll down to the message about Proxenos, and press **Open Anyway**.
+   - Windows: when SmartScreen warns, press **More info**, then **Run anyway**.
+4. Follow the screens. Setup asks for your name, where to keep your vault (the folder that holds your records; the suggested one is fine), and which model should write for you. The last screen is a short checklist. Do the lines you want now, and the rest later from **Connect**.
+
+You'll see Home when setup is done, and a menu-bar icon (Mac) or tray icon (Windows). Its menu has **Sync now**. A model comes first: without one, your sources still sync but nothing is drafted. Setup downloads a small open one with one button, or you can paste a key (a password-like code) from Anthropic, OpenAI or Google Gemini instead. If a Mac says it "can't be opened", that's step 3: use **Open Anyway**.
+
+**From source**, for developers, on a Mac with [Homebrew](https://brew.sh):
 
 ```bash
 git clone https://github.com/mindemory/proxenos && cd proxenos && scripts/install.sh
-```
-
-It installs what's missing (Node, Ollama's own app, and Miniforge if there's no conda), sets up the `proxenos` conda env and the page, and pulls a local model that fits your Mac's memory. Running it again only adds what's missing. `--no-model` skips it if you'll use a hosted model; `--start-at-login` keeps the page and a sync running from login on.
-
-```bash
 conda activate proxenos
-proxenos demo    # try it on a made-up person first; prints how to open it
+proxenos demo    # a made-up person, to try it first; prints how to open it
 proxenos web     # your own, at http://127.0.0.1:4747
 ```
 
-Setup asks your name, where to keep the vault and which model to use, then Connect adds a first source. A model is needed for anything to be drafted: an open one on your computer, which setup downloads with one button (a small one first, ready in minutes, then a bigger one in the background if your computer has the memory), or a hosted one with your own key from Anthropic, OpenAI or Google Gemini. Empty pages have a **Make it now** button, so nothing needs a terminal once it's installed. Windows and Linux run from source too, though less tried ([docs/apps.md](docs/apps.md)). Every step by hand is in [the guide](docs/guide.md); every command, in [docs/commands.md](docs/commands.md).
+The script installs what's missing (Node, Ollama's own app, and Miniforge if there's no conda), sets up the `proxenos` conda env and the page, and pulls a local model that fits your Mac's memory. Run it again and it only adds what's missing. `--no-model` skips the model; `--start-at-login` keeps the page and a sync running from login on. Empty pages have a **Make it now** button, so nothing needs a terminal once it's running. Windows and Linux run from source too, though less tried ([docs/apps.md](docs/apps.md)). Every step by hand is in [the guide](docs/guide.md); every command, in [docs/commands.md](docs/commands.md).
 
 ## How it works
 
