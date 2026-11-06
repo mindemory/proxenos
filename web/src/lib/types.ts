@@ -1124,8 +1124,8 @@ export const SETTING_KEYS = [
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
-/** Where a value comes from, first to last: the shell, the repo's .env, the settings file, the secure store ("keychain" everywhere). */
-export type SettingOrigin = "environment" | ".env" | "settings" | "keychain";
+/** Where a value comes from, first to last: the shell, the repo's .env, the settings file, the secure store ("keychain" everywhere), then what the desktop app ships ("app"). */
+export type SettingOrigin = "environment" | ".env" | "settings" | "keychain" | "app";
 
 export interface SettingValue {
   value: string | null;
@@ -1200,6 +1200,7 @@ export type SetupChange =
   | { hosted_model: string }
   | { ollama: string }
   | { server: string }
+  | { google_client: { client_id: string; client_secret: string } }
   | { secret: string; value: string }
   | { forget: string };
 

@@ -29,7 +29,7 @@ import { proxenos, setting } from "./vault";
 const SETUP_MS = 45_000;
 const MAX_OUTPUT = 256 * 1024;
 const MAX_VALUE = 4096;
-const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain"];
+const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain", "app"];
 /** The secrets `proxenos setup` keeps, as config.SECRET names them. */
 const SECRET_NAME =
   /^(ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|BEEPER_ACCESS_TOKEN|GMAIL_[A-Z0-9_]+|SLACK_USER_TOKEN(_\w+)?|STRAVA_(CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN)|SPOTIFY_(CLIENT_ID|REFRESH_TOKEN)|GOOGLE_CLIENT_(ID|SECRET)|GCALENDAR_[A-Z0-9_]+|GDOCS_[A-Z0-9_]+|MICROSOFT_[A-Z0-9_]+|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)|NTFY_(TOPIC|TOKEN))$/;
@@ -192,7 +192,8 @@ export async function getSetup(): Promise<SetupResponse> {
 
 /** Make one change through `proxenos setup --apply`, the change on its stdin. */
 export async function applySetup(change: SetupChange): Promise<SetupResult> {
-  const secret = "key" in change ? change.key : "value" in change ? change.value : null;
+  const secret =
+    "key" in change ? change.key : "value" in change ? change.value : "google_client" in change ? change.google_client.client_secret : null;
   // Whatever the provider's models are is the page's to show; nothing of the key is in it.
   const done = await run(["--apply"], JSON.stringify(change), secret);
   if ("error" in done) return { ok: false, message: null, error: done.error, status: null };
@@ -251,6 +252,12 @@ export function parseChange(body: Record<string, unknown>): SetupChange | { erro
     return typeof body.server === "string" && MODEL_NAME.test(body.server.trim())
       ? { server: body.server.trim() }
       : { error: "Name a model the server lists." };
+  }
+  if ("google_client" in body) {
+    const client = rec(body.google_client);
+    return oneLine(client.client_id, 512) && oneLine(client.client_secret, 512) && client.client_id.trim() && client.client_secret.trim()
+      ? { google_client: { client_id: client.client_id.trim(), client_secret: client.client_secret.trim() } }
+      : { error: "That isn't a Google client: it needs a client ID and a client secret." };
   }
   if ("secret" in body) {
     if (typeof body.secret !== "string" || !SECRET_NAME.test(body.secret)) return { error: "That isn't one of Proxenos's secrets." };

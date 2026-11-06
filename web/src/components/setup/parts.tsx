@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Cpu, KeyRound, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { Check, Cpu, FileUp, KeyRound, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { PrimaryButton } from "@/components/connect/parts";
 import { Command } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
+import { googleClientFrom } from "@/lib/googleClient";
 import { useRunJob } from "@/lib/runJobClient";
 import { hostedModels } from "@/lib/setupClient";
 import type { HostedModels, HostedProvider, LocalModel, SetupChange, SettingOrigin, SetupStatus } from "@/lib/types";
@@ -102,6 +103,7 @@ export function originLabel(from: SettingOrigin | null, store: string): string {
   if (from === ".env") return "in .env";
   if (from === "settings") return "in your settings";
   if (from === "environment") return "from the environment";
+  if (from === "app") return "from this app";
   return "";
 }
 
@@ -661,4 +663,52 @@ export function secretLabel(name: string): string {
   if (name.startsWith("MICROSOFT_")) return `Microsoft · ${name.slice(10).toLowerCase()}`;
   if (name.startsWith("SLACK_USER_TOKEN_")) return `Slack · ${name.slice(17)}`;
   return name;
+}
+
+/**
+ * "Load the file you downloaded from Google": the JSON Google's console gives for an OAuth client.
+ * It's read here, in the browser; only its ID and secret go on, in the request's body, and neither
+ * is shown or kept in the page.
+ */
+export function GoogleClientFile({ save, label = "Load the file you downloaded from Google" }: { save: Apply; label?: string }) {
+  const { busy, said, run } = useChange(save);
+  const [problem, setProblem] = useState<string | null>(null);
+  const load = async (file: File | undefined) => {
+    setProblem(null);
+    if (!file) return;
+    const client = file.size <= 64 * 1024 ? googleClientFrom(await file.text().catch(() => "")) : null;
+    if (!client) setProblem("That isn't the file Google gave you for an OAuth client. It has a client_id and a client_secret.");
+    else await run({ google_client: client });
+  };
+  return (
+    <div className="space-y-1.5">
+      <label
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5 text-[0.8125rem] text-muted transition-colors hover:text-ink focus-within:border-accent/60",
+          busy && "pointer-events-none opacity-50",
+        )}
+      >
+        <FileUp size={13} aria-hidden="true" />
+        {busy ? "Saving…" : label}
+        <input
+          type="file"
+          accept=".json,application/json"
+          className="sr-only"
+          disabled={busy}
+          onChange={(e) => {
+            const input = e.currentTarget;
+            load(input.files?.[0]).finally(() => {
+              input.value = "";
+            });
+          }}
+        />
+      </label>
+      {problem && (
+        <p className="text-sm text-bad-ink" role="alert">
+          {problem}
+        </p>
+      )}
+      <SaidLine said={said} />
+    </div>
+  );
 }

@@ -1,5 +1,10 @@
 """Settings are read as PROXENOS_<NAME>, with the older TWIN_<NAME> as a fallback."""
 
+import json
+import os
+
+import pytest
+
 from proxenos import config
 
 
@@ -36,3 +41,49 @@ def test_the_vault_defaults_to_proxenos_vault_and_reads_either_name(monkeypatch,
     assert config.vault_path() == (tmp_path / "old").resolve()
     monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path / "new"))
     assert config.vault_path() == (tmp_path / "new").resolve()
+
+
+def _client_file(tmp_path, client_id="shipped-id", client_secret="shipped-secret"):
+    path = tmp_path / "google.json"
+    path.write_text(
+        json.dumps({"installed": {"client_id": client_id, "client_secret": client_secret}})
+    )
+    return path
+
+
+def test_the_apps_google_client_is_the_last_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROXENOS_GOOGLE_CLIENT", str(_client_file(tmp_path)))
+    assert config.origin("GOOGLE_CLIENT_ID") == "app"
+    assert os.environ["GOOGLE_CLIENT_ID"] == "shipped-id"
+    assert os.environ["GOOGLE_CLIENT_SECRET"] == "shipped-secret"
+    assert config.origin("GOOGLE_CLIENT_SECRET") == "app"
+
+
+def test_a_client_of_the_users_own_wins_over_the_apps(monkeypatch, tmp_path, fake_keychain):
+    monkeypatch.setenv("PROXENOS_GOOGLE_CLIENT", str(_client_file(tmp_path)))
+    config.save_secret("GOOGLE_CLIENT_ID", "mine")
+    config.save_secret("GOOGLE_CLIENT_SECRET", "mine-too")
+    monkeypatch.setattr("proxenos.config._loaded", False)
+    monkeypatch.delenv("GOOGLE_CLIENT_ID")
+    monkeypatch.delenv("GOOGLE_CLIENT_SECRET")
+    config.load()
+    assert os.environ["GOOGLE_CLIENT_ID"] == "mine"
+    assert config.origin("GOOGLE_CLIENT_SECRET") == "keychain"
+
+
+def test_half_a_set_client_is_never_completed_from_the_apps(monkeypatch, tmp_path):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "mine")
+    monkeypatch.setenv("PROXENOS_GOOGLE_CLIENT", str(_client_file(tmp_path)))
+    assert config.origin("GOOGLE_CLIENT_ID") == "environment"
+    assert "GOOGLE_CLIENT_SECRET" not in os.environ
+
+
+@pytest.mark.parametrize("body", ["not json", '{"installed": {"client_id": "x"}}', "[]"])
+def test_a_client_file_that_isnt_one_is_ignored(monkeypatch, tmp_path, body):
+    path = tmp_path / "bad.json"
+    path.write_text(body)
+    monkeypatch.setenv("PROXENOS_GOOGLE_CLIENT", str(path))
+    assert config.origin("GOOGLE_CLIENT_ID") is None
+    monkeypatch.setenv("PROXENOS_GOOGLE_CLIENT", str(tmp_path / "missing.json"))
+    monkeypatch.setattr("proxenos.config._loaded", False)
+    assert config.origin("GOOGLE_CLIENT_ID") is None

@@ -29,7 +29,7 @@ import { nowIso, proxenos, vaultInfo, vaultPath } from "./vault";
 const PRIVACY_MS = 60_000;
 const MAX_OUTPUT = 2 * 1024 * 1024;
 const MAX_TEXT = 120;
-const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain"];
+const ORIGINS: readonly SettingOrigin[] = ["environment", ".env", "settings", "keychain", "app"];
 const HOWS: readonly ConnectHow[] = ["live", "download", "folder"];
 
 function rec(v: unknown): Record<string, unknown> {

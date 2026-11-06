@@ -12,6 +12,7 @@ import {
   type Apply,
   CloudWarning,
   Field,
+  GoogleClientFile,
   inputClass,
   ModelChoice,
   NOT_A_LOGIN,
@@ -419,7 +420,8 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
   const [mode, setMode] = useState<"idle" | "replace" | "remove">("idle");
   const [value, setValue] = useState("");
   const { busy, said, run } = useChange(apply);
-  const fromShell = s.from === "environment";
+  const shipped = s.from === "app";
+  const fromShell = s.from === "environment" || shipped;
   const done = (ok: boolean) => {
     if (!ok) return;
     setMode("idle");
@@ -520,8 +522,13 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
           </button>
         </div>
       )}
+      {s.name === "GOOGLE_CLIENT_ID" && mode === "idle" && <GoogleClientFile save={apply} />}
       {fromShell && mode === "idle" && (
-        <p className="text-xs text-muted">Set in the environment Proxenos was started with; change it there.</p>
+        <p className="text-xs text-muted">
+          {shipped
+            ? "This is the sign-in client the app shipped with. Replace it, or load your own file, to use your own."
+            : "Set in the environment Proxenos was started with; change it there."}
+        </p>
       )}
       <SaidLine said={said} />
     </div>

@@ -47,7 +47,7 @@ function Rows({ sources, now }: { sources: ConnectSource[]; now: string }) {
 }
 
 export function Connect() {
-  const { data, error, clearError, job, signIn, readWhatsApp, saveBeeperToken, cancel } = useConnect();
+  const { data, error, clearError, reload, job, signIn, readWhatsApp, saveBeeperToken, cancel } = useConnect();
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load sources: ${error}`} /> : <StatusSkeleton />;
@@ -94,6 +94,8 @@ export function Connect() {
             s={gmail}
             now={data.now}
             job={job("gmail")}
+            inApp={data.inApp}
+            onClient={reload}
             onSignIn={(n, a) => signIn("gmail", n, a)}
             onCancel={() => cancel("gmail")}
           />
@@ -103,6 +105,8 @@ export function Connect() {
             s={microsoft}
             now={data.now}
             job={job("microsoft")}
+            inApp={data.inApp}
+            onClient={reload}
             onSignIn={(n, a) => signIn("microsoft", n, a)}
             onCancel={() => cancel("microsoft")}
           />
@@ -112,6 +116,8 @@ export function Connect() {
             s={gcalendar}
             now={data.now}
             job={job("gcalendar")}
+            inApp={data.inApp}
+            onClient={reload}
             onSignIn={(n, a) => signIn("gcalendar", n, a)}
             onCancel={() => cancel("gcalendar")}
           />
@@ -136,6 +142,8 @@ export function Connect() {
             s={gdocs}
             now={data.now}
             job={job("gdocs")}
+            inApp={data.inApp}
+            onClient={reload}
             onSignIn={(n, a) => signIn("gdocs", n, a)}
             onCancel={() => cancel("gdocs")}
           />

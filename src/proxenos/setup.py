@@ -33,6 +33,9 @@ secret's value: only whether it's set.
 - {"fast": "auto"} sets the fast model to the one `proxenos model serve-fast` serves, when this
   is an Apple-silicon Mac with mlx-lm and that model downloaded; {"fast": "off"} keeps it unset.
   The first model, key or name saved here does the same on its own when it's unset and found.
+- {"google_client": {"client_id": ..., "client_secret": ...}} saves the Google sign-in client a
+  person loaded from the file Google gave them (the page reads it in the browser), as the two
+  secrets GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. One the app ships is used only without it.
 - {"secret": NAME, "value": ...} replaces a secret; {"forget": NAME} removes one.
 Secrets come in on stdin, never as arguments, and never go back out.
 """
@@ -299,6 +302,8 @@ def _apply(request: object, extra: dict) -> str:
         return _use_ollama(str(request["ollama"]).strip())
     if "server" in request:
         return _use_server(str(request["server"]).strip())
+    if "google_client" in request:
+        return _save_google_client(request["google_client"])
     if "secret" in request:
         name, value = str(request["secret"]), str(request.get("value", "")).strip()
         if name == "ANTHROPIC_API_KEY":
@@ -324,6 +329,21 @@ def _apply(request: object, extra: dict) -> str:
             return f"{name} comes from the environment Proxenos was started with; remove it there."
         return f"Removed {name}." if removed else f"{name} wasn't saved anywhere Proxenos keeps it."
     raise ValueError("Nothing to change.")
+
+
+def _save_google_client(client: object) -> str:
+    """Save a Google OAuth client's ID and secret, both or neither."""
+    pair = (
+        [client.get("client_id"), client.get("client_secret")] if isinstance(client, dict) else []
+    )
+    if len(pair) != 2 or not all(isinstance(v, str) and v.strip() for v in pair):
+        raise ValueError("That isn't a Google client: it needs a client ID and a client secret.")
+    client_id, client_secret = (v.strip() for v in pair)
+    if any(len(v) > 512 or not v.isprintable() for v in (client_id, client_secret)):
+        raise ValueError("The client's ID and secret each have to be one short line.")
+    where = config.save_secret("GOOGLE_CLIENT_ID", client_id)
+    config.save_secret("GOOGLE_CLIENT_SECRET", client_secret)
+    return f"Saved the Google sign-in client in {where}."
 
 
 def _save_settings(changes: dict) -> str:

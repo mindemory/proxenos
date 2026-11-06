@@ -11,9 +11,12 @@ of these that has it:
    setup and Settings write: {"name": ..., "vault": ..., "model": ...} for PROXENOS_NAME and the
    rest, and under "keychain" the names of the secrets kept in the secure store;
 4. the secure store, one item per secret: the macOS Keychain, Windows Credential Manager or the
-   Secret Service (keychain.py).
+   Secret Service (keychain.py);
+5. for GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET only, the client file the desktop app ships
+   (PROXENOS_GOOGLE_CLIENT, Google's own download format), so a person who got the app makes no
+   Google Cloud project. A client of their own, from any of 1 to 4, wins.
 
-`load` puts what 2 to 4 hold into the environment once per process, never over a variable that's
+`load` puts what 2 to 5 hold into the environment once per process, never over a variable that's
 already there, so every reader sees the same order. Changes go where they'd be read first: into
 .env when running from source with one, else into the settings file or the secure store.
 
@@ -37,6 +40,7 @@ ENV_FILE: Path | None = REPO_ROOT / ".env" if FROM_SOURCE else None
 PREFIX = "PROXENOS_"
 OLD_PREFIX = "TWIN_"
 DEFAULT_VAULT = "~/proxenos_vault"
+GOOGLE_CLIENT_FILE = "PROXENOS_GOOGLE_CLIENT"  # the desktop app's shipped Google client
 KEYCHAIN = "keychain"  # the settings file's list of the secrets in the secure store
 # The secrets: a model key, sign-ins' tokens, the apps you sign in through, the ntfy topic
 # phone notices go to, which anyone who knows it can read (proxenos.notify), and a search
@@ -127,11 +131,42 @@ def load() -> None:
             if value:
                 os.environ[name] = value
                 _origin[name] = "keychain"
+    _bundled_google()
+
+
+def _bundled_google() -> None:
+    """Fill GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the app's shipped client file, only
+    when neither is set from anywhere else: the pair is one client, never half of each."""
+    path = os.environ.get(GOOGLE_CLIENT_FILE)
+    if not path or os.environ.get("GOOGLE_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_SECRET"):
+        return
+    pair = google_client_file(Path(path))
+    if pair is None:
+        return
+    for name, value in zip(("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), pair, strict=True):
+        os.environ[name] = value
+        _origin[name] = "app"
+
+
+def google_client_file(path: Path) -> tuple[str, str] | None:
+    """The (client_id, client_secret) in a Google OAuth client file ({"installed": {...}}, as
+    Google Cloud's download has it; "web" is read the same), or None when it isn't one."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    client = (data.get("installed") or data.get("web")) if isinstance(data, dict) else None
+    if not isinstance(client, dict):
+        return None
+    pair = (client.get("client_id"), client.get("client_secret"))
+    if not all(isinstance(v, str) and v.strip() for v in pair):
+        return None
+    return pair[0].strip(), pair[1].strip()
 
 
 def origin(variable: str) -> str | None:
-    """Where a variable's value comes from: "environment", ".env", "settings" or "keychain"; None
-    when it isn't set."""
+    """Where a variable's value comes from: "environment", ".env", "settings", "keychain" or "app"
+    (the client file the desktop app ships); None when it isn't set."""
     load()
     if variable not in os.environ:
         return None

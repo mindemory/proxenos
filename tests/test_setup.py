@@ -434,3 +434,24 @@ def test_the_command_reads_one_change_on_stdin_and_prints_json(home, monkeypatch
         "error": "Nothing to change.",
         "status": None,
     }
+
+
+def test_a_google_client_from_the_downloaded_file_is_saved_as_two_secrets(home, fake_keychain):
+    done = apply({"google_client": {"client_id": "abc.apps.example", "client_secret": SECRET}})
+    assert done["ok"] and "Keychain" in done["message"]
+    assert fake_keychain.items == {
+        "GOOGLE_CLIENT_ID": "abc.apps.example",
+        "GOOGLE_CLIENT_SECRET": SECRET,
+    }
+    assert all(SECRET not in " ".join(command) for command in fake_keychain.commands)
+    shown = {s["name"]: (s["set"], s["from"]) for s in done["status"]["secrets"]}
+    assert shown["GOOGLE_CLIENT_ID"] == shown["GOOGLE_CLIENT_SECRET"] == (True, "keychain")
+
+
+@pytest.mark.parametrize(
+    "client",
+    [{"client_id": "only-an-id"}, {"client_id": "", "client_secret": "x"}, "text", None],
+)
+def test_half_a_google_client_is_refused_and_nothing_is_saved(home, fake_keychain, client):
+    assert not apply({"google_client": client})["ok"]
+    assert not fake_keychain.items

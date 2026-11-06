@@ -120,5 +120,5 @@ export function useConnect() {
 
   const job = useCallback((kind: ConnectJobKind) => data?.jobs.find((j) => j.kind === kind) ?? null, [data]);
 
-  return { data, error, clearError: () => setError(null), job, signIn, readWhatsApp, saveBeeperToken, cancel };
+  return { data, error, clearError: () => setError(null), reload: load, job, signIn, readWhatsApp, saveBeeperToken, cancel };
 }

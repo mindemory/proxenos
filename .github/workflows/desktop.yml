@@ -75,7 +75,12 @@ jobs:
           cache-dependency-path: |
             web/package-lock.json
             desktop/package-lock.json
+      # The Google sign-in client the app ships with, from this repo's secrets when they're set;
+      # without them the app builds without Google sign-in, as for anyone building it themselves.
       - run: desktop/build.sh
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       # The app's own Python writes a demo vault, and its page's server answers on it.
       - run: desktop/smoke.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

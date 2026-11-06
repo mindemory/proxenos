@@ -29,6 +29,8 @@ module.exports = {
     // A folder's own node_modules is always left out of a copy, so the server's comes on its own.
     { from: "resources/web/node_modules", to: "web/node_modules" },
     { from: "resources/python", to: "python" },
+    // Google sign-in's client (client/google.json), when the build had one; build.sh always makes the folder.
+    { from: "resources/client", to: "client" },
   ],
   icon: "resources/icon.png",
   npmRebuild: false, // the app has no packages of its own; the page's are in resources/web

@@ -39,6 +39,18 @@ export async function hostedModels(provider: HostedProvider): Promise<HostedMode
   return answer.models;
 }
 
+/** Make one change without the setup hook, as the Connect page does. Resolves with the answer; rejects with why not. */
+export async function postChange(change: SetupChange): Promise<SetupResult> {
+  const res = await fetch("/api/setup", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(change),
+  });
+  const answer = (await res.json().catch(() => ({}))) as Partial<SetupResult>;
+  if (!res.ok || !answer.ok) throw new Error(answer.error ?? `The change wasn't saved (${res.status}).`);
+  return answer as SetupResult;
+}
+
 export function useSetup() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,14 +69,8 @@ export function useSetup() {
 
   /** Make one change. Resolves with what was done; rejects with why not, in the page's words. */
   const apply = useCallback(async (change: SetupChange): Promise<string> => {
-    const res = await fetch("/api/setup", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(change),
-    });
-    const answer = (await res.json().catch(() => ({}))) as Partial<SetupResult>;
+    const answer = await postChange(change);
     if (answer.status) setStatus(answer.status);
-    if (!res.ok || !answer.ok) throw new Error(answer.error ?? `The change wasn't saved (${res.status}).`);
     return answer.message ?? "Saved.";
   }, []);
 

@@ -26,6 +26,8 @@ const WINDOWS = process.platform === "win32";
 const RESOURCES = app.isPackaged ? process.resourcesPath : path.join(__dirname, "resources");
 const WEB = path.join(RESOURCES, "web"); // server.js, .next and public
 const PYTHON = WINDOWS ? path.join(RESOURCES, "python", "python.exe") : path.join(RESOURCES, "python", "bin", "python3");
+// The Google sign-in client this build shipped with, when it had one (desktop/build.sh).
+const GOOGLE_CLIENT = path.join(RESOURCES, "client", "google.json");
 const BUSY = 75; // `proxenos schedule`'s exit when another scheduler already keeps the vault
 const STOP_GRACE = 30_000; // ms: the scheduler gives a running job 20 s to wind down, then ends it
 const RETRY = 5 * 60_000; // ms between tries at starting a scheduler that stopped by itself
@@ -103,6 +105,8 @@ function environment() {
   };
   delete env.PYTHONHOME;
   delete env.PYTHONPATH;
+  // A user's own client (environment, settings, Keychain) still wins; config.load reads this last.
+  if (fs.existsSync(GOOGLE_CLIENT)) env.PROXENOS_GOOGLE_CLIENT = GOOGLE_CLIENT;
   // An app opened from the Finder gets a bare PATH; add Homebrew's, as the launchd jobs do.
   if (MAC) env.PATH = [...new Set(["/opt/homebrew/bin", "/usr/local/bin", ...(env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin").split(":")])].join(":");
   return env;

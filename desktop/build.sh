@@ -80,6 +80,43 @@ rm -rf "$cache/wheel"
   "$cache"/wheel/proxenos-*.whl
 "$stage/$python" -m proxenos --help >/dev/null
 
+# Google sign-in that ships with the app: the builder's own Google client (a Desktop app one from
+# Google Cloud), so nobody who gets the app makes a project of their own. From GOOGLE_CLIENT_ID and
+# GOOGLE_CLIENT_SECRET in this build's environment, else (on a Mac) the builder's own Proxenos:
+# the repo's .env, its settings file or its Keychain, read through the staged Python's
+# proxenos.config. It goes to resources/client/google.json in Google's own download format, which
+# main.js hands the app as PROXENOS_GOOGLE_CLIENT. Neither value is ever printed. An installed
+# app's client secret isn't confidential (Google says so), but it isn't committed anywhere either.
+rm -rf "$stage/client"
+mkdir -p "$stage/client"
+if "$stage/$python" -I -c '
+import json, os, sys
+from pathlib import Path
+
+names = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")
+if not all(os.environ.get(n) for n in names):
+    env = Path(sys.argv[2]) / ".env"
+    if sys.platform == "darwin":
+        from dotenv import dotenv_values
+        from proxenos import config
+
+        for n, v in (dotenv_values(env) if env.is_file() else {}).items():
+            if n in names and v and not os.environ.get(n):
+                os.environ[n] = v
+        config.load()  # the settings file, then the Keychain, as the builder'"'"'s Proxenos reads them
+if not all(os.environ.get(n) for n in names):
+    sys.exit(3)
+client = {"installed": {"client_id": os.environ[names[0]], "client_secret": os.environ[names[1]]}}
+out = Path(sys.argv[1])
+out.write_text(json.dumps(client), encoding="utf-8")
+out.chmod(0o600)
+' "$stage/client/google.json" "$repo"; then
+  say "Google sign-in is in the app"
+else
+  rm -f "$stage/client/google.json"
+  say "no Google client in this build's environment or this Mac's Proxenos: the app is built without Google sign-in"
+fi
+
 say "building the page"
 (cd "$cache/src/web" && npm ci --no-audit --no-fund && PROXENOS_STANDALONE=1 npm run build)
 rm -rf "$stage/web"

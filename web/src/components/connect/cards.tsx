@@ -4,7 +4,9 @@ import { ChevronRight, ExternalLink, LogIn, RefreshCw, Save, Smartphone } from "
 import { useState } from "react";
 
 import { Command } from "@/components/EmptyState";
+import { GoogleClientFile } from "@/components/setup/parts";
 import { isAddress } from "@/lib/actions";
+import { postChange } from "@/lib/setupClient";
 import type { ConnectJob, ConnectSource, MailAccount, PhoneInfo } from "@/lib/types";
 
 import { QrCode } from "./QrCode";
@@ -82,6 +84,8 @@ interface SignInCopy {
   reads: string;
   /** Beside an account that hasn't been read yet, when that isn't the next sync's job. */
   unread?: string;
+  /** Google's sign-in: it can load a client file, and its consent screen warns the project is unverified. */
+  google?: boolean;
 }
 
 function StepsLink({ href }: { href: string }) {
@@ -97,6 +101,7 @@ const GMAIL_COPY: SignInCopy = {
   button: "Sign in with Google",
   placeholder: "you@gmail.com",
   noClientProblem: "no_google_client",
+  google: true,
   noClient: (
     <>
       Sign-in needs a Google OAuth client first. In Google Cloud, make a <em>Desktop app</em> client with the Gmail API on, put
@@ -127,6 +132,7 @@ const CALENDAR_COPY: SignInCopy = {
   button: "Sign in with Google",
   placeholder: "you@gmail.com",
   noClientProblem: "no_google_client",
+  google: true,
   noClient: (
     <>
       Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Calendar
@@ -142,6 +148,7 @@ const DOCS_COPY: SignInCopy = {
   button: "Sign in with Google",
   placeholder: "you@gmail.com",
   noClientProblem: "no_google_client",
+  google: true,
   noClient: (
     <>
       Sign-in needs a Google OAuth client first: the same <em>Desktop app</em> client as Gmail&apos;s, with the Google Drive API
@@ -158,6 +165,10 @@ interface SignInProps {
   s: ConnectSource;
   now: string;
   job: ConnectJob | null;
+  /** The desktop app: no Google Cloud steps to point at, and a copy built without a client says so. */
+  inApp: boolean;
+  /** After a Google client file is loaded: read the sources again, so the sign-in button shows. */
+  onClient: () => void;
   onSignIn: (name: string, address: string) => Promise<string | null>;
   onCancel: () => void;
 }
@@ -183,7 +194,7 @@ export function GoogleDocsCard(props: SignInProps) {
 }
 
 /** A source read through a sign-in: the accounts signed in, and a sign-in for another (or the same one again). */
-function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { copy: SignInCopy }) {
+function SignInCard({ s, now, job, inApp, onClient, onSignIn, onCancel, copy }: SignInProps & { copy: SignInCopy }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -275,12 +286,24 @@ function SignInCard({ s, now, job, onSignIn, onCancel, copy }: SignInProps & { c
             {formError}
           </p>
         )}
+        {copy.google && !noClient && (
+          <p className="text-xs leading-relaxed text-muted">
+            Google will say it hasn&apos;t verified Proxenos. Press Advanced, then Go to Proxenos.
+          </p>
+        )}
       </form>
 
       {noClient && (
-        <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
-          {copy.noClient}
-        </p>
+        <div className="space-y-2.5">
+          <p className="break-words rounded-xl border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm leading-relaxed text-warn-ink">
+            {copy.google && inApp
+              ? "This copy of the app was built without Google sign-in. If you have a Google client file of your own, load it below."
+              : copy.noClient}
+          </p>
+          {copy.google && (
+            <GoogleClientFile save={(change) => postChange(change).then((r) => (onClient(), r.message ?? "Saved."))} />
+          )}
+        </div>
       )}
 
       <JobLine
