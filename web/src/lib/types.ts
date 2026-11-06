@@ -1035,7 +1035,8 @@ export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a
  * project's step, a decision on one (Accept, Discard, or a change to the queue), a month's story, a thought
- * being thought through, a round of drafts comparing two models, and a comparison of offers.
+ * being thought through, a round of drafts comparing two models, a comparison of offers, a model being
+ * downloaded, and an empty view being filled ("Make it now"). The last two show their command's last line as it comes.
  */
 export type JobKind =
   | ConnectJobKind
@@ -1048,7 +1049,9 @@ export type JobKind =
   | "think"
   | "compare"
   | "offers"
-  | "review";
+  | "review"
+  | "model"
+  | "make";
 
 export interface ConnectJob {
   kind: ConnectJobKind;
@@ -1058,6 +1061,19 @@ export interface ConnectJob {
   account: string | null; // the address a sign-in is for
   started: string;
   finished: string | null;
+}
+
+/** A background command as the page follows it: a model download, or a view being filled. `command` is the one the latter runs. */
+export interface RunJob {
+  state: ConnectJob["state"];
+  message: string;
+  command: string | null;
+  started: string;
+  finished: string | null;
+}
+
+export interface RunJobResponse {
+  job: RunJob | null;
 }
 
 export interface ConnectJobsResponse {
@@ -1075,6 +1091,8 @@ export interface ConnectResponse extends ConnectJobsResponse {
   vault: VaultInfo;
   sources: ConnectSource[];
   phone: PhoneInfo;
+  /** Whether this is the desktop app, which has no `proxenos` command or slackdump on the PATH to point a person at. */
+  inApp: boolean;
   /** Why the sources couldn't be read, when they couldn't. */
   error: string | null;
 }
@@ -1130,8 +1148,8 @@ export interface SetupStatus {
   vault: { path: string; exists: boolean; cloud: "icloud" | "drive" | null };
   /** A model on this computer (through Ollama or another server), Anthropic's with a key, or none yet. */
   model: { kind: "local" | "api" | "none"; name: string; via: "ollama" | "server" | null };
-  /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, and the model to pull unless it's too big. */
-  computer: { memory: number | null; advice: string; rule: string; get: string | null };
+  /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, the model to pull unless it's too big, the small one to download first (null: too big too), and the bigger one to offer in the background while a small one is in use (null: none to offer). */
+  computer: { memory: number | null; advice: string; rule: string; get: string | null; starter: string | null; upgrade: string | null };
   ollama: LocalModels;
   /** The model for light jobs: the one set ("off" is a choice), whether this Mac has mlx-lm and the model to serve, whether its server answers, and the name setup would set. */
   fast: { model: string | null; found: boolean; running: boolean; suggested: string };

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PrimaryButton } from "@/components/connect/parts";
 import { Command } from "@/components/EmptyState";
 import { Segmented } from "@/components/layout/Segmented";
+import { useRunJob } from "@/lib/runJobClient";
 import type { LocalModel, SetupChange, SettingOrigin, SetupStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -176,48 +177,130 @@ function OnThisComputer({ status, apply, onReload }: { status: SetupStatus; appl
 function OllamaModel({ status, apply, onReload }: { status: SetupStatus; apply: Apply; onReload: () => void }) {
   const { running, models, suggested } = status.ollama;
   const { busy, said, run } = useChange(apply);
-  const get = status.computer.get;
+  const { starter, get, upgrade } = status.computer;
+  const download = useDownload(onReload);
   return (
     <div className="space-y-3">
-      {!running || !models.length ? (
-        <Missing onReload={onReload} state={running ? "Ollama is running, with no model yet." : "Ollama isn't running."}>
-          {!running && (
-            <li>
-              Install Ollama from{" "}
-              <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                ollama.com
-              </a>{" "}
-              and open it.
-            </li>
-          )}
+      {!running ? (
+        <Missing onReload={onReload} state="Ollama isn't running.">
           <li>
-            {get ? (
-              <>
-                Pull a model in Terminal: <Command>{`ollama pull ${get}`}</Command>
-              </>
-            ) : (
-              <>
-                Pull a model of the size above from{" "}
-                <a href="https://ollama.com/search" target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                  ollama.com/search
-                </a>
-                , in Terminal: <Command>ollama pull NAME</Command>
-              </>
-            )}
+            Install Ollama from{" "}
+            <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              ollama.com
+            </a>{" "}
+            and open it. Then Proxenos can download a model for you here.
           </li>
         </Missing>
+      ) : !models.length ? (
+        <div className="space-y-3 rounded-xl border border-line-strong bg-surface-2/60 p-3.5">
+          {starter || get ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <PrimaryButton disabled={download.running} onClick={() => download.start((starter ?? get) as string, "starter")}>
+                  Download {starter ?? get} (about {approx(starter ?? get)})
+                </PrimaryButton>
+                {starter && get && (
+                  <button
+                    type="button"
+                    disabled={download.running}
+                    onClick={() => download.start(get, "starter")}
+                    className="text-sm text-muted transition-colors hover:text-ink disabled:opacity-60"
+                  >
+                    or {get} (about {approx(get)}) for better writing
+                  </button>
+                )}
+              </div>
+              <p className="text-xs leading-relaxed text-faint">
+                Ollama is running, with no model yet. The model comes from Ollama&apos;s own library, and is used as soon as it&apos;s here.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted">
+              Ollama is running, but no model Proxenos suggests fits this computer&apos;s memory. Use an Anthropic API key instead.
+            </p>
+          )}
+          <Downloading download={download} />
+        </div>
       ) : (
-        <ModelPicker
-          models={models}
-          suggested={suggested}
-          current={status.model.via === "ollama" ? status.model.name : null}
-          rule={status.computer.rule}
-          busy={busy}
-          onUse={(name) => run({ ollama: name })}
-        />
+        <>
+          <ModelPicker
+            models={models}
+            suggested={suggested}
+            current={status.model.via === "ollama" ? status.model.name : null}
+            rule={status.computer.rule}
+            busy={busy}
+            onUse={(name) => run({ ollama: name })}
+          />
+          {(upgrade || download.running) && (
+            <div className="space-y-2 rounded-xl border border-line-strong bg-surface-2/60 p-3.5">
+              {upgrade && (
+                <>
+                  <p className="text-sm leading-relaxed text-muted">
+                    A bigger model writes better drafts: get {upgrade} (about {approx(upgrade)}) in the background. Proxenos keeps using{" "}
+                    <span className="num text-ink">{status.model.name}</span> until it&apos;s ready.
+                  </p>
+                  <PrimaryButton disabled={download.running} onClick={() => download.start(upgrade, "main")}>
+                    Get {upgrade}
+                  </PrimaryButton>
+                </>
+              )}
+              <Downloading download={download} />
+            </div>
+          )}
+        </>
       )}
       <SaidLine said={said} />
     </div>
+  );
+}
+
+/** About how big a model Proxenos suggests is to download, as Ollama's library lists it. */
+function approx(name: string | null): string {
+  return (name && { "gemma4:e4b": "7 GB", "gemma4:26b": "19 GB" }[name]) || "a few GB";
+}
+
+/** A model download the page started, followed by its last line; `onDone` is told when it finishes. */
+function useDownload(onDone: () => void) {
+  const [asked, setAsked] = useState(false);
+  const { job, error, start, stop } = useRunJob("/api/setup/pull", (ended) => {
+    if (ended.state === "done") onDone();
+  });
+  return {
+    job,
+    error,
+    asked,
+    running: job?.state === "running",
+    start: (name: string, as: "starter" | "main") => {
+      setAsked(true);
+      return start({ name, as });
+    },
+    stop,
+  };
+}
+
+/** How far a download is along (with Stop), or why it ended, once this page started it. */
+function Downloading({ download }: { download: ReturnType<typeof useDownload> }) {
+  const { job, error, asked, stop } = download;
+  const problem = error ?? (asked && job && (job.state === "failed" || job.state === "stopped") ? job.message : null);
+  return (
+    <>
+      {job?.state === "running" && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="num min-w-0 break-words text-sm text-ink" role="status">
+            {job.message || "Starting…"}
+          </p>
+          <button type="button" onClick={stop} className="rounded-full border border-line-strong px-3 py-1 text-sm text-muted hover:text-ink">
+            Stop
+          </button>
+        </div>
+      )}
+      {problem && (
+        <p className="flex items-start gap-1.5 text-sm leading-relaxed text-bad-ink" role="alert">
+          <X size={15} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{problem}</span>
+        </p>
+      )}
+    </>
   );
 }
 

@@ -106,6 +106,8 @@ function toStatus(raw: unknown): SetupStatus | null {
       advice: str(computer.advice)?.slice(0, 400) ?? "",
       rule: str(computer.rule)?.slice(0, 400) ?? "",
       get: str(computer.get) && MODEL_NAME.test(str(computer.get) ?? "") ? str(computer.get) : null,
+      starter: str(computer.starter) && MODEL_NAME.test(str(computer.starter) ?? "") ? str(computer.starter) : null,
+      upgrade: str(computer.upgrade) && MODEL_NAME.test(str(computer.upgrade) ?? "") ? str(computer.upgrade) : null,
     },
     ollama: localModels(r.ollama),
     // An older proxenos doesn't say: it had no fast model.

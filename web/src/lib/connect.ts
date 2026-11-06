@@ -14,7 +14,9 @@
 // the Projects page's steps ("step") and the decisions on them ("decide"), the Life page's
 // months written on demand ("life"), the Think page's turns ("think"), Settings' rounds
 // comparing two models ("compare"), the Offers page's comparisons ("offers"), and a paper's peer
-// review on the Projects page ("review").
+// review on the Projects page ("review"), a model's download ("model", through /api/setup/pull)
+// and an empty view being filled ("make", through /api/make). Those last two also show the
+// command's last line while it runs, so the page can say how far along it is.
 
 import type { ChildProcess } from "node:child_process";
 
@@ -42,7 +44,8 @@ const STATUS_MS = 30_000;
 // of each of up to fifty replies, a minute or two each on a laptop's model. A comparison of
 // offers reads up to twelve offers and writes a reply to each, a couple of minutes apiece there.
 // A paper's review is rounds of reports, a plan, the revision's steps and a letter: up to an hour
-// and a half a round, and up to five rounds.
+// and a half a round, and up to five rounds. A model's download is 7 to 19 GB, a few minutes on a
+// fast line and hours on a slow one. A view made on demand is a clone's run, as long as a step.
 export const ASK_MS = 15 * 60_000;
 export const STEP_MS = 40 * 60_000;
 export const COMPARE_MS = 4 * 60 * 60_000;
@@ -65,8 +68,14 @@ const JOB_MS: Record<JobKind, number> = {
   compare: COMPARE_MS,
   offers: OFFERS_MS,
   review: REVIEW_MS,
+  model: 3 * 60 * 60_000,
+  make: STEP_MS,
 };
+// The kinds whose message follows the command's output while it runs, not only when it ends.
+const LIVE: ReadonlySet<JobKind> = new Set<JobKind>(["model", "make"]);
 const MAX_OUTPUT = 1024 * 1024;
+// A download says a line a second for hours.
+const MAX_LIVE_OUTPUT = 16 * MAX_OUTPUT;
 const MAX_MESSAGE = 300;
 export const NO_COMMAND = "Couldn't find the proxenos command. Set PROXENOS_BIN in .env.";
 
@@ -148,7 +157,9 @@ function toPhone(raw: unknown): PhoneInfo {
 /** Every source and whether it's connected, from `proxenos connect`, and the jobs as they stand. */
 export async function getConnect(): Promise<ConnectResponse> {
   const vault = vaultPath();
-  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE };
+  // The desktop app starts this server with PROXENOS_PYTHON set (see vault.ts proxenos()).
+  const inApp = !!process.env.PROXENOS_PYTHON?.trim();
+  const base = { now: nowIso(), vault: await vaultInfo(vault), jobs: connectJobs(), phone: NO_PHONE, inApp };
   const cli = await proxenos();
   if (!cli) return { ...base, sources: [], error: NO_COMMAND };
   return new Promise((resolve) => {
@@ -253,12 +264,23 @@ export async function startJob(
   if (!cli) finish("failed", NO_COMMAND);
   else if (entry.stopping) finish("stopped", "Stopped.");
   else {
-    entry.child = cli.exec(args, { timeout: JOB_MS[kind], maxBuffer: MAX_OUTPUT }, (error, stdout, stderr) => {
+    const maxBuffer = LIVE.has(kind) ? MAX_LIVE_OUTPUT : MAX_OUTPUT;
+    entry.child = cli.exec(args, { timeout: JOB_MS[kind], maxBuffer }, (error, stdout, stderr) => {
       if (entry.stopping) finish("stopped", "Stopped.");
       else if (!error) finish("done", lastLine(hide(stdout)));
       else if (error.killed) finish("failed", "It took too long and was stopped.");
       else finish("failed", lastLine(hide(stderr)) || lastLine(hide(stdout)) || "It failed.");
     });
+    if (LIVE.has(kind)) {
+      // The last whole line said so far, kept as the job's message until the command ends.
+      let tail = "";
+      entry.child.stdout?.on("data", (chunk: Buffer | string) => {
+        tail = (tail + chunk.toString()).slice(-4096);
+        const whole = tail.slice(0, tail.lastIndexOf("\n") + 1);
+        const line = lastLine(hide(whole));
+        if (line && entry.job.state === "running") entry.job = { ...entry.job, message: line };
+      });
+    }
     if (stdin !== null) {
       // The command may exit without reading it all; that's reported by how it ends, not here.
       entry.child.stdin?.on("error", () => {});
