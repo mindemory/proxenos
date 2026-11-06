@@ -6,6 +6,7 @@ The [README](../README.md) says what Proxenos is in a few minutes. This is the l
 - [What it does](#what-it-does)
 - [What it looks like](#what-it-looks-like)
 - [How it fits together](#how-it-fits-together)
+- [Install the desktop app](#install-the-desktop-app)
 - [Install from source](#install-from-source)
 - [Adding your data](#adding-your-data)
 - [Building the model and the clones](#building-the-model-and-the-clones)
@@ -112,6 +113,53 @@ your sources ──ingest──▶ vault/raw ──observe──▶ notes ──
 
 More detail: [architecture](architecture.md), [memory](memory.md), [data sources](data_sources.md), [the feed and the page](tracker.md), [a voice model trained on your own writing](voice-model.md), [related work](landscape.md).
 
+## Install the desktop app
+
+For a Mac with Apple silicon (macOS 13 or newer) or a Windows PC. You never need a terminal. The first four steps are in the [README](../README.md#get-started): download from the [latest release](https://github.com/mindemory/proxenos/releases/latest), install, open (the app isn't signed yet, so use **Open Anyway** on a Mac or **More info → Run anyway** on Windows), and answer setup's questions. Setup's last screen is a checklist, **Get Proxenos ready**. Each line has one button. You can do them now or later: the same buttons are on **Connect**.
+
+**A model** writes your notes and drafts. Without one, your sources still sync but nothing is drafted.
+1. On setup's model step, choose **On this computer**, then **In Proxenos**. (It isn't there on a computer that can't run it. Use **Ollama** or **API key** instead.)
+2. Press **Download the model (about 5 GB)**. It comes once from Hugging Face, a site that shares open models, and nothing of yours is sent there.
+3. Wait. A progress line shows how far it is. You can press **Stop** and start again later: it carries on where it was.
+
+You'll see "Using Gemma 4 E4B on this computer" here. If a Mac has enough memory, the page then offers **Get Gemma 4 26B** (about 15 GB), which writes better. If the download stops before it finishes, press the button again.
+
+**Full Disk Access** (Mac only) lets Proxenos read Mail's and WhatsApp's files. macOS keeps them private until you allow it.
+1. Press **Open Full Disk Access**. System Settings opens at **Privacy & Security → Full Disk Access**.
+2. Turn on the switch beside **Proxenos**. If it isn't listed, press **+** and choose Proxenos in Applications.
+3. If macOS offers **Quit & Reopen**, choose it.
+
+You'll see "Proxenos can read Mail and WhatsApp" with a check mark. If it still says it's blocked, choose **Quit Proxenos** from the menu-bar icon, open Proxenos again, and look again.
+
+**Google sign-in** reads Gmail and Google Calendar (and makes a manuscript's Google Doc in your own Drive when you ask).
+1. Open **Connect** and find the **Gmail** card (or **Google Calendar**).
+2. Type a short name for the account, like **personal**, and its email address.
+3. Press **Sign in with Google**. A tab opens in your browser.
+4. Google warns that it hasn't verified Proxenos, because Proxenos hasn't been through Google's review yet. Press **Advanced**, then **Go to Proxenos (unsafe)**.
+5. Sign in, and allow what it asks. Proxenos only reads your mail and calendar.
+
+You'll see "Signed in as …" on the card. If you close the tab too soon, press **Cancel** and try again. If the card says this copy of Proxenos has no Google sign-in built in, Google can't connect here unless you make a Google sign-in client of your own and load its file on the card ([the steps](data_sources.md#email)).
+
+**Slack** reads your messages, one workspace at a time.
+1. Open **Connect** and find the **Slack** card.
+2. Type the workspace name: the part of your Slack address before `.slack.com` (**acme** for `acme.slack.com`).
+3. If you sign in to Slack with Google, tick **I sign in to Slack with Google**.
+4. Press **Sign in to Slack**. The first time, Proxenos downloads slackdump, the free program that reads Slack, from its GitHub page.
+5. Sign in in the window that opens, as you usually do. With Google, it opens in your own browser (Chrome or Firefox).
+
+You'll see "Signed in to …" on the card, and your last 30 days are saved. If it says the workspace doesn't exist, check the name in your Slack address. If Google sign-in can't open your browser, quit Chrome and press the button again.
+
+**WhatsApp** (Mac) is read from the WhatsApp app on this Mac.
+1. Install **WhatsApp** for Mac from the App Store, open it, and sign in by scanning its code with your phone.
+2. Turn on Full Disk Access (above).
+3. On **Connect**, press **Read WhatsApp now** on the WhatsApp card.
+
+You'll see "Read: … new messages" (the first read can take a few minutes). If the card says **Blocked by macOS**, redo Full Disk Access. The Mac app may hold less history than your phone.
+
+**A download from a service** (LinkedIn, Instagram, Google Takeout and the like): ask the service for your data. When the zip arrives, put it, as it is, in the `inbox` folder inside your vault (Connect's Downloads section shows the path). Then choose **Sync now** from the menu-bar or tray icon, or wait for the next sync. You'll see the source marked **Imported**. A zip Proxenos doesn't recognize stays in the inbox.
+
+Some sources can only be set up from a terminal for now: Strava, Bluesky, public mentions, other email, and notes. Connect says so on each.
+
 ## Install from source
 
 **One command**, on a Mac with [Homebrew](https://brew.sh):
@@ -142,7 +190,7 @@ Prefer a file? `cp .env.example .env` and fill it in. Running from source, `.env
 
 ## Adding your data
 
-Add data in any order. Each source works on its own:
+Add data in any order. Each source works on its own. In the desktop app, use the **Connect** page ([the steps are above](#install-the-desktop-app)). The commands below are for running from source:
 
 ```bash
 proxenos ingest whatsapp        # reads the WhatsApp Mac app's local store
