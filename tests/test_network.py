@@ -6,7 +6,7 @@ import itertools
 import json
 import math
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -749,6 +749,7 @@ def test_ideas(tmp_path, monkeypatch):
             {"name": "Tess Wintest", "why": "Self."},
             {"name": "BLOCKED author", "why": "Again."},
         ],
+        "drop": [],
     }
     calls = []
 
@@ -769,11 +770,11 @@ def test_ideas(tmp_path, monkeypatch):
         "clusters": 0,  # pairs only, and a pair is a tie, not a cluster
         "projects": 1,
         "outreach": 2,
-        "suggested_reads": 1,
+        "suggested_reads": 2,  # Rhea, and Pending Person, standing from before
     }
     ((prompt, kwargs),) = calls
     assert kwargs["effort"] == "high"
-    assert kwargs["schema"] == network._SCHEMA
+    assert kwargs["schema"] == network._schema([pending])
     assert "Tess" in kwargs["system"]
     assert "Studies spiral codes" in prompt and "NOT THE MODEL" not in prompt
     assert f"[{ada}] Ada Placeholder (example.edu): WhatsApp (direct chat" in prompt
@@ -810,9 +811,11 @@ def test_ideas(tmp_path, monkeypatch):
         (bram, "Bram Sample", "Coffee next week?"),
     ]
     assert ideas["outreach"][0]["id"] == network.idea_id("Share the spiral data?")
-    assert ideas["to_read"] == [
-        {"id": network.idea_id("Rhea Inkwell"), "name": "Rhea Inkwell", "why": "On the list."}
+    assert ideas["to_read"] == [  # what's new first, then the ideas still standing
+        {"id": network.idea_id("Rhea Inkwell"), "name": "Rhea Inkwell", "why": "On the list."},
+        {"id": pending, "name": "Pending Person", "why": "."},
     ]
+    assert f"[to_read] Pending Person (given 2026-03-01) id {pending}" in prompt
 
     history = json.loads((out / "history.json").read_text(encoding="utf-8"))
     assert history[rejected] == {
@@ -823,14 +826,83 @@ def test_ideas(tmp_path, monkeypatch):
     assert history[old_ask]["person_id"] == hana
     assert history[network.idea_id("Spiral atlas")]["given"] == "2026-03-10"
 
-    # A later run still knows what was rejected, though ideas.json has moved on.
+    # Nothing said since, and the notes and self-model the same: no call, ideas as they were.
     calls.clear()
     network.build(vault, now=NOW)
-    ((prompt, _),) = calls
+    assert calls == [] and json.loads((out / "ideas.json").read_text()) == ideas
+
+    # A later run still knows what was rejected, though ideas.json has moved on. It's asked
+    # about the standing ideas only, and drops one.
+    write(vault / "self" / "identity.md", "Studies spiral codes, and now grid cells.")
+    answer = {"projects": [], "outreach": [], "to_read": [], "drop": [pending]}
+    network.build(vault, now=NOW)
+    ((prompt, kwargs),) = calls
     assert "Old rejected idea" in prompt.split("They marked these not them")[1]
+    assert kwargs["schema"]["properties"]["drop"]["items"]["enum"] == [
+        network.idea_id("Spiral atlas"),
+        network.idea_id("Share the spiral data?"),
+        network.idea_id("Coffee next week?"),
+        network.idea_id("Rhea Inkwell"),
+        pending,
+    ]
     ideas = json.loads((out / "ideas.json").read_text(encoding="utf-8"))
     assert [p["title"] for p in ideas["projects"]] == ["Spiral atlas"]
+    assert [r["name"] for r in ideas["to_read"]] == ["Rhea Inkwell"]
     assert hana not in [o["person_id"] for o in ideas["outreach"]]
+
+
+def test_ideas_read_only_people_with_messages_since_the_last_run_and_a_bounded_number(
+    tmp_path, monkeypatch
+):
+    vault = tmp_path / "vault"
+    (vault / "self").mkdir(parents=True)
+    out = vault / "clones" / "network"
+    people = [
+        {
+            "id": f"p{n:03}",
+            "name": f"Person {n}",
+            "relation": "met",
+            "interactions": 10 + n,
+            "last_seen": "2026-03-09T10:00:00Z" if n < 130 else "2026-02-01T10:00:00Z",
+            "org": None,
+            "context": "WhatsApp",
+            "topics": [],
+        }
+        for n in range(200)
+    ]
+    calls = []
+
+    def fake_ask(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return {"projects": [], "outreach": [], "to_read": [], "drop": []}
+
+    monkeypatch.setattr(llm, "ask", fake_ask)
+    monkeypatch.setattr(llm, "prompt_chars", lambda: 100_000)  # a local model
+    network.ideas(vault, people, "x" * 20_000, NOW)  # the first run: the best, bounded
+    ((prompt, _),) = calls
+    assert prompt.count("\n- [p") == network.PEOPLE_PER_CALL
+
+    calls.clear()
+    network.ideas(vault, people, "x" * 20_000, NOW + timedelta(days=1))
+    assert calls == []  # nothing new: no call at all
+    ideas = json.loads((out / "ideas.json").read_text())
+    assert ideas["generated"] == GENERATED  # and the run it rests on isn't renewed
+
+    later = [p | {"last_seen": "2026-03-10T09:00:00Z"} if p["id"] == "p150" else p for p in people]
+    network.ideas(vault, later, "x" * 20_000, NOW + timedelta(days=1))
+    ((prompt, _),) = calls
+    assert prompt.count("\n- [p") == 1 and "[p150]" in prompt  # only who has news
+    assert "had messages since the last run" in prompt
+
+
+def test_a_local_model_reads_the_self_model_cut_short(monkeypatch):
+    monkeypatch.setattr(llm, "prompt_chars", lambda: 100_000)
+    whole = "\n".join(f"line {n} " * 20 for n in range(500))
+    cut = network._fit(whole)
+    assert len(cut) <= network.LOCAL_PROFILE + 60 and cut.startswith("line 0")
+    assert cut.endswith("(The rest of the self-model is left out.)")
+    monkeypatch.setattr(llm, "prompt_chars", lambda: None)  # a hosted model reads it all
+    assert network._fit(whole) == whole
 
 
 # Connections

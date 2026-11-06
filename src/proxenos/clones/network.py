@@ -65,12 +65,16 @@ the index already has from elsewhere skips the lower-case test. Notes are raw/no
 (title, collection, text, kind; Notion-style "Key: value" lines at the top of the text are
 read as properties) and raw/notes/tasks. Without them that part is skipped.
 
-The second step is one model call. It reads the self-model, the top 300 people (by messages
-and recency, with room kept for people the user knows of or wants to read), their note titles
-(empty and unfinished pages are plans) and how they took earlier ideas, and writes
-clones/network/ideas.json: projects they could do with what they know, people to reach out to
-with a specific ask, and people to read. `--people-only` stops after the index and needs no
-model.
+The second step is one model call, and only when something is new. It reads the self-model, up
+to PEOPLE_PER_CALL people (the first time the best of the index by messages and recency; after
+that those with messages since the last run), their note titles (empty and unfinished pages are
+plans) and the ideas still standing and how they took earlier ones. It answers with only what
+changed: new projects they could do with what they know, people to reach out to with a specific
+ask, and people to read, and the ids of standing ideas no longer worth keeping. Code merges them
+into clones/network/ideas.json. Nothing new since the last run (no one written to, the notes and
+self-model as they were) is no call. A local model reads about a third of what it did and writes a
+fifth: the whole index, and all the ideas written out again, made a run take a quarter hour.
+`--people-only` stops after the index and needs no model.
 
 The page marks ideas useful, not me or done in clones/network/feedback.jsonl. What the user marked
 not me never comes back: not that id, not the same text in other case or punctuation, and for
@@ -127,6 +131,11 @@ EMPTY_CHARS = 40  # a page with less text than this, besides title and propertie
 NOTE_TITLES = 400
 PER_COLLECTION = 40
 OPEN_TASKS = 100
+# What a local model reads of them, in a call that's slow for every token: fewer titles and
+# tasks, and the self-model cut to this many characters, identity first.
+LOCAL_TITLES, LOCAL_TASKS, LOCAL_PROFILE = 150, 40, 14_000
+PEOPLE_PER_CALL = 100  # people in the ideas call: those with messages since the last run
+PEOPLE_QUIET = 40  # and when only the notes or the self-model changed, the best of everyone
 LIMITS = {"projects": 8, "outreach": 12, "to_read": 15}
 CHANNELS = ("email", "whatsapp", "slack", "linkedin", "instagram", "in_person", "other")
 _REACTIONS = ("useful", "not_me", "done")
@@ -390,13 +399,15 @@ _SYSTEM = """\
 You help {person}, a researcher, see what their network makes possible. Their digital twin \
 keeps a model of them and an index of people: those they've met (messages, LinkedIn), those \
 they know of (co-authors, people citing their work, authors they read, names in their notes) \
-and those they want to read. You get the self-model, the top of that index, the titles of \
-their notes (empty and unfinished pages are plans they haven't got to), and how they took \
-earlier ideas.
+and those they want to read. You get the self-model, some of that index, the titles of \
+their notes (empty and unfinished pages are plans they haven't got to), the ideas still \
+standing, and how they took earlier ideas.
 
-Return three lists.
+Return only what changed, in four lists. Ideas already standing aren't repeated: add what's \
+missing, and name in drop the ones that are no longer worth keeping. Leave a list empty when \
+nothing new belongs in it.
 
-projects: five to eight projects {person} could start now with what they know and who they know.
+projects: up to three new projects {person} could start now with what they know and who they know.
 - title: short and specific.
 - pitch: two or three sentences: what it is and what comes out of it.
 - why_you: why {person} in particular: the skills, notes, data or people it builds on, from \
@@ -405,7 +416,7 @@ what you were given.
 shown in brackets. [] if none.
 - first_step: one concrete action for this week.
 
-outreach: eight to twelve people from the index worth contacting now, one entry each.
+outreach: up to five new people from the index worth contacting now, one entry each.
 - person_id: their id from the index, exactly as shown in brackets.
 - name: as the index has it.
 - why: why them and why now: the shared topic, the paper, the overlap with a project or note, \
@@ -415,10 +426,13 @@ collaboration, an introduction.
 - channel: one {person} already uses with them where the index shows one (email, whatsapp, \
 slack, linkedin, instagram), else in_person or other.
 
-to_read: up to fifteen people whose work {person} should read: names from the want-to-read \
+to_read: up to five new people whose work {person} should read: names from the want-to-read \
 list worth starting with, and people missing from the index who are central to their \
 interests. For each, the name and why: what of theirs to read and how it connects to what \
 {person} is doing.
+
+drop: the ids of standing ideas to take off the list: out of date, or overtaken by something \
+newer. Only ids given in the standing ideas.
 
 Rules:
 - Feasible: projects within reach of what {person} knows and has now, not wishes.
@@ -426,7 +440,7 @@ Rules:
 - Grounded: people in projects and outreach come from the index. Never invent people, or \
 facts about them beyond what the index says.
 - Their reactions come first. Never repeat or reword an idea they marked not_me. Done ideas \
-are context: build on them, don't suggest them again.
+are context: build on them, don't suggest them again. Don't repeat a standing idea.
 - Refer to them as {person} and don't assume pronouns. Nothing sensitive about other people."""
 
 
@@ -467,16 +481,25 @@ _SCHEMA = {
             ["person_id", "name", "why", "ask", "channel"],
         ),
         "to_read": _item({"name": _TEXT, "why": _TEXT}, ["name", "why"]),
+        "drop": {"type": "array", "items": _TEXT},
     },
-    "required": ["projects", "outreach", "to_read"],
+    "required": ["projects", "outreach", "to_read", "drop"],
     "additionalProperties": False,
 }
+
+
+def _schema(standing: list[str]) -> dict:
+    """The answer's shape, with `drop` held to the ids of the ideas it was shown as standing."""
+    if not standing:
+        return _SCHEMA
+    drop = {"type": "array", "items": {"type": "string", "enum": standing}}
+    return _SCHEMA | {"properties": _SCHEMA["properties"] | {"drop": drop}}
 
 
 def build(vault: Path, people_only: bool = False, now: datetime | None = None) -> dict[str, int]:
     now = now or datetime.now(UTC)
     out = vault / "clones" / "network"
-    profile = None if people_only else read_self(vault / "self")  # fail before the slow part
+    profile = None if people_only else _fit(read_self(vault / "self"))  # fail before slow part
     book = _read_vault(vault, now)
     people, groups = book.resolve(_aliases(out / ALIASES), _load_json(out / "people.json"))
     core = graph_people(people, groups, now)
@@ -2138,25 +2161,49 @@ def _louvain_level(graph: dict[str, dict[str, float]]) -> dict[str, str]:
 
 
 def ideas(vault: Path, people: list[dict], profile: str, now: datetime) -> dict[str, int]:
-    """One model call for projects, outreach and reading, written to ideas.json."""
+    """Projects, outreach and reading, written to ideas.json: one model call that adds what's new
+    and names what to drop, merged into the ideas still standing, and no call when no one was
+    written to since the last run and the notes and self-model are as they were."""
     out = vault / "clones" / "network"
     history = _load_json(out / "history.json")
     previous = _load_json(out / "ideas.json")
     _remember(history, previous, (previous.get("generated") or _iso(now))[:10])
     reactions = _feedback(out / "feedback.jsonl")
-    last_ids = {item["id"] for item in _items(previous)}
+    blocked = _blocked(history, reactions)
+    standing = _standing(previous, {p["id"] for p in people}, blocked)
+    notes = _notes_text(vault, *_note_limits())
+    inputs = hashlib.sha1(f"{profile}\0{notes}".encode()).hexdigest()[:12]
+    since = (previous.get("generated") or "")[:10]  # a day, as last_seen is
+    fresh = [p for p in people if since and (p.get("last_seen") or "")[:10] >= since]
 
-    answer = llm.ask(
-        prompt(
-            profile, people, _notes_text(vault), _history_text(history, reactions, last_ids), now
-        ),
-        system=_SYSTEM.format(person=env("NAME", "the person")),
-        schema=_SCHEMA,
-        effort="high",
-    )
-    result = _accept(answer, people, _blocked(history, reactions))
+    if since and not fresh and previous.get("inputs") == inputs:
+        result = standing  # still, with what they've said since taken off
+    else:
+        pool = fresh or people
+        limit = PEOPLE_PER_CALL if fresh or not since else PEOPLE_QUIET
+        ids = [i["id"] for group in standing.values() for i in group]
+        how = "had messages since the last run" if fresh else "are the most active and recent"
+        answer = llm.ask(
+            prompt(
+                profile,
+                people,
+                notes,
+                _history_text(history, reactions, set(ids)),
+                now,
+                top_people(pool, now, limit),
+                how,
+            ),
+            system=_SYSTEM.format(person=env("NAME", "the person")),
+            schema=_schema(ids),
+            effort="medium" if llm.prompt_chars() is not None else "high",
+        )
+        dropped = {str(i) for i in answer.get("drop") or []}
+        kept = {g: [i for i in found if i["id"] not in dropped] for g, found in standing.items()}
+        added = _accept(answer, people, blocked, kept)
+        result = {g: (added[g] + kept[g])[: LIMITS[g]] for g in LIMITS}
+        previous = previous | {"generated": _iso(now), "inputs": inputs}
     _remember(history, result, _iso(now)[:10])
-    _write_json(out / "ideas.json", {"generated": _iso(now)} | result)
+    _write_json(out / "ideas.json", previous | result)
     _write_json(out / "history.json", history)
     return {
         "projects": len(result["projects"]),
@@ -2165,8 +2212,54 @@ def ideas(vault: Path, people: list[dict], profile: str, now: datetime) -> dict[
     }
 
 
-def prompt(profile: str, people: list[dict], notes: str, history: str, now: datetime) -> str:
-    shown = top_people(people, now)
+def _fit(profile: str) -> str:
+    """The self-model as a local model reads it: LOCAL_PROFILE characters, whole lines, identity
+    first (`read_self` puts it there). A hosted model reads all of it."""
+    if llm.prompt_chars() is None or len(profile) <= LOCAL_PROFILE:
+        return profile
+    kept = profile[:LOCAL_PROFILE].rsplit("\n", 1)[0]
+    return kept + "\n(The rest of the self-model is left out.)"
+
+
+def _note_limits() -> tuple[int, int]:
+    """How many note titles and open note tasks the model reads."""
+    return (NOTE_TITLES, OPEN_TASKS) if llm.prompt_chars() is None else (LOCAL_TITLES, LOCAL_TASKS)
+
+
+def _standing(previous: dict, index: set[str], blocked: dict[str, set]) -> dict[str, list]:
+    """The ideas in an ideas.json that still stand: nothing the user marked not me or done, no
+    outreach to someone marked not me or gone from the index, and a project's people only those
+    still in it."""
+    found: dict[str, list] = {group: [] for group in LIMITS}
+    for item in _items(previous):
+        group = next(g for g, (kind, _) in _MAIN_TEXT.items() if kind == item["kind"])
+        text = item.pop("text")
+        item.pop("kind")
+        if item["id"] in blocked["ids"] or _fold(text) in blocked["texts"]:
+            continue
+        if group == "outreach" and (
+            item.get("person_id") in blocked["people"] or item.get("person_id") not in index
+        ):
+            continue
+        if group == "to_read" and normalize(text) in blocked["names"]:
+            continue
+        if group == "projects":
+            item["people"] = [p for p in item.get("people") or [] if p in index]
+        found[group].append(item)
+    return found
+
+
+def prompt(
+    profile: str,
+    people: list[dict],
+    notes: str,
+    history: str,
+    now: datetime,
+    shown: list[dict] | None = None,
+    how: str = "are the most active and recent of each kind",
+) -> str:
+    """The ideas call's prompt: `shown`, of the index's `people`, which `how` says were picked."""
+    shown = top_people(people, now) if shown is None else shown
     counts = Counter(p["relation"] for p in people)
     parts = [
         f"Today is {now.astimezone():%A %Y-%m-%d}.",
@@ -2174,7 +2267,7 @@ def prompt(profile: str, people: list[dict], notes: str, history: str, now: date
         (
             f"# People\n\nThe index has {len(people)} people: {counts['met']} met, "
             f"{counts['know_of']} known of, {counts['to_read']} to read. These {len(shown)} "
-            "are the most active and recent of each kind. Ids are in brackets; context says how "
+            f"{how}. Ids are in brackets; context says how "
             "they know each one, and topics what they share."
         ),
     ]
@@ -2264,7 +2357,7 @@ def _person_line(person: dict) -> str:
     return line + "."
 
 
-def _notes_text(vault: Path) -> str:
+def _notes_text(vault: Path, titles: int = NOTE_TITLES, open_tasks: int = OPEN_TASKS) -> str:
     pages = [_page(r) for r in _records(vault / "raw" / "notes" / "pages")]
     tasks = [t for t in _records(vault / "raw" / "notes" / "tasks") if _task(t)]
     # A reading list's rows have a status too, but they're listed with the readings.
@@ -2278,7 +2371,7 @@ def _notes_text(vault: Path) -> str:
         if page["title"]:
             by_collection[page["collection"] or "(no collection)"].append(page)
 
-    parts, budget = [], NOTE_TITLES
+    parts, budget = [], titles
     for collection, group in sorted(by_collection.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         group.sort(key=lambda p: p["ts"] or "", reverse=True)
         group.sort(key=lambda p: p["flag"] is None)  # marked pages first, newest first
@@ -2291,7 +2384,7 @@ def _notes_text(vault: Path) -> str:
             lines.append(f"- and {len(group) - len(shown)} more")
         parts.append("\n".join(lines))
     if tasks:
-        lines = [f"- {_clip(_task(t), 160)}" for t in tasks[-OPEN_TASKS:]]
+        lines = [f"- {_clip(_task(t), 160)}" for t in tasks[-open_tasks:]]
         parts.append(f"## Open tasks in their notes ({len(tasks)})\n" + "\n".join(lines))
     return "\n\n".join(parts)
 
@@ -2301,7 +2394,7 @@ def _history_text(history: dict[str, dict], reactions: dict[str, str], last_ids:
         "done": "They did these. Context only: build on them, don't suggest them again.",
         "not_me": "They marked these not them. Never suggest them again, reworded or not.",
         "useful": "They found these useful.",
-        None: "Given last time, no reaction yet. Keep one only if it's still among the best.",
+        None: "Standing, no reaction yet. Don't repeat them; name an id in drop to take one off.",
     }
     groups: dict[str | None, list[str]] = defaultdict(list)
     for key, item in sorted(history.items(), key=lambda kv: kv[1].get("given") or ""):
@@ -2309,7 +2402,8 @@ def _history_text(history: dict[str, dict], reactions: dict[str, str], last_ids:
         if action is None and key not in last_ids:
             continue
         text = f"{item['name']}: {item['text']}" if item.get("name") else item["text"]
-        groups[action].append(f"- [{item['kind']}] {text} (given {item.get('given')})")
+        mark = f" id {key}" if action is None else ""
+        groups[action].append(f"- [{item['kind']}] {text} (given {item.get('given')}){mark}")
     text = "\n\n".join(
         "\n".join([head, *groups[action]]) for action, head in heads.items() if groups[action]
     )
@@ -2330,14 +2424,22 @@ def _blocked(history: dict[str, dict], reactions: dict[str, str]) -> dict[str, s
     }
 
 
-def _accept(answer: dict, people: list[dict], blocked: dict[str, set]) -> dict[str, list]:
-    """The model's ideas, checked: people only from the index, nothing closed coming back, no
-    duplicates, ids from the text."""
+def _accept(
+    answer: dict,
+    people: list[dict],
+    blocked: dict[str, set],
+    standing: dict[str, list] | None = None,
+) -> dict[str, list]:
+    """The model's new ideas, checked: people only from the index, nothing closed coming back, no
+    duplicates, none of the `standing` ideas again, ids from the text."""
+    standing = standing or {}
     index = {p["id"]: p for p in people}
     by_name = {normalize(p["name"]): p for p in people}
     me = {normalize(env(name)) for name in ("NAME", "FULL_NAME")}
     me.discard("")
-    seen: set[str] = set()  # folded texts of the ideas kept so far
+    # Folded texts of the ideas kept so far, and the people already reached out to.
+    seen = {_fold(i[field]) for g, (_, field) in _MAIN_TEXT.items() for i in standing.get(g, [])}
+    held = {i.get("person_id") for i in standing.get("outreach", [])}
 
     def fresh(text: str) -> str | None:
         """The idea's id, or None when it's empty, closed, or a repeat in other case."""
@@ -2361,7 +2463,7 @@ def _accept(answer: dict, people: list[dict], blocked: dict[str, set]) -> dict[s
                     "first_step": item["first_step"].strip(),
                 }
             )
-    outreach, reached = [], set()
+    outreach, reached = [], set(held)
     for item in answer["outreach"]:
         person = index.get(item["person_id"].strip()) or by_name.get(normalize(item["name"]))
         if person is None or person["id"] in blocked["people"] | reached:
