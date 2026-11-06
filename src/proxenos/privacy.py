@@ -296,6 +296,8 @@ def sent(vault: Path, now: datetime) -> dict:
         "model": {
             "name": llm.bare(name),
             "kind": "local" if local else "api" if llm.configured() else "none",
+            # Who answers for it when it isn't on this computer: Anthropic, OpenAI or Google.
+            "host": None if local else llm.where(name),
             "voice": config.env("VOICE_MODEL").strip() or None,
             # The model for light jobs, when it's on this computer (llm.fast says so, by step).
             "fast": fast and llm.bare(fast) or None,
