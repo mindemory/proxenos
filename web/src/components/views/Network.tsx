@@ -74,8 +74,8 @@ function People({ data }: { data: NetworkResponse }) {
   if (!data.people.exists) {
     return (
       <EmptyState icon={NetworkIcon} title="No people index yet" command="proxenos clone network --people-only">
-        The network clone indexes the people in your messages, mentions and reading: who you&apos;ve met, who you know
-        of, and whose work you read.
+        Proxenos lists the people in your messages, mentions and reading: who you&apos;ve met, who you know of, and whose
+        work you read. Press Make it now to build the list.
       </EmptyState>
     );
   }
@@ -185,8 +185,7 @@ function People({ data }: { data: NetworkResponse }) {
 function NoIdeas() {
   return (
     <EmptyState icon={NetworkIcon} title="No projects or outreach yet" command="proxenos clone network">
-      A full run of the network clone suggests projects that fit you and people worth contacting.{" "}
-      <code className="num">proxenos clone network --people-only</code> builds just the people index.
+      Press Make it now, and Proxenos suggests projects that fit you and people worth contacting.
     </EmptyState>
   );
 }

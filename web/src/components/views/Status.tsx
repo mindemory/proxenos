@@ -45,7 +45,7 @@ function SourceRow({ s, now }: { s: SourceStatus; now: string }) {
           </div>
         ) : (
           <div className="text-sm text-muted mt-1">
-            Not synced yet. Run <Command>{s.command}</Command>
+            Not synced yet. Connect it on the Connect page, and the next sync reads it. From a terminal: <Command>{s.command}</Command>
           </div>
         )}
       </div>
@@ -93,7 +93,8 @@ export function Status() {
           </div>
         ) : (
           <p className="text-muted">
-            No batches yet. Run <Command>proxenos clone tracker</Command> to fetch and rank the first one.
+            No batches yet. Open the Feed view and press Make it now to fetch and rank the first one. From a terminal:{" "}
+            <Command>proxenos clone tracker</Command>
           </p>
         )}
       </section>
@@ -113,8 +114,8 @@ export function Status() {
         ))}
         {data.missing.length > 0 && (
           <p className="text-sm text-muted px-1 leading-relaxed">
-            Not set up: {joinAnd(data.missing.map((m) => sourceMeta(m).label))}. Each one appears here after its first{" "}
-            <Command>proxenos ingest &lt;source&gt;</Command>
+            Not set up: {joinAnd(data.missing.map((m) => sourceMeta(m).label))}. Add each one on the Connect page, and it appears
+            here after the next sync. From a terminal: <Command>proxenos ingest &lt;source&gt;</Command>
           </p>
         )}
         <p className="text-xs text-muted break-all px-1 pt-2">

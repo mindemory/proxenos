@@ -278,8 +278,8 @@ function GoogleDoc({ project, again, deciding, onPulled }: { project: string; ag
 
       {data && data.accounts.length === 0 && !doc && (
         <p className="text-sm leading-relaxed text-muted">
-          To edit it in Google Docs, comment on it and share it with co-authors, sign in to Google Docs once, on the Connect page or
-          with <Command>proxenos auth gdocs NAME ADDRESS</Command>. That sign-in sees only the files Proxenos makes.
+          To edit it in Google Docs, comment on it and share it with co-authors, sign in to Google Docs once on the Connect page. That
+          sign-in sees only the files Proxenos makes. From a terminal: <Command>proxenos auth gdocs NAME ADDRESS</Command>
         </p>
       )}
 

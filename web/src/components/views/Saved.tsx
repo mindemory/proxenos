@@ -19,7 +19,7 @@ export function Saved() {
   if (data.items.length === 0) {
     return (
       <EmptyState icon={Bookmark} title="Nothing saved yet" command="proxenos clone tracker">
-        Press Save on any feed item to keep it here. The feed itself comes from the tracker.
+        Press Save on any feed item to keep it here. Press Make it now to fetch a feed to save from.
       </EmptyState>
     );
   }

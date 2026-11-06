@@ -125,9 +125,10 @@ export function Watch({ onChange }: { onChange?: () => void }) {
   if (!data.date) {
     return (
       <EmptyState icon={Clapperboard} title="Nothing picked yet" command="proxenos clone watch --force">
-        Once a week, your twin reads the films you&apos;ve logged on Letterboxd, what you loved and what you didn&apos;t, and picks films and
-        shows you haven&apos;t seen. Set <code className="num">PROXENOS_LETTERBOXD_USER</code> so new logs come in on their own. The night job
-        runs it; this runs it now.
+        Once a week, Proxenos reads the films you&apos;ve logged on Letterboxd, what you loved and what you didn&apos;t, and picks films and
+        shows you haven&apos;t seen. It needs your Letterboxd export: see Letterboxd under Connect, Downloads. From source, set{" "}
+        <code className="num">PROXENOS_LETTERBOXD_USER</code> in .env so new logs come in on their own. The night job runs it. Press
+        Make it now to run it right away.
       </EmptyState>
     );
   }

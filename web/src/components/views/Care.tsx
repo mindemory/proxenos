@@ -59,9 +59,9 @@ export function Care({ onChange, onMemory, focus, onFocused }: CareProps) {
   if (!data.exists) {
     return (
       <EmptyState icon={HeartPulse} title="Nothing on your care yet" command="proxenos clone care">
-        The care clone picks the health-care admin out of your mail, calendar, chats and notes (visits, tests,
-        referrals, bills, insurance, records) and lays out where things stand, what&apos;s still open, and what to say
-        on the phone. Only those records go to the model, with names and numbers blanked.
+        Proxenos picks the health-care paperwork out of your mail, calendar, chats and notes (visits, tests, referrals,
+        bills, insurance, records). It lays out where things stand, what&apos;s still open, and what to say on the
+        phone. Only those records go to the model, with names and numbers blanked. Press Make it now to start.
       </EmptyState>
     );
   }

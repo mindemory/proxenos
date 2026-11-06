@@ -330,9 +330,9 @@ export function Jobs({ onDraft, onErrands, onMemory }: JobsProps) {
   if (!data.generated) {
     return (
       <EmptyState icon={BriefcaseBusiness} title="No job leads yet" command="proxenos clone jobs">
-        Your twin goes through the job leads that reached you (LinkedIn&apos;s alerts and messages, Work at a Startup&apos;s founders,
+        Proxenos goes through the job leads that reached you (LinkedIn&apos;s alerts and messages, Work at a Startup&apos;s founders,
         recruiters&apos; emails, job boards, lists and the posts you share to Ask) and says for each whether to apply, how, with which CV
-        and through whom, with the first step drafted. The night job runs it; this runs it now.
+        and through whom, with the first step drafted. The night job runs it. Press Make it now to run it right away.
       </EmptyState>
     );
   }

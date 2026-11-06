@@ -180,7 +180,7 @@ export function VoiceControls() {
     <div className="space-y-5">
       <Row
         label="Voice"
-        hint="Natural and Your voice are made on this Mac; This device's is the browser's own. Nothing is sent anywhere, and when one made here can't read, this device's does."
+        hint="Natural and Your voice are made on this Mac. This device's uses the voice your computer already has. Nothing is sent anywhere. If a voice made here can't read, this device's voice does."
       >
         <Segmented label="Voice" tabs={ENGINES} value={r.engine} onChange={(engine) => setReading({ engine })} />
       </Row>
@@ -205,8 +205,8 @@ export function VoiceControls() {
           </Row>
         ) : (
           <p className="text-sm leading-relaxed text-muted">
-            This browser has no voice that reads on this device, so Listen doesn&apos;t show. Safari, and Chrome or Edge with the
-            system&apos;s voices, have one; or pick Natural.
+            This page has no voice of this device to use, so the Listen button doesn&apos;t show. Pick Natural instead. Safari, and
+            Chrome or Edge with the system&apos;s voices, have one.
           </p>
         ))}
       <Row label="Reading speed" hint="Slower gives more time to take each sentence in.">

@@ -629,8 +629,8 @@ export function Life({ onThink }: { onThink?: (start: ThinkStart) => void } = {}
         {banners}
         <EmptyState icon={Library} title="Nothing to tell yet" command="proxenos index">
           The Life view tells your story by month and day, years back, from everything in the vault&apos;s memory: whom you wrote to,
-          your calendar, notes, activity and health records. Bring in a source on Connect and index it, and each night a month is
-          written, newest first.
+          your calendar, notes, activity and health records. Connect a source, then press Make it now to index it. Each night after
+          that, a month is written, newest first.
         </EmptyState>
       </div>
     );

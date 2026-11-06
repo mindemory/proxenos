@@ -38,13 +38,13 @@ const LOOKUP_SETTINGS: { key: SettingKey; label: string; hint: string; placehold
   {
     key: "searxng_url",
     label: "Your SearXNG",
-    hint: "Searches go there when it's set, with json among its search formats. Empty: Brave Search with a key below, else DuckDuckGo.",
+    hint: "The address of your own SearXNG search site, if you run one. It must allow the json format. Empty: Brave Search if you add a key below, else DuckDuckGo.",
     placeholder: "http://127.0.0.1:8888",
   },
   {
     key: "lookup",
     label: "Looking people up",
-    hint: "off to never look anyone up on the web; empty or on to look.",
+    hint: "Type off to never look anyone up on the web. Empty or on lets it look.",
     placeholder: "on",
   },
 ];
@@ -53,19 +53,19 @@ const NOTICE_SETTINGS: { key: SettingKey; label: string; hint: string; placehold
   {
     key: "ntfy_server",
     label: "Server",
-    hint: "Empty for ntfy.sh. Your own ntfy server's address, if you run one.",
+    hint: "Leave empty to use ntfy.sh. Type your own ntfy server's address only if you run one.",
     placeholder: "https://ntfy.sh",
   },
   {
     key: "quiet_hours",
     label: "Quiet hours",
-    hint: "In this computer's time. A notice waits until they end; off for none.",
+    hint: "In this computer's time. A notice waits until they end. Type off for none.",
     placeholder: "22:00-08:00",
   },
   {
     key: "notice_kinds",
     label: "Say what kinds",
-    hint: "on to say how many drafts, care items, steps and tasks; empty or off for a count alone, which says nothing on a lock screen.",
+    hint: "Type on to say how many drafts, care items, steps and tasks wait. Empty or off sends only a count, which says nothing on a lock screen.",
     placeholder: "off",
   },
 ];
@@ -98,7 +98,12 @@ const FOLDERS: { key: SettingKey; label: string; hint: string; placeholder: stri
     hint: "The folder of your Extended Streaming History download.",
     placeholder: "~/Downloads/Spotify Extended Streaming History",
   },
-  { key: "slackdump_dir", label: "slackdump runs", hint: "A folder holding slackdump_* runs.", placeholder: "~/slackdump" },
+  {
+    key: "slackdump_dir",
+    label: "slackdump runs",
+    hint: "A folder of Slack exports you made yourself with slackdump (folders named slackdump_…). Most people leave this empty.",
+    placeholder: "~/slackdump",
+  },
   {
     key: "cv_dirs",
     label: "Where your CV is",
@@ -112,7 +117,7 @@ const FAST_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder
   {
     key: "fast_model",
     label: "Fast model",
-    hint: "local:<name> for a model another server on this computer has, ollama:<name> for one in Ollama; off to keep light jobs on the main model.",
+    hint: "Type off to keep light jobs on the main model. Or local:NAME for a model another app serves on this computer, or ollama:NAME for one in Ollama.",
     placeholder: "local:mlx-community/gemma-4-e4b-it-4bit",
   },
 ];
@@ -122,7 +127,7 @@ const PROJECT_FOLDER: { key: SettingKey; label: string; hint: string; placeholde
   {
     key: "project_folder",
     label: "Your projects' folder",
-    hint: "A folder your cloud drive syncs: Google Drive for desktop, Dropbox, OneDrive or iCloud Drive. Empty: none.",
+    hint: "A folder your cloud drive syncs: Google Drive for desktop, Dropbox, OneDrive or iCloud Drive. It must already exist. Empty: none.",
     placeholder: "~/Library/CloudStorage/GoogleDrive-…/My Drive/Projects",
   },
 ];
@@ -132,7 +137,7 @@ const REVIEW_SETTINGS: { key: SettingKey; label: string; hint: string; placehold
   {
     key: "review_model",
     label: "Who reviews a paper",
-    hint: "Empty: Claude with your key, else Claude Code. claude-code for Claude Code; ollama:<name> for a model on this computer.",
+    hint: "Empty: Claude with your key, or the Claude Code app if you have no key. Type claude-code to always use that app, or ollama:NAME for a model on this computer.",
     placeholder: "claude-opus-5-5",
   },
 ];
@@ -155,7 +160,7 @@ function FromShell({ values }: { values: SettingValue[] }) {
   if (!values.some((v) => v.from === "environment")) return null;
   return (
     <p className="text-xs leading-relaxed text-warn-ink">
-      Set in the environment Proxenos was started with, which wins over what&apos;s saved here.
+      Something outside Proxenos sets this (an environment variable), so it wins over what you save here.
     </p>
   );
 }
@@ -245,7 +250,7 @@ export function Settings() {
       <Group
         kicker="Model"
         title="A faster one for light jobs"
-        note="The task list, the network, the notes on each month, the research picks and the like read a lot and write to no one, so a small model on this Mac can do them in half the time. Drafts, Ask, Think, errands and calls stay on the model above. Every call is in the Privacy view."
+        note="The task list, the people map, the monthly notes and the research picks read a lot and write to no one. A small model on this Mac can do them in about half the time. Drafts, Ask, Think, errands and calls stay on the model above. Every call is in the Privacy view."
       >
         <FastModel status={status} apply={apply} />
       </Group>
@@ -294,7 +299,18 @@ export function Settings() {
       <Group
         kicker="Projects"
         title="In your cloud drive"
-        note="Each night, each project's manuscript and Proxenos's notes on it go here as Word files, to read, edit, comment on and share in Word or Google Docs. Your drive uploads them; Proxenos shares nothing and reads nothing else there. What you change in a Markdown manuscript comes back as a step for you to accept; LaTeX goes one way. Needs pandoc (brew install pandoc)."
+        note={
+          <>
+            Each night, each project&apos;s manuscript and Proxenos&apos;s notes on it go here as Word files, to read, edit, comment on and share
+            in Word or Google Docs. Your drive uploads them; Proxenos shares nothing and reads nothing else there. What you change in a
+            Markdown manuscript comes back as a step for you to accept; LaTeX goes one way. It needs pandoc, a free program that makes Word
+            files: get it from{" "}
+            <a href="https://pandoc.org/installing.html" target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              pandoc.org/installing
+            </a>
+            .
+          </>
+        }
       >
         <FoldersForm status={status} apply={apply} fields={PROJECT_FOLDER} button="Save folder" />
       </Group>
@@ -323,23 +339,24 @@ function FastModel({ status, apply }: { status: SetupStatus; apply: Apply }) {
             <>
               <StatePill on={fast.running} tone={fast.running ? undefined : "bad"} label={fast.running ? "Running" : "Not answering"} />
               <span className="min-w-0 break-words">
-                Light jobs use <span className="num text-ink">{fast.model}</span>
-                {fast.running ? "." : ", and go to the main model until its server is up: proxenos model serve-fast."}
+                Light jobs use <span className="num text-ink">{fast.label}</span>
+                {fast.running ? "." : ", and go to the main model until it answers."}
               </span>
             </>
           ) : fast.model === "off" ? (
             "Off: light jobs use the main model."
           ) : fast.found ? (
-            "This Mac has mlx-lm and the model, and none is set yet."
+            "This Mac has the small model ready, and none is set yet."
           ) : (
-            "None set: light jobs use the main model. On a Mac with Apple silicon and mlx-lm, proxenos model serve-fast serves one."
+            "None set: light jobs use the main model. Downloading the small model above, under In Proxenos, sets this by itself."
           )}
         </p>
         {!on && fast.found && fast.suggested && (
           <PrimaryButton disabled={busy} onClick={() => run({ settings: { fast_model: fast.suggested } })}>
-            Use {fast.suggested.replace(/^local:/, "")}
+            Use {fast.suggestedLabel}
           </PrimaryButton>
         )}
+        <p className="text-xs leading-relaxed text-faint">From a terminal: proxenos model serve-fast starts the small model&apos;s server.</p>
         <SaidLine said={said} />
       </div>
       <FoldersForm key={fast.model ?? ""} status={status} apply={apply} fields={FAST_SETTINGS} button="Save" />
@@ -428,11 +445,11 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
     setValue("");
   };
   const hint = s.name.startsWith("GMAIL_")
-    ? "address:app password. Or sign in again from Connect."
+    ? "Type your address, a colon, then the app password. Or sign in again from Connect."
     : s.name === "ANTHROPIC_API_KEY" || s.name === "OPENAI_API_KEY" || s.name === "GEMINI_API_KEY"
       ? "Checked with its provider before it's saved."
       : s.name === "NTFY_TOPIC"
-        ? "20 to 64 letters, digits, - and _, random. The same name you subscribed to in the app."
+        ? "20 to 64 letters, digits, - or _, chosen at random. Use the same name you subscribed to in the ntfy app."
         : s.name === "NTFY_TOKEN"
           ? "Only for a server that asks for one. ntfy.sh doesn't."
           : s.name === "BRAVE_SEARCH_KEY"
@@ -527,7 +544,7 @@ function SecretRow({ s, store, apply }: { s: SecretState; store: string; apply: 
         <p className="text-xs text-muted">
           {shipped
             ? "This is the sign-in client the app shipped with. Replace it, or load your own file, to use your own."
-            : "Set in the environment Proxenos was started with; change it there."}
+            : "Something outside Proxenos sets this (an environment variable). Change it there."}
         </p>
       )}
       <SaidLine said={said} />
@@ -542,12 +559,18 @@ function NoticesCard({ status, apply }: { status: SetupStatus; apply: Apply }) {
   return (
     <div className="card divide-y divide-line">
       <ol className="list-decimal space-y-1 py-3.5 pl-9 pr-4 text-sm leading-relaxed text-muted">
-        <li>Install the ntfy app, on Android or iOS.</li>
+        <li>Install the free ntfy app on your phone (Android or iOS).</li>
         <li>
-          Make a long, random topic name below, and subscribe to it in the app. On ntfy.sh anyone who knows a topic can read
-          what&apos;s sent to it, so keep it like a password.
+          Press <strong>Make one</strong> below. It makes a long, random name, called a topic. On ntfy.sh anyone who knows a topic can
+          read what&apos;s sent to it, so keep it private, like a password.
         </li>
-        <li>Save it here as the topic.</li>
+        <li>In the ntfy app, press + and subscribe to that topic.</li>
+        <li>
+          Here, press <strong>Add</strong> beside ntfy topic, paste the name, and press <strong>Save</strong>.
+        </li>
+        <li>
+          Press <strong>Send a test</strong>.
+        </li>
       </ol>
       <MakeTopic />
       {rows.map((s) => (
@@ -656,7 +679,7 @@ function TestNotice({ ready }: { ready: boolean }) {
           {busy ? "Sending…" : "Send a test"}
         </PrimaryButton>
         <span className="text-xs text-muted">
-          {ready ? "Your phone should show it in a few seconds." : "Save a topic first."}
+          {ready ? "You'll see it on your phone in a few seconds. If not, check that the topic in the ntfy app matches." : "Save a topic first."}
         </span>
       </div>
       <SaidLine said={said} />

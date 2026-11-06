@@ -260,15 +260,15 @@ export function GraphView({
   if (!data.people.exists) {
     return (
       <EmptyState icon={NetworkIcon} title="No people index yet" command="proxenos clone network --people-only">
-        The network clone indexes the people in your messages, mentions and reading, and who shares a chat, a thread,
-        a paper or an employer with whom.
+        Proxenos lists the people in your messages, mentions and reading, and who shares a chat, a thread, a paper or an
+        employer with whom. Press Make it now to build the list.
       </EmptyState>
     );
   }
   if (model.nodes.length === 0) {
     return (
       <EmptyState icon={NetworkIcon} title="No one to draw" command="proxenos clone network --people-only">
-        The people index is empty. Run the network clone after syncing your sources.
+        The people list is empty. Connect a source and let it sync, then press Make it now.
       </EmptyState>
     );
   }

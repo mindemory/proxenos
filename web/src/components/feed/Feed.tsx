@@ -29,8 +29,8 @@ export function Feed({ data, error, flashId, tab, onReact, onOpen, onDismissErro
   if (data.items.length === 0) {
     return (
       <EmptyState icon={Sparkles} title="No items yet" command="proxenos clone tracker">
-        The tracker fetches papers, news and posts every few hours and ranks them against your profile. Run it once to
-        fill this feed.
+        Proxenos fetches papers, news and posts every few hours and ranks them for you, using your profile. Press Make it
+        now to fill this feed.
       </EmptyState>
     );
   }
@@ -47,7 +47,7 @@ export function Feed({ data, error, flashId, tab, onReact, onOpen, onDismissErro
       >
         {explore
           ? "About a fifth of each batch is adjacent or contrarian material. The next batch should bring some."
-          : "Every item in the latest batches is an exploration pick. Check the Explore tab, or run the tracker again."}
+          : "Every item in the latest batches is an exploration pick. Check the Explore tab, or press Make it now to fetch another batch."}
       </EmptyState>
     );
   }

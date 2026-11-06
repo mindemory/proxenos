@@ -22,9 +22,8 @@ export function Profile() {
   if (data.files.length === 0) {
     return (
       <EmptyState icon={UserRound} title="No profile yet" command="proxenos master">
-        Proxenos&apos;s picture of you lives in <code className="num">self/</code> in the vault: identity, interests,
-        taste, voice, routines and open questions. <code className="num">proxenos master</code> builds it from your
-        observations and reactions.
+        Proxenos&apos;s profile of you: identity, interests, taste, voice, routines and open questions. Press Make it now
+        to build it from what Proxenos has noted about you and how you&apos;ve reacted to its drafts.
       </EmptyState>
     );
   }

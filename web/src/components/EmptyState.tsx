@@ -46,13 +46,13 @@ export function EmptyState({ icon: Icon, title, children, command }: EmptyStateP
         <div className="mt-1 flex flex-col items-center gap-3">
           <MakeIt command={command} />
           <p className="max-w-full text-xs leading-relaxed text-faint">
-            or from a terminal: <Command>{command}</Command>
+            From a terminal: <Command>{command}</Command>
           </p>
         </div>
       ) : (
         command && (
           <div className="mt-1 flex flex-col items-center gap-2">
-            <span className="smallcaps">Run this</span>
+            <span className="smallcaps">From a terminal</span>
             <Command block>{command}</Command>
           </div>
         )
@@ -189,11 +189,11 @@ export function LoadingRows() {
 export function NoVault({ path }: { path: string }) {
   return (
     <EmptyState icon={FolderX} title="No vault found">
-      Looked in <code className="num">{path}</code>. Pick where it lives in{" "}
+      Proxenos looked in <code className="num">{path}</code> and found no vault. Choose where it lives in{" "}
       <a href="/setup" className="text-accent hover:underline">
         setup
       </a>{" "}
-      or Settings (or set PROXENOS_VAULT in the repo&apos;s .env), then reload.
+      (or in Settings, under Vault), then reload this page. From source, you can set PROXENOS_VAULT in .env instead.
     </EmptyState>
   );
 }

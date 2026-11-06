@@ -23,9 +23,8 @@ export function Advice({ onChange }: { onChange?: () => void }) {
   if (!data.date) {
     return (
       <EmptyState icon={Lightbulb} title="No advice yet" command="proxenos clone advisor">
-        The advisor compares what you do with what your profile says you want, and suggests one change at a time. It
-        writes advice once the profile exists, so run <code className="num">proxenos master</code> first if the Profile view is
-        empty.
+        Proxenos compares what you do with what your profile says you want, and suggests one change at a time. It
+        needs your profile first: if the Profile view is empty, press Make it now there, then come back and press it here.
       </EmptyState>
     );
   }

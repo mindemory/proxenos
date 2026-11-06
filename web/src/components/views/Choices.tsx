@@ -42,9 +42,9 @@ export function Choices({ onChange, onDraft, onErrands, onMemory }: ChoicesProps
   if (!data.date) {
     return (
       <EmptyState icon={Compass} title="No choices yet" command="proxenos clone choices --force">
-        Once a week, your twin reads the calls, fellowships, talks and events that reached you, and what your meetings, threads and lists
-        cost you, and picks what is worth taking on and what is worth letting go, by your own goals. The night job runs it; this runs it
-        now.
+        Once a week, Proxenos reads the calls, fellowships, talks and events that reached you, and what your meetings, threads and lists
+        cost you. It picks what is worth taking on and what is worth letting go, by your own goals. The night job runs it. Press Make it
+        now to run it right away.
       </EmptyState>
     );
   }

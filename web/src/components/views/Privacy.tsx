@@ -149,8 +149,8 @@ function StaysHere({ here }: { here: PrivacyReport["here"] }) {
           </div>
           {here.filevault === false && (
             <p className="text-xs leading-relaxed text-warn-ink">
-              Anyone who has this Mac&apos;s disk could read the vault. Turn FileVault on in System Settings, Privacy &amp;
-              Security.
+              Anyone who has this Mac&apos;s disk could read the vault. To lock the disk, open System Settings, then Privacy &amp;
+              Security, and turn on FileVault.
             </p>
           )}
           <CloudWarning where={vault.cloud} />

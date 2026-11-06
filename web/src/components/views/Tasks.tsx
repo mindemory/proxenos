@@ -53,8 +53,8 @@ export function Tasks({ onChange, onDraft }: { onChange?: () => void; onDraft?: 
   if (!data.exists) {
     return (
       <EmptyState icon={ListTodo} title="No task list yet" command="proxenos clone tasks">
-        The tasks clone reads WhatsApp, Slack and email for things people asked you to do, and lists each one with who
-        asked, when, and when it&apos;s due. Run it to build the list.
+        Proxenos reads WhatsApp, Slack and email for things people asked you to do, and lists each one with who asked,
+        when, and when it&apos;s due. Press Make it now to build the list.
       </EmptyState>
     );
   }

@@ -162,7 +162,8 @@ export function Memory({ initial, onConsumed }: MemoryProps) {
           <ResultSkeleton />
         ) : !data.indexed ? (
           <EmptyState icon={Brain} title="Nothing is indexed yet" command="proxenos index">
-            Memory search reads an index of everything in the vault. Build it once, and syncs keep it current.
+            Memory search looks through an index (a list of every word) of everything in the vault. Press Make it now to build it once.
+            Syncs then keep it current.
           </EmptyState>
         ) : !filtered ? (
           <EmptyState icon={Search} title="Search everything you've said, read and received">

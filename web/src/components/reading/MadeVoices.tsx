@@ -34,7 +34,7 @@ function Needs({ local, engine, children }: { local: Local; engine: SpeechEngine
   if (!s.supported) {
     return (
       <p className={note}>
-        Voices made here need a Mac with Apple silicon, which this isn&apos;t. Listen reads with this device&apos;s voice instead.
+        Voices made here need a Mac with Apple silicon, and this isn&apos;t one. Listen reads with this device&apos;s voice instead.
       </p>
     );
   }
@@ -42,8 +42,8 @@ function Needs({ local, engine, children }: { local: Local; engine: SpeechEngine
     return (
       <div className="space-y-2">
         <p className={note}>
-          Install the speech extra once, in a terminal in the Proxenos folder. Until then, Listen reads with this device&apos;s
-          voice.
+          This part of Proxenos isn&apos;t installed on this Mac, so Listen reads with this device&apos;s voice. The desktop app
+          doesn&apos;t include it. If you run Proxenos from source, you can add it once: in a terminal, in the Proxenos folder, run this.
         </p>
         <code className="num block break-all rounded-lg border border-line bg-bg px-3 py-2 text-xs text-ink">{s.install}</code>
         <button type="button" onClick={() => void local.reload()} className={PILL}>
@@ -269,7 +269,7 @@ function Recorder({
         if (recorded) setText(passage);
       }
     } catch {
-      setProblem("This browser couldn't read that recording. Try recording here, or a WAV or MP3 file.");
+      setProblem("This page couldn't read that recording. Record again here, or pick a WAV or MP3 file.");
     }
   };
   const begin = async () => {
@@ -279,7 +279,7 @@ function Recorder({
     try {
       r = await record(CLIP_MAX);
     } catch {
-      setProblem("The microphone isn't available. Allow it for this page in the browser, or pick a recording instead.");
+      setProblem("The microphone isn't available. Allow it for Proxenos (or your browser) in your computer's privacy settings, or pick a recording instead.");
       return;
     }
     started.current = Date.now();
