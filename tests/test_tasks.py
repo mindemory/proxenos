@@ -162,7 +162,8 @@ class FakeModel:
 
     def __call__(self, prompt, *, system=None, schema=None, effort="medium", max_tokens=32000):
         self.calls.append({"prompt": prompt, "system": system, "schema": schema, "effort": effort})
-        return {"tasks": self.answer(prompt)}
+        found = self.answer(prompt)  # new tasks, or {"new": [...], "updates": [...]}
+        return found if isinstance(found, dict) else {"new": found, "updates": []}
 
 
 @pytest.fixture(autouse=True)
@@ -196,6 +197,10 @@ def item(title, *, id="new", source="whatsapp", asked_in="", evidence=(), **fiel
         "status": fields.get("status", "open"),
         "evidence": list(evidence),
     }
+
+
+def update(key, why="Said so.", evidence=(), **fields):
+    return {"id": key, "why": why, "evidence": list(evidence), **fields}
 
 
 def saved(vault):
@@ -279,7 +284,7 @@ def test_the_model_sees_both_sides_of_my_conversations_and_nothing_else(tmp_path
     assert "Only the newest fit" not in prompt
     assert NOW.astimezone().strftime("Today is %A %Y-%m-%d, %H:%M") in prompt
     assert "<identity>\nA grad student who rows.\n</identity>" in call["system"]
-    assert call["schema"]["properties"]["tasks"]["items"]["properties"]["status"]["enum"] == [
+    assert call["schema"]["properties"]["new"]["items"]["properties"]["status"]["enum"] == [
         "open",
         "waiting",
         "done",
@@ -374,19 +379,23 @@ def test_listed_tasks_keep_their_ids_and_are_never_dropped_by_the_model(tmp_path
 
     def answer(prompt):
         said = ref(prompt, "will do tonight")
-        done = item("Sent Asha the list", id="aaaaaaaaaaaa", status="done", evidence=[said])
-        return [{**done, "source": "slack"}]  # the source of a listed task doesn't change
+        done = update("aaaaaaaaaaaa", status="done", title="Sent Asha the list", evidence=[said])
+        return {"new": [], "updates": [done | {"priority": "high", "source": "slack"}]}
 
     model.answer = answer
     stats = tasks.plan(vault, now=NOW)
 
     prompt = model.calls[0]["prompt"]
-    assert "- id aaaaaaaaaaaa [open, medium] Send Asha the reading list. Earlier detail." in prompt
-    assert "- id bbbbbbbbbbbb [open, medium] Review Ben's draft." in prompt
+    assert "- id aaaaaaaaaaaa [open] Send Asha the reading list (with Asha)\n" in prompt
+    assert "- id bbbbbbbbbbbb [open] Review Ben's draft (with Asha)\n" in prompt
+    assert "Earlier detail" not in prompt  # one line a task: no detail, priority or evidence
+    schema = model.calls[0]["schema"]["properties"]["updates"]["items"]["properties"]
+    assert schema["id"]["enum"] == ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
     listed = {t["id"]: t for t in saved(vault)["tasks"]}
     assert listed["aaaaaaaaaaaa"]["status"] == "done"
     assert listed["aaaaaaaaaaaa"]["title"] == "Sent Asha the list"
-    assert listed["aaaaaaaaaaaa"]["source"] == "whatsapp"
+    assert listed["aaaaaaaaaaaa"]["source"] == "whatsapp"  # only what an update names changes
+    assert listed["aaaaaaaaaaaa"]["priority"] == "medium"
     assert listed["aaaaaaaaaaaa"]["asked_at"] == asked_at
     assert listed["aaaaaaaaaaaa"]["evidence"][0] == "old/1"
     assert len(listed["aaaaaaaaaaaa"]["evidence"]) == 2
@@ -416,13 +425,16 @@ def test_what_i_closed_on_the_page_stays_closed(tmp_path, model):
 
     def answer(prompt):
         form = ref(prompt, "travel form")
-        return [
+        new = [
             item("Fix the cluster script", source="slack"),  # same title
             item("File travel paperwork", source="email", asked_in=form),  # same message
             item("send dana the POSTER pdf!", source="slack"),  # same title, any case
-            item("Send Dana the poster PDF", id="333333333333", source="slack"),  # its old id
-            item("Book the climbing wall", id="444444444444", priority="high"),
         ]
+        updates = [
+            update("333333333333", status="open"),  # closed on the page: its id can't reopen it
+            update("444444444444", due="2026-03-13"),
+        ]
+        return {"new": new, "updates": updates}
 
     model.answer = answer
     stats = tasks.plan(vault, now=NOW)
@@ -438,7 +450,7 @@ def test_what_i_closed_on_the_page_stays_closed(tmp_path, model):
     assert set(listed) == {"333333333333", "444444444444"}
     assert listed["333333333333"]["status"] == "done"
     assert listed["333333333333"]["title"] == "Send Dana the poster PDF"
-    assert listed["444444444444"]["priority"] == "high"
+    assert listed["444444444444"]["due"] == "2026-03-13"
     assert stats["new"] == 0 and stats["done"] == 1 and stats["open"] == 1
 
     # Gone from the list, they're still remembered, so they can't come back next run either.
@@ -562,12 +574,13 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
     def ask(prompt, *, system=None, schema=None, **kw):
         calls.append({"prompt": prompt, "system": system, "schema": schema})
         lunch, done = ref(prompt, "Lunch tomorrow"), ref(prompt, "wrote to the editor")
-        listed = item("Send Asha the slides", id="abcabcabcabc", status="done", evidence=[done])
+        listed = update("abcabcabcabc", status="done", evidence=[done])
         lunch_task = item("Lunch with Noor", evidence=[lunch], with_="Noor")
         lunch_task |= {"event": True, "at": "2026-03-11T12:00", "place": " Lantern Cafe "}
         why = "Ravi wrote to the editor for the extension today."
         return {
-            "tasks": [listed, lunch_task],
+            "new": [lunch_task],
+            "updates": [listed],
             "overtaken": [
                 {"id": "email-journal", "why": why, "evidence": [f"[{done}]"]},
                 {"id": "outreach-ben", "why": "Someone did it.", "evidence": ["m999"]},
@@ -615,7 +628,7 @@ def test_plans_get_a_time_and_drafts_the_messages_overtook_fold_away(tmp_path, m
     calls.clear()
     tasks.plan(vault, now=NOW)
     prompt = calls[0]["prompt"]
-    assert "at 2026-03-11T12:00 in Lantern Cafe] Lunch with Noor." in prompt
+    assert "[open, at 2026-03-11T12:00] Lunch with Noor (with Noor)" in prompt
     assert "email-journal" not in prompt and "outreach-ben" in prompt
 
 
@@ -897,3 +910,64 @@ def test_a_change_from_the_model_ends_staleness():
     merged, _ = tasks.merge([item("Old ask", id="a")], {"a": stale}, {}, set(), NOW)
     assert merged["a"]["stale"] is True
     assert merged["a"]["changed"] == ago(days=9)
+
+
+def test_an_answer_of_changes_leaves_every_other_task_as_it_was(tmp_path, model):
+    vault = make_vault(tmp_path)
+    many = [task(f"{n:012d}", f"Chore {n}") for n in range(40)]
+    write_tasks(vault, *many)
+
+    def answer(prompt):
+        said = ref(prompt, "will do tonight")
+        return {
+            "new": [],
+            "updates": [
+                update("000000000003", status="waiting", due="2026-03-14", evidence=[said]),
+                update("000000000004", due="not a date", at="", title="  ", status="finished"),
+                update("999999999999", status="done"),  # never listed
+            ],
+        }
+
+    model.answer = answer
+    tasks.plan(vault, now=NOW)
+
+    kept = {t["id"]: t for t in saved(vault)["tasks"]}
+    assert len(kept) == 40
+    changed = kept["000000000003"]
+    assert (changed["status"], changed["due"]) == ("waiting", "2026-03-14")
+    assert changed["title"] == "Chore 3" and len(changed["evidence"]) == 2
+    for before in many:
+        if before["id"] != "000000000003":
+            assert kept[before["id"]] == before  # empty, malformed or unknown changes: nothing
+    prompt = model.calls[0]["prompt"]
+    assert len(prompt.split("## Current list\n")[1].split("\n\n## ")[0].splitlines()) == 40
+
+
+def test_an_update_cant_reopen_a_task_tidy_closed_and_carries_its_fields(tmp_path, model):
+    vault = make_vault(tmp_path)
+    closed = task("cccccccccccc", "Go to lunch", status="done") | {
+        "closed_by": "time",
+        "closed_why": "It was at noon.",
+        "closed_at": GENERATED,
+        "changed": ago(days=1),
+    }
+    stale = task("dddddddddddd", "Old ask") | {"stale": True, "changed": ago(days=9)}
+    write_tasks(vault, closed, stale)
+    model.answer = lambda prompt: {
+        "new": [],
+        "updates": [
+            update("cccccccccccc", status="open", due="2026-03-14"),
+            update("dddddddddddd", title="Old ask, newly worded"),
+        ],
+    }
+
+    tasks.plan(vault, now=NOW)
+
+    kept = {t["id"]: t for t in saved(vault)["tasks"]}
+    reopened = kept["cccccccccccc"]
+    assert reopened["status"] == "done" and reopened["due"] == "2026-03-14"
+    assert (reopened["closed_by"], reopened["closed_why"]) == ("time", "It was at noon.")
+    assert reopened["changed"] == GENERATED  # its due moved
+    moved = kept["dddddddddddd"]
+    assert moved["title"] == "Old ask, newly worded" and "stale" not in moved
+    assert moved["changed"] == GENERATED

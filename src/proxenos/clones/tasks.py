@@ -2,7 +2,9 @@
 
 Each run reads the last two weeks of WhatsApp, Slack and email and has the model bring
 clones/tasks/tasks.json up to date: new tasks added, finished ones marked done, ones where
-the user is waiting on someone marked waiting. Tasks are mostly asked of the user by other
+the user is waiting on someone marked waiting. The model gets the list one line a task and
+answers with only what changed (new tasks, and updates by id), which code merges in (`apply`):
+writing the whole list back took most of a laptop model's time. Tasks are mostly asked of the user by other
 people, so this is the one clone that sends the other side of a conversation to the model. It
 only sends conversations the user is part of: direct chats, groups and channels they wrote in
 during the window (on Slack, also ones where they were @-mentioned), and mail addressed to
@@ -114,7 +116,9 @@ _WAITING = ("draft", "approved")  # a draft's statuses while it waits on the use
 _SYSTEM = """\
 You keep the task list of {person}: what is on their plate right now. You get their \
 WhatsApp, Slack and email from the last {days} days, both sides of every conversation they \
-take part in, and the list as it stood after the last run. Return the whole updated list.
+take part in, and the list as it stood after the last run, one line a task. Return only what \
+changed: the tasks that are new, and updates to listed ones. A listed task the messages don't \
+touch isn't in your answer.
 
 A task is something {person} has to do: asked of them ("can you send ...", "please review \
 ...") or promised by them ("I'll send it tomorrow"). Not tasks: what other people will do, \
@@ -122,9 +126,7 @@ unless {person} is waiting on it; pleasantries like "let's catch up sometime" un
 was agreed; newsletters, notifications and receipts; anything already settled in the messages \
 before it became a task.
 
-For each task:
-- id: its id from the current list if it's already there, "new" if it isn't. One entry per \
-real task: when new messages are about a listed task, update that task.
+For each new task:
 - title: a short imperative, under 12 words ("Send Priya the slides for lab meeting").
 - detail: one or two sentences: who wants what, and anything agreed about it.
 - source: whatsapp, slack or email, where it was asked or promised.
@@ -152,6 +154,13 @@ event true, at its time and place from the confirmation, and open until it's ove
 "YYYY-MM-DDTHH:MM" in local time, or "YYYY-MM-DD" when only the day is agreed. The latest \
 agreed time when it moved. "" for anything else, and for a deadline, which is due.
 - place: where it happens, as the messages say it ("the café on Main Street", "on Zoom"), or "".
+One entry per real task: when new messages are about a listed task, update that task and don't \
+add it.
+
+For each update to a listed task: its id from the list, why (one sentence), the [m..] refs that \
+show it, and only the fields that change: status (as above), due, at (as above, for a plan that \
+moved), title (only when it no longer says what the task is). Leave out a field that stays \
+the same.
 
 You also get the drafts written for {person} that wait to be sent. Return in overtaken each \
 draft the messages show is no longer needed: someone else already did what it asks or says \
@@ -160,8 +169,7 @@ it's about changed or was called off. For each: its id, why (one sentence: who d
 when) and the [m..] refs that show it. Leave out any draft the messages don't clearly settle.
 
 Rules:
-- Every task on the current list comes back, changed or not. Keep done and cancelled ones, \
-marked so.
+- A listed task you don't update stays as it is, whatever its status.
 - Never add back a task {person} closed on their own, however it's worded.
 - Only what the messages show. A message from someone else is evidence of what they asked, \
 not of what {person} agreed to.
@@ -183,48 +191,66 @@ Today is {today}. Message times are local.
 {cut}
 {messages}"""
 
+_NEW_ITEM = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "detail": {"type": "string"},
+        "source": {"type": "string", "enum": list(SOURCES)},
+        "with": {"type": "string"},
+        "asked_in": {"type": "string"},
+        "due": {"type": "string"},
+        "priority": {"type": "string", "enum": list(PRIORITIES)},
+        "status": {"type": "string", "enum": list(STATUSES)},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "event": {"type": "boolean"},
+        "at": {"type": "string"},
+        "place": {"type": "string"},
+    },
+    "required": [
+        "title",
+        "detail",
+        "source",
+        "with",
+        "asked_in",
+        "due",
+        "priority",
+        "status",
+        "evidence",
+        "event",
+        "at",
+        "place",
+    ],
+    "additionalProperties": False,
+}
+# What may change on a listed task, besides why and the messages that show it. A field the model
+# leaves out stays as it was, so an answer is only the words that changed.
+_UPDATE_FIELDS = {
+    "title": {"type": "string"},
+    "status": {"type": "string", "enum": list(STATUSES)},
+    "due": {"type": "string"},
+    "at": {"type": "string"},
+}
 _TASKS_SCHEMA = {
     "type": "object",
     "properties": {
-        "tasks": {
+        "new": {"type": "array", "items": _NEW_ITEM},
+        "updates": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
-                    "title": {"type": "string"},
-                    "detail": {"type": "string"},
-                    "source": {"type": "string", "enum": list(SOURCES)},
-                    "with": {"type": "string"},
-                    "asked_in": {"type": "string"},
-                    "due": {"type": "string"},
-                    "priority": {"type": "string", "enum": list(PRIORITIES)},
-                    "status": {"type": "string", "enum": list(STATUSES)},
+                    **_UPDATE_FIELDS,
+                    "why": {"type": "string"},
                     "evidence": {"type": "array", "items": {"type": "string"}},
-                    "event": {"type": "boolean"},
-                    "at": {"type": "string"},
-                    "place": {"type": "string"},
                 },
-                "required": [
-                    "id",
-                    "title",
-                    "detail",
-                    "source",
-                    "with",
-                    "asked_in",
-                    "due",
-                    "priority",
-                    "status",
-                    "evidence",
-                    "event",
-                    "at",
-                    "place",
-                ],
+                "required": ["id", "why", "evidence"],
                 "additionalProperties": False,
             },
-        }
+        },
     },
-    "required": ["tasks"],
+    "required": ["new", "updates"],
     "additionalProperties": False,
 }
 
@@ -266,9 +292,9 @@ def plan(vault: Path, days: float = DAYS, now: datetime | None = None) -> dict[s
                 messages=text,
             ),
             system=_system(vault / "self" / "identity.md", days),
-            schema=_schema(list(asked)),
+            schema=_schema(list(shown), list(asked)),
         )
-        updated, new = merge(answer["tasks"], shown, refs, _closed_keys(closed, mine), now)
+        updated, new = apply(answer, shown, refs, _closed_keys(closed, mine), now)
         tasks = {k: task for k, task in tasks.items() if k in mine} | updated
         overtaken = _overtaken(answer.get("overtaken") or [], asked, refs)
 
@@ -538,6 +564,54 @@ def merge(
     return tasks, new
 
 
+def apply(
+    answer: dict,
+    shown: dict[str, dict],
+    refs: dict[str, dict],
+    closed_keys: set,
+    now: datetime | None = None,
+) -> tuple[dict[str, dict], int]:
+    """The model's changes applied to the tasks it was shown, and how many it added: the new
+    tasks (`merge`), then each update to a listed task, which changes only the fields it names.
+    A task it doesn't mention stays as it was, byte for byte; an update to an id it wasn't shown,
+    or to one the user closed, is dropped, and so is a field that's empty or isn't allowed.
+    A task `tidy` closed stays done (an update can't reopen it); `tidy`'s fields come through,
+    and a change to its title, due, at or status moves "changed" and clears "stale"."""
+    stamp = _iso(now or datetime.now(UTC))
+    tasks, new = merge(
+        [{**item, "id": "new"} for item in answer.get("new") or []],
+        shown,
+        refs,
+        closed_keys,
+        now,
+    )
+    for update in answer.get("updates") or []:
+        key = update.get("id")
+        if key not in shown or key in closed_keys:
+            continue
+        task = tasks[key]
+        changed = {}
+        if title := " ".join(str(update.get("title") or "").split()):
+            changed["title"] = title
+        if update.get("status") in STATUSES:
+            changed["status"] = update["status"]
+        if due := _due(str(update.get("due") or "")):
+            changed["due"] = due
+        if at := _at(update.get("at") or None):
+            changed["at"] = at
+        cited = [refs[r]["id"] for r in _refs([str(e) for e in update.get("evidence") or []])]
+        cited = [m for m in cited if m not in task.get("evidence", [])]
+        if cited and changed:
+            changed["evidence"] = [*task.get("evidence", []), *dict.fromkeys(cited)]
+        if task.get("closed_by") and task.get("status") == "done":
+            changed.pop("status", None)
+        if any(task.get(k) != v for k, v in changed.items() if k in _CHANGES):
+            changed |= {"changed": stamp}
+            task = {k: v for k, v in task.items() if k != "stale"}
+        tasks[key] = {**task, **changed}
+    return tasks, new
+
+
 def task_id(title: str, source: str, asked_at: str | None) -> str:
     return hashlib.sha1(f"{title}{source}{asked_at or ''}".encode()).hexdigest()[:12]
 
@@ -711,16 +785,14 @@ def _system(identity: Path, days: float) -> str:
 
 
 def _task_line(task: dict) -> str:
-    state = [task["status"], task["priority"]] + ([f"due {task['due']}"] if task["due"] else [])
+    """One short line a task: its id, title, status, due date, when (for an event) and who it's
+    with. The detail, priority and evidence stay in the file: the model only needs to find the
+    task the messages are about and say what changed."""
+    state = [task["status"]] + ([f"due {task['due']}"] if task["due"] else [])
     if task.get("at"):
-        state.append(f"at {task['at']}" + (f" in {task['place']}" if task.get("place") else ""))
-    origin = [task["source"]]
-    if task.get("with"):
-        origin.append(f"with {task['with']}")
-    if task.get("asked_at"):
-        origin.append(f"asked {_local_day(task['asked_at'])}")
-    detail = f" {task['detail']}" if task.get("detail") else ""
-    return f"- id {task['id']} [{', '.join(state)}] {task['title']}.{detail} ({', '.join(origin)})"
+        state.append(f"at {task['at']}")
+    who = f" (with {task['with']})" if task.get("with") else ""
+    return f"- id {task['id']} [{', '.join(state)}] {task['title']}{who}"
 
 
 def _draft_line(draft: dict) -> str:
@@ -730,10 +802,18 @@ def _draft_line(draft: dict) -> str:
     return f"{head}: {_clip(draft['text'], DRAFT_CHARS)}"
 
 
-def _schema(drafts: list[str]) -> dict:
-    """The answer's shape: the task list, and the drafts overtaken, by the ids it was shown."""
+def _schema(listed: list[str], drafts: list[str]) -> dict:
+    """The answer's shape: new tasks, updates by the ids of the tasks it was shown, and the drafts
+    overtaken, by the ids it was shown."""
+    schema = _TASKS_SCHEMA
+    if listed:
+        updates = {**schema["properties"]["updates"]["items"]}
+        updates["properties"] = {**updates["properties"], "id": {"type": "string", "enum": listed}}
+        schema = schema | {
+            "properties": schema["properties"] | {"updates": {"type": "array", "items": updates}}
+        }
     if not drafts:
-        return _TASKS_SCHEMA
+        return schema
     overtaken = {
         "type": "array",
         "items": {
@@ -747,9 +827,9 @@ def _schema(drafts: list[str]) -> dict:
             "additionalProperties": False,
         },
     }
-    return _TASKS_SCHEMA | {
-        "properties": _TASKS_SCHEMA["properties"] | {"overtaken": overtaken},
-        "required": ["tasks", "overtaken"],
+    return schema | {
+        "properties": schema["properties"] | {"overtaken": overtaken},
+        "required": ["new", "updates", "overtaken"],
     }
 
 
