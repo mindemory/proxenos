@@ -156,14 +156,30 @@ export default function AppPage() {
   }, [homeLoaded]);
 
   // A link can open a view: /app?view=ask, which is where a share from the phone lands. Read
-  // after the first paint, so the server's render (home) and the browser's first one agree.
+  // after the first paint, so the server's render (home) and the browser's first one agree. Kept
+  // once read, as the effect below puts the open view (home, at first) in the address.
+  const asked = useRef<string | null>(null);
   useEffect(() => {
-    const asked = new URLSearchParams(window.location.search).get("view");
-    const known = NAV_ITEMS.find((item) => item.id === asked);
-    if (!known) return;
-    const frame = requestAnimationFrame(() => setView(known.id));
+    asked.current ??= new URLSearchParams(window.location.search).get("view") ?? "";
+    const known = NAV_ITEMS.find((item) => item.id === asked.current);
+    if (!known) {
+      asked.current = "";
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      asked.current = "";
+      setView(known.id);
+    });
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  // The open view stays in the address, so a reload (a view made on demand reloads when it's
+  // done) comes back to it rather than to Home.
+  useEffect(() => {
+    if (asked.current) return; // the view a link asked for isn't open yet
+    const url = view === "home" ? "/app" : `/app?view=${view}`;
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(window.history.state, "", url);
+  }, [view]);
 
   const navigate = (next: View) => {
     setView(next);
