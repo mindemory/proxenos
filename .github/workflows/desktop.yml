@@ -39,12 +39,20 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTES: |
-            The desktop app: the page in a window, a menu-bar menu, and the sync and night built in, with its own Python. Your records stay on your computer.
+            Proxenos as an app, with nothing else to install and no terminal. Your records stay on your computer.
 
-            - **Mac (Apple silicon, macOS 13 or newer):** the `.dmg`. It isn't signed yet, so the first time macOS won't open it: open System Settings, then Privacy & Security, and choose Open Anyway beside Proxenos.
-            - **Windows (x64):** the `.exe`. It isn't signed yet, so Windows SmartScreen warns: choose More info, then Run anyway.
+            **Install it**
 
-            Setting it up: [README](https://github.com/mindemory/proxenos#readme) and [docs/apps.md](https://github.com/mindemory/proxenos/blob/main/docs/apps.md).
+            1. Download the file for your computer below, under Assets: the `.dmg` for a Mac with Apple silicon (macOS 13 or newer), or the `.exe` for Windows.
+            2. Mac: open the `.dmg` and drag Proxenos into Applications. Windows: run the `.exe`.
+            3. Open Proxenos. It isn't signed yet, so your computer warns you the first time. That's expected.
+               - Mac: try to open it once. Then open System Settings, then Privacy & Security, scroll down, and press **Open Anyway** beside Proxenos.
+               - Windows: when SmartScreen warns, press **More info**, then **Run anyway**.
+            4. Follow the screens. Setup asks your name, where to keep your records, and which model should write for you. Its last screen is a checklist: do the lines you want now, and the rest later from **Connect**.
+
+            You'll see Home, and a menu-bar icon (Mac) or tray icon (Windows). If a Mac says Proxenos "can't be opened", use **Open Anyway** as in step 3.
+
+            Every step, with what you'll see: [Get started](https://github.com/mindemory/proxenos#get-started) and [the guide](https://github.com/mindemory/proxenos/blob/main/docs/guide.md#install-the-desktop-app).
 
   build:
     needs: [draft]
