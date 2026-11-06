@@ -14,6 +14,8 @@ Who is in each channel (its CHANNEL_USER table) goes to raw/slack/<team>/channel
 one record per channel or group DM, as the API ingester writes it: every member's user id, name
 and profile email, and whether the user is in it.
 
+slackdump is the one on the PATH, else the copy the first sign-in downloaded (proxenos.slackbin).
+
 Before reading, each workspace slackdump is signed in to has its newest archive brought up to
 date with `slackdump resume`, so Slack is read as it comes in. slackdump keeps its sign-ins
 itself (`slackdump workspace new NAME`); a workspace without one is read as its archive stands.
@@ -22,7 +24,6 @@ Attachments are never fetched.
 
 import argparse
 import json
-import shutil
 import sqlite3
 import subprocess
 from collections import Counter
@@ -30,6 +31,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from proxenos import slackbin
 from proxenos.config import FROM_SOURCE, REPO_ROOT, env, vault_path
 from proxenos.ingest import slack
 from proxenos.store import merge_monthly, merge_snapshot, private_dir, write_private
@@ -140,11 +142,11 @@ def workspaces(
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> dict[str, str]:
     """The workspaces slackdump is signed in to, as {slug: name}; none without slackdump."""
-    if not shutil.which("slackdump"):
+    if not (binary := slackbin.find()):
         return {}
     try:
         listed = run(
-            ["slackdump", "workspace", "list", "-b"], capture_output=True, text=True, timeout=60
+            [binary, "workspace", "list", "-b"], capture_output=True, text=True, timeout=60
         )
     except (OSError, subprocess.TimeoutExpired):
         return {}
@@ -173,7 +175,7 @@ def catch_up(
     stats = Counter()
     for team, db in newest.items():
         command = [
-            "slackdump",
+            slackbin.find() or "slackdump",
             "resume",
             "-workspace",
             signed_in[team],

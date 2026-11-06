@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from proxenos import slackbin
 from proxenos.ingest import slackdump
 
 SCHEMA = """
@@ -159,7 +160,7 @@ def test_catch_up_resumes_the_newest_archive_of_each_signed_in_workspace(tmp_pat
     con.execute("update WORKSPACE set TEAM = 'Other Team'")  # not signed in
     con.commit()
     con.close()
-    monkeypatch.setattr(slackdump.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackbin.shutil, "which", lambda name: "/bin/slackdump")
     calls = []
 
     def run(command, **kwargs):
@@ -179,7 +180,7 @@ def test_catch_up_resumes_the_newest_archive_of_each_signed_in_workspace(tmp_pat
 
 def test_without_slackdump_or_when_offline_nothing_is_fetched(tmp_path, monkeypatch):
     make_archive(tmp_path)
-    monkeypatch.setattr(slackdump.shutil, "which", lambda name: None)
+    monkeypatch.setattr(slackbin.shutil, "which", lambda name: None)
     assert slackdump.catch_up(slackdump.archives(tmp_path), run=None) == {}
 
     monkeypatch.setattr(slackdump, "catch_up", lambda dbs: pytest.fail("fetched while offline"))
@@ -189,7 +190,7 @@ def test_without_slackdump_or_when_offline_nothing_is_fetched(tmp_path, monkeypa
 
 def test_quiet_channels_are_looked_at_on_the_days_first_catch_up_only(tmp_path, monkeypatch):
     make_archive(tmp_path)
-    monkeypatch.setattr(slackdump.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackbin.shutil, "which", lambda name: "/bin/slackdump")
     calls = []
 
     def run(command, **kwargs):

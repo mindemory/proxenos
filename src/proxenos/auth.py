@@ -45,7 +45,14 @@ prompt, or from stdin when the page passes it on, never from the command line.
 `proxenos auth slackdump NAME` signs in to a Slack workspace through slackdump (which keeps the
 sign-in itself) and, the first time, saves its last 30 days without attachments: into data/ from a checkout, else into the vault's
 downloads/slack (the desktop app has no data/ folder of its own).
-From then on every sync fetches its new messages.
+From then on every sync fetches its new messages. Without slackdump on the PATH it's downloaded
+first (proxenos.slackbin). At a terminal, slackdump asks how to log in. Without one (the page's
+Sign in to Slack button runs it so), slackdump won't start its login at all: its browser login
+(auth/rod.go, NewRODAuth) refuses unless stdin and stdout are terminals, and asks for the method in
+a menu (auth/auth_ui/huh.go) that has no flag. So it runs under a pseudo-terminal of its own that
+picks the first choice, "Interactive": a browser window opens on Slack's login page and the person
+signs in there, as for any website. A workspace it already knows asks whether to overwrite it
+(workspace/new.go), which is answered yes.
 """
 
 import base64
@@ -55,7 +62,7 @@ import json
 import os
 import re
 import secrets
-import shutil
+import select
 import subprocess
 import sys
 import time
@@ -69,6 +76,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from proxenos import gdocs as gdocs_api
+from proxenos import slackbin
 from proxenos.config import save_secret
 from proxenos.ingest import beeper as beeper_api
 from proxenos.ingest import gcalendar as gcalendar_api
@@ -78,6 +86,11 @@ from proxenos.ingest import slackdump as slack_archives
 from proxenos.ingest import spotify as spotify_api
 
 PORT = 8723
+SLACK_LOGIN_SECONDS = 10 * 60  # how long the person has to sign in in the browser window
+# What slackdump's login asks for, as its text appears on the terminal, and what to answer: the
+# first login method (a menu, Enter takes the highlighted one), and yes to overwrite a workspace.
+_SLACK_PROMPTS = (("(y/N)", b"y\r"), ("Select login type", b"\r"))
+_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][A-Z0-9]|.)")
 SLACK_FIRST_DAYS = 30  # how far back a workspace's first archive goes
 _STRAVA_AUTHORIZE = "https://www.strava.com/oauth/authorize"
 _STRAVA_TOKEN = "https://www.strava.com/oauth/token"
@@ -436,19 +449,85 @@ def _check_address(address: str) -> None:
         raise SystemExit(f"{address!r} isn't an email address.")
 
 
+def _slack_terminal_login(binary: str, workspace: str) -> int:
+    """`slackdump workspace new` as it runs at a terminal: the person answers its menu."""
+    return subprocess.run([binary, "workspace", "new", workspace], check=False).returncode
+
+
+def _slack_pty_login(
+    binary: str,
+    workspace: str,
+    seconds: float = SLACK_LOGIN_SECONDS,
+    say: Callable[[str], None] | None = None,
+) -> int:
+    """`slackdump workspace new` with no terminal of ours: under a pseudo-terminal, which it needs,
+    answering its prompts (see the module's notes) so the browser login starts, and waiting for the
+    person to finish in that window. Its exit status; 1 when it takes longer than `seconds`."""
+    import fcntl
+    import pty
+    import struct
+    import termios
+
+    say = say or (lambda line: print(line, flush=True))
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
+    env = {**os.environ, "TERM": "xterm-256color"}
+    child = subprocess.Popen(
+        [binary, "workspace", "new", workspace],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        env=env,
+        start_new_session=True,
+    )
+    os.close(slave)
+    seen, answered = "", set()
+    deadline = time.monotonic() + seconds
+    try:
+        while time.monotonic() < deadline:
+            if select.select([master], [], [], 0.5)[0]:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError:  # the other end closed: it has finished
+                    chunk = b""
+                if not chunk:
+                    return child.wait()
+                seen = (seen + _ANSI.sub("", chunk.decode(errors="replace")))[-4000:]
+                for marker, reply in _SLACK_PROMPTS:
+                    if marker in seen and marker not in answered:
+                        answered.add(marker)
+                        os.write(master, reply)
+                        if marker == "Select login type":
+                            say(f"A browser window is opening. Sign in to {workspace} there.")
+            elif child.poll() is not None:
+                return child.returncode
+        child.kill()
+        child.wait()
+        say("Slack's login window was open too long; try again.")
+        return 1
+    finally:
+        os.close(master)
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+
+
 def slackdump(
     name: str,
     data: Path | None = None,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     now: datetime | None = None,
+    signin: Callable[[str, str], int] | None = None,
 ) -> str:
-    if not shutil.which("slackdump"):
-        raise SystemExit("Install slackdump first: brew install slackdump")
+    binary = slackbin.ensure()
     # "acme", "acme.slack.com" or its address: slackdump knows it by "acme".
     workspace = re.sub(r"^https?://", "", name.strip()).split(".")[0].strip("/")
     if not workspace:
         raise SystemExit("Name the workspace as in its address, e.g. acme for acme.slack.com.")
-    if run(["slackdump", "workspace", "new", workspace]).returncode != 0:
+    if signin is None:
+        at_terminal = sys.stdin.isatty() and sys.stdout.isatty()
+        signin = _slack_terminal_login if at_terminal else _slack_pty_login
+    if signin(binary, workspace) != 0:
         raise SystemExit(f"slackdump didn't sign in to {workspace}")
     saved = {slack_api._slug(slack_archives._team(db) or "") for db in slack_archives.archives()}
     if slack_api._slug(workspace) in saved:
@@ -458,7 +537,7 @@ def slackdump(
     now = (now or datetime.now()).astimezone()
     since = now - timedelta(days=SLACK_FIRST_DAYS)
     print(f"Saving the last {SLACK_FIRST_DAYS} days of {workspace}, without attachments.")
-    command = ["slackdump", "archive", "-workspace", workspace, "-files=false", "-member-only"]
+    command = [binary, "archive", "-workspace", workspace, "-files=false", "-member-only"]
     command += ["-time-from", f"{since.astimezone(UTC):%Y-%m-%dT%H:%M:%S}"]  # it reads UTC
     command += ["-o", str(data / f"slackdump_{now:%Y%m%d_%H%M%S}")]
     if run(command).returncode != 0:

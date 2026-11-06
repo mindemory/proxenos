@@ -15,7 +15,7 @@ import urllib.request
 
 import pytest
 
-from proxenos import auth, config
+from proxenos import auth, config, slackbin
 
 
 @pytest.fixture
@@ -188,7 +188,7 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
 
     from proxenos.ingest import slackdump
 
-    monkeypatch.setattr(auth.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackbin.shutil, "which", lambda name: "/bin/slackdump")
     monkeypatch.setattr(slackdump, "REPO_ROOT", tmp_path)
     monkeypatch.delenv("PROXENOS_SLACKDUMP_DIR", raising=False)
     calls = []
@@ -197,8 +197,11 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
         calls.append(command)
         return SimpleNamespace(returncode=0)
 
+    def signin(binary, workspace):
+        return run([binary, "workspace", "new", workspace]).returncode
+
     now = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
-    said = auth.slackdump("https://acme.slack.com", tmp_path / "data", run, now)
+    said = auth.slackdump("https://acme.slack.com", tmp_path / "data", run, now, signin)
 
     login, archive = calls
     assert login == ["slackdump", "workspace", "new", "acme"]
@@ -217,7 +220,7 @@ def test_slackdump_sign_in_saves_a_first_archive_only_for_a_new_workspace(tmp_pa
     monkeypatch.setattr(slackdump, "archives", lambda: [tmp_path / "a" / "slackdump.sqlite"])
     monkeypatch.setattr(slackdump, "_team", lambda db: "Acme")
     calls.clear()
-    assert "fetches its new messages" in auth.slackdump("acme", tmp_path / "data", run, now)
+    assert "fetches its new messages" in auth.slackdump("acme", tmp_path / "data", run, now, signin)
     assert len(calls) == 1  # signed in again; its archive is already there
 
 
@@ -227,7 +230,7 @@ def test_slackdump_sign_in_saves_to_the_vault_when_this_isnt_a_checkout(tmp_path
 
     from proxenos.ingest import slackdump
 
-    monkeypatch.setattr(auth.shutil, "which", lambda name: "/bin/slackdump")
+    monkeypatch.setattr(slackbin.shutil, "which", lambda name: "/bin/slackdump")
     monkeypatch.setattr(slackdump, "FROM_SOURCE", False)
     monkeypatch.setenv("PROXENOS_VAULT", str(tmp_path / "vault"))
     monkeypatch.setattr(slackdump, "archives", list)
@@ -237,10 +240,15 @@ def test_slackdump_sign_in_saves_to_the_vault_when_this_isnt_a_checkout(tmp_path
         calls.append(command)
         return SimpleNamespace(returncode=0)
 
-    auth.slackdump("acme", run=run, now=datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    auth.slackdump(
+        "acme",
+        run=run,
+        now=datetime(2026, 3, 10, 12, 0, tzinfo=UTC),
+        signin=lambda binary, workspace: 0,
+    )
 
     saved = tmp_path / "vault" / "downloads" / "slack"
-    assert calls[1][-1].startswith(str(saved / "slackdump_2026")) and saved.is_dir()
+    assert calls[0][-1].startswith(str(saved / "slackdump_2026")) and saved.is_dir()
 
 
 @pytest.mark.parametrize(

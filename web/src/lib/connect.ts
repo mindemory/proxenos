@@ -58,6 +58,8 @@ const JOB_MS: Record<JobKind, number> = {
   gdocs: 6 * 60_000,
   whatsapp: 15 * 60_000,
   beeper: 60_000,
+  // slackdump may be downloaded first, the person signs in in a browser window, and then 30 days are saved.
+  slack: 40 * 60_000,
   ask: ASK_MS,
   errand: ASK_MS,
   send: 3 * 60_000,
@@ -71,8 +73,9 @@ const JOB_MS: Record<JobKind, number> = {
   model: 3 * 60 * 60_000,
   make: STEP_MS,
 };
-// The kinds whose message follows the command's output while it runs, not only when it ends.
-const LIVE: ReadonlySet<JobKind> = new Set<JobKind>(["model", "make"]);
+// The kinds whose message follows the command's output while it runs, not only when it ends: a
+// download's progress, and what a Slack sign-in is waiting for.
+const LIVE: ReadonlySet<JobKind> = new Set<JobKind>(["model", "make", "slack"]);
 const MAX_OUTPUT = 1024 * 1024;
 // A download says a line a second for hours.
 const MAX_LIVE_OUTPUT = 16 * MAX_OUTPUT;

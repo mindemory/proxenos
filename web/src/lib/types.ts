@@ -1028,9 +1028,9 @@ export interface ConnectSource {
 export type SignInKind = "gmail" | "microsoft" | "gcalendar" | "gdocs";
 export const SIGN_IN_KINDS: readonly SignInKind[] = ["gmail", "microsoft", "gcalendar", "gdocs"];
 
-/** What the page can start: a sign-in, a read of WhatsApp, or a Beeper token. One of each at a time. */
-export type ConnectJobKind = SignInKind | "whatsapp" | "beeper";
-export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "whatsapp", "beeper"];
+/** What the page can start: a sign-in, a read of WhatsApp, a Beeper token, or a Slack workspace's sign-in. One of each at a time. */
+export type ConnectJobKind = SignInKind | "whatsapp" | "beeper" | "slack";
+export const CONNECT_JOB_KINDS: readonly ConnectJobKind[] = [...SIGN_IN_KINDS, "whatsapp", "beeper", "slack"];
 
 /**
  * Every background command the server runs for the page, one of each kind at a time: those above, an ask, an errand, a Send, a

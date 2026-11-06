@@ -461,14 +461,38 @@ function workspaceName(text: string): string | null {
 }
 
 /**
- * Slack: the workspaces signed in, and the Terminal command that adds another. The desktop app
- * has no slackdump or `proxenos` command to point a person at, so there it says plainly that
- * adding one isn't ready yet.
+ * Slack: the workspaces signed in, and a button that signs in to another: slackdump is downloaded
+ * the first time (Macs), a browser window opens on Slack's login page, and the last 30 days are
+ * saved once the person is in. From source, the Terminal command does the same and stays below.
  */
-export function SlackCard({ s, now, inApp }: { s: ConnectSource; now: string; inApp: boolean }) {
+export function SlackCard({
+  s,
+  now,
+  job,
+  inApp,
+  onSignIn,
+  onCancel,
+}: {
+  s: ConnectSource;
+  now: string;
+  job: ConnectJob | null;
+  inApp: boolean;
+  onSignIn: (workspace: string) => Promise<string | null>;
+  onCancel: () => void;
+}) {
   const [text, setText] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const name = workspaceName(text);
   const command = `proxenos auth slackdump ${name ?? "NAME"}`;
+  const busy = job?.state === "running";
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name) setFormError("That isn't a workspace name. Use letters, digits and dashes, like acme.");
+    else {
+      setFormError(null);
+      onSignIn(name).then(setFormError);
+    }
+  };
 
   return (
     <section className="card space-y-4 p-4 sm:p-5">
@@ -491,14 +515,10 @@ export function SlackCard({ s, now, inApp }: { s: ConnectSource; now: string; in
         </p>
       )}
 
-      {inApp ? (
-        <p className="text-sm leading-relaxed text-muted">
-          Adding a Slack workspace from the app isn&apos;t ready yet. There&apos;s nothing to run for now.
-        </p>
-      ) : (
-        <div className="space-y-2.5">
-          <p className="smallcaps text-faint">{s.workspaces.length ? "Add a workspace" : "Add your first"}</p>
-          <label className="block space-y-1 sm:max-w-xs">
+      <form onSubmit={submit} className="space-y-2.5">
+        <p className="smallcaps text-faint">{s.workspaces.length ? "Add a workspace" : "Add your first"}</p>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,16rem)_auto] sm:items-end">
+          <label className="block space-y-1">
             <span className="text-xs text-muted">Workspace name, the part before .slack.com</span>
             <input
               value={text}
@@ -511,12 +531,31 @@ export function SlackCard({ s, now, inApp }: { s: ConnectSource; now: string; in
               className={inputClass}
             />
           </label>
-          {text.trim() && !name && (
-            <p className="text-sm text-bad-ink" role="alert">
-              That isn&apos;t a workspace name. Use letters, digits and dashes, like acme.
-            </p>
-          )}
-          <p className="text-sm leading-relaxed text-muted">Run this in Terminal and follow what it asks, then reload this page.</p>
+          <PrimaryButton type="submit" disabled={busy}>
+            <LogIn size={14} aria-hidden="true" />
+            Sign in to Slack
+          </PrimaryButton>
+        </div>
+        {(formError || (text.trim() && !name)) && (
+          <p className="text-sm text-bad-ink" role="alert">
+            {formError ?? "That isn't a workspace name. Use letters, digits and dashes, like acme."}
+          </p>
+        )}
+        <p className="text-xs leading-relaxed text-muted">
+          A browser window opens on Slack&apos;s login page: sign in there as you usually do. Proxenos then saves the last 30 days, without
+          attachments, and reads new messages on every sync.
+          {inApp && " The first time, it downloads slackdump, the program that reads Slack, from its GitHub page."}
+        </p>
+      </form>
+      <JobLine
+        job={job}
+        onCancel={onCancel}
+        running={job?.message || "Starting…"}
+        done={`Signed in to ${job?.account ?? "Slack"}. ${job?.message ?? ""}`}
+      />
+      {!inApp && (
+        <div className="space-y-1.5">
+          <p className="text-sm leading-relaxed text-muted">Or in Terminal, following what it asks, then reload this page:</p>
           <Command block>{command}</Command>
         </div>
       )}

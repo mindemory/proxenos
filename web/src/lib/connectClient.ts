@@ -18,6 +18,7 @@ const POLL_MS = 2000;
 /** The toast for a job that worked. Failures stay on their card instead. */
 function doneToast(job: ConnectJob): string {
   if ((SIGN_IN_KINDS as readonly string[]).includes(job.kind)) return `Signed in as ${job.account ?? "that account"}`;
+  if (job.kind === "slack") return job.account ? `Added ${job.account} to Slack` : "Slack workspace added";
   return job.kind === "beeper" ? "Beeper token saved" : "WhatsApp read";
 }
 
@@ -107,6 +108,19 @@ export function useConnect() {
     [started],
   );
 
+  /** Start signing in to a Slack workspace, named as before .slack.com. Resolves with why it couldn't start, or null. */
+  const signInToSlack = useCallback(
+    (workspace: string): Promise<string | null> =>
+      post<{ job: ConnectJob }>("/api/connect/slack", { workspace }).then(
+        (r) => {
+          started(r.job);
+          return null;
+        },
+        (e: unknown) => (e instanceof Error ? e.message : String(e)),
+      ),
+    [started],
+  );
+
   const readWhatsApp = useCallback(() => {
     post<{ job: ConnectJob }>("/api/connect/whatsapp", {}).then(
       (r) => started(r.job),
@@ -120,5 +134,5 @@ export function useConnect() {
 
   const job = useCallback((kind: ConnectJobKind) => data?.jobs.find((j) => j.kind === kind) ?? null, [data]);
 
-  return { data, error, clearError: () => setError(null), reload: load, job, signIn, readWhatsApp, saveBeeperToken, cancel };
+  return { data, error, clearError: () => setError(null), reload: load, job, signIn, signInToSlack, readWhatsApp, saveBeeperToken, cancel };
 }

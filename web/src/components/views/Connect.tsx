@@ -47,7 +47,7 @@ function Rows({ sources, now }: { sources: ConnectSource[]; now: string }) {
 }
 
 export function Connect() {
-  const { data, error, clearError, reload, job, signIn, readWhatsApp, saveBeeperToken, cancel } = useConnect();
+  const { data, error, clearError, reload, job, signIn, signInToSlack, readWhatsApp, saveBeeperToken, cancel } = useConnect();
 
   if (!data) {
     return error ? <ErrorBanner message={`Couldn't load sources: ${error}`} /> : <StatusSkeleton />;
@@ -125,7 +125,16 @@ export function Connect() {
         {whatsapp && (
           <WhatsAppCard s={whatsapp} now={data.now} job={job("whatsapp")} inApp={data.inApp} onRead={readWhatsApp} onCancel={() => cancel("whatsapp")} />
         )}
-        {slack && <SlackCard s={slack} now={data.now} inApp={data.inApp} />}
+        {slack && (
+          <SlackCard
+            s={slack}
+            now={data.now}
+            job={job("slack")}
+            inApp={data.inApp}
+            onSignIn={signInToSlack}
+            onCancel={() => cancel("slack")}
+          />
+        )}
         {beeper && (
           <BeeperCard s={beeper} now={data.now} job={job("beeper")} onSave={saveBeeperToken} onCancel={() => cancel("beeper")} />
         )}
