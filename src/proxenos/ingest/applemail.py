@@ -10,7 +10,10 @@ the mbox ingester's parser, so they match its fields and Message-ID keys, and a 
 also in a Takeout export or a Gmail sync merges with it. <account> is the address made
 path-safe, as for Takeout. Mail's account folders don't name their address, so it is the one in
 PROXENOS_EMAILS that appears most in that account's From, To and Cc; an account with none is
-skipped and counted, and --full retries it once PROXENOS_EMAILS is fixed. The mailbox's path
+skipped and counted, and --full retries it once PROXENOS_EMAILS is fixed. With PROXENOS_EMAILS
+unset (the desktop app asks no one to type their addresses), each account's own address is found
+from its mail first: the From most of its sent mail has, else the address most of its mail is to,
+and those are saved as the setting, so the rest of Proxenos knows them too. The mailbox's path
 ("INBOX", "[Gmail]/Sent Mail") goes in gmail_labels. Junk, spam and trash are left out.
 
 The first run reads messages saved in the last 180 days. Later runs read only files changed since
@@ -29,6 +32,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
+from proxenos import config
 from proxenos.config import env
 from proxenos.ingest import email
 from proxenos.store import merge_monthly, write_private
@@ -44,6 +48,7 @@ BATCH = 2000  # records per merge
 _VERSION = re.compile(r"V\d+")
 _ACCOUNT = re.compile(r"[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}", re.IGNORECASE)
 # Mailbox names, whatever the provider calls them: [Gmail]/Spam, Junk Email, Deleted Items ...
+_SENT = re.compile(r"\bsent\b", re.IGNORECASE)  # "Sent Messages", "[Gmail]/Sent Mail", "Sent Items"
 _UNWANTED = re.compile(r"junk( e-?mail)?|spam|trash|bin|deleted (items|messages)", re.IGNORECASE)
 
 
@@ -194,13 +199,38 @@ def run(vault: Path, args: argparse.Namespace) -> dict[str, int]:
             f"applemail: macOS won't let Proxenos read Mail's folder. Give {sys.executable} "
             "Full Disk Access in System Settings, Privacy & Security, Full Disk Access."
         ) from None
-    me = env("EMAILS").split(",")
-    if not any(a.strip() for a in me):
-        raise SystemExit(
-            "applemail: set PROXENOS_EMAILS to your addresses, so each Mail account can be "
-            "matched to one."
-        )
+    me = [a.strip() for a in env("EMAILS").split(",") if a.strip()]
+    if not me:
+        me = guess(store)
+        if not me:
+            raise SystemExit(
+                "applemail: Mail has no messages yet to tell your addresses from. Add your "
+                "accounts in Mail and let it download your mail, or set PROXENOS_EMAILS."
+            )
+        config.save_setting("EMAILS", ",".join(me))
     return ingest(vault, store, me, args.full)
+
+
+def guess(store: Path, now: float | None = None) -> list[str]:
+    """Each Mail account's own address, from its last FIRST_RUN_DAYS of mail: the From that most of
+    its sent mail (a mailbox named Sent) has, else the address most of its mail is to or copied
+    to. Sorted, lowercase; empty when there's no mail to tell from."""
+    since = (now or time.time()) - FIRST_RUN_DAYS * 86400
+    found = set()
+    for account in sorted(p for p in store.iterdir() if _ACCOUNT.fullmatch(p.name) and p.is_dir()):
+        files = _changed(account, since)[0]
+        sent = [f for f in files if _SENT.search(f[2])][-SAMPLE:]
+        seen = Counter()
+        for _, path, _ in sent:
+            if (record := _record(path, "", set())) and record["from_address"]:
+                seen[record["from_address"]] += 1
+        if not seen:  # no sent mail here: the address its mail is to
+            for _, path, _ in files[-SAMPLE:]:
+                if record := _record(path, "", set()):
+                    seen.update({*(record["to"] or []), *(record["cc"] or [])})
+        if seen:
+            found.add(seen.most_common(1)[0][0].lower())
+    return sorted(found)
 
 
 def _store(root: Path) -> Path:

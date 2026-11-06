@@ -292,13 +292,33 @@ def test_a_folder_macos_blocks_says_to_give_full_disk_access(tmp_path, mail):
     assert not (tmp_path / "vault" / "raw").exists()
 
 
-def test_without_proxenos_emails_it_says_so_instead_of_skipping_everything(
+def test_without_proxenos_emails_each_account_is_known_by_its_own_mail_and_saved(
     tmp_path, mail, monkeypatch
 ):
+    # A: sent mail says who it is. B: no sent mailbox, so the address its mail is to.
     put(mail, UUID_A, "INBOX", "1", message("m1", "ann@example.org", ME))
+    put(mail, UUID_A, "Sent Messages", "2", message("m2", ME.upper(), "ann@example.org"))
+    put(mail, UUID_A, "Sent Messages", "3", message("m3", ME, "bo@example.org"))
+    put(mail, UUID_B, "INBOX", "4", message("m4", "ann@example.org", "work@example.net"))
+    put(mail, UUID_B, "INBOX", "5", message("m5", "bo@example.org", "work@example.net"))
+    monkeypatch.delenv("PROXENOS_EMAILS")
+    saved = {}
+    monkeypatch.setattr(
+        applemail.config, "save_setting", lambda name, value: saved.update({name: value})
+    )
+
+    read(tmp_path / "vault", mail)
+
+    assert saved == {"EMAILS": f"{ME},work@example.net"}
+    assert set(stored(tmp_path / "vault")) == {"m1", "m2", "m3"}
+    assert set(stored(tmp_path / "vault", "work-example-net")) == {"m4", "m5"}
+
+
+def test_without_proxenos_emails_and_no_mail_it_says_what_to_do(tmp_path, mail, monkeypatch):
+    (mail / "V10" / UUID_A / "INBOX.mbox").mkdir(parents=True)
     monkeypatch.delenv("PROXENOS_EMAILS")
 
-    with pytest.raises(SystemExit, match="PROXENOS_EMAILS"):
+    with pytest.raises(SystemExit, match="no messages yet"):
         read(tmp_path / "vault", mail)
 
 
