@@ -227,6 +227,7 @@ function SentToModel({ sent }: { sent: PrivacyReport["sent"] }) {
       >
         {said}
         {model.voice && ` Reply drafts are written in your voice by ${model.voice}, on this computer.`}
+        {model.fast && ` The task list, the network and the other light jobs are read by ${model.fast}, on this computer.`}
       </p>
       {hosted > 0 && (
         <p className="px-1 text-sm leading-relaxed text-muted">

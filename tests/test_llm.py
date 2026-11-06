@@ -771,6 +771,86 @@ def test_a_voice_model_on_another_server(monkeypatch):
     assert "response_format" not in body
 
 
+FAST = "local:mlx-community/gemma-4-e4b-it-4bit"
+
+
+def test_light_jobs_go_to_the_fast_model_and_the_rest_stay_on_the_main_one(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    assert llm.current() == "ollama:gemma4:26b"  # none set: as before
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", FAST)
+    assert llm.current() == "ollama:gemma4:26b"  # a test isn't a light job's step
+    for step in sorted(llm.FAST_STEPS):
+        with llm.using(step=step):
+            assert llm.current() == FAST, step
+    for step in ("work", "ask", "think", "errands", "calls", "voicemodel", "compare", "review"):
+        with llm.using(step=step):
+            assert llm.current() == "ollama:gemma4:26b", step
+    with llm.using(model="ollama:qwen3", step="tasks"):
+        assert llm.current() == "ollama:qwen3"  # a model asked for by name wins
+    monkeypatch.setenv("PROXENOS_ASK_MODEL", "ollama:qwen3")
+    with llm.using(step="tasks"), llm.foreground(tmp_path):
+        assert llm.current() == "ollama:qwen3"  # nor does one answering someone wait for it
+
+    for off in ("", "off", "claude-haiku-5"):  # off, or not on this computer
+        monkeypatch.setenv("PROXENOS_FAST_MODEL", off)
+        with llm.using(step="tasks"):
+            assert llm.current() == "ollama:gemma4:26b"
+
+
+def test_the_step_that_asks_is_the_module_that_called(monkeypatch):
+    monkeypatch.setenv("PROXENOS_MODEL", "ollama:gemma4:26b")
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", FAST)
+
+    assert llm.current() == "ollama:gemma4:26b"  # this test's module isn't one of them
+    # The module is found from the stack by its __name__, as the calls log names it.
+    code = compile("def f():\n    return llm.current()", "tasks.py", "exec")
+    scope = {"llm": llm, "__name__": "proxenos.clones.tasks"}
+    exec(code, scope)  # noqa: S102 - a test's own code
+    assert scope["f"]() == FAST
+
+
+def test_the_fast_model_is_served_at_its_own_address_and_the_main_one_at_its_own(monkeypatch):
+    sent = served(monkeypatch, "ok", model="qwen3-8b")
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", FAST)
+    with llm.using(step="tasks"):
+        assert llm.ask("light") == "ok"
+    assert llm.ask("main") == "ok"
+    (fast_url, fast_body, _), (main_url, main_body, _) = sent
+    assert fast_url == "http://127.0.0.1:8898/v1/chat/completions"
+    assert fast_body["model"] == "mlx-community/gemma-4-e4b-it-4bit"
+    assert main_url == "http://127.0.0.1:1234/v1/chat/completions"
+    assert main_body["model"] == "qwen3-8b"
+
+    monkeypatch.setenv("PROXENOS_FAST_URL", "http://localhost:9000/v1/")
+    with llm.using(step="tasks"):
+        llm.ask("light")
+    assert sent[-1][0] == "http://localhost:9000/v1/chat/completions"
+    monkeypatch.setenv("PROXENOS_FAST_URL", "https://example.com/v1")
+    with llm.using(step="tasks"), pytest.raises(llm.ModelError, match="isn't on this computer"):
+        llm.ask("light")
+
+
+def test_a_fast_model_that_isnt_running_leaves_the_job_to_the_main_model(monkeypatch, tmp_path):
+    asked = local(monkeypatch, "from the big one")  # Ollama, as PROXENOS_MODEL
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", FAST)
+
+    def down(request, timeout):
+        raise llm.urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(llm, "_direct", down)
+    lines = []
+    monkeypatch.setattr(llm, "_log", lines.append)
+    with llm.using(step="tasks"):
+        assert llm.ask("light") == "from the big one"
+    assert [(r["model"], r["ok"]) for r in lines] == [(FAST, False), ("ollama:gemma4:26b", True)]
+    assert asked[0][1]["model"] == "gemma4:26b"
+
+    # With the same model for both, nothing else to go to: the error stands.
+    monkeypatch.setenv("PROXENOS_MODEL", FAST)
+    with llm.using(step="tasks"), pytest.raises(llm.Unreachable):
+        llm.ask("light")
+
+
 def test_a_models_name_without_where_it_runs():
     assert llm.bare("ollama:gemma4:26b") == "gemma4:26b"
     assert llm.bare("local:qwen/qwen3-8b") == "qwen/qwen3-8b"

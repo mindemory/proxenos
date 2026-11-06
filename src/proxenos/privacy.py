@@ -158,8 +158,8 @@ SENDS = (
         "Network",
         ("network",),
         (
-            "The people you know by name, how you know each and what you share, and your notes' "
-            "titles."
+            "The people you know by name, how you know each and what you share, your notes' "
+            "titles, and the ideas it gave before and how you took them."
         ),
     ),
     ("Watch", ("watch",), "The films you've logged and how you rated them."),
@@ -282,6 +282,8 @@ def sent(vault: Path, now: datetime) -> dict:
     one by one, and what each part sends."""
     name = config.env("MODEL") or llm.default()
     local = name.startswith(llm.LOCAL)
+    fast = config.env("FAST_MODEL").strip()
+    fast = fast if fast.startswith(llm.LOCAL) else ""
     since = _iso(now - timedelta(days=DAYS))
     calls = [_call(line) for line in llm.calls(vault, since)]
     parts = {step: part for part, steps, _ in SENDS for step in steps}
@@ -293,6 +295,8 @@ def sent(vault: Path, now: datetime) -> dict:
             "name": llm.bare(name),
             "kind": "local" if local else "api" if llm.configured() else "none",
             "voice": config.env("VOICE_MODEL").strip() or None,
+            # The model for light jobs, when it's on this computer (llm.fast says so, by step).
+            "fast": fast and llm.bare(fast) or None,
         },
         "days": DAYS,
         "since": since,

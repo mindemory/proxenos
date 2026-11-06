@@ -154,6 +154,7 @@ function toReport(raw: unknown): PrivacyReport | null {
         name: text(model.name),
         kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
         voice: text(model.voice) || null,
+        fast: text(model.fast) || null,
       },
       days: count(sent.days) ?? 30,
       since: text(sent.since),

@@ -78,6 +78,7 @@ function toStatus(raw: unknown): SetupStatus | null {
   const model = rec(r.model);
   const computer = rec(r.computer);
   const server = rec(r.server);
+  const fast = rec(r.fast);
   if (typeof r.needed !== "boolean" || !str(vault.path) || !str(model.name)) return null;
   return {
     needed: r.needed,
@@ -107,6 +108,13 @@ function toStatus(raw: unknown): SetupStatus | null {
       get: str(computer.get) && MODEL_NAME.test(str(computer.get) ?? "") ? str(computer.get) : null,
     },
     ollama: localModels(r.ollama),
+    // An older proxenos doesn't say: it had no fast model.
+    fast: {
+      model: str(fast.model)?.slice(0, 200) || null,
+      found: fast.found === true,
+      running: fast.running === true,
+      suggested: str(fast.suggested) && MODEL_NAME.test(str(fast.suggested) ?? "") ? (str(fast.suggested) ?? "") : "",
+    },
     server: {
       ...localModels(server),
       url: str(server.url)?.slice(0, MAX_VALUE) ?? "",

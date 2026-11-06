@@ -21,6 +21,7 @@ from proxenos import (
     compare,
     connect,
     demo,
+    fastmodel,
     forms,
     importer,
     lock,
@@ -157,6 +158,8 @@ def main(argv: list[str] | None = None) -> None:
         "voice", help="a small model trained here on your own writing, for reply drafts"
     )
     voicemodel.add_arguments(tune)
+    models = commands.add_parser("model", help="serve the fast model for light jobs on this Mac")
+    fastmodel.add_arguments(models)
     speaking = commands.add_parser(
         "speech", help="Listen's natural voice or your own, made on this Mac; nothing is sent"
     )
@@ -241,6 +244,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "voice":
         voicemodel.run(vault_path(), args)  # vault_path also loads settings
+        return
+    if args.command == "model":  # a server on this computer, and timings of made-up prompts
+        fastmodel.run(vault_path(), args)  # vault_path also loads settings
         return
     if args.command == "speech":  # its own server; works alongside a sync
         speech.run(vault_path(), args)  # vault_path also loads settings

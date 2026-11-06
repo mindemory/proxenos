@@ -126,6 +126,10 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     # Nor, with no model set, the one Ollama has, which llm would go to first.
     monkeypatch.setattr("proxenos.llm._pulled", lambda: None)
     monkeypatch.setattr("proxenos.llm._default", None)
+    # Nor an MLX fast model on this computer, or its server: a test that needs one says so.
+    monkeypatch.setattr("proxenos.fastmodel.found", lambda *args, **kwargs: False)
+    monkeypatch.setattr("proxenos.fastmodel.capable", lambda *args, **kwargs: False)
+    monkeypatch.setattr("proxenos.fastmodel.running", lambda url=None: False)
     # Nor an Ask running on this computer, which a local model call would wait out.
     monkeypatch.setattr("proxenos.llm.waiting", lambda vault=None: False)
     # Nor the real vault's log of model calls: a test that checks the log points it elsewhere.

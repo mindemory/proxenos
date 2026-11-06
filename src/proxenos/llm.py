@@ -18,6 +18,15 @@ or "local:<name>" for one served the ways above. It goes through `ask_voice`. `u
 calls made inside it at other models than these settings name, so proxenos.compare can draft one
 reply with two.
 
+PROXENOS_FAST_MODEL, off when empty or "off", names a model on this computer ("local:<name>" or
+"ollama:<name>") for the light background jobs (FAST_STEPS: the task list, the network, the
+notes on each month, the research picks, the rules read from changed drafts,
+and the labels and moods), which a small fast one does well and a laptop's big one takes most of its
+night on. Drafts, Ask, Think, errands and calls stay on PROXENOS_MODEL, and so does a question
+someone is waiting on (`foreground`). A "local:" fast model is served at PROXENOS_FAST_URL
+(`proxenos model serve-fast`, mlx-lm's server, by default), apart from PROXENOS_LOCAL_URL. A job
+whose fast server isn't answering goes to the main model instead, rather than failing.
+
 What goes to Anthropic has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
 (proxenos.redact).
@@ -44,6 +53,7 @@ import urllib.request
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import anthropic
@@ -98,6 +108,13 @@ _TURN_EVERY = 0.5  # seconds between looks for a turn
 CALLS = "state/model-calls.jsonl"
 CALLS_KEPT = 20000  # lines kept, newest last: months of nights and syncs
 VOICE_PORT = 8899
+# The jobs PROXENOS_FAST_MODEL takes, by the step that asks (the module's name, as _step gives
+# it): light ones that read a lot and write to no one. Not the ones that write as the user.
+FAST_STEPS = frozenset(
+    {"tasks", "network", "observe", "tracker", "research", "voice", "mood", "rhythms"}
+)
+FAST_PORT = 8898  # where `proxenos model serve-fast` answers
+DEFAULT_FAST_URL = f"http://127.0.0.1:{FAST_PORT}/v1"
 VOICE_TEMPERATURE = 0.7
 VOICE_TOKENS = 600
 _VOICE_TIMEOUT = 120
@@ -111,6 +128,10 @@ _waited_on = False
 
 class ModelError(RuntimeError):
     pass
+
+
+class Unreachable(ModelError):
+    """The model's server didn't answer at all, as when it isn't running."""
 
 
 def ask(
@@ -131,6 +152,25 @@ def ask(
     read although it would be blanked, such as an account number a call may tell.
     """
     model = current()
+    try:
+        return _logged(model, prompt, system, schema, effort, max_tokens, images, keep)
+    except Unreachable:
+        # The fast model's server isn't up (after a restart, say): the main model does the job.
+        if (main := _chosen(light=False)) == model:
+            raise
+        return _logged(main, prompt, system, schema, effort, max_tokens, images, keep)
+
+
+def _logged(
+    model: str,
+    prompt: str,
+    system: str | None,
+    schema: dict | None,
+    effort: str,
+    max_tokens: int,
+    images: list[dict] | None,
+    keep: Iterable[str],
+) -> str | dict:
     sent = len(prompt) + len(system or "")
     with _recorded(model, sent, len(images or [])) as answered:
         answer = _ask(model, prompt, system, schema, effort, max_tokens, images, keep)
@@ -149,7 +189,9 @@ def _ask(
     keep: Iterable[str] = (),
 ) -> str | dict:
     if model.startswith(LOCAL):
-        return _ask_local(model, prompt, system, schema, effort, max_tokens, images)
+        return _ask_local(
+            model, prompt, system, schema, effort, max_tokens, images, _url_for(model)
+        )
     # Leaving this computer: the numbers and secrets no draft needs are blanked first, and the
     # log keeps only how many. Images go as they are; nothing here reads the text in them.
     prompt, blanked = redact.redact(prompt, keep)
@@ -205,11 +247,44 @@ def using(
 
 def current() -> str:
     """The model `ask` goes to: PROXENOS_MODEL, unless `using` names another, or someone is
-    waiting on the answer and PROXENOS_ASK_MODEL can give it (`foreground`). With neither set,
-    the `default`."""
+    waiting on the answer and PROXENOS_ASK_MODEL can give it (`foreground`), or the step asking
+    is a light job and PROXENOS_FAST_MODEL is set (`fast`). With none of those set, the
+    `default`."""
+    return _chosen(light=True)
+
+
+def _chosen(light: bool) -> str:
+    """`current`, with or without the fast model for a light job."""
     return (
-        getattr(_using, "model", None) or (_waited_on and _ask_model()) or env("MODEL") or default()
+        getattr(_using, "model", None)
+        or (_waited_on and _ask_model())
+        or (light and not _waited_on and fast())
+        or env("MODEL")
+        or default()
     )
+
+
+def fast() -> str:
+    """PROXENOS_FAST_MODEL when the step asking is one of FAST_STEPS, else "". Only a model on
+    this computer counts: a light job reads other people's messages, and the main model setting
+    alone says whether those may leave it."""
+    model = env("FAST_MODEL").strip()
+    return model if model.startswith(LOCAL) and _step() in FAST_STEPS else ""
+
+
+def fast_url(url: str | None = None) -> str:
+    """Where a "local:" fast model is served (`url`, else PROXENOS_FAST_URL, else mlx-lm's server
+    at FAST_PORT), held to this computer's own address as `local_url` holds PROXENOS_LOCAL_URL."""
+    return local_url((env("FAST_URL") if url is None else url).strip() or DEFAULT_FAST_URL)
+
+
+def _url_for(model: str) -> str | None:
+    """The address of the fast model's server when `model` is it, else None, for the one at
+    PROXENOS_LOCAL_URL. A model both settings name is the main one."""
+    fast_name = env("FAST_MODEL").strip()
+    if model.startswith(SERVER) and model == fast_name and model != env("MODEL"):
+        return fast_url()
+    return None
 
 
 def default() -> str:
@@ -456,6 +531,7 @@ def _ask_local(
     effort: str,
     max_tokens: int,
     images: list[dict] | None = None,
+    url: str | None = None,
 ) -> str | dict:
     """`ask`, answered by a model on this computer: "ollama:<name>" through Ollama's API, and
     "local:<name>" through the OpenAI-compatible server's (`_complete`). A schema goes in the
@@ -474,7 +550,8 @@ def _ask_local(
         raise ModelError(f"prompt too long for the local model's {LOCAL_CONTEXT}-token context")
     messages = [{"role": "system", "content": system}] if system else []
     if served:
-        chat, held, cant = _complete, "response_format", _NO_SCHEMA.search
+        chat = _complete if url is None else partial(_complete, url=url)
+        held, cant = "response_format", _NO_SCHEMA.search
         body = _served_body(name, messages, prompt, images, answer_room)
         holds: dict | None = {
             "type": "json_schema",
@@ -601,6 +678,12 @@ def _conform(value: object, schema: dict) -> object:
     return value
 
 
+def _down(error: Exception, said: str) -> ModelError:
+    """The error for a server that didn't answer: Unreachable when the connection itself failed,
+    as it does while the server isn't running, not when a model went quiet mid-answer."""
+    return (Unreachable if isinstance(error, urllib.error.URLError) else ModelError)(said)
+
+
 def _chat(model: str, body: dict, answer_room: int) -> str:
     """The answer to one Ollama chat request, read as it streams in, one JSON line at a time:
     its thinking, then its words, then a last line that says why it stopped."""
@@ -630,7 +713,7 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     except urllib.error.HTTPError as e:
         raise ModelError(f"local model {model}: {e.read().decode(errors='replace')[:300]}") from e
     except (urllib.error.URLError, TimeoutError) as e:
-        raise ModelError(f"the local model isn't answering ({e}); is Ollama running?") from e
+        raise _down(e, f"the local model isn't answering ({e}); is Ollama running?") from e
     except (OSError, ValueError, http.client.HTTPException) as e:
         raise ModelError(f"local model {model} stopped mid-answer ({e})") from e
     if not last:
@@ -641,12 +724,12 @@ def _chat(model: str, body: dict, answer_room: int) -> str:
     return "".join(words)
 
 
-def _complete(model: str, body: dict, answer_room: int) -> str:
+def _complete(model: str, body: dict, answer_room: int, url: str | None = None) -> str:
     """The answer to one chat request to the OpenAI-compatible server, read as it streams in:
     server-sent events, each a `data:` line with a piece of the words, until one says why it
     stopped and `data: [DONE]` ends them. Thinking the server parts out (`reasoning_content`) is
     left out, and so is a <think> block a model leaves at the start of its words."""
-    url = f"{local_url()}/chat/completions"
+    url = f"{local_url(url)}/chat/completions"
     request = urllib.request.Request(
         url, json.dumps(body).encode(), {"Content-Type": "application/json"}
     )
@@ -681,8 +764,8 @@ def _complete(model: str, body: dict, answer_room: int) -> str:
         said = e.read().decode(errors="replace")[:300] or f"HTTP {e.code} {e.reason}"
         raise ModelError(f"local model {model}: {said}") from e
     except (urllib.error.URLError, TimeoutError) as e:
-        raise ModelError(
-            f"the local model isn't answering ({e}); is its server running at {url}?"
+        raise _down(
+            e, f"the local model isn't answering ({e}); is its server running at {url}?"
         ) from e
     except (OSError, ValueError, AttributeError, http.client.HTTPException) as e:
         raise ModelError(f"local model {model} stopped mid-answer ({e})") from e

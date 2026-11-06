@@ -106,6 +106,16 @@ const FOLDERS: { key: SettingKey; label: string; hint: string; placeholder: stri
   },
 ];
 
+/** The model light jobs go to, which a small one on this Mac does about twice as fast as the main one. */
+const FAST_SETTINGS: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "fast_model",
+    label: "Fast model",
+    hint: "local:<name> for a model another server on this computer has, ollama:<name> for one in Ollama; off to keep light jobs on the main model.",
+    placeholder: "local:mlx-community/gemma-4-e4b-it-4bit",
+  },
+];
+
 /** Where each project's folder goes: written each night, never read but for the manuscript's changes. */
 const PROJECT_FOLDER: { key: SettingKey; label: string; hint: string; placeholder: string }[] = [
   {
@@ -232,6 +242,14 @@ export function Settings() {
       </Group>
 
       <Group
+        kicker="Model"
+        title="A faster one for light jobs"
+        note="The task list, the network, the notes on each month, the research picks and the like read a lot and write to no one, so a small model on this Mac can do them in half the time. Drafts, Ask, Think, errands and calls stay on the model above. Every call is in the Privacy view."
+      >
+        <FastModel status={status} apply={apply} />
+      </Group>
+
+      <Group
         kicker="Secrets"
         title="Keys and sign-ins"
         note="Whether each is set and where it's kept, never what it is. Gmail and Slack accounts are added from Connect."
@@ -287,6 +305,43 @@ export function Settings() {
       >
         <FoldersForm status={status} apply={apply} fields={REVIEW_SETTINGS} button="Save" />
       </Group>
+    </div>
+  );
+}
+
+/** Which model light jobs use and whether it's up, with one button to take the one this Mac can serve. */
+function FastModel({ status, apply }: { status: SetupStatus; apply: Apply }) {
+  const { fast } = status;
+  const { busy, said, run } = useChange(apply);
+  const on = fast.model !== null && fast.model !== "off";
+  return (
+    <div className="space-y-3">
+      <div className="card space-y-3 p-4 text-sm leading-relaxed text-muted sm:p-5">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {on ? (
+            <>
+              <StatePill on={fast.running} tone={fast.running ? undefined : "bad"} label={fast.running ? "Running" : "Not answering"} />
+              <span className="min-w-0 break-words">
+                Light jobs use <span className="num text-ink">{fast.model}</span>
+                {fast.running ? "." : ", and go to the main model until its server is up: proxenos model serve-fast."}
+              </span>
+            </>
+          ) : fast.model === "off" ? (
+            "Off: light jobs use the main model."
+          ) : fast.found ? (
+            "This Mac has mlx-lm and the model, and none is set yet."
+          ) : (
+            "None set: light jobs use the main model. On a Mac with Apple silicon and mlx-lm, proxenos model serve-fast serves one."
+          )}
+        </p>
+        {!on && fast.found && fast.suggested && (
+          <PrimaryButton disabled={busy} onClick={() => run({ settings: { fast_model: fast.suggested } })}>
+            Use {fast.suggested.replace(/^local:/, "")}
+          </PrimaryButton>
+        )}
+        <SaidLine said={said} />
+      </div>
+      <FoldersForm key={fast.model ?? ""} status={status} apply={apply} fields={FAST_SETTINGS} button="Save" />
     </div>
   );
 }

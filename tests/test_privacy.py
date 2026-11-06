@@ -170,10 +170,15 @@ def test_calls_are_totalled_for_thirty_days_by_where_and_step(home, monkeypatch)
 
     sent = privacy.report(vault, NOW)["sent"]
 
-    assert sent["model"] == {"name": "gemma4:26b", "kind": "local", "voice": None}
+    assert sent["model"] == {"name": "gemma4:26b", "kind": "local", "voice": None, "fast": None}
     monkeypatch.setenv("PROXENOS_MODEL", "local:qwen3-8b")  # another server on this computer
     served = privacy.report(vault, NOW)["sent"]["model"]
-    assert served == {"name": "qwen3-8b", "kind": "local", "voice": None}
+    assert served == {"name": "qwen3-8b", "kind": "local", "voice": None, "fast": None}
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", "local:mlx-community/gemma-4-e4b-it-4bit")
+    fast = privacy.report(vault, NOW)["sent"]["model"]["fast"]
+    assert fast == "mlx-community/gemma-4-e4b-it-4bit"
+    monkeypatch.setenv("PROXENOS_FAST_MODEL", "claude-haiku-5")  # only one on this computer counts
+    assert privacy.report(vault, NOW)["sent"]["model"]["fast"] is None
     assert sent["days"] == 30 and sent["since"] == "2026-10-02T12:00:00Z"
     assert sent["totals"] == {
         "calls": 4,

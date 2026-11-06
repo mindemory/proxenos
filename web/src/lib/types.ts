@@ -1090,6 +1090,7 @@ export const SETTING_KEYS = [
   "model",
   "review_model",
   "local_url",
+  "fast_model",
   "docs_dirs",
   "website_repo",
   "spotify_export",
@@ -1132,6 +1133,8 @@ export interface SetupStatus {
   /** This computer's memory in bytes (null: unknown), which size of model to get, the rule for what fits, and the model to pull unless it's too big. */
   computer: { memory: number | null; advice: string; rule: string; get: string | null };
   ollama: LocalModels;
+  /** The model for light jobs: the one set ("off" is a choice), whether this Mac has mlx-lm and the model to serve, whether its server answers, and the name setup would set. */
+  fast: { model: string | null; found: boolean; running: boolean; suggested: string };
   /** An OpenAI-compatible server on this computer (LM Studio, llama-server, ...) at `url`; `error` when that isn't this computer's own. */
   server: LocalModels & { url: string; error: string | null; context: number };
   keychain: boolean; // whether this computer's secure store can keep secrets
@@ -2260,7 +2263,7 @@ export interface PrivacyReport {
     secrets: { name: string; from: SettingOrigin | null }[];
   };
   sent: {
-    model: { name: string; kind: "local" | "api" | "none"; voice: string | null };
+    model: { name: string; kind: "local" | "api" | "none"; voice: string | null; fast: string | null };
     days: number;
     since: string;
     totals: CallTotals;

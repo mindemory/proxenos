@@ -140,6 +140,46 @@ def test_a_voice_model_is_served_here_or_in_ollama(home):
     assert config.env("VOICE_MODEL") == ""
 
 
+def test_a_fast_model_is_on_this_computer_or_off(home, monkeypatch):
+    assert apply({"settings": {"fast_model": "local:mlx-community/gemma-4-e4b-it-4bit"}})["ok"]
+    assert apply({"settings": {"fast_model": "ollama:qwen3:4b"}})["ok"]
+    assert apply({"settings": {"fast_model": "off"}})["ok"]
+    assert "A fast model is" in apply({"settings": {"fast_model": "claude-haiku-5"}})["error"]
+    assert apply({"settings": {"fast_model": ""}})["ok"] and config.env("FAST_MODEL") == ""
+
+    status = setup.status()["fast"]  # nothing here to serve one: conftest has no MLX
+    assert status == {
+        "model": None,
+        "found": False,
+        "running": False,
+        "suggested": "local:mlx-community/gemma-4-e4b-it-4bit",
+    }
+    assert "Apple silicon" in apply({"fast": "auto"})["error"]
+    assert "auto or off" in apply({"fast": "sometimes"})["error"]
+
+    monkeypatch.setattr("proxenos.fastmodel.capable", lambda: True)
+    assert apply({"fast": "auto"})["ok"]
+    assert config.env("FAST_MODEL") == "local:mlx-community/gemma-4-e4b-it-4bit"
+    assert apply({"fast": "off"})["ok"] and config.env("FAST_MODEL") == "off"
+
+
+def test_setup_sets_the_fast_model_itself_where_this_mac_has_it_and_never_over_a_choice(
+    home, monkeypatch
+):
+    monkeypatch.setattr("proxenos.fastmodel.found", lambda: True)
+    saved = apply({"settings": {"name": "Tess"}})
+    assert saved["ok"] and "fast model" in saved["message"]
+    assert config.env("FAST_MODEL") == "local:mlx-community/gemma-4-e4b-it-4bit"
+    assert saved["status"]["fast"]["model"] == config.env("FAST_MODEL")
+
+    apply({"settings": {"fast_model": "off"}})
+    saved = apply({"settings": {"name": "Tess Example"}})
+    assert "fast model" not in saved["message"] and config.env("FAST_MODEL") == "off"
+    apply({"settings": {"fast_model": ""}})  # unset, but lookup isn't one of setup's steps
+    assert "fast model" not in apply({"settings": {"lookup": "on"}})["message"]
+    assert config.env("FAST_MODEL") == ""
+
+
 def test_lookups_take_a_searxng_address_a_brave_key_and_on_or_off(home):
     assert apply({"settings": {"searxng_url": "http://127.0.0.1:8888/"}})["ok"]
     assert config.env("SEARXNG_URL") == "http://127.0.0.1:8888"

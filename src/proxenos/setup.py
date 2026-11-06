@@ -11,7 +11,8 @@ secret's value: only whether it's set.
 - {"settings": {"name": ..., "vault": ..., "docs_dirs": ...}} saves those settings; "" removes
   one. The vault folder is made if it isn't there, and has to be outside this repo. A voice model
   (for reply drafts, see proxenos.voicemodel) is "mlx", "mlx:<port>", "ollama:<name>" or
-  "local:<name>". The local server's address ("local_url") has to be this computer's own.
+  "local:<name>". A fast model for the light jobs (proxenos.fastmodel) is "ollama:<name>",
+  "local:<name>" or "off". The local server's address ("local_url") has to be this computer's own.
   SearXNG's ("searxng_url"), for looking people up (proxenos.lookup), is any web address, and
   "lookup" is on or off.
 - {"key": "sk-ant-..."} checks an Anthropic API key with one small call (it asks for the model
@@ -21,6 +22,9 @@ secret's value: only whether it's set.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
 - {"server": "qwen3-8b"} checks that the server at PROXENOS_LOCAL_URL serves that model, and
   uses it, as "local:qwen3-8b".
+- {"fast": "auto"} sets the fast model to the one `proxenos model serve-fast` serves, when this
+  is an Apple-silicon Mac with mlx-lm and that model downloaded; {"fast": "off"} keeps it unset.
+  The first model, key or name saved here does the same on its own when it's unset and found.
 - {"secret": NAME, "value": ...} replaces a secret; {"forget": NAME} removes one.
 Secrets come in on stdin, never as arguments, and never go back out.
 """
@@ -33,7 +37,7 @@ from pathlib import Path
 
 import anthropic
 
-from proxenos import config, keychain, llm, machine, notify
+from proxenos import config, fastmodel, keychain, llm, machine, notify
 
 # What the page can change, by its key in the settings file, and how many folders each takes.
 SETTINGS = {
@@ -44,6 +48,7 @@ SETTINGS = {
     "review_model": "REVIEW_MODEL",
     "local_url": "LOCAL_URL",
     "voice_model": "VOICE_MODEL",
+    "fast_model": "FAST_MODEL",
     "docs_dirs": "DOCS_DIRS",
     "website_repo": "WEBSITE_REPO",
     "spotify_export": "SPOTIFY_EXPORT",
@@ -80,6 +85,7 @@ SECRETS = (
 # A model's name: LM Studio's may name a quantization after an @ (qwen3-8b@q4_k_m).
 _MODEL = re.compile(r"[\w.:/@+-]{1,200}")
 _VOICE = re.compile(r"mlx(:\d{1,5})?|(ollama|local):[\w.:/@+-]{1,200}")
+_FAST = re.compile(r"off|(ollama|local):[\w.:/@+-]{1,200}")
 _KEY = re.compile(r"sk-ant-[\w-]{10,500}")
 _MAX_NAME = 100
 _KEY_CHECK_SECONDS = 20
@@ -135,9 +141,24 @@ def status() -> dict:
             "error": refused,
             "context": llm.LOCAL_CONTEXT,  # what to load a model with there
         },
+        "fast": _fast(),
         "keychain": keychain.available(),
         "secret_store": keychain.store(),
         "secrets": secrets(),
+    }
+
+
+def _fast() -> dict:
+    """The fast model for light jobs: the one set (or None), whether this Mac has mlx-lm and
+    the model it would serve (`proxenos model serve-fast`), whether that server answers, and the
+    name setup would set."""
+    model = config.env("FAST_MODEL").strip()
+    on = model.startswith(llm.SERVER)
+    return {
+        "model": model or None,
+        "found": fastmodel.found(),
+        "running": fastmodel.running() if on else False,
+        "suggested": fastmodel.NAME,
     }
 
 
@@ -163,7 +184,32 @@ def apply(request: object) -> dict:
         return {"ok": False, "error": str(e), "status": status()}
     except SystemExit as e:
         return {"ok": False, "error": str(e.code), "status": status()}
+    if _first_run_step(request):
+        message += _adopt_fast()
     return {"ok": True, "message": message, "status": status()}
+
+
+def _first_run_step(request: object) -> bool:
+    """Whether a change is one of setup's: a name, a model, or a key."""
+    if not isinstance(request, dict):
+        return False
+    settings = request.get("settings")
+    return bool({"key", "ollama", "server"} & request.keys()) or (
+        isinstance(settings, dict) and "name" in settings
+    )
+
+
+def _adopt_fast() -> str:
+    """Set the fast model when none is set and this Mac has mlx-lm and its model; what to add
+    to the message, if anything. "off" is a choice too, so it stays."""
+    if config.env("FAST_MODEL").strip() or not fastmodel.found():
+        return ""
+    config.save_setting("FAST_MODEL", fastmodel.NAME)
+    return (
+        " This Mac has the fast model, so light jobs (the task list, the network) use it: "
+        "run `proxenos model serve-fast` to serve it, or scripts/install-fast-model.sh to keep it "
+        "running."
+    )
 
 
 def cloud(path: Path) -> str | None:
@@ -190,6 +236,8 @@ def _apply(request: object) -> str:
         return _save_settings(request["settings"])
     if "key" in request:
         return _save_key(str(request["key"]).strip())
+    if "fast" in request:
+        return _use_fast(str(request["fast"]).strip())
     if "ollama" in request:
         return _use_ollama(str(request["ollama"]).strip())
     if "server" in request:
@@ -237,6 +285,8 @@ def _save_settings(changes: dict) -> str:
             "A voice model is mlx (as `proxenos voice serve` runs it), ollama:<name> or "
             "local:<name>."
         )
+    if values.get("fast_model") and not _FAST.fullmatch(values["fast_model"]):
+        raise ValueError("A fast model is ollama:<name> or local:<name>, on this computer, or off.")
     if values.get("ntfy_server"):
         try:
             values["ntfy_server"] = notify.server_address(values["ntfy_server"])
@@ -338,6 +388,25 @@ def _check_key(key: str, model: str) -> str | None:
     except anthropic.APIStatusError as e:
         return f"Anthropic answered with an error ({e.status_code}). Try again in a minute."
     return None
+
+
+def _use_fast(how: str) -> str:
+    """Set the fast model to the one `proxenos model serve-fast` serves, or off."""
+    if how == "off":
+        where = config.save_setting("FAST_MODEL", "off")
+        return f"Light jobs use the main model. Saved in {_place(where)}."
+    if how != "auto":
+        raise ValueError("Say auto or off.")
+    if not fastmodel.capable():
+        raise ValueError(
+            "The fast model needs a Mac with Apple silicon and mlx-lm (pip install mlx-lm); "
+            f"it serves {fastmodel.BASE}, which it downloads on its first run."
+        )
+    where = config.save_setting("FAST_MODEL", fastmodel.NAME)
+    return (
+        f"Light jobs use {fastmodel.BASE}. Saved in {_place(where)}. "
+        "Serve it with proxenos model serve-fast."
+    )
 
 
 def _use_ollama(model: str) -> str:
