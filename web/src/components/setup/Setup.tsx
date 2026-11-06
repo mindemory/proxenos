@@ -13,11 +13,12 @@ import type { SetupStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { type Apply, CloudWarning, Field, inputClass, ModelChoice, NOT_A_LOGIN, SaidLine, useChange } from "./parts";
+import { Ready } from "./Ready";
 
-const STEPS = ["Your name", "Your vault", "A model", "A first source"];
+const STEPS = ["Your name", "Your vault", "A model", "Get Proxenos ready"];
 const DEFAULT_VAULT = "~/proxenos_vault";
 
-/** The first run: your name, where the vault lives, a model, and on to Connect for a first source. */
+/** The first run: your name, where the vault lives, a model, and a checklist of what else Proxenos needs. */
 export function Setup() {
   const { status, error, reload, apply } = useSetup();
   return (
@@ -180,20 +181,15 @@ function Flow({ status, apply, onReload }: { status: SetupStatus; apply: Apply; 
       default:
         return (
           <div className="space-y-6">
-            <Heading title="Connect a first source">
-              Proxenos reads only what you connect: your mail, WhatsApp, Slack, a download of your data. Start with one; the rest can come
-              any time from Connect.
+            <Heading title="Get Proxenos ready">
+              Proxenos reads only what you connect: your mail, WhatsApp, Slack, a download of your data. Do what you like here; the rest can
+              come any time from Connect.
             </Heading>
             <ul className="divide-y divide-line rounded-xl border border-line text-sm">
               <Done label="Name" value={status.settings.name.value} />
               <Done label="Vault" value={status.vault.exists ? status.vault.path : null} mono />
-              <Done
-                label="Model"
-                value={status.model.kind === "none" ? null : status.model.name}
-                mono
-                missing="Skipped: pick one in Settings"
-              />
             </ul>
+            <Ready status={status} onModel={() => go(2)} onConnect={() => enter("connect")} />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Back onClick={() => go(2)} />
               <div className="flex flex-wrap items-center gap-2">
