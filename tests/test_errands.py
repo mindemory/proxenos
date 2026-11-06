@@ -663,6 +663,20 @@ def test_a_message_in_their_chat_on_its_channel_settles_a_chat_errand(vault):
     assert saved["status"] == "sent"
 
 
+def test_a_message_to_them_on_another_channel_settles_it_too(vault):
+    errand = waiting_errand(vault, "Cy Doe", "linkedin")  # drafted for LinkedIn, sent nowhere
+    cy = {"chat_id": "91980@s.whatsapp.net", "chat_name": "Cy Doe", "chat_type": "direct"}
+    texts = [cy | {"id": "w9", "ts": "2026-10-02T10:00:00Z", "text": "thanks!", "from_me": True}]
+    write_month(vault, "whatsapp/messages", "2026-10", texts)
+
+    assert errands.settle(vault, NOW) == {"messages_sent_elsewhere": 1}
+
+    saved = errands.load(vault, errand["id"])
+    assert saved["messages"][0]["sent_evidence"] == (
+        "you wrote to them on WhatsApp on 2026-10-02, not where this was drafted"
+    )
+
+
 def test_a_slack_message_is_settled_by_the_dm_with_that_person(vault):
     errand = waiting_errand(vault, "Cy Doe", "slack")  # copied, so no chat of its own
     dm = {

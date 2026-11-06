@@ -596,6 +596,16 @@ def settle(vault: Path, now: datetime | None = None) -> dict[str, int]:
     return {"messages_sent_elsewhere": settled}
 
 
+_CHANNEL_NAMES = {
+    "whatsapp": "WhatsApp",
+    "linkedin": "LinkedIn",
+    "slack": "Slack",
+    "facebook": "Messenger",
+    "instagram": "Instagram",
+    "twitter": "X",
+}
+
+
 class _Outgoing:
     """The user's own outgoing messages since a time, read once and only when asked: their mail
     (all accounts, by the address it went to) and their chats (one-to-one, by their name or
@@ -607,7 +617,27 @@ class _Outgoing:
         self._chats: list[tuple[str, str, set[str], list[dict]]] | None = None
 
     def wrote(self, message: dict, since: datetime) -> tuple[str, str] | None:
-        """(when, evidence) for the user's first message to the one this is for after `since`."""
+        """(when, evidence) for the user's first message to the one this is for after `since`:
+        on the errand's own channel, else in a one-to-one chat with them on any other, since
+        people often answer the same thing wherever they last talked."""
+        return self._on_channel(message, since) or self._anywhere(message, since)
+
+    def _anywhere(self, message: dict, since: datetime) -> tuple[str, str] | None:
+        found = []
+        for src, _key, names, sent in self._conversations():
+            if not any(_same(message["to"], n) for n in names):
+                continue
+            for m in sent:
+                if (when := _when(m["ts"])) and when > since:
+                    found.append((when, m["ts"], src))
+                    break
+        if not found:
+            return None
+        _, ts, src = min(found)
+        label = _CHANNEL_NAMES.get(src, src)
+        return ts, f"you wrote to them on {label} on {ts[:10]}, not where this was drafted"
+
+    def _on_channel(self, message: dict, since: datetime) -> tuple[str, str] | None:
         address = _text(message.get("address")).lower()
         chat = message.get("chat") if isinstance(message.get("chat"), dict) else None
         channel = message.get("channel")
