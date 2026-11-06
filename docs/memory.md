@@ -174,3 +174,7 @@ drafts you never saw.
   Desktop. Slack has no way yet.
 - **The record:** every attempt, sent or not, is a line in `clones/outbox/log.jsonl`, and a reply
   that goes out is marked sent, as if you'd pressed Sent. Nothing goes out from `proxenos demo`.
+- **Done without it:** a draft you sent yourself is noticed (marked sent) from the chat or mail that shows it; one the
+  conversation has since moved past is marked overtaken, with why ([fidelity.py](../src/proxenos/fidelity.py)); and an
+  errand's message is marked sent, `sent_by: "elsewhere"` with the evidence, when your own outgoing records show you
+  wrote to that person after it was made. None of these sends anything.
