@@ -1,4 +1,4 @@
-import { CalendarClock, Check, ChevronRight, PenLine, Send, UserX, X, type LucideIcon } from "lucide-react";
+import { CalendarClock, Check, ChevronRight, PenLine, RotateCcw, Send, UserX, X, type LucideIcon } from "lucide-react";
 
 import { ActionButton, type ActionTone } from "@/components/ActionButton";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -25,6 +25,7 @@ export const TASK_ACTION_META: Record<TaskAction, { label: string; icon: LucideI
   done: { label: "Done", icon: Check, tone: "ok" },
   not_mine: { label: "Not mine", icon: UserX, tone: "neutral" },
   dismiss: { label: "Dismiss", icon: X, tone: "neutral" },
+  keep: { label: "Keep", icon: RotateCcw, tone: "neutral" },
 };
 
 interface TaskRowProps {
@@ -85,6 +86,13 @@ export function TaskRow({ task: t, now, actions = [], onAct, onDraft, showEviden
           </span>
         )}
       </div>
+
+      {t.closed_why && done && (
+        <p className="mt-2 text-xs text-muted break-words">
+          {t.closed_by === "time" ? "Marked done: " : "Marked done, you wrote elsewhere: "}
+          {t.closed_why}
+        </p>
+      )}
 
       {showEvidence && t.evidence.length > 0 && (
         <details className="mt-2 group">

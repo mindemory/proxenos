@@ -80,6 +80,7 @@ import { foldReviews, isToSend, openErrandItems, waitingToSend } from "./drafts"
 import { getErrands } from "./errands";
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from "./graph";
 import { applyOutboxEdit, cancelledIds, outboxLog, outboxRules, outboxState } from "./outbox";
+import { isActed } from "./tasks";
 import {
   ACTIONS,
   ADVICE_ACTIONS,
@@ -776,6 +777,10 @@ function toTask(raw: unknown): Task | null {
     evidence: strings(r.evidence),
     at: at && AT.test(at) ? at : null,
     place: str(r.place)?.trim() || null,
+    stale: r.stale === true,
+    changed: str(r.changed),
+    closed_by: r.closed_by === "time" || r.closed_by === "elsewhere" ? r.closed_by : null,
+    closed_why: str(r.closed_why),
   };
 }
 
@@ -1954,8 +1959,8 @@ export async function getHome(since: string | null): Promise<HomeResponse> {
     tasks: {
       exists: tasks.exists,
       generated: tasks.generated,
-      actionable: tasks.tasks.filter((t) => t.status === "open" && t.action === null),
-      waiting: tasks.tasks.filter((t) => t.status === "waiting" && t.action === null).length,
+      actionable: tasks.tasks.filter((t) => t.status === "open" && !isActed(t)),
+      waiting: tasks.tasks.filter((t) => t.status === "waiting" && !isActed(t)).length,
     },
     advice: {
       exists: advice.date !== null,

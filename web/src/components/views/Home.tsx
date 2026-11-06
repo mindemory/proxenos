@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Brain,
   CalendarDays,
+  ChevronRight,
   FolderGit2,
   HeartPulse,
   type LucideIcon,
@@ -52,7 +53,7 @@ import {
   timeAgo,
 } from "@/lib/format";
 import { plain } from "@/lib/memoryMarks";
-import { byUrgency, daysLeft, isUrgent } from "@/lib/tasks";
+import { byUrgency, daysLeft, isActed, isStale, isUrgent } from "@/lib/tasks";
 import type {
   AgendaEvent,
   BriefingResponse,
@@ -66,6 +67,7 @@ import type {
   RecallTrigger,
   ThinkStart,
 } from "@/lib/types";
+import { OLDER_TASK_ACTIONS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type HomeState = ReturnType<typeof useHome>;
@@ -195,7 +197,7 @@ function count(n: number, one: string, many: string, none: string): string {
  */
 function spokenDay(data: HomeResponse, briefing: BriefingResponse | null): string {
   const today = localDay(data.now);
-  const open = data.tasks.actionable.filter((t) => t.action === null);
+  const open = data.tasks.actionable.filter((t) => !isActed(t) && !isStale(t));
   const due = open.filter((t) => (daysLeft(t, today) ?? 1) <= 0).length;
   const said = [`${greeting(data.now)}${data.name ? `, ${data.name}` : ""}. It's ${longDay(data.now)}.`];
   if (briefing) {
@@ -226,7 +228,7 @@ function Greeting({
   onThink,
 }: { data: HomeResponse; briefing: Briefing; onNavigate: (v: View) => void } & Pick<HomeProps, "onThink">) {
   const today = localDay(data.now);
-  const open = data.tasks.actionable.filter((t) => t.action === null);
+  const open = data.tasks.actionable.filter((t) => !isActed(t) && !isStale(t));
   const due = open.filter((t) => (daysLeft(t, today) ?? 1) <= 0).length;
   const overdue = open.filter((t) => (daysLeft(t, today) ?? 0) < 0).length;
   const events = briefing.data ? eventsToday(briefing.data.agenda.events, data.now).length : null;
@@ -343,7 +345,9 @@ function TodayCard({
   onNavigate: (v: View) => void;
   onDraft: (id: string) => void;
 }) {
-  const open = data.tasks.actionable.filter((t) => t.action === null);
+  const pending = data.tasks.actionable.filter((t) => !isActed(t));
+  const open = pending.filter((t) => !isStale(t));
+  const older = pending.filter(isStale);
   const today = localDay(data.now);
   const urgent = open.filter((t) => isUrgent(t, today)).length;
   const top = byUrgency(open, data.now).slice(0, 4);
@@ -400,6 +404,19 @@ function TodayCard({
                 </ul>
               ) : (
                 <Meta>Nothing open.</Meta>
+              )}
+              {older.length > 0 && (
+                <details className="mt-3 group">
+                  <summary className="list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1 text-xs text-muted cursor-pointer select-none hover:text-ink rounded">
+                    <ChevronRight size={12} className="transition-transform group-open:rotate-90" />
+                    Older, still needed? <span className="num">({older.length})</span>
+                  </summary>
+                  <ul className="tile divide-y divide-line overflow-hidden mt-2">
+                    {older.map((t) => (
+                      <TaskRow key={t.id} task={t} now={data.now} actions={OLDER_TASK_ACTIONS} onAct={home.actTask} showEvidence={false} />
+                    ))}
+                  </ul>
+                </details>
               )}
             </>
           )}

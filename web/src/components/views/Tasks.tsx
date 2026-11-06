@@ -9,7 +9,7 @@ import { TaskRow } from "@/components/tasks/TaskRow";
 import { useTasks } from "@/lib/client";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { groupTasks } from "@/lib/tasks";
-import { TASK_ACTIONS, type TaskView } from "@/lib/types";
+import { OLDER_TASK_ACTIONS, TASK_ROW_ACTIONS, type TaskView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function SectionHeader({ title, count, hint }: { title: string; count: number; hint?: string }) {
@@ -62,10 +62,10 @@ export function Tasks({ onChange, onDraft }: { onChange?: () => void; onDraft?: 
   const g = groupTasks(data.tasks, data.now);
   const openCount = g.urgent.length + g.open.length;
 
-  const list = (tasks: TaskView[]) => (
+  const list = (tasks: TaskView[], actions = TASK_ROW_ACTIONS) => (
     <ul className="divide-y divide-line border-b border-line">
       {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} now={data.now} actions={TASK_ACTIONS} onAct={act} onDraft={onDraft} flash={flashId === t.id} />
+        <TaskRow key={t.id} task={t} now={data.now} actions={actions} onAct={act} onDraft={onDraft} flash={flashId === t.id} />
       ))}
     </ul>
   );
@@ -103,6 +103,13 @@ export function Tasks({ onChange, onDraft }: { onChange?: () => void; onDraft?: 
           </p>
         )}
       </section>
+
+      {g.older.length > 0 && (
+        <section>
+          <SectionHeader title="Older, still needed?" hint="unchanged for a week" count={g.older.length} />
+          {list(g.older, OLDER_TASK_ACTIONS)}
+        </section>
+      )}
 
       {g.waiting.length > 0 && (
         <section>

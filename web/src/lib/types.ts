@@ -101,9 +101,12 @@ export interface StatusResponse {
 
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "waiting" | "done" | "cancelled";
-export type TaskAction = "done" | "not_mine" | "dismiss";
+export type TaskAction = "done" | "not_mine" | "dismiss" | "keep";
 
-export const TASK_ACTIONS: readonly TaskAction[] = ["done", "not_mine", "dismiss"];
+export const TASK_ACTIONS: readonly TaskAction[] = ["done", "not_mine", "dismiss", "keep"];
+/** What a task's row offers: the three that close it, or for an older one, keep it or close it. */
+export const TASK_ROW_ACTIONS: readonly TaskAction[] = ["done", "not_mine", "dismiss"];
+export const OLDER_TASK_ACTIONS: readonly TaskAction[] = ["keep", "done"];
 
 /** One entry of tasks.json "tasks". */
 export interface Task {
@@ -119,6 +122,10 @@ export interface Task {
   evidence: string[];
   at: string | null; // when it happens, local: YYYY-MM-DDTHH:MM, or YYYY-MM-DD for a day
   place: string | null;
+  stale: boolean; // open and unchanged for a week: folded under "Older, still needed?"
+  changed: string | null; // ISO, when it last changed
+  closed_by: "time" | "elsewhere" | null; // set when Proxenos marked it done itself, with no model
+  closed_why: string | null;
 }
 
 /** A task with the latest line about it from clones/tasks/feedback.jsonl folded in. */
@@ -749,7 +756,7 @@ export interface HomeResponse {
   tasks: {
     exists: boolean;
     generated: string | null;
-    actionable: TaskView[]; // open, not acted on
+    actionable: TaskView[]; // open, not closed on the page; older ones included (see isStale)
     waiting: number;
   };
   advice: {

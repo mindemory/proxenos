@@ -23,6 +23,7 @@ import { Home } from "@/components/views/Home";
 import type { MemoryIntent } from "@/components/views/Memory";
 import { prefetch, useHome, useItems } from "@/lib/client";
 import { scrollBehavior } from "@/lib/reading";
+import { isActed, isStale } from "@/lib/tasks";
 import type { ThinkStart } from "@/lib/types";
 
 // Home and the feed come with the page; every other view loads the first time it's opened,
@@ -234,7 +235,7 @@ export default function AppPage() {
 
   const counts: NavCounts = home.data
     ? {
-        tasks: home.data.tasks.actionable.filter((t) => t.action === null).length,
+        tasks: home.data.tasks.actionable.filter((t) => !isActed(t) && !isStale(t)).length,
         drafts: home.data.drafts.awaiting,
         advice: home.data.advice.unanswered,
       }

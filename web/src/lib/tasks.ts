@@ -20,6 +20,21 @@ export function placeOf(t: TaskView): "open" | "waiting" | "done" | null {
   return t.status;
 }
 
+/** Whether the user closed the task or set it aside on the page; keeping an older one isn't that. */
+export function isActed(t: TaskView): boolean {
+  return t.action !== null && t.action !== "keep";
+}
+
+/**
+ * Open, and nothing has changed it for a week (proxenos.clones.tasks.tidy marks it), so it's asked
+ * about, not counted as overdue. Keeping it counts at once; the next sync clears the mark and moves
+ * "changed" to that time, so the second of slack is for the page's milliseconds against its seconds.
+ */
+export function isStale(t: TaskView): boolean {
+  if (!t.stale || placeOf(t) !== "open") return false;
+  return !(t.action === "keep" && time(t.acted_at) - time(t.changed) > 1000);
+}
+
 export function daysLeft(t: TaskView, today: string): number | null {
   return t.due ? daysBetween(today, t.due) : null;
 }
@@ -67,21 +82,24 @@ const byAsked = (a: TaskView, b: TaskView) => time(a.asked_at) - time(b.asked_at
 export interface TaskGroups {
   urgent: TaskView[]; // open, overdue or due within SOON_DAYS, soonest first
   open: TaskView[]; // the rest of open, high priority first
+  older: TaskView[]; // open but unchanged for a week: still needed?
   waiting: TaskView[]; // waiting on someone else
   done: TaskView[]; // done, most recently acted on first
 }
 
 export function groupTasks(tasks: TaskView[], now: string): TaskGroups {
   const today = localDay(now);
-  const g: TaskGroups = { urgent: [], open: [], waiting: [], done: [] };
+  const g: TaskGroups = { urgent: [], open: [], older: [], waiting: [], done: [] };
   for (const t of tasks) {
     const place = placeOf(t);
-    if (place === "open") (isUrgent(t, today) ? g.urgent : g.open).push(t);
+    if (place === "open" && isStale(t)) g.older.push(t);
+    else if (place === "open") (isUrgent(t, today) ? g.urgent : g.open).push(t);
     else if (place === "waiting") g.waiting.push(t);
     else if (place === "done") g.done.push(t);
   }
   g.urgent.sort((a, b) => byDue(a, b) || byPriority(a, b) || byAsked(a, b));
   g.open.sort((a, b) => byPriority(a, b) || byDue(a, b) || byAsked(a, b));
+  g.older.sort((a, b) => byAsked(b, a));
   g.waiting.sort((a, b) => byDue(a, b) || byAsked(a, b));
   g.done.sort((a, b) => actedMs(b) - actedMs(a));
   return g;

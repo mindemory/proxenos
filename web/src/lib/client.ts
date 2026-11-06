@@ -124,6 +124,7 @@ export const TASK_TOAST: Record<TaskAction, string> = {
   done: "Task marked done",
   not_mine: "Marked not yours",
   dismiss: "Task dismissed",
+  keep: "Kept, asking again in a week",
 };
 export const ADVICE_TOAST: Record<AdviceAction, string> = {
   useful: "Marked useful",
