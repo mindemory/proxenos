@@ -31,6 +31,11 @@ someone is waiting on (`foreground`). A "local:" fast model is served at PROXENO
 (`proxenos model serve-fast`, mlx-lm's server, by default), apart from PROXENOS_LOCAL_URL. A job
 whose fast server isn't answering goes to the main model instead, rather than failing.
 
+PROXENOS_SERVED_HERE lists the models the desktop app serves itself (`proxenos model get` sets it,
+`proxenos model serve-app` serves them): Hugging Face repos from HERE_PORTS, each on a port of its
+own on 127.0.0.1. A "local:<repo>" model named there is asked at that port, whichever of
+PROXENOS_MODEL or PROXENOS_FAST_MODEL names it; PROXENOS_LOCAL_URL stays for another app's server.
+
 What goes to Anthropic, OpenAI or Google has the numbers and secrets no draft needs blanked first: card and
 Social Security numbers, one-time codes, passwords, keys and tokens, bank account numbers
 (proxenos.redact).
@@ -131,6 +136,12 @@ FAST_STEPS = frozenset(
 )
 FAST_PORT = 8898  # where `proxenos model serve-fast` answers
 DEFAULT_FAST_URL = f"http://127.0.0.1:{FAST_PORT}/v1"
+# The models the desktop app can serve itself with mlx-lm (proxenos.localmodel), by Hugging Face
+# repo, and the port each answers on: the small one at the fast model's port, the bigger one below.
+HERE_PORTS = {
+    "mlx-community/gemma-4-e4b-it-4bit": FAST_PORT,
+    "mlx-community/gemma-4-26b-a4b-it-4bit": FAST_PORT - 1,
+}
 VOICE_TEMPERATURE = 0.7
 VOICE_TOKENS = 600
 _VOICE_TIMEOUT = 120
@@ -296,9 +307,18 @@ def fast_url(url: str | None = None) -> str:
     return local_url((env("FAST_URL") if url is None else url).strip() or DEFAULT_FAST_URL)
 
 
+def served_here() -> list[str]:
+    """The repos the desktop app serves itself (PROXENOS_SERVED_HERE, comma-separated), those of
+    HERE_PORTS only: nothing else is ever sent to a port this names."""
+    return [r for r in (p.strip() for p in env("SERVED_HERE").split(",")) if r in HERE_PORTS]
+
+
 def _url_for(model: str) -> str | None:
-    """The address of the fast model's server when `model` is it, else None, for the one at
-    PROXENOS_LOCAL_URL. A model both settings name is the main one."""
+    """The address of the server that answers `model`, when it isn't the one at PROXENOS_LOCAL_URL
+    (None then): the app's own server for a model it serves, else the fast model's. A model both
+    settings name is the main one."""
+    if model.startswith(SERVER) and bare(model) in served_here():
+        return f"http://127.0.0.1:{HERE_PORTS[bare(model)]}/v1"
     fast_name = env("FAST_MODEL").strip()
     if model.startswith(SERVER) and model == fast_name and model != env("MODEL"):
         return fast_url()

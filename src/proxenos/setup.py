@@ -26,6 +26,8 @@ secret's value: only whether it's set.
   what goes to Claude. Claude then answers what the user waits on (the ask model, set to
   Claude unless one is set already); the model for the rest stays as it was, a local one theirs.
   With no model set, one Ollama has on this computer is used first (llm.default).
+- `proxenos model get` (proxenos.localmodel) downloads a model for Proxenos to serve itself, in the
+  desktop app, and sets it; "here" in the status says what it can run and what's downloaded.
 - {"ollama": "gemma4:26b"} checks that Ollama is running and has that model, and uses it.
   (`proxenos model pull` downloads one, and does this on its own when it's done.)
 - {"server": "qwen3-8b"} checks that the server at PROXENOS_LOCAL_URL serves that model, and
@@ -49,7 +51,7 @@ from pathlib import Path
 
 import anthropic
 
-from proxenos import config, fastmodel, hosted, keychain, llm, machine, notify
+from proxenos import config, fastmodel, hosted, keychain, llm, localmodel, machine, notify
 
 # What the page can change, by its key in the settings file, and how many folders each takes.
 SETTINGS = {
@@ -116,7 +118,13 @@ def status() -> dict:
     held = config.secrets()
     if model.startswith(llm.LOCAL):
         kind, name = "local", llm.bare(model)
-        via = "ollama" if model.startswith(llm.OLLAMA) else "server"
+        via = (
+            "ollama"
+            if model.startswith(llm.OLLAMA)
+            else "app"
+            if llm.bare(model) in llm.served_here()
+            else "server"
+        )
     else:
         host = llm.chat_host(model)
         kind, name, via = (
@@ -168,6 +176,7 @@ def status() -> dict:
             "context": llm.LOCAL_CONTEXT,  # what to load a model with there
         },
         "fast": _fast(),
+        "here": _here(memory),
         "keychain": keychain.available(),
         "secret_store": keychain.store(),
         "secrets": secrets(),
@@ -198,6 +207,28 @@ def _upgrade(
     ):
         return None
     return None if machine.SUGGESTED in pulled else machine.SUGGESTED
+
+
+def _here(memory: int | None) -> dict:
+    """The models Proxenos can run itself (proxenos.localmodel): whether this is an Apple-silicon
+    Mac with mlx-lm, each model's name, size and whether it's downloaded, and whether the bigger
+    one fits this computer's memory. The small one is for starting, the big one for writing."""
+
+    def entry(repo: str) -> dict:
+        here = localmodel.CATALOG[repo]
+        return {
+            "repo": repo,
+            "name": here.name,
+            "bytes": here.bytes,
+            "ready": localmodel.complete(repo),
+            "serving": repo in llm.served_here(),
+        }
+
+    return {
+        "capable": fastmodel.capable(),
+        "small": entry(localmodel.SMALL),
+        "big": {**entry(localmodel.BIG), "fits": localmodel.big_fits(memory)},
+    }
 
 
 def _fast() -> dict:

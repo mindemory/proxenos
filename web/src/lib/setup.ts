@@ -9,6 +9,7 @@
 
 import { lastLine, NO_COMMAND } from "./connect";
 import type {
+  HereModel,
   HostedModels,
   HostedProvider,
   LocalModel,
@@ -84,6 +85,19 @@ function localModels(v: unknown): LocalModels {
   return { running: r.running === true, models, suggested: models.some((m) => m.name === suggested) ? suggested : null };
 }
 
+/** A model Proxenos runs itself, as `proxenos setup` lists it: a Hugging Face repo's name, and nothing else of it. */
+function hereModel(v: unknown): HereModel {
+  const m = rec(v);
+  const repo = str(m.repo);
+  return {
+    repo: repo && /^[\w.-]+\/[\w.-]+$/.test(repo) ? repo : "",
+    name: str(m.name)?.slice(0, 60) ?? "",
+    bytes: positive(m.bytes) ?? 0,
+    ready: m.ready === true,
+    serving: m.serving === true,
+  };
+}
+
 function toStatus(raw: unknown): SetupStatus | null {
   const r = rec(raw);
   const settings = rec(r.settings);
@@ -92,6 +106,7 @@ function toStatus(raw: unknown): SetupStatus | null {
   const computer = rec(r.computer);
   const server = rec(r.server);
   const fast = rec(r.fast);
+  const here = rec(r.here);
   if (typeof r.needed !== "boolean" || !str(vault.path) || !str(model.name)) return null;
   return {
     needed: r.needed,
@@ -112,7 +127,7 @@ function toStatus(raw: unknown): SetupStatus | null {
     model: {
       kind: model.kind === "local" || model.kind === "api" ? model.kind : "none",
       name: str(model.name) ?? "",
-      via: model.via === "ollama" || model.via === "server" ? model.via : null,
+      via: model.via === "ollama" || model.via === "server" || model.via === "app" ? model.via : null,
       provider: PROVIDERS.find((p) => p === model.provider) ?? null,
     },
     computer: {
@@ -137,6 +152,8 @@ function toStatus(raw: unknown): SetupStatus | null {
       error: str(server.error)?.slice(0, 600) ?? null,
       context: positive(server.context) ?? 0,
     },
+    // An older proxenos doesn't say: it couldn't run a model itself.
+    here: { capable: here.capable === true, small: hereModel(here.small), big: { ...hereModel(here.big), fits: rec(here.big).fits === true } },
     keychain: r.keychain === true,
     // An older proxenos doesn't say: it only ran on a Mac.
     secretStore: str(r.secret_store)?.slice(0, 40) || "Keychain",

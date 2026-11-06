@@ -1,5 +1,7 @@
 """A fast model for the light jobs, and a way to measure it: `proxenos model serve-fast` and
-`proxenos model bench`; `proxenos model pull` (proxenos.pull) downloads one through Ollama.
+`proxenos model bench`; `proxenos model pull` (proxenos.pull) downloads one through Ollama, and
+`proxenos model get` and `serve-app` (proxenos.localmodel) download and serve one inside the
+desktop app, with no Ollama.
 
 A laptop's big model reads about 50 to 250 tokens a second and writes 15 to 30, and the task list,
 the network, the notes on each month and the like read tens of thousands of tokens a run. A small
@@ -66,13 +68,18 @@ def found(cached: Callable[[str], bool] | None = None, **computer: Callable) -> 
     return capable(**computer) and (cached or _cached)(BASE)
 
 
-def _cached(base: str) -> bool:
-    """Whether Hugging Face's cache has a download of `base`: where huggingface_hub keeps them,
-    HF_HUB_CACHE, else HF_HOME/hub, else ~/.cache/huggingface/hub."""
+def cache_folder(base: str) -> Path:
+    """Where Hugging Face's cache keeps `base`: where huggingface_hub keeps them, HF_HUB_CACHE,
+    else HF_HOME/hub, else ~/.cache/huggingface/hub."""
     hub = os.environ.get("HF_HUB_CACHE") or (
         Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub"
     )
-    snapshots = Path(hub) / f"models--{base.replace('/', '--')}" / "snapshots"
+    return Path(hub) / f"models--{base.replace('/', '--')}"
+
+
+def _cached(base: str) -> bool:
+    """Whether Hugging Face's cache has a download of `base`."""
+    snapshots = cache_folder(base) / "snapshots"
     try:
         return any((snapshot / "config.json").is_file() for snapshot in snapshots.iterdir())
     except OSError:
@@ -208,14 +215,19 @@ def models_to_time() -> tuple[list[str], list[str]]:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("action", choices=["serve-fast", "bench", "pull"])
-    parser.add_argument("name", nargs="?", help="pull: the model to download, e.g. gemma4:e4b")
+    parser.add_argument("action", choices=["serve-fast", "serve-app", "bench", "pull", "get"])
+    parser.add_argument(
+        "name",
+        nargs="?",
+        help="pull: the model to download through Ollama, e.g. gemma4:e4b; get: a model for "
+        "Proxenos to run itself (proxenos.localmodel), e.g. mlx-community/gemma-4-e4b-it-4bit",
+    )
     parser.add_argument(
         "--as",
         dest="use",
         choices=pull.AS,
-        help="pull: use it as the main model (the one it replaces keeps the light jobs), or as "
-        "the starter; the default is the starter while no model is set",
+        help="pull, get: use it as the main model (the one it replaces keeps the light jobs), or "
+        "as the starter; the default is the starter while no model is set",
     )
     parser.add_argument("--port", type=int, default=llm.FAST_PORT, help="where serve-fast answers")
     parser.add_argument(
@@ -229,6 +241,11 @@ def run(vault: Path, args: argparse.Namespace) -> None:
         return
     if args.action == "pull":
         pull.run(args)
+        return
+    if args.action in ("get", "serve-app"):
+        from proxenos import localmodel  # which imports this module, so not at the top
+
+        localmodel.run(args)
         return
     chosen, notes = models_to_time()
     if notes:

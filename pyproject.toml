@@ -25,6 +25,11 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.3",
 ]
+# A model the desktop app runs itself, with no Ollama (proxenos.localmodel): mlx-lm on a Mac with
+# Apple silicon, which serves Gemma 4 from Hugging Face's weights. desktop/build.sh installs it.
+local = [
+    "mlx-lm>=0.32; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 # Listen's natural voice and the user's own (proxenos.speech), made with MLX on a Mac with Apple
 # silicon. Kokoro reads text as sounds with misaki, which needs spaCy's small English model and
 # espeak-ng (GPL-3.0, through phonemizer-fork and espeakng-loader) for words not in its

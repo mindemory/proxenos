@@ -122,6 +122,8 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
               <>
                 , through the server at <span className="num">{status.server.url}</span>
               </>
+            ) : model.via === "app" ? (
+              ", run by Proxenos itself"
             ) : (
               ", through Ollama"
             )}
@@ -151,8 +153,8 @@ export function ModelChoice({ status, apply, onReload }: { status: SetupStatus; 
 
 /** An open model on this computer: through Ollama, or another app that serves OpenAI's API, such as LM Studio. */
 function OnThisComputer({ status, apply, onReload }: { status: SetupStatus; apply: Apply; onReload: () => void }) {
-  const [via, setVia] = useState<"ollama" | "server">(
-    status.model.via ?? (status.server.running && !status.ollama.running ? "server" : "ollama"),
+  const [via, setVia] = useState<"app" | "ollama" | "server">(
+    status.model.via ?? (status.here.capable ? "app" : status.server.running && !status.ollama.running ? "server" : "ollama"),
   );
   return (
     <div className="space-y-3">
@@ -162,17 +164,67 @@ function OnThisComputer({ status, apply, onReload }: { status: SetupStatus; appl
       <Segmented
         label="What runs the model"
         tabs={[
-          { id: "ollama", label: "Ollama" },
-          { id: "server", label: "LM Studio and others" },
+          ...(status.here.capable ? [{ id: "app" as const, label: "In Proxenos" }] : []),
+          { id: "ollama" as const, label: "Ollama" },
+          { id: "server" as const, label: "LM Studio and others" },
         ]}
         value={via}
         onChange={setVia}
       />
-      {via === "ollama" ? (
+      {via === "app" ? (
+        <AppModel status={status} onReload={onReload} />
+      ) : via === "ollama" ? (
         <OllamaModel status={status} apply={apply} onReload={onReload} />
       ) : (
         <ServerModel status={status} apply={apply} onReload={onReload} />
       )}
+    </div>
+  );
+}
+
+/**
+ * A model Proxenos runs itself, with nothing else to install (an Apple-silicon Mac with mlx-lm, as
+ * the desktop app has): the small one to start with, and, when this computer has the memory, the
+ * bigger one to write with, downloaded in the background after it. The weights come from Hugging
+ * Face; nothing of yours goes there.
+ */
+function AppModel({ status, onReload }: { status: SetupStatus; onReload: () => void }) {
+  const { small, big } = status.here;
+  const download = useDownload(onReload);
+  const using = status.model.via === "app";
+  const gb = (bytes: number) => `${Math.round(bytes / 1e9)} GB`;
+  return (
+    <div className="space-y-3 rounded-xl border border-line-strong bg-surface-2/60 p-3.5">
+      {!small.ready || !using ? (
+        <>
+          <PrimaryButton disabled={download.running} onClick={() => download.start(small.repo, "starter", true)}>
+            {small.ready ? `Use ${small.name}` : `Download the model (about ${gb(small.bytes)})`}
+          </PrimaryButton>
+          <p className="text-xs leading-relaxed text-faint">
+            {small.name} runs inside Proxenos on this Mac: no other app to install, no account. It&apos;s downloaded once from Hugging Face,
+            and nothing of yours is sent there.
+            {big.fits && ` When it's ready you can also get ${big.name} (about ${gb(big.bytes)}), which writes better.`}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm leading-relaxed text-muted">
+            <span className="num text-ink">{small.name}</span> is downloaded and runs inside Proxenos.
+          </p>
+          {big.fits && !(big.ready && big.serving) && (
+            <div className="space-y-2">
+              <p className="text-sm leading-relaxed text-muted">
+                A bigger model writes better drafts: get {big.name} (about {gb(big.bytes)}) in the background. Proxenos keeps using{" "}
+                <span className="num text-ink">{status.model.name}</span> until it&apos;s ready, and {small.name} goes on doing the light jobs.
+              </p>
+              <PrimaryButton disabled={download.running} onClick={() => download.start(big.repo, "main", true)}>
+                Get {big.name}
+              </PrimaryButton>
+            </div>
+          )}
+        </>
+      )}
+      <Downloading download={download} />
     </div>
   );
 }
@@ -273,9 +325,10 @@ function useDownload(onDone: () => void) {
     error,
     asked,
     running: job?.state === "running",
-    start: (name: string, as: "starter" | "main") => {
+    /** `here`: a model Proxenos runs itself, named by its Hugging Face repo, not one of Ollama's. */
+    start: (name: string, as: "starter" | "main", here = false) => {
       setAsked(true);
-      return start({ name, as });
+      return start(here ? { repo: name, as } : { name, as });
     },
     stop,
   };

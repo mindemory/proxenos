@@ -5,7 +5,8 @@
 // a utility process) on a free loopback port and opens a window on it once it answers. The page
 // runs the `proxenos` command with the bundled Python (PROXENOS_PYTHON) from the app's resources
 // (PROXENOS_HOME). `proxenos schedule` runs beside it while the app is open, once a vault is set
-// up, and is stopped cleanly on quit. Links to other sites open in the browser, and mailto:,
+// up, and so, on a Mac, does `proxenos model serve-app`, which serves a model the app runs itself;
+// both are stopped cleanly on quit. Links to other sites open in the browser, and mailto:,
 // whatsapp: and slack: links in their apps, as mac/Proxenos.swift does. Nothing is sent anywhere:
 // no telemetry, and no updates yet.
 //
@@ -55,6 +56,7 @@ let window = null;
 let tray = null;
 let quitting = false;
 let restarts = 0; // of the page's server, this run
+const models = { child: null, started: 0, retry: false }; // `proxenos model serve-app`, on a Mac
 const schedule = { child: null, vault: null, paused: false, note: "", started: 0, stopping: null };
 let syncing = null; // a Sync now run
 let ticking = false;
@@ -85,6 +87,7 @@ async function start() {
   writeState({ port });
   startPage();
   startSchedule();
+  startModels();
   if (await answering(origin, 120_000)) openWindow();
   refreshMenu();
 }
@@ -345,10 +348,47 @@ async function tick() {
     } else if (!schedule.child && Date.now() - schedule.started >= RETRY) {
       startSchedule();
     }
+    if (models.retry && Date.now() - models.started >= RETRY) {
+      models.retry = false;
+      startModels();
+    }
     refreshMenu();
   } finally {
     ticking = false;
   }
+}
+
+// ── The models ──────────────────────────────────────────────────────────────
+
+/** Start `proxenos model serve-app` (Mac only): it serves the models the settings say Proxenos runs
+ * itself, with mlx-lm, and follows changes to them, so a model picked on the page starts without a
+ * restart. It does nothing where there are none, and exits at once where mlx-lm isn't there. */
+function startModels() {
+  if (!MAC || models.child || quitting) return;
+  models.started = Date.now();
+  const log = openLog(path.join(OWN, "logs", "models.log"));
+  const child = spawn(PYTHON, ["-m", "proxenos", "model", "serve-app"], {
+    cwd: RESOURCES,
+    env: { ...environment(), PYTHONUNBUFFERED: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.pipe(log, { end: false });
+  child.stderr.pipe(log, { end: false });
+  child.on("close", () => log.end());
+  child.on("error", (error) => log.write(`desktop: couldn't start the models: ${error.message}\n`));
+  child.on("exit", (code) => {
+    if (models.child !== child) return;
+    models.child = null;
+    models.retry = code !== 0; // a clean exit means there's nothing to serve here
+  });
+  models.child = child;
+}
+
+async function stopModels() {
+  const child = models.child;
+  if (!child) return;
+  models.child = null;
+  await stop(child, STOP_GRACE);
 }
 
 // ── The menu ────────────────────────────────────────────────────────────────
@@ -430,13 +470,13 @@ function trayIcon() {
 
 // ── Quitting ────────────────────────────────────────────────────────────────
 
-/** Stop the schedule and a Sync now cleanly before the app goes, then the page. */
+/** Stop the schedule, the models' servers and a Sync now cleanly before the app goes, then the page. */
 function beforeQuit(event) {
   if (quitting) return;
   event.preventDefault();
   quitting = true;
   tray?.destroy();
-  Promise.all([stopSchedule(), syncing ? stop(syncing, 10_000) : null]).finally(() => {
+  Promise.all([stopSchedule(), stopModels(), syncing ? stop(syncing, 10_000) : null]).finally(() => {
     server?.kill();
     app.quit();
   });

@@ -76,8 +76,13 @@ tar -xzf "$cache/$archive" -C "$stage"
 say "installing Proxenos into it"
 rm -rf "$cache/wheel"
 "$stage/$python" -m pip wheel --quiet --no-deps --wheel-dir "$cache/wheel" "$cache/src"
+# On a Mac, with the `local` extra: mlx-lm, so the app can run a model itself (proxenos.localmodel).
+# Every package it needs has a wheel for Apple silicon, which --only-binary requires.
+extra=""
+if [ "$triple" = aarch64-apple-darwin ]; then extra="[local]"; fi
+wheels=("$cache"/wheel/proxenos-*.whl)
 "$stage/$python" -m pip install --quiet --only-binary=:all: --no-warn-script-location \
-  "$cache"/wheel/proxenos-*.whl
+  "${wheels[0]}$extra"
 "$stage/$python" -m proxenos --help >/dev/null
 
 # Google sign-in that ships with the app: the builder's own Google client (a Desktop app one from

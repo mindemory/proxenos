@@ -126,6 +126,8 @@ def no_real_credentials(monkeypatch, tmp_path_factory):
     # Nor, with no model set, the one Ollama has, which llm would go to first.
     monkeypatch.setattr("proxenos.llm._pulled", lambda: None)
     monkeypatch.setattr("proxenos.llm._default", None)
+    # Nor the real Hugging Face cache, which setup asks about the models Proxenos can run itself.
+    monkeypatch.setenv("HF_HUB_CACHE", str(app / "huggingface"))
     # Nor an MLX fast model on this computer, or its server: a test that needs one says so.
     monkeypatch.setattr("proxenos.fastmodel.found", lambda *args, **kwargs: False)
     monkeypatch.setattr("proxenos.fastmodel.capable", lambda *args, **kwargs: False)
