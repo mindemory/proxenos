@@ -40,11 +40,12 @@ For each project that isn't paused, a run:
   hasn't touched go, so Drafts holds its newest; any they edited, approved, sent or discarded
   stay.
 
-Nobody's health goes into the status or the log, since they reach the page and the user's cloud
-drive (proxenos.clones.folders), and health is care's (proxenos.clones.care). The model is told
-to leave it out, saying at most that someone is unavailable for a while, and in case it doesn't,
-every sentence, next step and question that still mentions it is dropped before they're written.
-The last status and log go back to the model without it too, so it isn't kept as what still holds.
+Nobody's health goes into the status, the log or the drafts, since they reach the page and the
+user's cloud drive (proxenos.clones.folders), and health is care's (proxenos.clones.care). The
+model is told to leave it out, saying at most that someone is unavailable for a while, and in case
+it doesn't, every sentence, next step and question that still mentions it is dropped before
+they're written; a draft that lost some asks the user whether it still reads right. The last
+status and log go back to the model without it too, so it isn't kept as what still holds.
 
 It only writes notes and drafts; nothing is sent.
 """
@@ -71,6 +72,9 @@ STATUS_CHARS = 6000  # of the last status the model reads
 BRIEF_CHARS = 5000  # of the project's brief
 LOG_CHARS = 3000  # of the end of the log
 DRAFTS = 2
+# A draft's first ask when something about health was taken out of it, which can leave it
+# reading oddly.
+_CUT = "What it said about health was taken out: does it still read right?"
 _PROJECT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 # What, in a note about a project, tells of someone's health: being ill or hurt, symptoms (care's,
 # as in the user's own words), medical care and getting better. Care's terms are wider, but care
@@ -406,7 +410,8 @@ def gather(vault: Path, project: dict, since: datetime) -> tuple[list[dict], lis
 
 def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: datetime) -> int:
     """The run's drafts in clones/drafts/, after the project's earlier ones the user hasn't
-    touched are gone."""
+    touched are gone. Like the status, they reach the cloud drive, so what a draft says about
+    health is taken out too (a title that mentions it gives way to the project's name)."""
     out = vault / "clones" / "drafts"
     ours = re.compile(rf"project-{re.escape(project['id'])}-\d{{8}}-\d")
     edited = work._latest(out / "feedback.jsonl", "draft_id", ("edit",))
@@ -416,18 +421,24 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
     written = 0
     writing = voice.Writing(vault)
     for i, d in enumerate([d for d in drafted if isinstance(d, dict)][:DRAFTS], start=1):
-        body = str(d.get("body") or "").strip()
+        wrote = str(d.get("body") or "").strip()
+        body = _without_health(wrote)
         if not body:
             continue
+        cut = [_CUT] if body != wrote else []
         draft_id = f"project-{project['id']}-{now:%Y%m%d}-{i}"
         body, checked = work.vet(body, now, [], draft_id, writing, d.get("channel") in tells.CHATS)
+        title = _text(d.get("title"))
         message = d.get("kind") not in ("doc", "plan", "checklist", "blocked")
         work._write(
             out / f"{draft_id}.md",
             work.render(
                 {
                     "id": draft_id,
-                    "title": work._clip(_text(d.get("title")) or project["name"], work.TITLE_CHARS),
+                    "title": work._clip(
+                        title if title and not _mentions_health(title) else project["name"],
+                        work.TITLE_CHARS,
+                    ),
                     "kind": d["kind"] if d.get("kind") in work.KINDS else "doc",
                     "for": "project",
                     "channel": d["channel"] if d.get("channel") in work.CHANNELS else "other",
@@ -437,7 +448,9 @@ def _drafts(vault: Path, project: dict, drafted: list, asks: list[str], now: dat
                     "found": work._clip(
                         f"From the {project['name']} project's status.", work.FOUND_CHARS
                     ),
-                    "asks": [work._clip(a, work.ASK_CHARS) for a in [*checked, *asks[: work.ASKS]]],
+                    "asks": [
+                        work._clip(a, work.ASK_CHARS) for a in [*cut, *checked, *asks[: work.ASKS]]
+                    ],
                     "body": body,
                 }
             ),

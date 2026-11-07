@@ -387,3 +387,42 @@ def test_research_that_sounds_medical_is_left_as_it_was():
     assert projects._without_health("Away until **Apr 2**. Drafts wait.") == (
         "Away until **Apr 2**. Drafts wait."
     )
+
+
+def test_health_stays_out_of_a_project_s_drafts(tmp_path):
+    write_list(tmp_path, {"id": "atlas", "name": "The atlas paper", "terms": ["atlas"]})
+
+    class Unwell(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            return answer | {
+                "drafts": [
+                    {
+                        "title": "Update to Ana after the migraine",
+                        "kind": "email",
+                        "channel": "email",
+                        "to": "Ana Lee",
+                        "body": (
+                            "Hi Ana,\n\nSorry for the slow reply, I've been unwell. The new maps "
+                            "are in the shared folder.\n\nJoe"
+                        ),
+                    },
+                    {
+                        "title": "Plan",
+                        "kind": "plan",
+                        "channel": "other",
+                        "to": "",
+                        "body": "1. Redo the maps.\n2. Show them to Ana.",
+                    },
+                ]
+            }
+
+    projects.projects(tmp_path, now=NOW, model=Unwell())
+
+    drafts = tmp_path / "clones" / "drafts"
+    email = (drafts / "project-atlas-20260310-1.md").read_text()
+    assert "Hi Ana,\n\nThe new maps are in the shared folder.\n\nJoe" in email
+    assert "unwell" not in email and "migraine" not in email
+    assert 'title: "The atlas paper"' in email and projects._CUT in email
+    plan = (drafts / "project-atlas-20260310-2.md").read_text()
+    assert "1. Redo the maps.\n2. Show them to Ana." in plan and projects._CUT not in plan
