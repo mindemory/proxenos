@@ -74,6 +74,7 @@ and who sees it is the user's choice. No model is used.
 
 import argparse
 import csv
+import errno
 import hashlib
 import io
 import itertools
@@ -121,6 +122,14 @@ NO_PANDOC = (
     "pandoc.org/installing (or set PROXENOS_PANDOC to where it is)"
 )
 NO_ENGINE = "nothing on this computer makes PDFs: `brew install tectonic` on a Mac"
+# What a cloud drive's folder answers when its app is closed or can't fetch a file kept only
+# online: macOS's file provider gives a background job EDEADLK ("Resource deadlock avoided") and
+# the rest ETIMEDOUT. It's the drive, not the project, so every other project would fail the same.
+_STALLED = frozenset({errno.EDEADLK, errno.ETIMEDOUT})
+STALLED = (
+    "{folder} isn't handing over its files, so nothing more was written: open your cloud "
+    "drive's app (Google Drive, say) and let it sync, or make that folder available offline"
+)
 _PANDOC_PLACES = ("/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc")
 _TECTONIC_PLACES = ("/opt/homebrew/bin/tectonic", "/usr/local/bin/tectonic")
 # The engines pandoc makes a PDF from Markdown with, where there's no tectonic, and where MacTeX
@@ -188,6 +197,10 @@ def folders(
             record["links"] = _links(root.joinpath(*record["folder"].split("/")))
         except (Exception, SystemExit) as e:  # noqa: BLE001 - one project must not stop the rest
             stats["failed"] += 1
+            if isinstance(e, OSError) and e.errno in _STALLED:
+                print(f"folders: {STALLED.format(folder=named)}", file=sys.stderr)
+                stats["drive_not_answering"] = 1
+                break
             reason = " ".join(str(e).split())[:200]
             print(f"folders: {project['id']} failed ({reason})", file=sys.stderr)
         finally:

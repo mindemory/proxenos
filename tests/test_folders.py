@@ -2,6 +2,7 @@
 here and a fake pandoc and tectonic. No network, no model, no pandoc, no tectonic, no real
 document and no real drive."""
 
+import errno
 import json
 import os
 import stat
@@ -225,6 +226,27 @@ def test_without_the_setting_or_pandoc_nothing_is_done_and_it_says_why(setup, mo
 
     assert fake.made == [] and list(drive.iterdir()) == []
     assert not (vault / "clones" / "folders").exists()
+
+
+@pytest.mark.parametrize("code", [errno.EDEADLK, errno.ETIMEDOUT])
+def test_a_drive_that_wont_hand_over_its_files_is_said_once_and_plainly(
+    setup, monkeypatch, capsys, code
+):
+    vault, repo, _, _ = setup
+    write_list(vault, *({"id": n, "name": n, "repo": str(repo)} for n in ("one", "two", "three")))
+    tried = []
+
+    def stalled(vault, root, project, *args):
+        tried.append(project["id"])
+        raise OSError(code, os.strerror(code))
+
+    monkeypatch.setattr(folders, "refresh", stalled)
+    stats = run(vault, NOW)
+    err = capsys.readouterr().err
+    assert tried == ["one"]  # the drive, not the project: the rest aren't tried
+    assert stats["failed"] == 1 and stats["drive_not_answering"] == 1
+    assert err.count("folders:") == 1 and "open your cloud drive's app" in err
+    assert "deadlock" not in err
 
 
 def test_names_are_safe_on_every_computer():
