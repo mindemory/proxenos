@@ -44,6 +44,11 @@ case "$(uname -s)/$(uname -m)" in
 esac
 
 say() { echo "build: $*"; }
+# What became of Google sign-in, also as a note on a GitHub run's page, where it's seen unopened.
+google() {
+  say "$2"
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::$1 title=Google sign-in::$2"; fi
+}
 sha() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
 # Telemetry off, and a Python that reads only its own packages.
@@ -111,15 +116,25 @@ if not all(os.environ.get(n) for n in names):
         config.load()  # the settings file, then the Keychain, as the builder'"'"'s Proxenos reads them
 if not all(os.environ.get(n) for n in names):
     sys.exit(3)
-client = {"installed": {"client_id": os.environ[names[0]], "client_secret": os.environ[names[1]]}}
+client_id, secret = (os.environ[n].strip() for n in names)
+# A client ID ends in .apps.googleusercontent.com and a secret never does. With the ID pasted as
+# the secret too, the app would fail only at the last step of signing in, so the build stops.
+if secret.endswith(".apps.googleusercontent.com"):
+    sys.exit(4)
+client = {"installed": {"client_id": client_id, "client_secret": secret}}
 out = Path(sys.argv[1])
 out.write_text(json.dumps(client), encoding="utf-8")
 out.chmod(0o600)
 ' "$stage/client/google.json" "$repo"; then
-  say "Google sign-in is in the app"
+  google notice "Google sign-in is in the app"
 else
+  status=$?
   rm -f "$stage/client/google.json"
-  say "no Google client in this build's environment or this Mac's Proxenos: the app is built without Google sign-in"
+  if [ "$status" = 4 ]; then
+    google error "GOOGLE_CLIENT_SECRET is the client ID: set it to client_secret from the file Google gave you, which starts GOCSPX-"
+    exit 1
+  fi
+  google warning "no Google client in this build's environment or this Mac's Proxenos: the app is built without Google sign-in"
 fi
 
 say "building the page"

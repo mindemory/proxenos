@@ -33,7 +33,9 @@ jobs:
             echo "::error title=version::the tag is $TAG but desktop/package.json says $version"
             exit 1
           fi
-          gh release create "$TAG" --draft --verify-tag --title "Proxenos $TAG" --notes "$NOTES"
+          # A re-run (after fixing a secret, say) builds into the release that's already there.
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --draft --verify-tag --title "Proxenos $TAG" --notes "$NOTES"
         env:
           TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
