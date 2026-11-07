@@ -7,8 +7,12 @@ export interface GoogleClient {
   client_secret: string;
 }
 
-/** The ID and secret in the file's text, or null when it isn't a Google OAuth client's. */
-export function googleClientFrom(text: string): GoogleClient | null {
+/**
+ * The ID and secret in the file's text; "web" for a Web application client's file, which can't sign
+ * in from Proxenos (it signs in as a Desktop app, on 127.0.0.1, which a Web client doesn't list);
+ * null when it isn't a Google OAuth client's.
+ */
+export function googleClientFrom(text: string): GoogleClient | "web" | null {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -16,7 +20,8 @@ export function googleClientFrom(text: string): GoogleClient | null {
     return null;
   }
   const top = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-  const client = top.installed ?? top.web;
+  if (!top.installed && top.web) return "web";
+  const client = top.installed;
   if (!client || typeof client !== "object") return null;
   const { client_id: id, client_secret: secret } = client as Record<string, unknown>;
   if (typeof id !== "string" || typeof secret !== "string" || !id.trim() || !secret.trim()) return null;

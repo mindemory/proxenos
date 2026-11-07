@@ -78,7 +78,11 @@ def test_half_a_set_client_is_never_completed_from_the_apps(monkeypatch, tmp_pat
     assert "GOOGLE_CLIENT_SECRET" not in os.environ
 
 
-@pytest.mark.parametrize("body", ["not json", '{"installed": {"client_id": "x"}}', "[]"])
+# A Web application client's file is refused too: its sign-in would fail at Google.
+WEB = '{"web": {"client_id": "x", "client_secret": "y"}}'
+
+
+@pytest.mark.parametrize("body", ["not json", '{"installed": {"client_id": "x"}}', "[]", WEB])
 def test_a_client_file_that_isnt_one_is_ignored(monkeypatch, tmp_path, body):
     path = tmp_path / "bad.json"
     path.write_text(body)

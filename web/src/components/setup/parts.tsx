@@ -751,7 +751,11 @@ export function GoogleClientFile({ save, label = "Load the file you downloaded f
     setProblem(null);
     if (!file) return;
     const client = file.size <= 64 * 1024 ? googleClientFrom(await file.text().catch(() => "")) : null;
-    if (!client) setProblem("That isn't the sign-in client file from Google. It should hold a client_id and a client_secret. Download it again from Google Cloud and try once more.");
+    if (client === "web")
+      setProblem(
+        "That file is for a Web application client, and Proxenos needs a Desktop app one. In Google Cloud, open Clients, press Create client, pick Desktop app as the type, and load the file it gives you.",
+      );
+    else if (!client) setProblem("That isn't the sign-in client file from Google. It should hold a client_id and a client_secret. Download it again from Google Cloud and try once more.");
     else await run({ google_client: client });
   };
   return (

@@ -149,13 +149,14 @@ def _bundled_google() -> None:
 
 
 def google_client_file(path: Path) -> tuple[str, str] | None:
-    """The (client_id, client_secret) in a Google OAuth client file ({"installed": {...}}, as
-    Google Cloud's download has it; "web" is read the same), or None when it isn't one."""
+    """The (client_id, client_secret) in a Desktop app client's file ({"installed": {...}}, as
+    Google Cloud's download has it), or None when it isn't one. A Web application client's file
+    ({"web": ...}) is None too: its sign-in would fail, as it doesn't list 127.0.0.1."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    client = (data.get("installed") or data.get("web")) if isinstance(data, dict) else None
+    client = data.get("installed") if isinstance(data, dict) else None
     if not isinstance(client, dict):
         return None
     pair = (client.get("client_id"), client.get("client_secret"))
