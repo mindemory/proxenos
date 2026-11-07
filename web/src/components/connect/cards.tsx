@@ -272,7 +272,8 @@ function SignInCard({ s, now, job, inApp, onClient, onSignIn, onCancel, copy }: 
             {copy.google && (
               <li>
                 Google warns that it hasn&apos;t verified Proxenos. That&apos;s because Proxenos hasn&apos;t been through Google&apos;s
-                review yet. To go on, press <strong>Advanced</strong>, then <strong>Go to Proxenos (unsafe)</strong>.
+                review yet. To go on, press <strong>Go to proxenos (unsafe)</strong> in the red box. If you don&apos;t see it, press
+                <strong>Advanced</strong> first.
               </li>
             )}
             <li>On the next screen, {copy.asks}</li>

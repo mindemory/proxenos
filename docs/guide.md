@@ -135,7 +135,7 @@ You'll see "Proxenos can read Mail and WhatsApp" with a check mark. If it still 
 1. Open **Connect** and find the **Gmail** card (or **Google Calendar**).
 2. Type a short name for the account, like **personal**, and its email address.
 3. Press **Sign in with Google**. A tab opens in your browser.
-4. Google warns that it hasn't verified Proxenos, because Proxenos hasn't been through Google's review yet. Press **Advanced**, then **Go to Proxenos (unsafe)**.
+4. Google warns that it hasn't verified Proxenos, because Proxenos hasn't been through Google's review yet. Press **Go to proxenos (unsafe)** in the red box. If you don't see it, press **Advanced** first.
 5. Sign in, and allow what it asks. Proxenos only reads your mail and calendar.
 
 You'll see "Signed in as …" on the card. If you close the tab too soon, press **Cancel** and try again. If the card says this copy of Proxenos has no Google sign-in built in, Google can't connect here unless you make a Google sign-in client of your own and load its file on the card ([the steps](data_sources.md#email)).
