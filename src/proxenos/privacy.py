@@ -108,8 +108,9 @@ SENDS = (
         "Projects",
         ("projects", "steps", "agent"),
         (
-            "The records that name each project or come from its people, and its code's commit "
-            "messages and changed documents. A step gives its code and data to the runner, and "
+            "The records that name each project or come from its people, its code's commit "
+            "messages and changed documents, and its last status and log, without anyone's "
+            "health. A step gives its code and data to the runner, and "
             "one you approved from others' comments on the manuscript's copy, those comments."
         ),
     ),

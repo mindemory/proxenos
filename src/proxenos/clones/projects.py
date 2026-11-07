@@ -40,6 +40,12 @@ For each project that isn't paused, a run:
   hasn't touched go, so Drafts holds its newest; any they edited, approved, sent or discarded
   stay.
 
+Nobody's health goes into the status or the log, since they reach the page and the user's cloud
+drive (proxenos.clones.folders), and health is care's (proxenos.clones.care). The model is told
+to leave it out, saying at most that someone is unavailable for a while, and in case it doesn't,
+every sentence, next step and question that still mentions it is dropped before they're written.
+The last status and log go back to the model without it too, so it isn't kept as what still holds.
+
 It only writes notes and drafts; nothing is sent.
 """
 
@@ -66,6 +72,44 @@ BRIEF_CHARS = 5000  # of the project's brief
 LOG_CHARS = 3000  # of the end of the log
 DRAFTS = 2
 _PROJECT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
+# What, in a note about a project, tells of someone's health: being ill or hurt, symptoms (care's,
+# as in the user's own words), medical care and getting better. Care's terms are wider, but care
+# weighs a whole record against its research words; a project's notes are often research, where
+# clinics, hospitals, patients, doctors, scans, labs and therapy are the work itself and an
+# inverse problem is ill-posed, so those aren't here. Recovering the sources is a method's.
+_HEALTH = re.compile(
+    r"\bhealth\b|\bwell-?being\b|\bill\b(?!-)|\billness|\bsick|\bunwell\b|under the weather|"
+    r"not feeling (well|great|good)|(feel|feeling|felt) (sick|unwell|awful|terrible|weak|off|"
+    r"worse|better)|get well|\bon the mend\b|\bsymptoms?\b|\bdizz(y|iness)\b|\bvertigo\b|"
+    r"light-? ?headed|\bwoozy\b|off[- ]balance|\bfaint(ed|ing)\b|passed out|\bsyncope\b|"
+    r"\btinnitus\b|brain fog|blurr?(y|ed) vision|double vision|palpitations|\bmigraines?\b|"
+    r"\bheadaches?\b|\bnause(a|ous|ated)\b|\bvomit|\bfevers?\b|short(ness)? of breath|\bflu\b|"
+    r"\bcovid|\binfection|\ballerg|\bfatigued\b|\bburn-?out\b|panic attack|\bconcussion|"
+    r"\binjur(y|ies|ed)\b|\bsprain|\bfractured?\b|"
+    r"(back|neck|knee|wrist|joint|stomach|tooth|chest) ?(pain|ache)|\bsurger(y|ies)\b|"
+    r"\bhospitali[sz]|(admitted to|discharged from) (the )?hospital|urgent care|emergency room|"
+    r"\bmedical (leave|appointments?|reasons?|emergenc|issues?|problems?|procedures?|care|"
+    r"treatment|condition|stuff)|\b(doctor|dentist|physician|specialist)('s|s')? (appointment|"
+    r"appt|visit|office|note|orders?)|\b(see|saw|seeing|seen) (a|the|my|his|her|their) "
+    r"(doctor|dentist|specialist|physician|neurologist)\b|\btherapist\b|\bphysio|"
+    r"physical therap|\bmeds\b|\bmedications?\b|\bprescriptions?\b|\bpregnan|\bbed ?rest\b|"
+    r"\brecover(y|ing|ed|s)?\b(?! (of|the|a|an|its|their)\b)",
+    re.IGNORECASE,
+)
+# Where those words name a field, a funder or a method, not anyone's health.
+_NOT_HEALTH = re.compile(
+    r"institutes? of (mental )?health|public health|health sciences?|"
+    r"(parameter|model|signal|source|data) recovery",
+    re.IGNORECASE,
+)
+# A sentence ends at . ! or ? (beside a bracket, a quote or markdown's emphasis: "due **May 1**.")
+# before a capital or one of those, not after an initial ("Jo Q. Coauthor") or a title ("Dr. Lee").
+_SENTENCE = re.compile(
+    r"(?:(?<=\w\w[.!?])(?<!\b(?:Dr|Mr|Ms|al|vs)\.)|(?<=\d[.!?])|(?<=[)\"'”’*_][.!?])"
+    r"|(?<=[.!?][)\"'”’*_]))\s+(?=[A-Z\"“(*_\[])"
+)
+_HEADING = re.compile(r"(#{1,6})\s")
+_ITEM = re.compile(r"\s*(?:[-*+]|\d+[.)])\s+")
 
 _SYSTEM = """\
 You look after one of {person}'s long-running projects, as their digital twin, so it keeps \
@@ -95,7 +139,11 @@ another paper: use only what is about this one, and leave out the rest.
 - drafts: up to {drafts} things written for {person} that would move it on now: a message to a \
 collaborator in {person}'s voice, a plan for the next analysis, a checklist, a short doc. Each \
 with a title under 12 words, kind, channel ("other" when it isn't a message), to ("" when it \
-isn't a message) and body, ready to use. None when nothing is worth drafting now."""
+isn't a message) and body, ready to use. None when nothing is worth drafting now.
+
+Leave health out of all of it: no health, illness, symptoms, medical care or recovery, \
+{person}'s or anyone else's, not even as a risk. When someone being away matters for a \
+deadline, say at most that they're unavailable for a while."""
 
 
 # Who a step is for, by whether Proxenos can take steps on the project's code (proxenos.clones.steps).
@@ -253,7 +301,8 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
     person = env("NAME", "the person")
     folder = vault / "clones" / "projects" / project["id"]
     status_path, log_path = folder / "status.md", folder / "log.md"
-    last = _read(status_path)
+    last = _without_health(_read(status_path))
+    log = _without_health(_read(log_path))
     since = _last_run(log_path) or (now - timedelta(days=FIRST_DAYS))
     new, near = gather(vault, project, since)
     prompt = "\n\n".join(
@@ -262,7 +311,7 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
             dates.today(now),
             _about(project),
             f"Where you said it stood last time:\n{last[:STATUS_CHARS]}" if last else "",
-            f"The end of its log:\n{_read(log_path)[-LOG_CHARS:]}" if log_path.exists() else "",
+            f"The end of its log:\n{log[-LOG_CHARS:]}" if log else "",
             _work_done(vault, project["id"]),
             _code(project, since),
             f"New since {since:%Y-%m-%d}:\n" + "\n".join(research._line(h, person) for h in new)
@@ -287,15 +336,20 @@ def advance(vault: Path, project: dict, now: datetime, model: Callable[..., obje
     status = str(answer.get("status") or "").strip()
     if not status:
         raise ValueError("the model wrote no status")
-    status, fixed = dates.scheduled(status, now)
+    status, fixed = dates.scheduled(_without_health(status), now)
     for line in fixed:
         print(f"projects: {project['id']}: {line}", file=sys.stderr)
-    steps = [s for s in answer.get("next") or [] if isinstance(s, dict) and _text(s.get("step"))]
-    asks = [_text(a) for a in answer.get("asks") or [] if _text(a)]
+    steps = [
+        s
+        for s in answer.get("next") or []
+        if isinstance(s, dict) and _text(s.get("step")) and not _mentions_health(_step(s))
+    ]
+    asks = [a for a in map(_text, answer.get("asks") or []) if a and not _mentions_health(a)]
     if project["repo"]:
         _queue_own(vault, project, steps, now)
     work._write(status_path, _status_file(project, status, steps, asks, now))
-    _append(log_path, _log_entry(_text(answer.get("changed")), steps, len(new), now))
+    changed = _without_health(_text(answer.get("changed")))
+    _append(log_path, _log_entry(changed, steps, len(new), now))
     return _drafts(vault, project, answer.get("drafts") or [], asks, now)
 
 
@@ -496,6 +550,52 @@ def _log_entry(changed: str, steps: list[dict], new: int, now: datetime) -> str:
 def _step(step: dict) -> str:
     extra = ", ".join(x for x in (_text(step.get("who")), _text(step.get("by"))) if x)
     return _text(step["step"]) + (f" ({extra})" if extra else "")
+
+
+def _mentions_health(text: str) -> bool:
+    return bool(_HEALTH.search(_NOT_HEALTH.sub(" ", text)))
+
+
+def _without_health(text: str) -> str:
+    """`text`, markdown, without what it says of anyone's health: each sentence that mentions
+    it, a table row whole, and a heading or list item left with none of its own goes with what's
+    under it. Anything else stays exactly as it was."""
+    kept: list[str] = []
+    dropped = False
+    under: tuple[str, int] | None = None  # a heading's level, or a list item's indent, that went
+    for line in text.splitlines():
+        heading = _HEADING.match(line)
+        indent = len(line) - len(line.lstrip())
+        if under:
+            kind, depth = under
+            if (kind == "#" and not (heading and len(heading[1]) <= depth)) or (
+                kind == "-" and line.strip() and indent > depth
+            ):
+                continue
+            under = None
+        if line.lstrip().startswith("|"):
+            if _mentions_health(line):
+                dropped = True
+            else:
+                kept.append(line)
+            continue
+        lead = heading or _ITEM.match(line)
+        start = lead.end() if lead else 0
+        sentences = _SENTENCE.split(line[start:])
+        clean = [s for s in sentences if not _mentions_health(s)]
+        if len(clean) == len(sentences):
+            kept.append(line)
+            continue
+        dropped = True
+        if clean:
+            kept.append(line[:start] + " ".join(clean))
+        elif heading:
+            under = ("#", len(heading[1]))
+        elif lead:
+            under = ("-", indent)
+    if not dropped:
+        return text
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip("\n")
 
 
 def _last_run(log: Path) -> datetime | None:

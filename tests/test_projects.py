@@ -303,3 +303,87 @@ def test_a_status_is_told_todays_date_and_never_calls_a_future_date_done(tmp_pat
     assert "Consultation scheduled for 30 Mar, intake done 2 Mar." in status
     drafts = tmp_path / "clones" / "drafts"
     assert "Hi Ana, thanks." in (drafts / "project-clinic-20260310-1.md").read_text()
+
+
+def test_health_stays_out_of_a_project_s_status_and_log(tmp_path):
+    write_list(tmp_path, {"id": "atlas", "name": "The atlas paper", "terms": ["atlas"]})
+    folder = tmp_path / "clones" / "projects" / "atlas"
+    folder.mkdir()
+    (folder / "status.md").write_text(
+        "# The atlas paper\n\n- Recovering from flu.\n- Figure 2 done.\n"
+    )
+    (folder / "log.md").write_text(
+        "## 2026-03-01\n\nJoe said he'd been sick. Ana sent the map.\n\n"
+    )
+
+    class Unwell(Model):
+        def __call__(self, prompt, **kw):
+            answer = super().__call__(prompt, **kw)
+            return answer | {
+                "status": (
+                    "Second draft due **May 1**. Joe has been dizzy since the fall, so it may "
+                    "slip.\n\n"
+                    "**Risks**\n"
+                    "- **Health**: Recovery from a migraine flare is slow.\n"
+                    "  - Resting until the 20th\n"
+                    "- **Timeline**: Two editor comments open.\n\n"
+                    "### Wellbeing\n"
+                    "Sleeping badly; a doctor's appointment on Friday.\n\n"
+                    "### Open\n"
+                    "- Retest the bread recipe. Joe is unwell, so Ana may take it."
+                ),
+                "changed": "Ana sent the new photos. Joe shared health updates with Ana.",
+                "next": [
+                    {"step": "Retest the bread recipe", "who": "Joe", "by": "Mar 14"},
+                    {"step": "Rest until the vertigo passes", "who": "Joe", "by": ""},
+                ],
+                "asks": ["Ask for an extension?", "Tell Ana you're unwell?"],
+            }
+
+    model = Unwell()
+
+    projects.projects(tmp_path, now=NOW, model=model)
+
+    assert "Leave health out" in model.calls[0]["system"]
+    assert "unavailable for a while" in model.calls[0]["system"]
+    # The last status and log go back without it, so it isn't kept as what still holds.
+    prompt = model.calls[0]["prompt"]
+    assert "Figure 2 done." in prompt and "Ana sent the map." in prompt
+    assert "flu" not in prompt and "sick" not in prompt
+    assert (folder / "status.md").read_text() == (
+        "# The atlas paper\n\n"
+        "_Where it stands, 2026-03-10._\n\n"
+        "Second draft due **May 1**.\n\n"
+        "**Risks**\n"
+        "- **Timeline**: Two editor comments open.\n\n"
+        "### Open\n"
+        "- Retest the bread recipe.\n\n"
+        "## Next steps\n\n"
+        "- Retest the bread recipe (Joe, Mar 14)\n\n"
+        "## Needs you\n\n"
+        "- Ask for an extension?\n"
+    )
+    assert (
+        (folder / "log.md")
+        .read_text()
+        .endswith(
+            "## 2026-03-10\n\n"
+            "Ana sent the new photos.\n\n"
+            "0 new records read.\n\n"
+            "Next: Retest the bread recipe (Joe, Mar 14).\n\n"
+        )
+    )
+
+
+def test_research_that_sounds_medical_is_left_as_it_was():
+    status = (
+        "Recruiting patients through the clinic; MRI scans booked for co-registration.\n\n"
+        "- Parameter recovery on simulated data holds. It recovers the true sources.\n"
+        "- The inverse problem is ill-posed, so Dr. Lee suggested a stronger prior.\n"
+        "- NIH (National Institutes of Health) renewal due **Jun 5**.\n\n"
+        "| Step | Who |\n|---|---|\n| Therapy arm analysis | Ana |\n"
+    )
+    assert projects._without_health(status) == status
+    assert projects._without_health("Away until **Apr 2**. Drafts wait.") == (
+        "Away until **Apr 2**. Drafts wait."
+    )
