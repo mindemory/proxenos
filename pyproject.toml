@@ -23,7 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.2.0",
-    "ruff>=0.17.4",
+    "ruff>=0.17.5",
 ]
 # A model the desktop app runs itself, with no Ollama (proxenos.localmodel): mlx-lm on a Mac with
 # Apple silicon, which serves Gemma 4 from Hugging Face's weights. desktop/build.sh installs it.
